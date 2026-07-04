@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compartilhar Tela</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1115;
+    color: #eee;
+    text-align: center;
+    padding: 40px 20px;
+    margin: 0;
+  }
+  h1 { font-weight: 600; }
+  video {
+    width: 90%;
+    max-width: 820px;
+    border-radius: 10px;
+    border: 2px solid #333;
+    background: #000;
+    margin-top: 20px;
+  }
+  button {
+    padding: 12px 28px;
+    font-size: 15px;
+    border-radius: 8px;
+    border: none;
+    background: #4f8cff;
+    color: #fff;
+    cursor: pointer;
+    margin: 6px;
+    transition: background 0.2s;
+  }
+  button:hover:not(:disabled) { background: #3a76e0; }
+  button:disabled { background: #3a3f4b; cursor: not-allowed; color: #888; }
+  #status { margin-top: 14px; color: #8bffa0; font-size: 14px; }
+  #watchers { margin-top: 8px; color: #999; font-size: 13px; }
+  a.link { color: #4f8cff; }
+</style>
+</head>
+<body>
+  <h1>Compartilhar minha tela</h1>
+  <p>Clique no botao, escolha a tela/janela e marque "Compartilhar audio" na janela do navegador.</p>
+
+  <button id="startBtn">Iniciar compartilhamento</button>
+  <button id="stopBtn" disabled>Parar</button>
+
+  <p id="status">Aguardando inicio...</p>
+  <p id="watchers"></p>
+
+  <video id="preview" autoplay muted playsinline></video>
+
+  <p style="margin-top:30px;">Compartilhe este link com quem vai assistir: <br>
+    <a class="link" id="linkAoVivo" href="/ao-vivo" target="_blank">/ao-vivo</a>
+  </p>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const status = document.getElementById('status');
+const watchersEl = document.getElementById('watchers');
+const preview = document.getElementById('preview');
+
+let localStream = null;
+const peerConnections = {}; // watcherId -> RTCPeerConnection
+
+const rtcConfig = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+};
+
+function atualizarContador() {
+  const n = Object.keys(peerConnections).length;
+  watchersEl.textContent = n > 0 ? `${n} pessoa(s) assistindo agora` : 'Ninguem assistindo ainda';
+}
+
+startBtn.onclick = async () => {
+  try {
+    localStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        cursor: 'always',
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 30, max: 30 }
+      },
+      audio: {
+        // Desliga processamento pensado pra microfone (causa a "compressao" no audio da tela)
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 48000,
+        sampleSize: 16,
+        channelCount: 2
+      }
+    });
+  } catch (err) {
+    status.textContent = 'Erro ao capturar a tela: ' + err.message;
+    return;
+  }
+
+  // Avisa o codec que o conteudo tem movimento (prioriza fluidez sobre nitidez)
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (videoTrack) videoTrack.contentHint = 'motion';
+
+  preview.srcObject = localStream;
+  socket.emit('broadcaster');
+  status.textContent = 'Transmitindo ao vivo';
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  atualizarContador();
+
+  // Se o usuario clicar em "Parar de compartilhar" na barra do navegador
+  localStream.getVideoTracks()[0].onended = stopSharing;
+};
+
+stopBtn.onclick = stopSharing;
+
+function stopSharing() {
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  Object.values(peerConnections).forEach(pc => pc.close());
+  for (const id in peerConnections) delete peerConnections[id];
+  preview.srcObject = null;
+  status.textContent = 'Compartilhamento encerrado.';
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  atualizarContador();
+}
+
+function preferCodec(pc, kind, mimeTypesInOrder) {
+  const transceiver = pc.getTransceivers().find(
+    t => t.sender && t.sender.track && t.sender.track.kind === kind
+  );
+  if (!transceiver || !transceiver.setCodecPreferences) return;
+
+  const caps = RTCRtpSender.getCapabilities(kind);
+  if (!caps) return;
+
+  const ordenados = [];
+  mimeTypesInOrder.forEach(mt => {
+    caps.codecs.forEach(c => {
+      if (c.mimeType.toLowerCase() === mt.toLowerCase() && !ordenados.includes(c)) {
+        ordenados.push(c);
+      }
+    });
+  });
+  // Mantem os demais codecs no fim, como fallback
+  caps.codecs.forEach(c => { if (!ordenados.includes(c)) ordenados.push(c); });
+
+  try {
+    transceiver.setCodecPreferences(ordenados);
+  } catch (err) {
+    console.warn('Nao foi possivel definir preferencia de codec:', err);
+  }
+}
+
+// Um novo espectador entrou -> cria uma conexao so para ele
+socket.on('watcher', (watcherId) => {
+  if (!localStream) return;
+
+  const pc = new RTCPeerConnection(rtcConfig);
+  peerConnections[watcherId] = pc;
+  atualizarContador();
+
+  localStream.getTracks().forEach(track => {
+    const sender = pc.addTrack(track, localStream);
+
+    if (track.kind === 'video') {
+      const params = sender.getParameters();
+      if (!params.encodings) params.encodings = [{}];
+      // Rede local aguenta mais que isso, mas o gargalo aqui e o decoder fraco da TV,
+      // nao a rede -- exagerar no bitrate so faz o buffer da TV crescer mais rapido
+      params.encodings[0].maxBitrate = 3_000_000; // 3 Mbps, adequado para 720p30
+      // Em vez de baixar a resolucao quando aperta, prefere manter os FPS
+      params.degradationPreference = 'maintain-framerate';
+      sender.setParameters(params).catch(err => console.warn('video params:', err));
+    }
+
+    if (track.kind === 'audio') {
+      const params = sender.getParameters();
+      if (!params.encodings) params.encodings = [{}];
+      params.encodings[0].maxBitrate = 256_000; // Opus ate ~256kbps = bem mais limpo
+      sender.setParameters(params).catch(err => console.warn('audio params:', err));
+    }
+  });
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('candidate', watcherId, event.candidate);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+      delete peerConnections[watcherId];
+      atualizarContador();
+    }
+  };
+
+  // Prioriza H.264 -- e o que a maioria das Smart TVs decodifica por hardware.
+  // VP8/VP9 costumam ser software-only nesses aparelhos, o que causa o delay crescente.
+  preferCodec(pc, 'video', ['video/H264', 'video/VP8', 'video/VP9']);
+
+  pc.createOffer()
+    .then(offer => pc.setLocalDescription(offer))
+    .then(() => socket.emit('offer', watcherId, pc.localDescription));
+});
+
+socket.on('answer', (id, description) => {
+  const pc = peerConnections[id];
+  if (pc) pc.setRemoteDescription(description);
+});
+
+socket.on('candidate', (id, candidate) => {
+  const pc = peerConnections[id];
+  if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+});
+
+socket.on('disconnectPeer', (id) => {
+  if (peerConnections[id]) {
+    peerConnections[id].close();
+    delete peerConnections[id];
+    atualizarContador();
+  }
+});
+</script>
+</body>
+</html>
