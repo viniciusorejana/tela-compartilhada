@@ -13,6 +13,13 @@ npm install
 npm start
 ```
 
+No Windows, `npm start` também compila automaticamente o helper nativo. É
+necessário ter o Visual Studio Build Tools com C++ e Windows SDK instalados.
+O recurso de captura por aplicativo exige Windows 10 build 20348 ou superior
+(ou Windows 11). No Windows 10 comum, como o build 19045, a API de loopback
+por processo não está disponível; nesse caso use Windows 11, VB-CABLE/OBS ou
+um driver de áudio virtual.
+
 3. O terminal vai mostrar algo como:
 
 ```
@@ -21,29 +28,68 @@ Servidor rodando em http://localhost:3000
   -> Assistir ao vivo:  http://localhost:3000/ao-vivo
 ```
 
+Para publicar na internet, use a porta externa encaminhada para a maquina que
+roda o Node e informe a URL publica ao iniciar. No PowerShell:
+
+```powershell
+$env:PUBLIC_URL="https://SEU-DOMINIO/" # ou http://SEU-IP-PUBLICO:3000
+$env:PORT="3000"
+npm start
+```
+
+No roteador, encaminhe a porta TCP 3000 (e UDP 3000, se disponível) para o IP
+local dessa maquina e permita o Node.js no Firewall do Windows. Acesse a pagina
+de compartilhamento pela URL publica, nao por `localhost`.
+
 ## Como usar
 
-- **Quem vai transmitir**: acesse `http://localhost:3000/compartilhar`, clique em
+- **Quem vai transmitir**: acesse `/compartilhar`, clique em
   "Iniciar compartilhamento", escolha a tela/janela/aba e **marque a opção
   "Compartilhar áudio"** na janela de seleção do navegador (essa opção varia
   de navegador para navegador).
-- **Quem vai assistir**: acesse `http://localhost:3000/ao-vivo` (pode ser em outro
+- **Quem vai assistir**: acesse `/ao-vivo` (pode ser em outro
   computador na mesma rede, usando o IP da máquina que roda o servidor, ex:
   `http://192.168.0.10:3000/ao-vivo`).
 - Vários espectadores podem assistir ao mesmo tempo.
+- Qualquer espectador pode clicar em **Compartilhar minha tela** e transmitir
+  pelo próprio navegador. Não precisa instalar Node.js nem iniciar servidor.
+  Para compartilhar de outro computador, use o link público com HTTPS e
+  permita tela/áudio no diálogo do navegador.
+- Durante a transmissão, use **Atualizar captura** para trocar a tela, janela ou
+  política de áudio. A troca é aplicada aos espectadores sem reiniciar o
+  servidor. A opção **Permitir atualização** pode ser desmarcada para bloquear
+  esse controle durante a transmissão.
 
 ## Observações importantes
 
-- **Compartilhamento de áudio do sistema**: no Chrome/Edge (Windows), ao escolher
-  "Aba do Chrome" ou "Tela inteira" aparece a opção de compartilhar áudio. No
+- **Compartilhamento de áudio**: no Chrome/Edge (Windows), escolha uma **janela**
+  para tentar capturar o áudio daquela aplicação, ou uma aba/tela e habilite a
+  opção de áudio no seletor. O navegador e o sistema operacional decidem quais
+  fontes aparecem; a API `getDisplayMedia` não permite selecionar ou capturar
+  silenciosamente um aplicativo específico por código. No
   macOS, o Chrome só compartilha áudio de **abas** (não da tela inteira), por
   limitação do próprio sistema operacional. No Firefox o suporte é mais limitado.
-- **Rede local x internet**: para uso na mesma rede Wi-Fi/local, o código já
-  funciona direto. Para funcionar entre redes diferentes (ex: um em casa, outro
-  no trabalho), muitas vezes é necessário um servidor **TURN** além do STUN
-  público que já está configurado, pois nem toda rede permite conexão direta
-  peer-to-peer. Se precisar disso, posso te ajudar a configurar um TURN (ex:
-  Coturn ou um serviço como o Twilio TURN).
+- **Áudio por aplicativo**: na página de compartilhamento, clique em **Atualizar
+  aplicativos**, escolha uma política e selecione os processos desejados. Em
+  **Somente aplicativos selecionados**, é possível selecionar vários processos
+  com Ctrl; eles serão mixados. Em **Todo o sistema, exceto um aplicativo**, o
+  áudio do processo escolhido e seus subprocessos será bloqueado.
+- **HTTPS**: navegadores exigem contexto seguro para `getDisplayMedia`. Para
+  compartilhar a tela usando IP publico, use HTTPS com um dominio/certificado;
+  `localhost` e permitido sem HTTPS, mas um IP publico em HTTP pode bloquear a
+  captura. Se a pagina mostrar `Captura bloqueada`, esse e o motivo. Uma forma
+  simples e usar um proxy HTTPS como Caddy ou Nginx na frente do Node.
+- **Rede local x internet**: para uso entre redes diferentes, configure um
+  servidor **TURN** (Coturn ou um provedor). O servidor ja aceita:
+
+```powershell
+$env:TURN_URLS="turn:turn.seudominio.com:3478,turns:turn.seudominio.com:5349"
+$env:TURN_USERNAME="usuario"
+$env:TURN_CREDENTIAL="senha-ou-credencial"
+npm start
+```
+
+  O cliente recebe essa configuracao automaticamente em `/api/rtc-config`.
 - O vídeo/áudio **não passa pelo servidor** — ele só ajuda os dois lados a se
   encontrarem (sinalização). O streaming em si é direto entre os navegadores
   (peer-to-peer), então a qualidade depende da conexão entre as duas pontas.

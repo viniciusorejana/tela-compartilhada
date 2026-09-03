@@ -34,6 +34,7 @@
     font-size: 14px;
   }
   button:hover { background: #3a76e0; }
+  .shareLink { display: inline-block; margin-top: 18px; color: #8fb7ff; }
 </style>
 </head>
 <body>
@@ -42,6 +43,8 @@
   <video id="remoteVideo" autoplay playsinline controls></video>
   <br>
   <button id="unmuteBtn" style="display:none;">Ativar som</button>
+  <br>
+  <a class="shareLink" href="/compartilhar">Compartilhar minha tela</a>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -50,9 +53,11 @@ const remoteVideo = document.getElementById('remoteVideo');
 const status = document.getElementById('status');
 const unmuteBtn = document.getElementById('unmuteBtn');
 
-const rtcConfig = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-};
+let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const rtcConfigReady = fetch('/api/rtc-config')
+  .then(response => response.json())
+  .then(config => { rtcConfig = config; })
+  .catch(() => {});
 
 let pc = null;
 let broadcasterId = null;
@@ -105,8 +110,16 @@ socket.on('broadcaster-offline', () => {
   broadcasterId = null;
 });
 
+socket.on('broadcaster-replaced', () => {
+  status.textContent = 'Outra pessoa iniciou uma nova transmissao.';
+  if (pc) { pc.close(); pc = null; }
+  remoteVideo.srcObject = null;
+  broadcasterId = null;
+  socket.emit('watcher');
+});
+
 // Ao carregar a pagina, ja avisa que quer assistir (caso a transmissao ja esteja rolando)
-socket.emit('watcher');
+rtcConfigReady.then(() => socket.emit('watcher'));
 
 // Navegadores bloqueiam autoplay com som; o video comeca mudo e o usuario ativa manualmente
 remoteVideo.addEventListener('play', () => {

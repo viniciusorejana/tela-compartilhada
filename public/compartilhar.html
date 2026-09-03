@@ -5,99 +5,369 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Compartilhar Tela</title>
 <style>
+  :root {
+    --bg: #101418;
+    --panel: #181e24;
+    --panel-strong: #202830;
+    --line: #303a44;
+    --text: #edf2f5;
+    --muted: #94a2ad;
+    --accent: #69a9ff;
+    --accent-strong: #4389e8;
+    --success: #75d6a0;
+  }
+  * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #0f1115;
-    color: #eee;
-    text-align: center;
-    padding: 40px 20px;
+    font-family: "Aptos", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
     margin: 0;
+    min-height: 100vh;
   }
-  h1 { font-weight: 600; }
-  video {
-    width: 90%;
-    max-width: 820px;
-    border-radius: 10px;
-    border: 2px solid #333;
-    background: #000;
-    margin-top: 20px;
+  .app-shell { width: min(100% - 40px, 1060px); margin: 0 auto; padding: 44px 0 56px; }
+  .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 10px; }
+  h1 { font-size: clamp(28px, 4vw, 42px); line-height: 1.05; letter-spacing: -.02em; margin: 0; }
+  .intro { color: var(--muted); line-height: 1.55; max-width: 590px; margin: 12px 0 0; }
+  .config-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+  .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  h2 { font-size: 17px; margin: 0; }
+  .section-note, small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  label { color: #cbd4db; font-size: 13px; font-weight: 700; }
+  select {
+    width: 100%; padding: 12px 13px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--panel-strong); color: var(--text); font: inherit; font-size: 14px;
   }
+  select:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #audioSource { min-height: 130px; }
+  .audio-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; margin-top: 18px; }
+  .audio-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   button {
-    padding: 12px 28px;
-    font-size: 15px;
-    border-radius: 8px;
-    border: none;
-    background: #4f8cff;
-    color: #fff;
-    cursor: pointer;
-    margin: 6px;
-    transition: background 0.2s;
+    border: 0; border-radius: 7px; padding: 12px 17px; font: inherit; font-size: 14px; font-weight: 700;
+    background: var(--accent-strong); color: white; cursor: pointer; transition: background .18s, transform .18s;
   }
-  button:hover:not(:disabled) { background: #3a76e0; }
-  button:disabled { background: #3a3f4b; cursor: not-allowed; color: #888; }
-  #status { margin-top: 14px; color: #8bffa0; font-size: 14px; }
-  #watchers { margin-top: 8px; color: #999; font-size: 13px; }
-  a.link { color: #4f8cff; }
+  button:hover:not(:disabled) { background: #5a9bf0; transform: translateY(-1px); }
+  button:disabled { background: #34404b; color: #7c8994; cursor: not-allowed; }
+  .secondary { background: transparent; border: 1px solid var(--line); color: #cbd8e2; }
+  .secondary:hover:not(:disabled) { background: var(--panel-strong); }
+  .primary-actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+  .update-options { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--muted); font-size: 12px; }
+  .update-options input { accent-color: var(--accent); }
+  .status-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; margin: 20px 0 14px; }
+  #status { color: var(--success); font-size: 14px; margin: 0; }
+  #watchers { color: var(--muted); font-size: 13px; margin: 0; }
+  .preview-frame { overflow: hidden; background: #080a0c; border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 16 / 9; }
+  video { display: block; width: 100%; height: 100%; object-fit: contain; background: #080a0c; }
+  .share-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .share-footer p { margin: 0; color: var(--muted); font-size: 13px; }
+  a.link { color: var(--accent); overflow-wrap: anywhere; }
+  @media (max-width: 700px) {
+    .app-shell { width: min(100% - 28px, 560px); padding-top: 28px; }
+    .page-header, .share-footer { align-items: flex-start; flex-direction: column; }
+    .config-panel { padding: 18px; }
+    .field-grid, .audio-row { grid-template-columns: 1fr; }
+    .audio-actions, .primary-actions { align-items: stretch; flex-direction: column; }
+    button { width: 100%; }
+    .status-bar { align-items: flex-start; flex-direction: column; gap: 7px; }
+  }
 </style>
 </head>
 <body>
-  <h1>Compartilhar minha tela</h1>
-  <p>Clique no botao, escolha a tela/janela e marque "Compartilhar audio" na janela do navegador.</p>
+  <main class="app-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Sala de transmissão</p>
+        <h1>Compartilhar minha tela</h1>
+        <p class="intro">Configure a fonte de vídeo e o áudio, depois inicie a transmissão. As escolhas ficam neste computador.</p>
+      </div>
+    </header>
 
-  <button id="startBtn">Iniciar compartilhamento</button>
-  <button id="stopBtn" disabled>Parar</button>
+    <section class="config-panel" aria-labelledby="configTitle">
+      <div class="section-heading">
+        <h2 id="configTitle">Configuração da captura</h2>
+        <span class="section-note">Você poderá confirmar a tela no próximo diálogo</span>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label for="captureMode">Fonte de vídeo</label>
+          <select id="captureMode">
+            <option value="browser">Aba do navegador</option>
+            <option value="window">Janela ou aplicativo</option>
+            <option value="monitor">Tela inteira</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="audioPolicy">Fonte de áudio</label>
+          <select id="audioPolicy">
+            <option value="none">Sem áudio</option>
+            <option value="system">Todo o sistema</option>
+            <option value="include">Somente aplicativos selecionados</option>
+            <option value="exclude">Todo o sistema, exceto um aplicativo</option>
+          </select>
+        </div>
+      </div>
+      <div class="audio-row">
+        <div class="field">
+          <label for="audioSource">Aplicativos de áudio</label>
+          <select id="audioSource" multiple size="5" aria-label="Aplicativos de áudio"></select>
+          <small>Use Ctrl para selecionar mais de um aplicativo no modo “somente aplicativos selecionados”.</small>
+        </div>
+        <div class="audio-actions">
+          <button id="refreshAudioBtn" class="secondary" type="button">Atualizar aplicativos</button>
+        </div>
+      </div>
+      <div class="primary-actions">
+        <button id="startBtn">Iniciar compartilhamento</button>
+        <button id="updateBtn" class="secondary" type="button" disabled>Atualizar captura</button>
+        <button id="stopBtn" class="secondary" disabled>Parar transmissão</button>
+      </div>
+      <label class="update-options"><input id="allowUpdates" type="checkbox" checked> Permitir atualização da tela e do áudio durante a transmissão</label>
+    </section>
 
-  <p id="status">Aguardando inicio...</p>
-  <p id="watchers"></p>
-
-  <video id="preview" autoplay muted playsinline></video>
-
-  <p style="margin-top:30px;">Compartilhe este link com quem vai assistir: <br>
-    <a class="link" id="linkAoVivo" href="/ao-vivo" target="_blank">/ao-vivo</a>
-  </p>
+    <div class="status-bar">
+      <p id="status">Aguardando início...</p>
+      <p id="watchers"></p>
+    </div>
+    <div class="preview-frame"><video id="preview" autoplay muted playsinline></video></div>
+    <footer class="share-footer">
+      <p>Link para quem vai assistir</p>
+      <a class="link" id="linkAoVivo" href="/ao-vivo" target="_blank">/ao-vivo</a>
+    </footer>
+  </main>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 const startBtn = document.getElementById('startBtn');
+const updateBtn = document.getElementById('updateBtn');
 const stopBtn = document.getElementById('stopBtn');
+const allowUpdates = document.getElementById('allowUpdates');
 const status = document.getElementById('status');
 const watchersEl = document.getElementById('watchers');
 const preview = document.getElementById('preview');
+const captureMode = document.getElementById('captureMode');
+const audioPolicy = document.getElementById('audioPolicy');
+const audioSource = document.getElementById('audioSource');
+const refreshAudioBtn = document.getElementById('refreshAudioBtn');
 
 let localStream = null;
+let appAudioContext = null;
+let appAudioNode = null;
+let appAudioTrack = null;
+let audioCaptureVersion = 0;
 const peerConnections = {}; // watcherId -> RTCPeerConnection
 
-const rtcConfig = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+const rtcConfigReady = fetch('/api/rtc-config')
+  .then(response => response.json())
+  .then(config => { rtcConfig = config; })
+  .catch(() => {});
+
+document.getElementById('linkAoVivo').href = `${window.location.origin}/ao-vivo`;
+document.getElementById('linkAoVivo').textContent = `${window.location.origin}/ao-vivo`;
+
+if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  status.textContent = 'Use HTTPS neste endereco publico para liberar a captura de tela.';
+}
+
+function atualizarAplicativos() {
+  socket.emit('audio-processes', (processes) => {
+    audioSource.querySelectorAll('option[data-pid]').forEach(option => option.remove());
+    processes.forEach(process => {
+      const option = document.createElement('option');
+      option.value = `app:${process.pid}`;
+      option.dataset.pid = process.pid;
+      option.textContent = process.title ? `${process.name} - ${process.title}` : process.name;
+      audioSource.appendChild(option);
+    });
+  });
+}
+
+audioPolicy.onchange = () => {
+  audioSource.style.display = audioPolicy.value === 'none' || audioPolicy.value === 'system' ? 'none' : 'inline-block';
 };
+audioPolicy.onchange();
+
+refreshAudioBtn.onclick = atualizarAplicativos;
+socket.on('connect', atualizarAplicativos);
+
+async function iniciarAudioDoAplicativo(targetStream, processIds, mode) {
+  appAudioContext = new AudioContext({ sampleRate: 44100 });
+  const workletCode = `
+    class PcmPlayer extends AudioWorkletProcessor {
+      constructor() {
+        super(); this.queue = []; this.current = null; this.offset = 0;
+        this.port.onmessage = event => this.queue.push(new Int16Array(event.data));
+      }
+      process(inputs, outputs) {
+        const left = outputs[0][0];
+        const right = outputs[0][1] || left;
+        for (let i = 0; i < left.length; i++) {
+          if (!this.current || this.offset + 1 >= this.current.length) {
+            this.current = this.queue.shift(); this.offset = 0;
+          }
+          left[i] = this.current ? this.current[this.offset++] / 32768 : 0;
+          right[i] = this.current ? this.current[this.offset++] / 32768 : 0;
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-player', PcmPlayer);
+  `;
+  const moduleUrl = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
+  await appAudioContext.audioWorklet.addModule(moduleUrl);
+  URL.revokeObjectURL(moduleUrl);
+  appAudioNode = new AudioWorkletNode(appAudioContext, 'pcm-player', { outputChannelCount: [2] });
+  const destination = appAudioContext.createMediaStreamDestination();
+  appAudioNode.connect(destination);
+  appAudioTrack = destination.stream.getAudioTracks()[0];
+  targetStream.addTrack(appAudioTrack);
+  await appAudioContext.resume();
+  socket.emit('audio-start', { processIds, mode, version: audioCaptureVersion });
+}
+
+async function limparAudioLocal() {
+  audioCaptureVersion += 1;
+  socket.emit('audio-stop');
+  if (appAudioTrack) appAudioTrack.stop();
+  if (appAudioContext) await appAudioContext.close();
+  appAudioTrack = null;
+  appAudioContext = null;
+  appAudioNode = null;
+  pendingPcm = new Uint8Array(0);
+}
+
+let pendingPcm = new Uint8Array(0);
+socket.on('audio-data', (data) => {
+  if (!appAudioNode) return;
+  const incoming = new Uint8Array(data);
+  const combined = new Uint8Array(pendingPcm.length + incoming.length);
+  combined.set(pendingPcm);
+  combined.set(incoming, pendingPcm.length);
+  const usableLength = combined.length - (combined.length % 4);
+  if (usableLength) {
+    const pcm = combined.slice(0, usableLength).buffer;
+    appAudioNode.port.postMessage(pcm, [pcm]);
+  }
+  pendingPcm = combined.slice(usableLength);
+});
+
+socket.on('audio-error', (message) => {
+  status.textContent = message;
+});
 
 function atualizarContador() {
   const n = Object.keys(peerConnections).length;
   watchersEl.textContent = n > 0 ? `${n} pessoa(s) assistindo agora` : 'Ninguem assistindo ainda';
 }
 
-startBtn.onclick = async () => {
+function obterConfigAudio() {
+  const selectedPolicy = audioPolicy.value;
+  const selectedProcessIds = Array.from(audioSource.selectedOptions)
+    .map(option => Number(option.dataset.pid))
+    .filter(Number.isInteger);
+  if ((selectedPolicy === 'include' && !selectedProcessIds.length)
+      || (selectedPolicy === 'exclude' && selectedProcessIds.length !== 1)) {
+    throw new Error(selectedPolicy === 'exclude'
+      ? 'Selecione exatamente um aplicativo para excluir.'
+      : 'Selecione pelo menos um aplicativo para transmitir.');
+  }
+  return { selectedPolicy, selectedProcessIds };
+}
+
+async function capturarFonte() {
+  const { selectedPolicy, selectedProcessIds } = obterConfigAudio();
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: {
+      displaySurface: captureMode.value,
+      cursor: 'always',
+      width: { ideal: 1280, max: 1280 },
+      height: { ideal: 720, max: 720 },
+      frameRate: { ideal: 30, max: 30 }
+    },
+    audio: selectedPolicy === 'system' ? {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: 48000,
+      sampleSize: 16,
+      channelCount: 2
+    } : false,
+    systemAudio: 'include',
+    windowAudio: captureMode.value === 'window' ? 'window' : 'exclude',
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'include'
+  });
+  if (selectedPolicy === 'include' || selectedPolicy === 'exclude') {
+    await iniciarAudioDoAplicativo(stream, selectedProcessIds, selectedPolicy);
+  } else {
+    socket.emit('audio-stop');
+  }
+  return stream;
+}
+
+async function renegociar(pc) {
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  const watcherId = Object.keys(peerConnections).find(id => peerConnections[id] === pc);
+  if (watcherId) socket.emit('offer', watcherId, pc.localDescription);
+}
+
+async function atualizarCaptura() {
+  if (!localStream || !allowUpdates.checked) return;
+  updateBtn.disabled = true;
+  status.textContent = 'Aguardando nova tela ou janela...';
+  let newStream;
+  const oldStream = localStream;
   try {
-    localStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        cursor: 'always',
-        width: { ideal: 1280, max: 1280 },
-        height: { ideal: 720, max: 720 },
-        frameRate: { ideal: 30, max: 30 }
-      },
-      audio: {
-        // Desliga processamento pensado pra microfone (causa a "compressao" no audio da tela)
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        sampleRate: 48000,
-        sampleSize: 16,
-        channelCount: 2
+    await limparAudioLocal();
+    newStream = await capturarFonte();
+    localStream = newStream;
+    preview.srcObject = newStream;
+    const newTracks = { video: newStream.getVideoTracks()[0], audio: newStream.getAudioTracks()[0] };
+    await Promise.all(Object.values(peerConnections).map(async pc => {
+      const senders = pc.getSenders();
+      for (const kind of ['video', 'audio']) {
+        const sender = senders.find(item => item.track?.kind === kind);
+        if (sender) {
+          await sender.replaceTrack(newTracks[kind] || null);
+        }
+        else if (newTracks[kind]) pc.addTrack(newTracks[kind], newStream);
       }
-    });
+      await renegociar(pc);
+    }));
+    oldStream.getTracks().forEach(track => track.stop());
+    newStream.getVideoTracks()[0].onended = stopSharing;
+    status.textContent = newStream.getAudioTracks().length
+      ? 'Transmissão atualizada com vídeo e áudio'
+      : 'Transmissão atualizada com vídeo, sem áudio';
   } catch (err) {
-    status.textContent = 'Erro ao capturar a tela: ' + err.message;
+    if (newStream) newStream.getTracks().forEach(track => track.stop());
+    status.textContent = 'Não foi possível atualizar a captura: ' + err.message;
+  } finally {
+    updateBtn.disabled = !localStream || !allowUpdates.checked;
+  }
+}
+
+updateBtn.onclick = atualizarCaptura;
+allowUpdates.onchange = () => { updateBtn.disabled = !localStream || !allowUpdates.checked; };
+
+startBtn.onclick = async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    status.textContent = window.isSecureContext
+      ? 'Este navegador nao oferece captura de tela.'
+      : 'Captura bloqueada: abra este link usando HTTPS (http://localhost funciona localmente).';
+    return;
+  }
+  await rtcConfigReady;
+  socket.emit('broadcaster');
+  try {
+    localStream = await capturarFonte();
+  } catch (err) {
+    status.textContent = 'Não foi possível iniciar a captura: ' + err.message;
     return;
   }
 
@@ -106,10 +376,13 @@ startBtn.onclick = async () => {
   if (videoTrack) videoTrack.contentHint = 'motion';
 
   preview.srcObject = localStream;
-  socket.emit('broadcaster');
-  status.textContent = 'Transmitindo ao vivo';
+  socket.emit('broadcaster-ready');
+  status.textContent = localStream.getAudioTracks().length
+    ? 'Transmitindo video e audio ao vivo'
+    : 'Transmitindo video ao vivo (sem audio)';
   startBtn.disabled = true;
   stopBtn.disabled = false;
+  updateBtn.disabled = !allowUpdates.checked;
   atualizarContador();
 
   // Se o usuario clicar em "Parar de compartilhar" na barra do navegador
@@ -118,7 +391,13 @@ startBtn.onclick = async () => {
 
 stopBtn.onclick = stopSharing;
 
+socket.on('broadcaster-replaced', () => {
+  stopSharing();
+  status.textContent = 'Outra pessoa assumiu a transmissao.';
+});
+
 function stopSharing() {
+  limparAudioLocal();
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
@@ -129,6 +408,7 @@ function stopSharing() {
   status.textContent = 'Compartilhamento encerrado.';
   startBtn.disabled = false;
   stopBtn.disabled = true;
+  updateBtn.disabled = true;
   atualizarContador();
 }
 
