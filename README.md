@@ -1,175 +1,206 @@
-# Tela Compartilhada — Compartilhamento de tela ao vivo (com áudio)
+# Tela Compartilhada
 
-Servidor Node.js simples que permite compartilhar sua tela em tempo real (com áudio)
-para qualquer pessoa acessando o mesmo servidor, usando WebRTC + Socket.io.
+Aplicacao web para compartilhar tela, camera e audio em tempo real usando WebRTC e Socket.IO. O servidor faz a sinalizacao; video e audio sao enviados diretamente entre os navegadores.
 
-## Como instalar e rodar
+## Requisitos
 
-1. Instale o Node.js (v18 ou superior) se ainda não tiver: https://nodejs.org
-2. Abra o terminal dentro desta pasta e rode:
+- Windows 10/11 para executar o helper nativo de captura de audio por aplicativo.
+- Node.js 18 ou superior: https://nodejs.org/
+- Visual Studio Build Tools 2022 (ou Visual Studio) com Desenvolvimento para Desktop com C++, MSVC para x64 e Windows 10/11 SDK.
+- Navegador atualizado. Chrome ou Edge sao as opcoes mais completas para captura de tela e audio.
+- Para acesso pela internet: HTTPS. `localhost` funciona sem HTTPS, mas um IP publico em HTTP normalmente impede `getDisplayMedia`.
 
-```bash
-npm install
-npm start
-```
+> O helper usa a API de loopback por processo do Windows. Ela exige Windows 10 build 20348 ou superior, ou Windows 11. Em builds antigos do Windows 10, use captura de audio pelo navegador, VB-CABLE/OBS ou atualize o sistema.
 
-No Windows, `npm start` também compila automaticamente o helper nativo. É
-necessário ter o Visual Studio Build Tools com C++ e Windows SDK instalados.
-O recurso de captura por aplicativo exige Windows 10 build 20348 ou superior
-(ou Windows 11). No Windows 10 comum, como o build 19045, a API de loopback
-por processo não está disponível; nesse caso use Windows 11, VB-CABLE/OBS ou
-um driver de áudio virtual.
+## Instalar depois de clonar
 
-3. O terminal vai mostrar algo como:
-
-```
-Servidor rodando em http://localhost:3000
-  -> Compartilhar tela: http://localhost:3000/compartilhar
-  -> Assistir ao vivo:  http://localhost:3000/ao-vivo
-```
-
-Para publicar na internet, use a porta externa encaminhada para a maquina que
-roda o Node e informe a URL publica ao iniciar. No PowerShell:
+No PowerShell, abra a pasta do projeto e execute:
 
 ```powershell
-$env:PUBLIC_URL="https://SEU-DOMINIO/" # ou http://SEU-IP-PUBLICO:3000
-$env:PORT="3000"
+git clone URL_DO_REPOSITORIO tela-compartilhada
+Set-Location tela-compartilhada
+npm install
+```
+
+O `npm install` instala Express e Socket.IO. Nao e preciso instalar dependencias manualmente dentro de `native/`; os arquivos do helper e do WIL ja estao no repositorio.
+
+## Rodar no proprio computador
+
+O comando abaixo compila o helper C++ em `native/audio-helper/x64/Release/` e inicia o servidor:
+
+```powershell
 npm start
 ```
 
-No roteador, encaminhe a porta TCP 3000 (e UDP 3000, se disponível) para o IP
-local dessa maquina e permita o Node.js no Firewall do Windows. Acesse a pagina
-de compartilhamento pela URL publica, nao por `localhost`.
+Se a compilacao falhar, confirme que `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` existe e que o workload de C++ e o Windows SDK foram instalados.
+
+Acesse no computador que executa o servidor:
+
+- Inicio: http://localhost:3000/
+- Transmitir: http://localhost:3000/compartilhar
+- Assistir: http://localhost:3000/ao-vivo
+
+Para testar em outro dispositivo da mesma rede, descubra o IPv4 do computador servidor com `ipconfig` e use, por exemplo, `http://192.168.0.10:3000/ao-vivo`. Libere o Node.js no Firewall do Windows quando solicitado. O transmissor e o espectador devem conseguir acessar a porta TCP 3000.
 
 ## Como usar
 
-- **Quem vai transmitir**: acesse `/compartilhar`, clique em
-  "Iniciar compartilhamento", escolha a tela/janela/aba e **marque a opção
-  "Compartilhar áudio"** na janela de seleção do navegador (essa opção varia
-  de navegador para navegador).
-- **Quem vai assistir**: acesse `/ao-vivo` (pode ser em outro
-  computador na mesma rede, usando o IP da máquina que roda o servidor, ex:
-  `http://192.168.0.10:3000/ao-vivo`).
-- Vários espectadores podem assistir ao mesmo tempo.
-- Qualquer espectador pode clicar em **Compartilhar minha tela** e transmitir
-  pelo próprio navegador. Não precisa instalar Node.js nem iniciar servidor.
-  Para compartilhar de outro computador, use o link público com HTTPS e
-  permita tela/áudio no diálogo do navegador.
-- Durante a transmissão, use **Atualizar captura** para trocar a tela, janela ou
-  política de áudio. A troca é aplicada aos espectadores sem reiniciar o
-  servidor. A opção **Permitir atualização** pode ser desmarcada para bloquear
-  esse controle durante a transmissão.
+1. Na pagina de transmitir, escolha somente tela, somente camera ou tela e camera.
+2. Clique em **Iniciar compartilhamento** e aceite as permissoes do navegador.
+3. Para levar audio da tela, marque **Compartilhar audio** na janela de selecao do Chrome/Edge. As opcoes variam conforme a fonte escolhida.
+4. Compartilhe com os espectadores o endereco `/ao-vivo`. Para uma sala especifica, use `/{codigo}/compartilhar` e `/{codigo}/ao-vivo`, com um codigo de 4 a 32 caracteres contendo letras minusculas, numeros, `_` ou `-`.
+5. Na pagina ao vivo, o espectador pode usar o link da sala e, quando habilitado, compartilhar a propria tela pelo navegador sem instalar Node.js.
 
-## Observações importantes
+So ha um transmissor ativo por sala. Varios espectadores podem assistir. A qualidade depende da conexao e do encoder/decoder dos dois navegadores; o servidor nao retransmite a midia.
 
-- **Compartilhamento de áudio**: no Chrome/Edge (Windows), escolha uma **janela**
-  para tentar capturar o áudio daquela aplicação, ou uma aba/tela e habilite a
-  opção de áudio no seletor. O navegador e o sistema operacional decidem quais
-  fontes aparecem; a API `getDisplayMedia` não permite selecionar ou capturar
-  silenciosamente um aplicativo específico por código. No
-  macOS, o Chrome só compartilha áudio de **abas** (não da tela inteira), por
-  limitação do próprio sistema operacional. No Firefox o suporte é mais limitado.
-- **Áudio por aplicativo**: na página de compartilhamento, clique em **Atualizar
-  aplicativos**, escolha uma política e selecione os processos desejados. Em
-  **Somente aplicativos selecionados**, é possível selecionar vários processos
-  com Ctrl; eles serão mixados. Em **Todo o sistema, exceto um aplicativo**, o
-  áudio do processo escolhido e seus subprocessos será bloqueado.
-- **HTTPS**: navegadores exigem contexto seguro para `getDisplayMedia`. Para
-  compartilhar a tela usando IP publico, use HTTPS com um dominio/certificado;
-  `localhost` e permitido sem HTTPS, mas um IP publico em HTTP pode bloquear a
-  captura. Se a pagina mostrar `Captura bloqueada`, esse e o motivo. Uma forma
-  simples e usar um proxy HTTPS como Caddy ou Nginx na frente do Node.
-- **Rede local x internet**: para uso entre redes diferentes, configure um
-  servidor **TURN** (Coturn ou um provedor). O servidor ja aceita:
+### Audio por aplicativo no Windows
+
+Na pagina de transmitir, use **Atualizar aplicativos** para listar processos, escolha uma politica e selecione os processos desejados. Em **Somente aplicativos selecionados**, use Ctrl para selecionar varios; eles sao mixados. Em **Todo o sistema, exceto um aplicativo**, selecione o processo que deve ser excluido.
+
+Essa captura depende do helper compilado e do Windows. O navegador continua sendo responsavel pelo audio compartilhado na janela de `getDisplayMedia`; nenhum aplicativo pode ser selecionado silenciosamente por codigo.
+
+## Configuracao
+
+As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo terminal:
+
+| Variavel | Padrao | Funcao |
+| --- | --- | --- |
+| `PORT` | `3000` | Porta HTTP do servidor |
+| `HOST` | `0.0.0.0` | Endereco onde o servidor escuta |
+| `PUBLIC_URL` | `http://localhost:PORT` | URL exibida nos logs |
+| `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
+| `TURN_URLS` | vazio | URLs TURN separadas por virgula |
+| `TURN_USERNAME` | vazio | Usuario do TURN |
+| `TURN_CREDENTIAL` | vazio | Credencial do TURN |
+
+Exemplo:
+
+```powershell
+$env:PORT="3000"
+$env:HOST="0.0.0.0"
+$env:PUBLIC_URL="https://stream.exemplo.com"
+$env:CORS_ORIGIN="https://stream.exemplo.com"
+npm start
+```
+
+`PUBLIC_URL` nao publica o servidor nem configura DNS; ele apenas altera os enderecos mostrados nos logs.
+
+## Publicar com Cloudflare Tunnel
+
+O Tunnel cria uma conexao de saida do computador para a Cloudflare, sem abrir a porta 3000 no roteador. O HTTPS termina na Cloudflare e o tunnel encaminha para `http://localhost:3000`. Ainda assim, a sala nao tem login: trate o link e o codigo da sala como informacao privada.
+
+### Opcao rapida, sem conta e temporaria
+
+1. Instale o `cloudflared` no Windows. Com `winget`:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+   Alternativamente, baixe o executavel em https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/ e coloque-o no `PATH`.
+2. Em um terminal, inicie o projeto:
+
+```powershell
+npm start
+```
+
+3. Em outro terminal, crie o tunnel:
+
+```powershell
+cloudflared tunnel --url http://localhost:3000
+```
+
+4. Copie a URL `https://....trycloudflare.com` mostrada no terminal e use `/compartilhar` para transmitir ou `/ao-vivo` para assistir.
+
+Esse endereco e aleatorio, muda quando o processo termina e e apropriado para testes. Mantenha a janela do `cloudflared` aberta durante a transmissao. Nao use um Quick Tunnel como endereco permanente.
+
+### Opcao permanente com dominio proprio
+
+Essa opcao exige uma conta Cloudflare e um dominio cuja zona DNS esteja na Cloudflare.
+
+1. Instale o `cloudflared` e autentique o computador:
+
+```powershell
+cloudflared tunnel login
+```
+
+Uma pagina sera aberta; escolha a zona do seu dominio e autorize o acesso.
+2. Crie um tunnel nomeado e um registro DNS:
+
+```powershell
+cloudflared tunnel create tela-compartilhada
+cloudflared tunnel route dns tela-compartilhada stream.seudominio.com
+```
+
+3. Crie `cloudflared-config.yml` fora do repositorio, substituindo o caminho pelo arquivo de credenciais criado no passo anterior:
+
+```yaml
+tunnel: ID_DO_TUNNEL
+credentials-file: C:\Users\SEU_USUARIO\.cloudflared\ID_DO_TUNNEL.json
+
+ingress:
+  - hostname: stream.seudominio.com
+    service: http://localhost:3000
+  - service: http_status:404
+```
+
+4. Inicie o Node e o tunnel:
+
+```powershell
+$env:PUBLIC_URL="https://stream.seudominio.com"
+$env:CORS_ORIGIN="https://stream.seudominio.com"
+npm start
+cloudflared tunnel --config C:\caminho\cloudflared-config.yml run tela-compartilhada
+```
+
+Use `https://stream.seudominio.com/compartilhar` para transmitir e `https://stream.seudominio.com/ao-vivo` para assistir. O DNS e o certificado HTTPS sao gerenciados pela Cloudflare. Proteja o arquivo `.json` de credenciais e nunca o commite.
+
+Para manter o servico apos reinicializacoes, configure o `cloudflared` como servico do Windows ou use o Agendador de Tarefas. O processo Node tambem precisa ser mantido ativo por NSSM, PM2 ou um servico do Windows.
+
+## Dominio proprio sem Cloudflare Tunnel
+
+Outra arquitetura e apontar o DNS para um servidor publico e colocar Caddy ou Nginx como proxy HTTPS na frente do Node. O proxy deve encaminhar HTTP e WebSocket para `localhost:3000`; libere apenas as portas 80/443 no firewall e mantenha o Node escutando localmente. Configure `PUBLIC_URL` e `CORS_ORIGIN` com a URL HTTPS final. Nao encaminhe a porta 3000 diretamente quando o objetivo for acesso publico seguro.
+
+## TURN para redes restritas
+
+WebRTC tenta uma conexao direta. Se transmissor e espectador estiverem em redes diferentes e a conexao nao for estabelecida, configure um servidor TURN, como Coturn:
 
 ```powershell
 $env:TURN_URLS="turn:turn.seudominio.com:3478,turns:turn.seudominio.com:5349"
 $env:TURN_USERNAME="usuario"
-$env:TURN_CREDENTIAL="senha-ou-credencial"
+$env:TURN_CREDENTIAL="credencial"
 npm start
 ```
 
-  O cliente recebe essa configuracao automaticamente em `/api/rtc-config`.
-- O vídeo/áudio **não passa pelo servidor** — ele só ajuda os dois lados a se
-  encontrarem (sinalização). O streaming em si é direto entre os navegadores
-  (peer-to-peer), então a qualidade depende da conexão entre as duas pontas.
-- Atualmente só suporta **uma transmissão por vez** (um transmissor). Se quiser
-  suportar múltiplos transmissores simultâneos, dá pra evoluir facilmente.
+O endpoint `/api/rtc-config` entrega essa configuracao aos clientes. TURN aumenta o consumo de banda no servidor e deve usar credenciais fortes e rotacionadas. O tunnel HTTPS nao substitui TURN: eles resolvem problemas diferentes.
 
-## Se o delay ficar crescendo (tipo câmera lenta)
+## Seguranca e privacidade
 
-Isso é sinal de que o **decodificador do lado que assiste não está dando conta**
-(não é problema de rede). Como o navegador prefere não travar a imagem, ele vai
-empilhando quadros num buffer que só cresce, e a transmissão "atrasa" cada vez
-mais. É bem comum em navegadores de Smart TV, que costumam ter pouco poder de
-processamento e, na maioria das vezes, só decodificam **H.264 por hardware**
-(VP8/VP9, que muitos navegadores escolhem por padrão, acabam sendo decodificados
-por software — bem mais pesado).
+- HTTPS e necessario para captura de tela fora de `localhost`; nunca instrua usuarios a ignorar alertas de certificado.
+- O servidor atual nao possui autenticacao, lista de convidados, expiracao de salas ou controle de acesso. Nao publique links sensiveis sem adicionar uma camada de autenticacao.
+- A sinalizacao passa pelo servidor, mas a midia e peer-to-peer quando possivel; com TURN, a midia pode passar pelo relay.
+- Nao inclua tokens, credenciais TURN, arquivos `.cloudflared` ou certificados no Git.
+- Para producao, defina `CORS_ORIGIN` para o dominio exato, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs.
 
-Já ajustei o código para:
+## Solucao de problemas
 
-- **Forçar H.264 como codec preferido** (função `preferCodec` no
-  `compartilhar.html`) — se a TV tiver decodificação por hardware pra H.264
-  (a grande maioria tem), isso sozinho já deve resolver.
-- **Reduzir a captura para 1280x720 @ 30fps** e o teto de bitrate para 3 Mbps —
-  bem mais tranquilo para um chip fraco decodificar em tempo real.
+- **Helper de audio nao encontrado:** execute `npm start` em Windows com Visual Studio Build Tools C++ e confirme que o build terminou sem erro.
+- **Captura bloqueada:** abra a pagina por `https://` ou por `localhost`; um IP publico em HTTP nao e contexto seguro.
+- **Espectador nao conecta:** teste a sala correta, confirme que o transmissor esta online e configure TURN se houver NAT/firewall restritivo.
+- **Audio sem som:** marque a opcao de audio no seletor do navegador; a disponibilidade depende da fonte, navegador e sistema operacional.
+- **Atraso crescente:** reduza resolucao, FPS ou bitrate em `public/compartilhar.html`; em TVs e dispositivos fracos, o gargalo costuma ser a decodificacao.
+- **Tunnel nao abre:** confirme que o Node responde em `http://localhost:3000`, que o `cloudflared` esta no `PATH` e que a janela do tunnel continua aberta.
 
-Se mesmo assim o delay continuar crescendo, o próximo passo é baixar ainda mais:
+## Estrutura
 
-```js
-// em compartilhar.html
-width: { ideal: 960, max: 960 },
-height: { ideal: 540, max: 540 },
-frameRate: { ideal: 24, max: 24 }
-// ...
-params.encodings[0].maxBitrate = 1_500_000; // 1.5 Mbps
-```
-
-Regra prática: se o delay **estabiliza** num valor (mesmo que perceptível, tipo
-meio segundo) e não continua subindo, é rede/latência normal — não tem muito o
-que fazer além de cabo/Wi-Fi melhor. Se o delay **continua crescendo sem parar**,
-é decodificador não dando conta — a solução é sempre reduzir resolução/fps/bitrate,
-nunca aumentar.
-
-## Melhorando a performance (menos lag e áudio mais limpo)
-
-Já apliquei no código estes ajustes:
-
-- **Áudio sem processamento de microfone**: `echoCancellation`, `noiseSuppression`
-  e `autoGainControl` desligados — eram eles que "comprimiam"/distorciam o áudio
-  da tela. Também subi para 48kHz/estéreo e o teto de bitrate do Opus para 256kbps.
-- **Prioridade de fluidez em vez de nitidez**: `track.contentHint = 'motion'` e
-  `degradationPreference = 'maintain-framerate'` — por padrão o WebRTC, ao notar
-  qualquer variação de rede, prefere baixar a resolução a perder quadros; isso
-  inverte essa prioridade, ideal para telas com bastante movimento.
-- **Bitrate de vídeo mais alto** (teto de 8 Mbps): o WebRTC por padrão assume uma
-  rede mais fraca do que uma rede local costuma ter, então sem esse ajuste ele
-  se segura sozinho mesmo com banda de sobra.
-
-Outras coisas que ajudam bastante e dependem do seu ambiente, não do código:
-
-- **Cabo em vez de Wi-Fi** — se der pra ligar por cabo de rede o computador que
-  transmite (e, se possível, o dispositivo que recebe na TV), o ganho de
-  estabilidade costuma ser maior que qualquer ajuste de software.
-- **Wi-Fi 5GHz em vez de 2.4GHz**, se cabo não for opção — menos interferência.
-- **Feche outros apps consumindo CPU/GPU** durante a transmissão: encoding de
-  vídeo em tempo real consome processamento, e se a CPU/GPU está no limite o
-  próprio encoder derruba quadros antes mesmo de chegar na rede.
-- **Ajuste o teto de bitrate** (`maxBitrate` no `compartilhar.html`) para baixo
-  (ex: `4_000_000`) se sua rede não aguentar 8 Mbps estáveis — bitrate acima do
-  que a rede aguenta gera mais engasgo, não menos.
-- **Se o dispositivo que assiste na TV for fraco** (ex: um Smart TV com navegador
-  limitado, ou um Chromecast antigo), o gargalo pode estar na decodificação, não
-  na rede — nesse caso, reduzir a resolução de captura (`width`/`height` no
-  `compartilhar.html`) ajuda mais que qualquer bitrate.
-
-## Estrutura do projeto
-
-```
+```text
 tela-compartilhada/
-├── package.json
-├── server.js              # servidor Express + Socket.io (sinalização)
+├── package.json                    # scripts e dependencias Node.js
+├── package-lock.json               # versoes fixadas das dependencias
+├── server.js                       # Express, Socket.IO e sinalizacao WebRTC
+├── build-helper.ps1                # build Release x64 do helper C++
+├── native/audio-helper/            # captura de audio por processo no Windows
 └── public/
-    ├── compartilhar.html  # página de quem transmite a tela
-    └── ao-vivo.html       # página de quem assiste
+    ├── index.html                  # entrada e salas
+    ├── compartilhar.html            # interface do transmissor
+    └── ao-vivo.html                 # interface do espectador
 ```

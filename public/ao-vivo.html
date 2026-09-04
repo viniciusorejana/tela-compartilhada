@@ -14,14 +14,34 @@
     margin: 0;
   }
   h1 { font-weight: 600; }
-  video {
-    width: 95%;
-    max-width: 960px;
-    border-radius: 10px;
+  .stage {
+    position: relative;
+    width: min(95vw, 960px);
+    aspect-ratio: 16 / 9;
+    margin: 20px auto 0;
+    overflow: hidden;
     border: 2px solid #333;
+    border-radius: 10px;
     background: #000;
-    margin-top: 20px;
   }
+  .stage video {
+    position: absolute;
+    display: none;
+    background: #000;
+    object-fit: contain;
+  }
+  .stage video.main { inset: 0; display: block; width: 100%; height: 100%; }
+  .stage video.pip {
+    top: 3%; left: 3%; right: auto; bottom: auto;
+    display: block; width: 27%; height: auto; aspect-ratio: 16 / 9;
+    border: 2px solid #fff; border-radius: 7px; object-fit: cover;
+    cursor: grab; touch-action: none; box-shadow: 0 3px 14px #000b;
+  }
+  .stage video.pip:active { cursor: grabbing; }
+  .stage video.visible { display: block; }
+  .controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .controls button { margin: 0; padding: 9px 13px; }
+  .controls button[aria-pressed="true"] { background: #2e5da8; }
   #status { margin-top: 14px; color: #7fd1ff; font-size: 14px; }
   button {
     padding: 10px 22px;
@@ -40,16 +60,32 @@
 <body>
   <h1>Assistindo ao vivo</h1>
   <p id="status">Aguardando transmissao...</p>
-  <video id="remoteVideo" autoplay playsinline controls></video>
+  <div class="stage" id="stage">
+    <video id="screenVideo" autoplay playsinline controls></video>
+    <video id="cameraVideo" autoplay muted playsinline controls></video>
+  </div>
+  <div class="controls" aria-label="Controles da transmissão">
+    <button id="toggleScreenBtn" type="button" aria-pressed="false">Tela visível</button>
+    <button id="toggleCameraBtn" type="button" aria-pressed="false">Câmera visível</button>
+    <button id="swapPipBtn" type="button">Câmera no PiP</button>
+  </div>
   <br>
   <button id="unmuteBtn" style="display:none;">Ativar som</button>
   <br>
-  <a class="shareLink" href="/compartilhar">Compartilhar minha tela</a>
+  <a class="shareLink" id="shareLink" href="/compartilhar">Compartilhar minha tela</a>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-const remoteVideo = document.getElementById('remoteVideo');
+const pathParts = window.location.pathname.split('/').filter(Boolean);
+const roomCode = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : 'principal';
+const stage = document.getElementById('stage');
+const screenVideo = document.getElementById('screenVideo');
+const cameraVideo = document.getElementById('cameraVideo');
+const toggleScreenBtn = document.getElementById('toggleScreenBtn');
+const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+const swapPipBtn = document.getElementById('swapPipBtn');
+document.getElementById('shareLink').href = `/${roomCode}/compartilhar`;
 const status = document.getElementById('status');
 const unmuteBtn = document.getElementById('unmuteBtn');
 
@@ -61,15 +97,69 @@ const rtcConfigReady = fetch('/api/rtc-config')
 
 let pc = null;
 let broadcasterId = null;
+let roomJoined = false;
+let sourceIds = { screenStreamId: null, cameraStreamId: null };
+let sourceAvailable = { screen: false, camera: false };
+let visible = { screen: true, camera: true };
+let pipSource = 'camera';
+let remoteStreams = { screen: new MediaStream(), camera: new MediaStream() };
+
+function videoFor(source) { return source === 'screen' ? screenVideo : cameraVideo; }
+
+function renderLayout() {
+  ['screen', 'camera'].forEach(source => {
+    const video = videoFor(source);
+    video.className = '';
+    video.style.left = '';
+    video.style.top = '';
+    video.style.right = '';
+    video.style.bottom = '';
+    if (!sourceAvailable[source] || !visible[source]) return;
+    const other = source === 'screen' ? 'camera' : 'screen';
+    const usePip = sourceAvailable[other] && visible[other] && pipSource === source;
+    video.classList.add(usePip ? 'pip' : 'main', 'visible');
+  });
+  toggleScreenBtn.disabled = !sourceAvailable.screen;
+  toggleCameraBtn.disabled = !sourceAvailable.camera;
+  toggleScreenBtn.setAttribute('aria-pressed', String(visible.screen));
+  toggleCameraBtn.setAttribute('aria-pressed', String(visible.camera));
+  swapPipBtn.disabled = !(sourceAvailable.screen && sourceAvailable.camera && visible.screen && visible.camera);
+  swapPipBtn.textContent = pipSource === 'camera' ? 'Câmera no PiP' : 'Tela no PiP';
+}
+
+function identifySource(stream) {
+  if (stream.id === sourceIds.screenStreamId) return 'screen';
+  if (stream.id === sourceIds.cameraStreamId) return 'camera';
+  return null;
+}
+
+renderLayout();
+
+function entrarNaSala() {
+  socket.emit('join-room', roomCode, response => {
+    roomJoined = Boolean(response?.ok);
+    if (roomJoined) rtcConfigReady.then(() => socket.emit('watcher'));
+  });
+}
+
+socket.on('connect', entrarNaSala);
 
 function criarConexao() {
   pc = new RTCPeerConnection(rtcConfig);
 
   pc.ontrack = (event) => {
-    if (remoteVideo.srcObject !== event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
-      status.textContent = 'Conectado! Recebendo transmissao ao vivo.';
+    event.receiver.playoutDelayHint = 0;
+    const stream = event.streams[0];
+    const source = identifySource(stream) || (event.track.kind === 'audio' ? 'screen' : null);
+    if (!source) return;
+    const remoteStream = remoteStreams[source];
+    if (!remoteStream.getTracks().some(track => track.id === event.track.id)) {
+      remoteStream.addTrack(event.track);
     }
+    videoFor(source).srcObject = remoteStream;
+    sourceAvailable[source] = true;
+    renderLayout();
+    status.textContent = 'Conectado! Recebendo transmissao ao vivo.';
   };
 
   pc.onicecandidate = (event) => {
@@ -85,8 +175,10 @@ function criarConexao() {
   };
 }
 
-socket.on('offer', (id, description) => {
+socket.on('offer', (id, description, mediaInfo) => {
   broadcasterId = id;
+  sourceIds = mediaInfo || sourceIds;
+  sourceAvailable = { screen: Boolean(sourceIds.screenStreamId), camera: Boolean(sourceIds.cameraStreamId) };
   if (!pc) criarConexao();
   pc.setRemoteDescription(description)
     .then(() => pc.createAnswer())
@@ -106,30 +198,61 @@ socket.on('broadcaster-online', () => {
 socket.on('broadcaster-offline', () => {
   status.textContent = 'A transmissao foi encerrada.';
   if (pc) { pc.close(); pc = null; }
-  remoteVideo.srcObject = null;
+  screenVideo.srcObject = null;
+  cameraVideo.srcObject = null;
+  remoteStreams = { screen: new MediaStream(), camera: new MediaStream() };
+  sourceAvailable = { screen: false, camera: false };
+  renderLayout();
   broadcasterId = null;
 });
 
 socket.on('broadcaster-replaced', () => {
   status.textContent = 'Outra pessoa iniciou uma nova transmissao.';
   if (pc) { pc.close(); pc = null; }
-  remoteVideo.srcObject = null;
+  screenVideo.srcObject = null;
+  cameraVideo.srcObject = null;
+  remoteStreams = { screen: new MediaStream(), camera: new MediaStream() };
+  sourceAvailable = { screen: false, camera: false };
+  renderLayout();
   broadcasterId = null;
   socket.emit('watcher');
 });
 
-// Ao carregar a pagina, ja avisa que quer assistir (caso a transmissao ja esteja rolando)
-rtcConfigReady.then(() => socket.emit('watcher'));
-
 // Navegadores bloqueiam autoplay com som; o video comeca mudo e o usuario ativa manualmente
-remoteVideo.addEventListener('play', () => {
-  if (remoteVideo.muted) unmuteBtn.style.display = 'inline-block';
-});
+screenVideo.addEventListener('play', () => { if (screenVideo.muted) unmuteBtn.style.display = 'inline-block'; });
+cameraVideo.addEventListener('play', () => { if (cameraVideo.muted) unmuteBtn.style.display = 'inline-block'; });
 
 unmuteBtn.onclick = () => {
-  remoteVideo.muted = false;
+  screenVideo.muted = false;
+  cameraVideo.muted = true;
   unmuteBtn.style.display = 'none';
 };
+
+toggleScreenBtn.onclick = () => { visible.screen = !visible.screen; renderLayout(); };
+toggleCameraBtn.onclick = () => { visible.camera = !visible.camera; renderLayout(); };
+swapPipBtn.onclick = () => { pipSource = pipSource === 'camera' ? 'screen' : 'camera'; renderLayout(); };
+
+let dragOffset = null;
+stage.addEventListener('pointerdown', event => {
+  const pip = event.target.closest('video.pip');
+  if (!pip) return;
+  const rect = pip.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top, stageRect };
+  pip.setPointerCapture(event.pointerId);
+});
+stage.addEventListener('pointermove', event => {
+  const pip = event.target.closest('video.pip');
+  if (!pip || !dragOffset) return;
+  const pipWidth = pip.offsetWidth;
+  const pipHeight = pip.offsetHeight;
+  const left = Math.max(0, Math.min(dragOffset.stageRect.width - pipWidth, event.clientX - dragOffset.stageRect.left - dragOffset.x));
+  const top = Math.max(0, Math.min(dragOffset.stageRect.height - pipHeight, event.clientY - dragOffset.stageRect.top - dragOffset.y));
+  pip.style.left = `${left}px`;
+  pip.style.top = `${top}px`;
+  pip.style.right = 'auto';
+});
+stage.addEventListener('pointerup', () => { dragOffset = null; });
 </script>
 </body>
 </html>

@@ -91,7 +91,15 @@
       </div>
       <div class="field-grid">
         <div class="field">
-          <label for="captureMode">Fonte de vídeo</label>
+          <label for="videoMode">Compartilhamentos de vídeo</label>
+          <select id="videoMode">
+            <option value="screen">Somente tela</option>
+            <option value="camera">Somente câmera</option>
+            <option value="both">Tela e câmera</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="captureMode">Tipo de tela</label>
           <select id="captureMode">
             <option value="browser">Aba do navegador</option>
             <option value="window">Janela ou aplicativo</option>
@@ -140,6 +148,8 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+const pathParts = window.location.pathname.split('/').filter(Boolean);
+const roomCode = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : 'principal';
 const startBtn = document.getElementById('startBtn');
 const updateBtn = document.getElementById('updateBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -147,12 +157,15 @@ const allowUpdates = document.getElementById('allowUpdates');
 const status = document.getElementById('status');
 const watchersEl = document.getElementById('watchers');
 const preview = document.getElementById('preview');
+const videoMode = document.getElementById('videoMode');
 const captureMode = document.getElementById('captureMode');
 const audioPolicy = document.getElementById('audioPolicy');
 const audioSource = document.getElementById('audioSource');
 const refreshAudioBtn = document.getElementById('refreshAudioBtn');
 
 let localStream = null;
+let screenStream = null;
+let cameraStream = null;
 let appAudioContext = null;
 let appAudioNode = null;
 let appAudioTrack = null;
@@ -166,8 +179,8 @@ const rtcConfigReady = fetch('/api/rtc-config')
   .then(config => { rtcConfig = config; })
   .catch(() => {});
 
-document.getElementById('linkAoVivo').href = `${window.location.origin}/ao-vivo`;
-document.getElementById('linkAoVivo').textContent = `${window.location.origin}/ao-vivo`;
+document.getElementById('linkAoVivo').href = `${window.location.origin}/${roomCode}/ao-vivo`;
+document.getElementById('linkAoVivo').textContent = `${window.location.origin}/${roomCode}/ao-vivo`;
 
 if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
   status.textContent = 'Use HTTPS neste endereco publico para liberar a captura de tela.';
@@ -192,7 +205,7 @@ audioPolicy.onchange = () => {
 audioPolicy.onchange();
 
 refreshAudioBtn.onclick = atualizarAplicativos;
-socket.on('connect', atualizarAplicativos);
+socket.on('connect', () => socket.emit('join-room', roomCode, () => atualizarAplicativos()));
 
 async function iniciarAudioDoAplicativo(targetStream, processIds, mode) {
   appAudioContext = new AudioContext({ sampleRate: 44100 });
@@ -280,40 +293,72 @@ function obterConfigAudio() {
 
 async function capturarFonte() {
   const { selectedPolicy, selectedProcessIds } = obterConfigAudio();
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      displaySurface: captureMode.value,
-      cursor: 'always',
-      width: { ideal: 1280, max: 1280 },
-      height: { ideal: 720, max: 720 },
-      frameRate: { ideal: 30, max: 30 }
-    },
-    audio: selectedPolicy === 'system' ? {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-      sampleRate: 48000,
-      sampleSize: 16,
-      channelCount: 2
-    } : false,
-    systemAudio: 'include',
-    windowAudio: captureMode.value === 'window' ? 'window' : 'exclude',
-    selfBrowserSurface: 'exclude',
-    surfaceSwitching: 'include'
-  });
-  if (selectedPolicy === 'include' || selectedPolicy === 'exclude') {
-    await iniciarAudioDoAplicativo(stream, selectedProcessIds, selectedPolicy);
+  const tracks = [];
+  screenStream = null;
+  cameraStream = null;
+
+  if (videoMode.value === 'screen' || videoMode.value === 'both') {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        displaySurface: captureMode.value,
+        cursor: 'always',
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 30, max: 30 }
+      },
+      audio: selectedPolicy === 'system' ? {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 48000,
+        sampleSize: 16,
+        channelCount: 2
+      } : false,
+      systemAudio: 'include',
+      windowAudio: captureMode.value === 'window' ? 'window' : 'exclude',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include'
+    });
+    if (selectedPolicy === 'include' || selectedPolicy === 'exclude') {
+      await iniciarAudioDoAplicativo(screenStream, selectedProcessIds, selectedPolicy);
+    } else {
+      socket.emit('audio-stop');
+    }
+    tracks.push(...screenStream.getTracks());
   } else {
     socket.emit('audio-stop');
   }
-  return stream;
+
+  if (videoMode.value === 'camera' || videoMode.value === 'both') {
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch (error) {
+      screenStream?.getTracks().forEach(track => track.stop());
+      screenStream = null;
+      throw new Error('Não foi possível acessar a câmera: ' + error.message);
+    }
+    tracks.push(...cameraStream.getTracks());
+  }
+
+  return new MediaStream(tracks);
+}
+
+function fontesDaCaptura() {
+  return {
+    screen: screenStream?.getVideoTracks()[0] || null,
+    camera: cameraStream?.getVideoTracks()[0] || null,
+    audio: screenStream?.getAudioTracks()[0] || null
+  };
 }
 
 async function renegociar(pc) {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   const watcherId = Object.keys(peerConnections).find(id => peerConnections[id] === pc);
-  if (watcherId) socket.emit('offer', watcherId, pc.localDescription);
+  if (watcherId) socket.emit('offer', watcherId, pc.localDescription, {
+    screenStreamId: screenStream?.id || null,
+    cameraStreamId: cameraStream?.id || null
+  });
 }
 
 async function atualizarCaptura() {
@@ -327,20 +372,19 @@ async function atualizarCaptura() {
     newStream = await capturarFonte();
     localStream = newStream;
     preview.srcObject = newStream;
-    const newTracks = { video: newStream.getVideoTracks()[0], audio: newStream.getAudioTracks()[0] };
+    const newTracks = fontesDaCaptura();
     await Promise.all(Object.values(peerConnections).map(async pc => {
-      const senders = pc.getSenders();
-      for (const kind of ['video', 'audio']) {
-        const sender = senders.find(item => item.track?.kind === kind);
+      for (const source of ['screen', 'camera', 'audio']) {
+        const sender = pc._sourceSenders[source];
         if (sender) {
-          await sender.replaceTrack(newTracks[kind] || null);
+          await sender.replaceTrack(newTracks[source]);
         }
-        else if (newTracks[kind]) pc.addTrack(newTracks[kind], newStream);
+        else if (newTracks[source]) pc._sourceSenders[source] = pc.addTrack(newTracks[source], newStream);
       }
       await renegociar(pc);
     }));
     oldStream.getTracks().forEach(track => track.stop());
-    newStream.getVideoTracks()[0].onended = stopSharing;
+    newStream.getVideoTracks().forEach(track => { track.onended = stopSharing; });
     status.textContent = newStream.getAudioTracks().length
       ? 'Transmissão atualizada com vídeo e áudio'
       : 'Transmissão atualizada com vídeo, sem áudio';
@@ -356,7 +400,8 @@ updateBtn.onclick = atualizarCaptura;
 allowUpdates.onchange = () => { updateBtn.disabled = !localStream || !allowUpdates.checked; };
 
 startBtn.onclick = async () => {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+  if (!navigator.mediaDevices || (videoMode.value !== 'camera' && !navigator.mediaDevices.getDisplayMedia)
+      || (videoMode.value !== 'screen' && !navigator.mediaDevices.getUserMedia)) {
     status.textContent = window.isSecureContext
       ? 'Este navegador nao oferece captura de tela.'
       : 'Captura bloqueada: abra este link usando HTTPS (http://localhost funciona localmente).';
@@ -372,8 +417,7 @@ startBtn.onclick = async () => {
   }
 
   // Avisa o codec que o conteudo tem movimento (prioriza fluidez sobre nitidez)
-  const videoTrack = localStream.getVideoTracks()[0];
-  if (videoTrack) videoTrack.contentHint = 'motion';
+  localStream.getVideoTracks().forEach(videoTrack => { videoTrack.contentHint = 'motion'; });
 
   preview.srcObject = localStream;
   socket.emit('broadcaster-ready');
@@ -386,7 +430,7 @@ startBtn.onclick = async () => {
   atualizarContador();
 
   // Se o usuario clicar em "Parar de compartilhar" na barra do navegador
-  localStream.getVideoTracks()[0].onended = stopSharing;
+  localStream.getVideoTracks().forEach(track => { track.onended = stopSharing; });
 };
 
 stopBtn.onclick = stopSharing;
@@ -402,6 +446,8 @@ function stopSharing() {
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
   }
+  screenStream = null;
+  cameraStream = null;
   Object.values(peerConnections).forEach(pc => pc.close());
   for (const id in peerConnections) delete peerConnections[id];
   preview.srcObject = null;
@@ -444,11 +490,16 @@ socket.on('watcher', (watcherId) => {
   if (!localStream) return;
 
   const pc = new RTCPeerConnection(rtcConfig);
+  pc._sourceSenders = { screen: null, camera: null, audio: null };
   peerConnections[watcherId] = pc;
   atualizarContador();
 
-  localStream.getTracks().forEach(track => {
-    const sender = pc.addTrack(track, localStream);
+  const sources = fontesDaCaptura();
+  Object.entries(sources).forEach(([source, track]) => {
+    if (!track) return;
+    const stream = source === 'screen' ? screenStream : source === 'camera' ? cameraStream : localStream;
+    const sender = pc.addTrack(track, stream);
+    pc._sourceSenders[source] = sender;
 
     if (track.kind === 'video') {
       const params = sender.getParameters();
@@ -488,7 +539,10 @@ socket.on('watcher', (watcherId) => {
 
   pc.createOffer()
     .then(offer => pc.setLocalDescription(offer))
-    .then(() => socket.emit('offer', watcherId, pc.localDescription));
+    .then(() => socket.emit('offer', watcherId, pc.localDescription, {
+      screenStreamId: screenStream?.id || null,
+      cameraStreamId: cameraStream?.id || null
+    }));
 });
 
 socket.on('answer', (id, description) => {

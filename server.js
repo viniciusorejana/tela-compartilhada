@@ -20,6 +20,14 @@ app.get('/ao-vivo', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ao-vivo.html'));
 });
 
+app.get('/:roomCode/compartilhar', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'compartilhar.html'));
+});
+
+app.get('/:roomCode/ao-vivo', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ao-vivo.html'));
+});
+
 // TURN e necessario quando os navegadores nao conseguem abrir uma conexao direta.
 app.get('/api/rtc-config', (req, res) => {
   const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -37,11 +45,20 @@ app.get('/api/rtc-config', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.redirect('/ao-vivo');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-let broadcasterSocketId = null;
+const broadcasterSocketIds = new Map();
+const socketRoomCodes = new Map();
 const audioCaptureProcesses = new Map();
+
+function roomCodeForSocket(socket) {
+  return socketRoomCodes.get(socket.id) || 'principal';
+}
+
+function roomName(roomCode) {
+  return `room:${roomCode}`;
+}
 
 function listarProcessos() {
   return new Promise((resolve) => {
@@ -99,19 +116,38 @@ function misturarAudio(socket, captures) {
 io.on('connection', (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
 
+  socket.on('join-room', (requestedCode, callback) => {
+    const roomCode = String(requestedCode || 'principal').toLowerCase();
+    if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Codigo de sala invalido.' });
+      return;
+    }
+    const previousRoom = socketRoomCodes.get(socket.id);
+    if (previousRoom) socket.leave(roomName(previousRoom));
+    socket.join(roomName(roomCode));
+    socketRoomCodes.set(socket.id, roomCode);
+    if (typeof callback === 'function') callback({ ok: true, roomCode });
+    if (broadcasterSocketIds.has(roomCode)) socket.emit('broadcaster-online');
+  });
+
   // Quem clicou em "Iniciar compartilhamento"
   socket.on('broadcaster', () => {
-    if (broadcasterSocketId && broadcasterSocketId !== socket.id) {
-      const previousBroadcaster = io.sockets.sockets.get(broadcasterSocketId);
+    const roomCode = roomCodeForSocket(socket);
+    const currentBroadcasterId = broadcasterSocketIds.get(roomCode);
+    if (currentBroadcasterId && currentBroadcasterId !== socket.id) {
+      const previousBroadcaster = io.sockets.sockets.get(currentBroadcasterId);
       if (previousBroadcaster) previousBroadcaster.emit('broadcaster-replaced');
-      pararCapturaAudio(broadcasterSocketId);
+      pararCapturaAudio(currentBroadcasterId);
     }
-    broadcasterSocketId = socket.id;
-    console.log(`Transmissor definido: ${socket.id}`);
+    broadcasterSocketIds.set(roomCode, socket.id);
+    console.log(`Transmissor definido na sala ${roomCode}: ${socket.id}`);
   });
 
   socket.on('broadcaster-ready', () => {
-    if (socket.id === broadcasterSocketId) socket.broadcast.emit('broadcaster-online');
+    const roomCode = roomCodeForSocket(socket);
+    if (socket.id === broadcasterSocketIds.get(roomCode)) {
+      socket.to(roomName(roomCode)).emit('broadcaster-online');
+    }
   });
 
   socket.on('audio-processes', async (callback) => {
@@ -119,7 +155,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('audio-start', (request) => {
-    if (socket.id !== broadcasterSocketId) return;
+    const roomCode = roomCodeForSocket(socket);
+    if (socket.id !== broadcasterSocketIds.get(roomCode)) return;
     const processIds = Array.isArray(request?.processIds)
       ? request.processIds.map(Number).filter(Number.isInteger)
       : [];
@@ -152,6 +189,8 @@ io.on('connection', (socket) => {
 
   // Um espectador avisa que quer assistir
   socket.on('watcher', () => {
+    const roomCode = roomCodeForSocket(socket);
+    const broadcasterSocketId = broadcasterSocketIds.get(roomCode);
     if (broadcasterSocketId) {
       // Avisa o transmissor que ha um novo espectador (envia o id dele)
       socket.to(broadcasterSocketId).emit('watcher', socket.id);
@@ -159,27 +198,35 @@ io.on('connection', (socket) => {
   });
 
   // Repasse de mensagens WebRTC (offer/answer/candidate) entre os dois lados
-  socket.on('offer', (targetId, description) => {
-    socket.to(targetId).emit('offer', socket.id, description);
+  socket.on('offer', (targetId, description, mediaInfo) => {
+    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
+      socket.to(targetId).emit('offer', socket.id, description, mediaInfo || {});
+    }
   });
 
   socket.on('answer', (targetId, description) => {
-    socket.to(targetId).emit('answer', socket.id, description);
+    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
+      socket.to(targetId).emit('answer', socket.id, description);
+    }
   });
 
   socket.on('candidate', (targetId, candidate) => {
-    socket.to(targetId).emit('candidate', socket.id, candidate);
+    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
+      socket.to(targetId).emit('candidate', socket.id, candidate);
+    }
   });
 
   socket.on('disconnect', () => {
     pararCapturaAudio(socket.id);
-    if (socket.id === broadcasterSocketId) {
-      broadcasterSocketId = null;
-      socket.broadcast.emit('broadcaster-offline');
-      console.log('Transmissor saiu.');
+    const roomCode = roomCodeForSocket(socket);
+    if (socket.id === broadcasterSocketIds.get(roomCode)) {
+      broadcasterSocketIds.delete(roomCode);
+      socket.to(roomName(roomCode)).emit('broadcaster-offline');
+      console.log(`Transmissor saiu da sala ${roomCode}.`);
     } else {
-      socket.broadcast.emit('disconnectPeer', socket.id);
+      socket.to(roomName(roomCode)).emit('disconnectPeer', socket.id);
     }
+    socketRoomCodes.delete(socket.id);
   });
 });
 
