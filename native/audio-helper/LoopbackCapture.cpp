@@ -8,6 +8,25 @@
 
 #define BITS_PER_BYTE 8
 
+// Destino padrao do PCM: stdout, que e como o servidor Node consome o helper.
+static void EscreverPcmNoStdout(const BYTE* dados, DWORD bytes)
+{
+    std::cout.write(reinterpret_cast<const char*>(dados), bytes);
+    std::cout.flush();
+}
+
+static PcmSinkFn g_destinoPcm = EscreverPcmNoStdout;
+
+void DefinirDestinoPcm(PcmSinkFn destino)
+{
+    g_destinoPcm = destino ? destino : EscreverPcmNoStdout;
+}
+
+static void EnviarPcm(const BYTE* dados, DWORD bytes)
+{
+    g_destinoPcm(dados, bytes);
+}
+
 HRESULT CLoopbackCapture::SetDeviceStateErrorIfFailed(HRESULT hr)
 {
     if (FAILED(hr))
@@ -393,19 +412,18 @@ HRESULT CLoopbackCapture::OnAudioSampleRequested()
         RETURN_IF_FAILED(m_AudioCaptureClient->GetBuffer(&Data, &FramesAvailable, &dwCaptureFlags, &u64DevicePosition, &u64QPCPosition));
 
 
-        // Forward raw PCM to the Node process. Silent packets keep the timing.
+        // Forward raw PCM to the configured sink. Silent packets keep the timing.
         if (m_DeviceState != DeviceState::Stopping)
         {
             if (dwCaptureFlags & AUDCLNT_BUFFERFLAGS_SILENT)
             {
                 std::vector<BYTE> silence(cbBytesToCapture, 0);
-                std::cout.write(reinterpret_cast<const char*>(silence.data()), cbBytesToCapture);
+                EnviarPcm(silence.data(), cbBytesToCapture);
             }
             else
             {
-                std::cout.write(reinterpret_cast<const char*>(Data), cbBytesToCapture);
+                EnviarPcm(Data, cbBytesToCapture);
             }
-            std::cout.flush();
         }
 
         // Release buffer back

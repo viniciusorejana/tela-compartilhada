@@ -14,6 +14,12 @@
 
 using namespace Microsoft::WRL;
 
+// Para onde o PCM capturado e enviado. Por padrao vai para o stdout (comportamento do
+// ApplicationLoopback.exe, usado pelo servidor Node). O agente troca por um destino que
+// envia os bytes pelo WebSocket.
+using PcmSinkFn = void (*)(const BYTE* dados, DWORD bytes);
+void DefinirDestinoPcm(PcmSinkFn destino);
+
 class CLoopbackCapture :
     public RuntimeClass< RuntimeClassFlags< ClassicCom >, FtmBase, IActivateAudioInterfaceCompletionHandler >
 {

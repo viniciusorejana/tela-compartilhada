@@ -1,3 +1,5 @@
 node_modules
 native/audio-helper/x64/
 native/audio-helper/Applicat.*/
+native/audio-agent/x64/
+native/audio-agent/AgenteAudio/
