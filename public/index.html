@@ -24,9 +24,9 @@
 </head>
 <body>
 <main>
-  <div class="eyebrow">Sala de transmissão</div>
+  <div class="eyebrow">Sala com voz, câmera e tela</div>
   <h1>Crie ou entre em uma sala</h1>
-  <p>Use um código para manter cada transmissão separada. Quem tiver o link poderá assistir ou compartilhar na mesma sala.</p>
+  <p>Todo mundo na sala pode conversar por microfone e compartilhar câmera ou tela quando quiser, como em um servidor de voz.</p>
   <section>
     <label for="roomCode">Código da sala</label>
     <input id="roomCode" maxlength="32" placeholder="ex.: reuniao-123" autocomplete="off">
@@ -39,14 +39,14 @@
 <script>
 const roomCode = document.getElementById('roomCode');
 const normalize = value => value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-function openRoom(mode, code) {
+function openRoom(code) {
   const normalized = normalize(code);
   if (normalized.length < 4) { roomCode.focus(); return; }
-  window.location.href = `/${encodeURIComponent(normalized)}/${mode}`;
+  window.location.href = `/${encodeURIComponent(normalized)}/sala`;
 }
-document.getElementById('createBtn').onclick = () => openRoom('compartilhar', `sala-${Math.random().toString(36).slice(2, 8)}`);
-document.getElementById('joinBtn').onclick = () => openRoom('ao-vivo', roomCode.value);
-roomCode.addEventListener('keydown', event => { if (event.key === 'Enter') openRoom('ao-vivo', roomCode.value); });
+document.getElementById('createBtn').onclick = () => openRoom(`sala-${Math.random().toString(36).slice(2, 8)}`);
+document.getElementById('joinBtn').onclick = () => openRoom(roomCode.value);
+roomCode.addEventListener('keydown', event => { if (event.key === 'Enter') openRoom(roomCode.value); });
 </script>
 </body>
 </html>

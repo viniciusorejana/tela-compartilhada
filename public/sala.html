@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala</title>
+<style>
+  :root {
+    --bg: #101418;
+    --panel: #181e24;
+    --panel-strong: #202830;
+    --line: #303a44;
+    --text: #edf2f5;
+    --muted: #94a2ad;
+    --accent: #69a9ff;
+    --accent-strong: #4389e8;
+    --success: #75d6a0;
+    --danger: #e56a6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Aptos", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    min-height: 100vh;
+  }
+  button {
+    border: 0; border-radius: 7px; padding: 10px 15px; font: inherit; font-size: 13px; font-weight: 700;
+    background: var(--accent-strong); color: white; cursor: pointer; transition: background .18s, transform .18s;
+  }
+  button:hover:not(:disabled) { background: #5a9bf0; }
+  button:disabled { background: #34404b; color: #7c8994; cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--line); color: #cbd8e2; }
+  button.secondary:hover:not(:disabled) { background: var(--panel-strong); }
+  button.danger { background: #6b2f34; color: #ffd8d8; }
+  button.danger:hover:not(:disabled) { background: #83373d; }
+  select, input[type="text"] {
+    width: 100%; padding: 11px 12px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--panel-strong); color: var(--text); font: inherit; font-size: 14px;
+  }
+
+  /* Portal de nome */
+  #nameGate {
+    position: fixed; inset: 0; background: #0a0d10ee; display: grid; place-items: center; z-index: 50; padding: 20px;
+  }
+  #nameGate.hidden { display: none; }
+  .gate-card { width: min(100%, 380px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 26px; }
+  .gate-card h1 { font-size: 22px; margin: 0 0 8px; }
+  .gate-card p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .gate-card label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #cbd4db; }
+  .gate-card .actions { margin-top: 16px; }
+  .gate-card button { width: 100%; }
+
+  .room-shell { width: min(100% - 32px, 1100px); margin: 0 auto; padding: 22px 0 110px; }
+  .room-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 4px; }
+  h1#roomTitle { font-size: clamp(22px, 3.6vw, 30px); margin: 0; letter-spacing: -.02em; }
+  .room-actions { display: flex; align-items: center; gap: 12px; }
+  #participantCount { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .status-line { color: var(--success); font-size: 13px; margin: 10px 0 16px; min-height: 18px; }
+
+  .stage-wrap { margin-bottom: 18px; }
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16/9; background: #05070a; border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden; display: grid; place-items: center;
+  }
+  .stage:fullscreen { aspect-ratio: unset; border-radius: 0; border: 0; }
+  .stage video { width: 100%; height: 100%; object-fit: contain; background: #05070a; cursor: grab; touch-action: none; }
+  .stage video:active { cursor: grabbing; }
+  .stage-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; padding: 20px; text-align: center; }
+  .stage-empty.hidden { display: none; }
+  .stage-label {
+    position: absolute; left: 12px; bottom: 10px; background: #000a; padding: 5px 11px; border-radius: 6px; font-size: 12px;
+  }
+  .stage-label.hidden { display: none; }
+  .stage-controls {
+    position: absolute; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 4px;
+    background: #000a; padding: 5px; border-radius: 8px;
+  }
+  .stage-controls.hidden { display: none; }
+  .stage-controls button {
+    padding: 6px 10px; font-size: 13px; font-weight: 700; background: transparent; color: #fff; min-width: 0;
+  }
+  .stage-controls button:hover:not(:disabled) { background: #ffffff26; }
+  .stage-controls span { font-size: 11px; color: var(--muted); min-width: 38px; text-align: center; }
+
+  .participants { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .participant {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .participant.pinned { border-color: var(--accent); }
+  .avatar-wrap {
+    position: relative; width: 100%; aspect-ratio: 4/3; border-radius: 7px; overflow: hidden; background: #0c1116;
+    cursor: pointer; display: grid; place-items: center;
+  }
+  .avatar-wrap video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  .avatar-wrap video.active { display: block; }
+  .avatar-fallback {
+    width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 18px; color: #0a0d10;
+  }
+  .avatar-fallback.hidden { display: none; }
+  .mic-icon {
+    position: absolute; left: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 50%; background: #000a;
+    display: grid; place-items: center; font-size: 12px;
+  }
+  .screen-badge {
+    position: absolute; right: 6px; top: 6px; background: #1c3a63cc; color: #bcdcff; font-size: 10px; font-weight: 700;
+    padding: 3px 7px; border-radius: 5px; letter-spacing: .03em;
+  }
+  .screen-badge.hidden { display: none; }
+  .participant-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .volume-row { display: flex; align-items: center; gap: 6px; }
+  .volume-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .volume-row button { padding: 5px 8px; font-size: 12px; }
+
+  .settings-panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px;
+  }
+  .settings-panel.hidden { display: none; }
+  .settings-panel h2 { font-size: 15px; margin: 0 0 14px; }
+  .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin-bottom: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; font-weight: 700; color: #cbd4db; }
+  .settings-panel small { color: var(--muted); font-size: 11px; }
+  .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .echo-warning {
+    margin-top: 10px; padding: 12px; border-radius: 7px; background: #3a2a12; border: 1px solid #6b4c1e;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  }
+  .echo-warning small { color: #f0c47a; }
+  .echo-warning[hidden] { display: none; }
+  .agente-box {
+    margin-top: 10px; padding: 12px; border-radius: 7px; background: var(--panel-strong);
+    border: 1px solid var(--line); display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  }
+  .agente-box[hidden] { display: none; }
+  .agente-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .agente-bolinha { width: 9px; height: 9px; border-radius: 50%; background: #7c8994; flex: none; }
+  .agente-bolinha.ligado { background: var(--success); }
+  .agente-download {
+    display: inline-block; padding: 8px 14px; border-radius: 7px; background: var(--accent-strong);
+    color: #fff; font-size: 13px; font-weight: 700; text-decoration: none;
+  }
+  .agente-download:hover { background: #5a9bf0; }
+  .agente-download[hidden] { display: none; }
+
+  .control-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: #12171cee; border-top: 1px solid var(--line);
+    padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; backdrop-filter: blur(6px);
+  }
+  .control-btn { min-width: 96px; }
+  .control-btn[aria-pressed="true"] { background: var(--accent-strong); }
+  .control-btn.secondary[aria-pressed="true"] { background: #2e5da8; color: #fff; border-color: transparent; }
+
+  #enableSoundBtn { position: fixed; top: 16px; right: 16px; z-index: 20; }
+  #enableSoundBtn.hidden { display: none; }
+
+  @media (max-width: 640px) {
+    .field-grid { grid-template-columns: 1fr; }
+    .control-bar { justify-content: flex-start; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div id="nameGate">
+  <div class="gate-card">
+    <h1>Entrar na sala</h1>
+    <p>Escolha um nome para os outros participantes reconhecerem você.</p>
+    <label for="nameInput">Seu nome</label>
+    <input id="nameInput" type="text" maxlength="40" placeholder="ex.: Vinicius" autocomplete="off">
+    <div class="actions"><button id="nameConfirmBtn">Entrar</button></div>
+  </div>
+</div>
+
+<button id="enableSoundBtn" class="hidden">Ativar som</button>
+
+<main class="room-shell">
+  <header class="room-header">
+    <div>
+      <p class="eyebrow">Sala</p>
+      <h1 id="roomTitle">sala</h1>
+    </div>
+    <div class="room-actions">
+      <span id="participantCount">1 pessoa na sala</span>
+      <button id="copyLinkBtn" class="secondary" type="button">Copiar link</button>
+    </div>
+  </header>
+  <p id="status" class="status-line">Conectando...</p>
+
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <video id="stageVideo" autoplay playsinline muted></video>
+      <div class="stage-empty" id="stageEmpty">Clique na câmera ou na tela de alguém para destacar aqui.</div>
+      <div class="stage-label hidden" id="stageLabel"></div>
+      <div class="stage-controls hidden" id="stageControls">
+        <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
+        <span id="zoomLevelLabel">100%</span>
+        <button id="zoomInBtn" type="button" title="Aumentar zoom">+</button>
+        <button id="fullscreenBtn" type="button" title="Tela cheia">⛶</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="participants" id="participants"></div>
+
+  <section class="settings-panel hidden" id="settingsPanel">
+    <h2 id="settingsTitle">Configurar compartilhamento de tela</h2>
+    <div class="field-grid">
+      <div class="field">
+        <label for="captureMode">Tipo de tela</label>
+        <select id="captureMode">
+          <option value="browser">Aba do navegador</option>
+          <option value="window">Janela ou aplicativo</option>
+          <option value="monitor">Tela inteira</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="audioPolicy">Áudio</label>
+        <select id="audioPolicy">
+          <option value="auto">Compartilhar áudio (automático)</option>
+          <option value="none">Sem áudio</option>
+        </select>
+      </div>
+    </div>
+    <small id="echoHint"></small>
+    <div id="echoWarning" class="echo-warning" hidden>
+      <small id="echoWarningText"></small>
+      <button id="fixEchoBtn" type="button" class="secondary">Compartilhar uma aba (sem eco)</button>
+    </div>
+    <div id="agenteBox" class="agente-box" hidden>
+      <div class="agente-status">
+        <span class="agente-bolinha" id="agenteBolinha"></span>
+        <strong id="agenteTitulo">Agente de áudio</strong>
+      </div>
+      <small id="agenteTexto"></small>
+      <a id="agenteDownload" class="agente-download" href="#" hidden>Baixar o agente (.exe)</a>
+    </div>
+    <div class="settings-actions">
+      <button id="confirmScreenBtn" type="button">Compartilhar</button>
+      <button id="cancelScreenBtn" class="secondary" type="button">Cancelar</button>
+    </div>
+  </section>
+</main>
+
+<div class="control-bar">
+  <button id="micBtn" class="control-btn" type="button" aria-pressed="true">Mic ligado</button>
+  <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false">Ligar câmera</button>
+  <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false">Compartilhar tela</button>
+  <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden>Atualizar tela</button>
+  <button id="testAudioBtn" class="control-btn secondary" type="button">Testar áudio</button>
+  <button id="leaveBtn" class="control-btn danger" type="button">Sair</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const pathParts = window.location.pathname.split('/').filter(Boolean);
+const roomCode = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : 'principal';
+document.getElementById('roomTitle').textContent = roomCode;
+
+const nameGate = document.getElementById('nameGate');
+const nameInput = document.getElementById('nameInput');
+const nameConfirmBtn = document.getElementById('nameConfirmBtn');
+const status = document.getElementById('status');
+const participantCount = document.getElementById('participantCount');
+const participantsEl = document.getElementById('participants');
+const stage = document.getElementById('stage');
+const stageVideo = document.getElementById('stageVideo');
+const stageEmpty = document.getElementById('stageEmpty');
+const stageLabel = document.getElementById('stageLabel');
+const stageControls = document.getElementById('stageControls');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomLevelLabel = document.getElementById('zoomLevelLabel');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const echoWarning = document.getElementById('echoWarning');
+const fixEchoBtn = document.getElementById('fixEchoBtn');
+const micBtn = document.getElementById('micBtn');
+const cameraBtn = document.getElementById('cameraBtn');
+const screenBtn = document.getElementById('screenBtn');
+const updateScreenBtn = document.getElementById('updateScreenBtn');
+const testAudioBtn = document.getElementById('testAudioBtn');
+const leaveBtn = document.getElementById('leaveBtn');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const enableSoundBtn = document.getElementById('enableSoundBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+const settingsTitle = document.getElementById('settingsTitle');
+const captureMode = document.getElementById('captureMode');
+const audioPolicy = document.getElementById('audioPolicy');
+const echoHint = document.getElementById('echoHint');
+const echoWarningText = document.getElementById('echoWarningText');
+const agenteBox = document.getElementById('agenteBox');
+const agenteBolinha = document.getElementById('agenteBolinha');
+const agenteTitulo = document.getElementById('agenteTitulo');
+const agenteTexto = document.getElementById('agenteTexto');
+const agenteDownload = document.getElementById('agenteDownload');
+const confirmScreenBtn = document.getElementById('confirmScreenBtn');
+const cancelScreenBtn = document.getElementById('cancelScreenBtn');
+
+let socket = null;
+let myId = null;
+let myName = '';
+let micStream = null;
+let micTrack = null;
+let cameraStream = null;
+let screenStream = null;
+let micMuted = false;
+let appAudioContext = null;
+let appAudioNode = null;
+let appAudioTrack = null;
+let audioCaptureVersion = 0;
+let testAudioContext = null;
+let pendingPcm = new Uint8Array(0);
+let settingsMode = 'start'; // 'start' | 'update'
+let audioCapabilities = { podeUsarHelper: false, motivo: 'remoto', agenteDisponivel: false, agenteConectado: false };
+
+// Token que liga ESTE navegador ao agente instalado neste computador. Fica no
+// localStorage e vai gravado dentro do .exe no momento do download, para o participante
+// nao precisar digitar nada.
+const tokenDoAgente = (() => {
+  let token = localStorage.getItem('tokenAgenteAudio');
+  if (!/^[a-f0-9]{16,64}$/i.test(token || '')) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem('tokenAgenteAudio', token);
+  }
+  return token;
+})();
+let pinned = null; // { id, source }
+let needsUserGesture = false;
+let zoomLevel = 1;
+let panX = 0, panY = 0;
+let arrastandoPalco = null;
+
+const peers = new Map(); // id -> peer object
+const tiles = new Map(); // id -> dom refs
+
+let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const rtcConfigReady = fetch('/api/rtc-config').then(r => r.json()).then(c => { rtcConfig = c; }).catch(() => {});
+
+function corDoNome(nome) {
+  let hash = 0;
+  for (let i = 0; i < nome.length; i++) hash = (hash * 31 + nome.charCodeAt(i)) >>> 0;
+  return `hsl(${hash % 360}, 55%, 62%)`;
+}
+function iniciais(nome) {
+  return nome.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || '?';
+}
+
+// ---------- Entrada / nome ----------
+const nomeSalvo = localStorage.getItem('salaNome');
+if (nomeSalvo) {
+  nameInput.value = nomeSalvo;
+}
+nameGate.classList.remove('hidden');
+
+function entrar() {
+  const nome = nameInput.value.trim().slice(0, 40) || `Convidado-${Math.floor(Math.random() * 1000)}`;
+  localStorage.setItem('salaNome', nome);
+  myName = nome;
+  nameGate.classList.add('hidden');
+  iniciarConexao();
+}
+nameConfirmBtn.onclick = entrar;
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+
+// ---------- Conexão / sala ----------
+async function iniciarConexao() {
+  status.textContent = 'Conectando ao servidor...';
+  socket = io();
+  await rtcConfigReady;
+
+  socket.on('connect', async () => {
+    myId = socket.id;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      micTrack = micStream.getAudioTracks()[0];
+    } catch (err) {
+      status.textContent = 'Não foi possível acessar o microfone: ' + err.message;
+    }
+
+    socket.emit('join-room', roomCode, myName, (response) => {
+      if (!response?.ok) {
+        status.textContent = response?.error || 'Não foi possível entrar na sala.';
+        return;
+      }
+      criarTileLocal();
+      // Acabei de entrar: sou eu quem inicia a negociacao com quem ja estava na sala.
+      response.peers.forEach(peer => {
+        criarConexaoPar(peer.id, peer.name, peer.state, true);
+      });
+      status.textContent = 'Conectado. Use os botões abaixo para ligar câmera, tela ou microfone.';
+      atualizarContador();
+    });
+
+    // Liga este navegador ao agente local (se houver um instalado) e descobre quais
+    // caminhos de captura de áudio estão disponíveis para ESTE participante.
+    socket.emit('registrar-agente', tokenDoAgente, () => {
+      socket.emit('audio-capabilities', (capabilities) => {
+        audioCapabilities = capabilities || audioCapabilities;
+        if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
+      });
+    });
+  });
+
+  socket.on('agente-status', ({ conectado }) => {
+    audioCapabilities.agenteConectado = Boolean(conectado);
+    status.textContent = conectado
+      ? 'Agente de áudio conectado: você já pode compartilhar o som do seu computador.'
+      : 'Agente de áudio desconectado.';
+    if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
+  });
+
+  socket.on('peer-joined', ({ id, name, state }) => {
+    // Alguem acabou de entrar: espero a oferta dessa pessoa antes de adicionar minha midia.
+    criarConexaoPar(id, name, state, false);
+    atualizarContador();
+  });
+
+  socket.on('peer-left', ({ id }) => {
+    removerPar(id);
+    atualizarContador();
+  });
+
+  socket.on('media-state', ({ id, ...state }) => {
+    const peer = peers.get(id);
+    if (!peer) return;
+    peer.state = state;
+    atualizarTile(id);
+    if (!state.screen && pinned?.id === id && pinned.source === 'screen') despinar();
+    if (!state.camera && pinned?.id === id && pinned.source === 'camera') despinar();
+    if (state.screen && !pinned) pin(id, 'screen');
+  });
+
+  socket.on('offer', async (fromId, description, mediaInfo) => {
+    const peer = peers.get(fromId) || criarConexaoPar(fromId, 'Participante', {}, false);
+    peer.remoteStreamIds = mediaInfo || {};
+    const pc = peer.pc;
+    const offerCollision = pc.signalingState !== 'stable' || peer.makingOffer;
+    peer.ignoreOffer = !peer.polite && offerCollision;
+    if (peer.ignoreOffer) return;
+    try {
+      // Adiciona minha midia ANTES de aplicar a oferta remota: assim o navegador reaproveita
+      // meu transceiver (ainda sem mid) para a mesma faixa do offer e minha midia ja sai
+      // incluida nesta primeira resposta, sem precisar de uma renegociacao extra.
+      peer.adicionarFaixasSeNecessario();
+      if (offerCollision) {
+        await Promise.all([
+          pc.setLocalDescription({ type: 'rollback' }),
+          pc.setRemoteDescription(description)
+        ]);
+      } else {
+        await pc.setRemoteDescription(description);
+      }
+      preferirCodecsDeVideo(pc, ['video/H264', 'video/VP8', 'video/VP9']);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('answer', fromId, pc.localDescription, buildMediaInfo());
+      await aplicarCandidatosPendentes(peer);
+    } catch (err) {
+      console.warn('Falha ao processar offer:', err);
+    }
+  });
+
+  socket.on('answer', async (fromId, description, mediaInfo) => {
+    const peer = peers.get(fromId);
+    if (!peer) return;
+    peer.remoteStreamIds = mediaInfo || {};
+    try {
+      await peer.pc.setRemoteDescription(description);
+      await aplicarCandidatosPendentes(peer);
+    } catch (err) { console.warn('Falha ao aplicar answer:', err); }
+  });
+
+  // Candidatos ICE podem chegar antes de setRemoteDescription terminar do nosso lado
+  // (a sinalizacao e mais rapida que a negociacao, especialmente com colisao de ofertas
+  // no mesh). Sem essa fila, addIceCandidate falha com "remote description was null" e
+  // o candidato e perdido para sempre -- foi a causa real da tela/camera ficarem pretas
+  // de forma intermitente: a conexao ICE nunca chegava a "connected".
+  socket.on('candidate', async (fromId, candidate) => {
+    const peer = peers.get(fromId);
+    if (!peer) return;
+    if (peer.pc.remoteDescription) {
+      try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+      catch (err) { console.warn('Falha ao aplicar candidate:', err); }
+    } else {
+      peer.pendingCandidates.push(candidate);
+    }
+  });
+
+  async function aplicarCandidatosPendentes(peer) {
+    const pendentes = peer.pendingCandidates.splice(0);
+    for (const candidate of pendentes) {
+      try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+      catch (err) { console.warn('Falha ao aplicar candidate pendente:', err); }
+    }
+  }
+
+  socket.on('audio-data', (data) => {
+    if (!appAudioNode) return;
+    const incoming = new Uint8Array(data);
+    const combined = new Uint8Array(pendingPcm.length + incoming.length);
+    combined.set(pendingPcm);
+    combined.set(incoming, pendingPcm.length);
+    const usableLength = combined.length - (combined.length % 4);
+    if (usableLength) {
+      const pcm = combined.slice(0, usableLength).buffer;
+      appAudioNode.port.postMessage(pcm, [pcm]);
+    }
+    pendingPcm = combined.slice(usableLength);
+  });
+
+  socket.on('audio-error', (message) => { status.textContent = message; });
+
+  socket.on('disconnect', () => {
+    status.textContent = 'Desconectado do servidor. Tentando reconectar...';
+  });
+}
+
+function buildMediaInfo() {
+  return {
+    micStreamId: micStream?.id || null,
+    cameraStreamId: cameraStream?.id || null,
+    screenStreamId: screenStream?.id || null
+  };
+}
+
+function meuEstado() {
+  return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted };
+}
+
+function enviarEstado() {
+  socket?.emit('media-state', meuEstado());
+}
+
+// ---------- Codec preferido (corrige tela preta ao compartilhar tela+câmera) ----------
+function preferirCodecsDeVideo(pc, mimeTypesEmOrdem) {
+  const caps = window.RTCRtpSender?.getCapabilities?.('video');
+  if (!caps) return;
+  pc.getTransceivers().forEach(transceiver => {
+    if (!transceiver.sender?.track || transceiver.sender.track.kind !== 'video' || !transceiver.setCodecPreferences) return;
+    const ordenados = [];
+    mimeTypesEmOrdem.forEach(mt => {
+      caps.codecs.forEach(c => {
+        if (c.mimeType.toLowerCase() === mt.toLowerCase() && !ordenados.includes(c)) ordenados.push(c);
+      });
+    });
+    caps.codecs.forEach(c => { if (!ordenados.includes(c)) ordenados.push(c); });
+    try { transceiver.setCodecPreferences(ordenados); } catch (err) { console.warn('codec prefs:', err); }
+  });
+}
+
+function aplicarParametrosDeEnvio(sender, kind) {
+  const params = sender.getParameters();
+  if (!params.encodings) params.encodings = [{}];
+  if (kind === 'video') {
+    params.encodings[0].maxBitrate = 2_500_000;
+    params.degradationPreference = 'maintain-framerate';
+  } else {
+    params.encodings[0].maxBitrate = 256_000;
+  }
+  sender.setParameters(params).catch(() => {});
+}
+
+// ---------- Peer connections (mesh) ----------
+// So quem acabou de entrar na sala adiciona midia e inicia a oferta para quem ja estava
+// la; quem ja estava espera essa oferta chegar antes de adicionar a propria midia. Isso
+// evita que os dois lados comecem a negociar ao mesmo tempo: essa colisao de ofertas exige
+// um "rollback" no lado que cede, e em alguns casos o Chrome trava a coleta de candidatos
+// ICE depois de um rollback (o ICE nunca sai do estado "new") -- foi essa a causa real de
+// as cameras/telas dos outros participantes ficarem pretas de forma intermitente.
+function criarConexaoPar(id, name, state, ehIniciador) {
+  if (peers.has(id)) return peers.get(id);
+  const pc = new RTCPeerConnection(rtcConfig);
+  const peer = {
+    id, name: name || 'Participante',
+    pc,
+    polite: myId > id,
+    makingOffer: false,
+    ignoreOffer: false,
+    faixasAdicionadas: false,
+    timeoutIniciador: null,
+    senders: { mic: null, camera: null, screen: null, screenAudio: null },
+    remoteStreams: { camera: new MediaStream(), screen: new MediaStream(), combinedAudio: new MediaStream() },
+    remoteStreamIds: {},
+    pendingCandidates: [],
+    state: state || { camera: false, screen: false, screenAudio: false, micMuted: false }
+  };
+  peers.set(id, peer);
+
+  pc.onnegotiationneeded = async () => {
+    try {
+      peer.makingOffer = true;
+      // Precisa ser chamado ANTES de gerar a oferta: e o que faltava no comportamento
+      // original e causava a tela preta ao compartilhar tela+camera (o 2o video track
+      // ficava sem prioridade de codec e o navegador remoto podia nao decodifica-lo).
+      preferirCodecsDeVideo(pc, ['video/H264', 'video/VP8', 'video/VP9']);
+      await pc.setLocalDescription();
+      socket.emit('offer', id, pc.localDescription, buildMediaInfo());
+    } catch (err) {
+      console.warn('negotiationneeded:', err);
+    } finally {
+      peer.makingOffer = false;
+    }
+  };
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) socket.emit('candidate', id, event.candidate);
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['failed', 'closed'].includes(pc.connectionState)) removerPar(id);
+  };
+
+  pc.ontrack = (event) => {
+    const track = event.track;
+    const stream = event.streams[0];
+    let source = null;
+    if (stream && stream.id === peer.remoteStreamIds.micStreamId) source = 'mic';
+    else if (stream && stream.id === peer.remoteStreamIds.cameraStreamId) source = 'camera';
+    else if (stream && stream.id === peer.remoteStreamIds.screenStreamId) source = track.kind === 'video' ? 'screen' : 'screen-audio';
+    else source = track.kind === 'audio' ? 'mic' : 'camera';
+
+    if (source === 'mic' || source === 'screen-audio') {
+      if (!peer.remoteStreams.combinedAudio.getTracks().some(t => t.id === track.id)) {
+        peer.remoteStreams.combinedAudio.addTrack(track);
+      }
+    } else if (source === 'camera') {
+      peer.remoteStreams.camera = new MediaStream([track]);
+    } else if (source === 'screen') {
+      peer.remoteStreams.screen = new MediaStream([track]);
+    }
+    track.onended = () => atualizarTile(id);
+    ligarMidiaDoTile(id);
+  };
+
+  criarTile(id, peer.name, peer.state);
+
+  peer.adicionarFaixasSeNecessario = () => {
+    if (peer.faixasAdicionadas) return;
+    peer.faixasAdicionadas = true;
+    if (peer.timeoutIniciador) { clearTimeout(peer.timeoutIniciador); peer.timeoutIniciador = null; }
+    adicionarFaixasLocaisAoPar(peer);
+  };
+
+  if (ehIniciador) {
+    peer.adicionarFaixasSeNecessario();
+  } else {
+    // Rede de seguranca: se quem deveria iniciar nunca mandar oferta (ex.: entrou sem
+    // nenhuma midia disponivel), iniciamos por conta propria apos alguns segundos.
+    peer.timeoutIniciador = setTimeout(peer.adicionarFaixasSeNecessario, 4000);
+  }
+  return peer;
+}
+
+function adicionarFaixasLocaisAoPar(peer) {
+  const pc = peer.pc;
+  // Se a faixa ja foi enviada para este par (ex.: a camera foi ligada enquanto ainda
+  // esperavamos a oferta), so troca o conteudo: chamar addTrack de novo com a mesma
+  // faixa lanca InvalidAccessError e derrubaria a negociacao inteira.
+  const enviar = (source, track, stream) => {
+    if (!track) return;
+    if (peer.senders[source]) {
+      peer.senders[source].replaceTrack(track);
+      return;
+    }
+    peer.senders[source] = pc.addTrack(track, stream);
+    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio');
+  };
+
+  enviar('mic', micTrack, micStream);
+  if (cameraStream) enviar('camera', cameraStream.getVideoTracks()[0], cameraStream);
+  if (screenStream) {
+    enviar('screen', screenStream.getVideoTracks()[0], screenStream);
+    enviar('screenAudio', screenStream.getAudioTracks()[0], screenStream);
+  }
+}
+
+function paraCadaPar(fn) { peers.forEach(fn); }
+
+function definirFaixaEmTodosOsPares(source, track, stream) {
+  paraCadaPar(peer => {
+    const sender = peer.senders[source];
+    if (track) {
+      if (sender) {
+        sender.replaceTrack(track);
+      } else {
+        peer.senders[source] = peer.pc.addTrack(track, stream);
+        if (track.kind === 'video') aplicarParametrosDeEnvio(peer.senders[source], 'video');
+        else aplicarParametrosDeEnvio(peer.senders[source], 'audio');
+      }
+    } else if (sender) {
+      sender.replaceTrack(null);
+    }
+  });
+}
+
+function removerPar(id) {
+  const peer = peers.get(id);
+  if (!peer) return;
+  peer.pc.close();
+  peers.delete(id);
+  removerTile(id);
+  if (pinned?.id === id) despinar();
+}
+
+// ---------- Mic ----------
+function alternarMic() {
+  if (!micTrack) return;
+  micMuted = !micMuted;
+  micTrack.enabled = !micMuted;
+  micBtn.textContent = micMuted ? 'Mic mudo' : 'Mic ligado';
+  micBtn.setAttribute('aria-pressed', String(!micMuted));
+  micBtn.classList.toggle('secondary', micMuted);
+  atualizarTile('self');
+  enviarEstado();
+}
+micBtn.onclick = alternarMic;
+
+// ---------- Câmera ----------
+async function alternarCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+    definirFaixaEmTodosOsPares('camera', null, null);
+    cameraBtn.textContent = 'Ligar câmera';
+    cameraBtn.setAttribute('aria-pressed', 'false');
+  } else {
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch (err) {
+      status.textContent = 'Não foi possível acessar a câmera: ' + err.message;
+      return;
+    }
+    const track = cameraStream.getVideoTracks()[0];
+    definirFaixaEmTodosOsPares('camera', track, cameraStream);
+    track.onended = alternarCamera;
+    cameraBtn.textContent = 'Desligar câmera';
+    cameraBtn.setAttribute('aria-pressed', 'true');
+  }
+  atualizarTile('self');
+  if (pinned?.id === 'self' && pinned.source === 'camera') pin(cameraStream ? 'self' : null, 'camera');
+  enviarEstado();
+}
+cameraBtn.onclick = alternarCamera;
+
+// ---------- Tela ----------
+function abrirPainelDeTela(modo) {
+  settingsMode = modo;
+  settingsTitle.textContent = modo === 'update' ? 'Atualizar tela compartilhada' : 'Configurar compartilhamento de tela';
+  confirmScreenBtn.textContent = modo === 'update' ? 'Atualizar' : 'Compartilhar';
+  settingsPanel.classList.remove('hidden');
+  atualizarExplicacaoDeAudio();
+}
+function fecharPainelDeTela() { settingsPanel.classList.add('hidden'); }
+
+// Qual navegador esta rodando: o servidor usa isso para achar sozinho a arvore de
+// processos a excluir do audio do sistema.
+function familiaDoNavegador() {
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return 'msedge';
+  if (/OPR\//.test(ua)) return 'opera';
+  if (/Firefox\//.test(ua)) return 'firefox';
+  if (/Chrome\//.test(ua)) return 'chrome'; // Brave/Vivaldi tambem se identificam como Chrome
+  return '';
+}
+
+// Segunda camada de protecao (a primeira e no servidor): a captura nativa acontece na
+// maquina do servidor, entao so pode valer para uma pagina aberta localmente. Se a sala
+// foi aberta por um dominio publico/tunel, o helper capturaria o audio do computador do
+// host e mandaria como se fosse o nosso.
+function paginaAbertaLocalmente() {
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1' ||
+    /^192\.168\./.test(h) || /^10\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+    /^25\./.test(h) || /^26\./.test(h); // faixas de VPN comuns (Hamachi/Radmin)
+}
+
+// Decide sozinho de onde vem o audio, sem o usuario escolher processo nenhum:
+//  - aba    -> o proprio navegador entrega o audio daquela aba (nunca gera eco)
+//  - agente -> agente instalado NESTE computador: todo o sistema menos o navegador
+//  - helper -> mesma coisa, mas pelo processo do servidor (so para quem esta nele)
+//  - resto  -> audio do sistema pelo navegador, que pode voltar como eco
+function planoDeAudio() {
+  if (audioPolicy.value === 'none') return 'nenhum';
+  if (captureMode.value === 'browser') return 'aba';
+  if (audioCapabilities.agenteConectado) return 'agente';
+  if (audioCapabilities.podeUsarHelper && paginaAbertaLocalmente()) return 'helper';
+  return 'navegador-sistema';
+}
+
+function atualizarExplicacaoDeAudio() {
+  const plano = planoDeAudio();
+  const textos = {
+    nenhum: 'A tela será compartilhada sem áudio.',
+    aba: 'O áudio da aba escolhida será transmitido. Marque "Compartilhar áudio da guia" na janela do navegador. Como é o áudio só daquela aba, não existe risco de eco.',
+    agente: 'O agente instalado neste computador vai transmitir todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar marcar nada na janela do Chrome.',
+    helper: 'Todo o áudio deste computador será transmitido, exceto o do seu navegador — ou seja, sem a voz dos outros participantes voltando como eco. O aplicativo a excluir é detectado automaticamente.',
+    'navegador-sistema': 'O áudio do SEU computador será capturado pelo navegador. Marque "Compartilhar áudio do sistema" na janela que abrir — sem isso o Chrome não envia áudio nenhum.'
+  };
+  echoHint.textContent = textos[plano];
+  atualizarCaixaDoAgente(plano);
+
+  const riscoDeEco = plano === 'navegador-sistema';
+  echoWarning.hidden = !riscoDeEco;
+  if (riscoDeEco) {
+    const explicacoes = {
+      'helper-ausente': 'O helper nativo não está compilado neste computador, então não dá para remover o áudio desta chamada da captura: a voz dos outros participantes pode voltar como eco. Rode "npm start" (que compila o helper) ou compartilhe uma aba.',
+      'atras-de-proxy': 'Esta sala foi aberta por um endereço público/túnel, então a captura nativa fica desativada — ela roda na máquina do servidor e enviaria o áudio do computador do host, não o seu. Seu áudio do sistema será capturado pelo navegador; a voz dos outros participantes pode voltar como eco. Se você É quem hospeda, abra a sala por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador para liberar a captura nativa.',
+      remoto: 'Você não está no computador que executa o servidor, então a captura nativa não vale aqui (ela pegaria o áudio do host). O navegador vai capturar o áudio do SEU computador normalmente, mas a voz dos outros participantes pode voltar como eco.'
+    };
+    echoWarningText.textContent = explicacoes[audioCapabilities.motivo] || explicacoes.remoto;
+  }
+}
+
+// Mostra o estado do agente e, quando ele nao esta rodando, oferece o download ja
+// configurado com a URL desta sala e com o token deste navegador.
+function atualizarCaixaDoAgente(plano) {
+  const relevante = plano !== 'nenhum' && plano !== 'aba';
+  agenteBox.hidden = !relevante || !audioCapabilities.agenteDisponivel;
+  if (agenteBox.hidden) return;
+
+  const conectado = Boolean(audioCapabilities.agenteConectado);
+  agenteBolinha.classList.toggle('ligado', conectado);
+  agenteTitulo.textContent = conectado ? 'Agente de áudio conectado' : 'Agente de áudio não encontrado';
+  agenteTexto.textContent = conectado
+    ? 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.'
+    : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta.';
+  agenteDownload.hidden = conectado;
+  agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
+}
+
+captureMode.onchange = atualizarExplicacaoDeAudio;
+audioPolicy.onchange = atualizarExplicacaoDeAudio;
+
+fixEchoBtn.onclick = () => {
+  captureMode.value = 'browser';
+  atualizarExplicacaoDeAudio();
+};
+
+// O PCM chega pelo evento 'audio-data' (do agente local ou do helper do servidor) e vira
+// uma faixa de audio comum, que entra na transmissao WebRTC como qualquer outra.
+async function iniciarAudioDoSistema(targetStream, origem) {
+  appAudioContext = new AudioContext({ sampleRate: 44100 });
+  const workletCode = `
+    class PcmPlayer extends AudioWorkletProcessor {
+      constructor() {
+        super(); this.queue = []; this.current = null; this.offset = 0;
+        this.port.onmessage = event => this.queue.push(new Int16Array(event.data));
+      }
+      process(inputs, outputs) {
+        const left = outputs[0][0];
+        const right = outputs[0][1] || left;
+        for (let i = 0; i < left.length; i++) {
+          if (!this.current || this.offset + 1 >= this.current.length) {
+            this.current = this.queue.shift(); this.offset = 0;
+          }
+          left[i] = this.current ? this.current[this.offset++] / 32768 : 0;
+          right[i] = this.current ? this.current[this.offset++] / 32768 : 0;
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-player', PcmPlayer);
+  `;
+  const moduleUrl = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
+  await appAudioContext.audioWorklet.addModule(moduleUrl);
+  URL.revokeObjectURL(moduleUrl);
+  appAudioNode = new AudioWorkletNode(appAudioContext, 'pcm-player', { outputChannelCount: [2] });
+  const destination = appAudioContext.createMediaStreamDestination();
+  appAudioNode.connect(destination);
+  appAudioTrack = destination.stream.getAudioTracks()[0];
+  targetStream.addTrack(appAudioTrack);
+  await appAudioContext.resume();
+  socket.emit('audio-start', { origem, familia: familiaDoNavegador(), version: audioCaptureVersion });
+}
+
+async function limparAudioDoAplicativo() {
+  audioCaptureVersion += 1;
+  socket.emit('audio-stop');
+  if (appAudioTrack) appAudioTrack.stop();
+  if (appAudioContext) await appAudioContext.close();
+  appAudioTrack = null;
+  appAudioContext = null;
+  appAudioNode = null;
+  pendingPcm = new Uint8Array(0);
+}
+
+async function capturarTela() {
+  const plano = planoDeAudio();
+  // Com o agente/helper o audio vem do sistema (fora do navegador), entao aqui pedimos
+  // video sem audio para nao capturar a mesma coisa duas vezes.
+  const audioPeloNavegador = plano === 'aba' || plano === 'navegador-sistema';
+
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: {
+      displaySurface: captureMode.value,
+      cursor: 'always',
+      width: { ideal: 1280, max: 1280 },
+      height: { ideal: 720, max: 720 },
+      frameRate: { ideal: 30, max: 30 }
+    },
+    audio: audioPeloNavegador ? {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: 48000,
+      sampleSize: 16,
+      channelCount: 2,
+      restrictOwnAudio: true
+    } : false,
+    systemAudio: plano === 'navegador-sistema' ? 'include' : 'exclude',
+    windowAudio: captureMode.value === 'window' ? 'window' : 'exclude',
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'include'
+  });
+  stream.getVideoTracks().forEach(track => { track.contentHint = 'motion'; });
+
+  if (plano === 'agente' || plano === 'helper') {
+    await iniciarAudioDoSistema(stream, plano === 'agente' ? 'agente' : 'local');
+  }
+  return stream;
+}
+
+confirmScreenBtn.onclick = async () => {
+  confirmScreenBtn.disabled = true;
+  try {
+    await limparAudioDoAplicativo();
+    const plano = planoDeAudio();
+    const novaTela = await capturarTela();
+    const telaAntiga = screenStream;
+    screenStream = novaTela;
+    screenStream.getVideoTracks()[0].onended = pararTela;
+
+    definirFaixaEmTodosOsPares('screen', screenStream.getVideoTracks()[0], screenStream);
+    definirFaixaEmTodosOsPares('screenAudio', screenStream.getAudioTracks()[0] || null, screenStream);
+
+    if (telaAntiga) telaAntiga.getTracks().forEach(t => t.stop());
+    fecharPainelDeTela();
+    screenBtn.textContent = 'Parar tela';
+    screenBtn.setAttribute('aria-pressed', 'true');
+    updateScreenBtn.hidden = false;
+    atualizarTile('self');
+    if (!pinned) pin('self', 'screen');
+
+    // Diz exatamente que audio esta indo junto. Esquecer de marcar a caixa de audio no
+    // seletor do Chrome e o motivo mais comum de "compartilhei mas nao sai som".
+    const temAudio = screenStream.getAudioTracks().length > 0;
+    if (plano === 'nenhum') status.textContent = 'Compartilhando tela (sem áudio).';
+    else if (!temAudio) {
+      status.textContent = (plano === 'agente' || plano === 'helper')
+        ? 'Compartilhando tela, mas a captura nativa de áudio não iniciou. Veja o aviso acima.'
+        : 'Compartilhando tela SEM áudio: a caixa de compartilhar áudio não foi marcada na janela do navegador. Use "Atualizar tela" e marque a opção de áudio.';
+    }
+    else if (plano === 'agente') status.textContent = 'Compartilhando tela + áudio do seu computador (pelo agente, sem eco).';
+    else if (plano === 'helper') status.textContent = 'Compartilhando tela + áudio deste computador (exceto o navegador).';
+    else if (plano === 'aba') status.textContent = 'Compartilhando tela + áudio da aba.';
+    else status.textContent = 'Compartilhando tela + áudio do seu sistema.';
+    enviarEstado();
+  } catch (err) {
+    status.textContent = 'Não foi possível compartilhar a tela: ' + err.message;
+  } finally {
+    confirmScreenBtn.disabled = false;
+  }
+};
+cancelScreenBtn.onclick = fecharPainelDeTela;
+
+function pararTela() {
+  if (!screenStream) return;
+  screenStream.getTracks().forEach(t => t.stop());
+  screenStream = null;
+  limparAudioDoAplicativo();
+  definirFaixaEmTodosOsPares('screen', null, null);
+  definirFaixaEmTodosOsPares('screenAudio', null, null);
+  screenBtn.textContent = 'Compartilhar tela';
+  screenBtn.setAttribute('aria-pressed', 'false');
+  updateScreenBtn.hidden = true;
+  atualizarTile('self');
+  if (pinned?.id === 'self' && pinned.source === 'screen') despinar();
+  status.textContent = 'Compartilhamento de tela encerrado.';
+  enviarEstado();
+}
+
+screenBtn.onclick = () => {
+  if (screenStream) pararTela();
+  else abrirPainelDeTela('start');
+};
+updateScreenBtn.onclick = () => abrirPainelDeTela('update');
+
+// ---------- Teste de áudio ----------
+testAudioBtn.onclick = async () => {
+  testAudioContext ||= new AudioContext();
+  await testAudioContext.resume();
+  const oscillator = testAudioContext.createOscillator();
+  const gain = testAudioContext.createGain();
+  const now = testAudioContext.currentTime;
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(880, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+  oscillator.connect(gain).connect(testAudioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.2);
+  status.textContent = 'Beep de teste reproduzido.';
+};
+
+// ---------- Zoom e tela cheia do palco ----------
+function aplicarTransformDoPalco() {
+  stageVideo.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+}
+
+function limitarPan() {
+  const rect = stage.getBoundingClientRect();
+  const maxX = (rect.width * (zoomLevel - 1)) / 2;
+  const maxY = (rect.height * (zoomLevel - 1)) / 2;
+  panX = Math.max(-maxX, Math.min(maxX, panX));
+  panY = Math.max(-maxY, Math.min(maxY, panY));
+}
+
+function definirZoom(novoNivel) {
+  zoomLevel = Math.round(Math.max(1, Math.min(3, novoNivel)) * 100) / 100;
+  if (zoomLevel === 1) { panX = 0; panY = 0; }
+  limitarPan();
+  aplicarTransformDoPalco();
+  zoomLevelLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
+  zoomOutBtn.disabled = zoomLevel <= 1;
+  zoomInBtn.disabled = zoomLevel >= 3;
+}
+
+zoomInBtn.onclick = () => definirZoom(zoomLevel + 0.25);
+zoomOutBtn.onclick = () => definirZoom(zoomLevel - 0.25);
+
+stageVideo.addEventListener('pointerdown', event => {
+  if (zoomLevel <= 1) return;
+  arrastandoPalco = { x: event.clientX - panX, y: event.clientY - panY };
+  stageVideo.setPointerCapture(event.pointerId);
+});
+stageVideo.addEventListener('pointermove', event => {
+  if (!arrastandoPalco) return;
+  panX = event.clientX - arrastandoPalco.x;
+  panY = event.clientY - arrastandoPalco.y;
+  limitarPan();
+  aplicarTransformDoPalco();
+});
+stageVideo.addEventListener('pointerup', () => { arrastandoPalco = null; });
+stageVideo.addEventListener('dblclick', () => alternarTelaCheia());
+
+function alternarTelaCheia() {
+  if (!document.fullscreenElement) {
+    (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  }
+}
+fullscreenBtn.onclick = () => alternarTelaCheia();
+document.addEventListener('fullscreenchange', () => {
+  fullscreenBtn.textContent = document.fullscreenElement ? '⛝' : '⛶';
+  fullscreenBtn.title = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
+  limitarPan();
+  aplicarTransformDoPalco();
+});
+
+// ---------- Sair ----------
+leaveBtn.onclick = () => { window.location.href = '/'; };
+
+// ---------- Link ----------
+copyLinkBtn.onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    copyLinkBtn.textContent = 'Link copiado!';
+    setTimeout(() => { copyLinkBtn.textContent = 'Copiar link'; }, 1800);
+  } catch (_) {
+    status.textContent = window.location.href;
+  }
+};
+
+// ---------- Tiles (UI de participantes) ----------
+function criarTileLocal() {
+  criarTileBase('self', myName, meuEstado(), true);
+}
+
+function criarTile(id, name, state) {
+  if (tiles.has(id)) return;
+  criarTileBase(id, name, state, false);
+}
+
+function criarTileBase(id, name, state, isSelf) {
+  const el = document.createElement('div');
+  el.className = 'participant';
+  el.dataset.id = id;
+  el.innerHTML = `
+    <div class="avatar-wrap">
+      <video class="cam-video" autoplay playsinline ${isSelf ? 'muted' : ''}></video>
+      <div class="avatar-fallback" style="background:${corDoNome(name)}">${iniciais(name)}</div>
+      <span class="mic-icon">🎙️</span>
+      <span class="screen-badge hidden">Tela</span>
+    </div>
+    <div class="participant-name">${name}${isSelf ? ' (você)' : ''}</div>
+    <div class="volume-row"></div>
+    <audio class="peer-audio" autoplay></audio>
+  `;
+  const volumeRow = el.querySelector('.volume-row');
+  if (!isSelf) {
+    volumeRow.innerHTML = `
+      <input type="range" class="volume-slider" min="0" max="150" value="100">
+      <button class="mute-peer-btn" type="button" title="Silenciar participante">🔊</button>
+    `;
+  }
+  participantsEl.appendChild(el);
+
+  const refs = {
+    root: el,
+    camVideo: el.querySelector('.cam-video'),
+    avatar: el.querySelector('.avatar-fallback'),
+    micIcon: el.querySelector('.mic-icon'),
+    screenBadge: el.querySelector('.screen-badge'),
+    peerAudio: el.querySelector('.peer-audio'),
+    volumeSlider: el.querySelector('.volume-slider'),
+    muteBtn: el.querySelector('.mute-peer-btn'),
+    localMute: false
+  };
+  tiles.set(id, refs);
+
+  el.querySelector('.avatar-wrap').addEventListener('click', () => {
+    const peer = peers.get(id);
+    const estado = id === 'self' ? meuEstado() : peer?.state;
+    if (estado?.screen) pin(id, 'screen');
+    else if (estado?.camera) pin(id, 'camera');
+  });
+
+  if (!isSelf) {
+    refs.volumeSlider.addEventListener('input', () => {
+      refs.peerAudio.volume = Math.min(1.5, Number(refs.volumeSlider.value) / 100);
+      if (pinned?.id === id) stageVideo.volume = refs.peerAudio.volume;
+    });
+    refs.muteBtn.addEventListener('click', () => {
+      refs.localMute = !refs.localMute;
+      refs.peerAudio.muted = refs.localMute;
+      refs.muteBtn.textContent = refs.localMute ? '🔇' : '🔊';
+    });
+  }
+
+  atualizarTile(id);
+}
+
+function removerTile(id) {
+  const refs = tiles.get(id);
+  if (!refs) return;
+  refs.root.remove();
+  tiles.delete(id);
+}
+
+function ligarMidiaDoTile(id) {
+  const refs = tiles.get(id);
+  const peer = peers.get(id);
+  if (!refs || !peer) return;
+  if (peer.remoteStreams.camera.getTracks().length) refs.camVideo.srcObject = peer.remoteStreams.camera;
+  if (peer.remoteStreams.combinedAudio.getTracks().length) refs.peerAudio.srcObject = peer.remoteStreams.combinedAudio;
+  if (pinned?.id === id) atualizarPalco();
+  atualizarTile(id);
+  garantirReproducao(refs.peerAudio);
+  garantirReproducao(refs.camVideo);
+}
+
+function atualizarTile(id) {
+  const refs = tiles.get(id);
+  if (!refs) return;
+  const estado = id === 'self' ? meuEstado() : (peers.get(id)?.state || {});
+  const temCamera = id === 'self' ? Boolean(cameraStream) : Boolean(estado.camera);
+  if (id === 'self' && cameraStream) refs.camVideo.srcObject = cameraStream;
+
+  refs.camVideo.classList.toggle('active', temCamera);
+  refs.avatar.classList.toggle('hidden', temCamera);
+  refs.screenBadge.classList.toggle('hidden', !estado.screen);
+  refs.micIcon.textContent = estado.micMuted ? '🔇' : '🎙️';
+}
+
+function atualizarContador() {
+  const total = peers.size + 1;
+  participantCount.textContent = total === 1 ? 'Só você na sala' : `${total} pessoas na sala`;
+}
+
+// ---------- Palco (spotlight) ----------
+function pin(id, source) {
+  if (!id) { despinar(); return; }
+  pinned = { id, source };
+  definirZoom(1);
+  atualizarPalco();
+  stageControls.classList.remove('hidden');
+  document.querySelectorAll('.participant').forEach(el => el.classList.toggle('pinned', el.dataset.id === id));
+}
+
+function despinar() {
+  pinned = null;
+  stageVideo.srcObject = null;
+  stageEmpty.classList.remove('hidden');
+  stageLabel.classList.add('hidden');
+  stageControls.classList.add('hidden');
+  definirZoom(1);
+  if (document.fullscreenElement === stage) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  document.querySelectorAll('.participant').forEach(el => el.classList.remove('pinned'));
+}
+
+function atualizarPalco() {
+  if (!pinned) return;
+  const { id, source } = pinned;
+  let stream = null;
+  let nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
+  if (id === 'self') {
+    stream = source === 'screen' ? screenStream : cameraStream;
+  } else {
+    const peer = peers.get(id);
+    stream = peer ? peer.remoteStreams[source] : null;
+  }
+  if (!stream || !stream.getVideoTracks().length) { despinar(); return; }
+  stageVideo.srcObject = stream;
+  stageVideo.muted = true; // audio já é reproduzido pelo <audio> por participante
+  stageEmpty.classList.add('hidden');
+  stageLabel.classList.remove('hidden');
+  stageLabel.textContent = `${nome} — ${source === 'screen' ? 'Tela' : 'Câmera'}`;
+  garantirReproducao(stageVideo);
+}
+
+// ---------- Autoplay (som bloqueado pelo navegador) ----------
+function garantirReproducao(mediaEl) {
+  const p = mediaEl.play?.();
+  if (p && typeof p.catch === 'function') {
+    p.catch(() => { needsUserGesture = true; enableSoundBtn.classList.remove('hidden'); });
+  }
+}
+enableSoundBtn.onclick = () => {
+  tiles.forEach(refs => { refs.peerAudio.play().catch(() => {}); });
+  stageVideo.play().catch(() => {});
+  enableSoundBtn.classList.add('hidden');
+  needsUserGesture = false;
+};
+
+window.addEventListener('beforeunload', () => {
+  micStream?.getTracks().forEach(t => t.stop());
+  cameraStream?.getTracks().forEach(t => t.stop());
+  screenStream?.getTracks().forEach(t => t.stop());
+});
+</script>
+</body>
+</html>
