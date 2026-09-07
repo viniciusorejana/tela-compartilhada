@@ -41,6 +41,9 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalIncludeDirectories>$(ProjectDir)..\audio-helper;$(ProjectDir)..\audio-helper\packages\Microsoft.Windows.ImplementationLibrary.1.0.210204.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <Manifest>
+      <AdditionalManifestFiles>AgenteAudio.manifest</AdditionalManifestFiles>
+    </Manifest>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -49,6 +52,11 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;mfplat.lib;mmdevapi.lib;mfuuid.lib;mfreadwrite.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- Identidade do executavel: versao, icone e manifesto. Ver AgenteAudio.rc. -->
+    <ResourceCompile Include="AgenteAudio.rc" />
+    <Manifest Include="AgenteAudio.manifest" />
+  </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AgenteAudio.cpp" />
     <ClCompile Include="..\audio-helper\LoopbackCapture.cpp" />

@@ -1,0 +1,44 @@
+// Identidade do executavel. Nao e enfeite: binario sem nenhum metadado, sem assinatura e
+// recem-compilado e exatamente o perfil que o modelo de aprendizado de maquina do Windows
+// Defender marca como Trojan:Win32/Wacatac!ml -- um falso positivo generico que derrubava
+// o agente assim que alguem baixava. Preencher esses campos e o unico jeito gratuito de
+// dar alguma reputacao ao arquivo.
+#include <windows.h>
+
+#define VERSAO_NUMERICA   1,1,0,0
+#define VERSAO_TEXTO      "1.1.0.0"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     VERSAO_NUMERICA
+PRODUCTVERSION  VERSAO_NUMERICA
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"   // ingles (EUA), Unicode
+        BEGIN
+            VALUE "CompanyName",      "Tela Compartilhada"
+            VALUE "FileDescription",  "Agente de audio da sala de tela compartilhada"
+            VALUE "FileVersion",      VERSAO_TEXTO
+            VALUE "InternalName",     "AgenteAudio"
+            VALUE "LegalCopyright",   "Projeto pessoal de codigo aberto"
+            VALUE "ProductName",      "Tela Compartilhada - Agente de audio"
+            VALUE "ProductVersion",   VERSAO_TEXTO
+            VALUE "Comments",         "Captura o audio deste computador, sem o do navegador, e envia para a sala. Nao instala nada e nao roda em segundo plano: fechar a janela encerra."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+// Sem OriginalFilename de proposito: o arquivo e servido com a configuracao no proprio
+// nome, entao ele nunca bateria com o nome declarado aqui -- e essa divergencia e, por si
+// so, mais um sinal ruim para os antivirus.
+
+IDI_ICON1 ICON "AgenteAudio.ico"
