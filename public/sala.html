@@ -1023,7 +1023,9 @@ async function alternarCamera() {
     cameraBtn.setAttribute('aria-pressed', 'true');
   }
   atualizarTile('self');
-  if (pinned?.id === 'self' && pinned.source === 'camera') pin(cameraStream ? 'self' : null, 'camera');
+  // Precisa passar pelo avaliador, e nao so desfazer o destaque: ligar a propria camera
+  // estando sozinho tem de acender o palco na hora, sem depender de outro evento chegar.
+  avaliarDestaque();
   enviarEstado();
 }
 cameraBtn.onclick = alternarCamera;
