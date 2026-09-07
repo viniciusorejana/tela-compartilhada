@@ -1074,6 +1074,7 @@ function montarFiltroDeRuido() {
     // Um contexto suspenso nao produz som nenhum: enquanto ele nao estiver rodando, quem
     // vai para a sala e a faixa crua.
     contexto.addEventListener?.('statechange', escolherFaixaDoMic);
+    liberarContextoDeAudio();
     escolherFaixaDoMic();
   } catch (_) {
     cadeiaDeRuido = null;
@@ -1085,11 +1086,37 @@ function escolherFaixaDoMic() {
   if (!micTrack) return;
   const podeFiltrar = filtroDeRuidoLigado && cadeiaDeRuido && cadeiaDeRuido.contexto.state === 'running';
   const desejada = podeFiltrar ? cadeiaDeRuido.faixa : micTrack;
+  atualizarBotaoDeRuido();
   if (desejada === faixaEnviadaDoMic) return;
   faixaEnviadaDoMic = desejada;
   desejada.enabled = !micMuted;
   definirFaixaEmTodosOsPares('mic', desejada, micStream);
 }
+
+// O botao mostra o que esta valendo de verdade, nao o que foi pedido: se o navegador ainda
+// nao liberou o audio, a filtragem nao esta acontecendo e nao adianta o botao dizer que sim.
+function atualizarBotaoDeRuido() {
+  const ativo = Boolean(filtroDeRuidoLigado && cadeiaDeRuido && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
+  noiseBtn.textContent = filtroDeRuidoLigado ? 'Ruído reduzido' : 'Sem filtro';
+  noiseBtn.setAttribute('aria-pressed', String(filtroDeRuidoLigado));
+  noiseBtn.classList.toggle('secondary', !ativo);
+  noiseBtn.title = !filtroDeRuidoLigado
+    ? 'Redução de ruído desligada: seu microfone vai cru para a sala'
+    : (ativo
+      ? 'Redução de ruído ligada: o ruído de fundo para de sair quando você não está falando'
+      : 'Redução de ruído pedida, mas o navegador ainda não liberou o áudio desta página. Toque na tela.');
+}
+
+// Celular costuma criar o contexto de audio suspenso, e contexto suspenso nao processa
+// nada: a faixa filtrada sairia muda, entao ate liberar quem vai para a sala e a crua.
+// Qualquer toque na pagina serve para liberar.
+function liberarContextoDeAudio() {
+  if (!contextoDeAnalise || contextoDeAnalise.state !== 'suspended') return;
+  contextoDeAnalise.resume().then(escolherFaixaDoMic).catch(() => {});
+}
+['pointerdown', 'touchstart', 'keydown'].forEach(evento => {
+  document.addEventListener(evento, liberarContextoDeAudio, { passive: true });
+});
 
 function ajustarPorteira(nivel) {
   if (!cadeiaDeRuido || faixaEnviadaDoMic !== cadeiaDeRuido.faixa) return;
@@ -1117,9 +1144,7 @@ function ajustarPorteira(nivel) {
 
 noiseBtn.onclick = () => {
   filtroDeRuidoLigado = !filtroDeRuidoLigado;
-  noiseBtn.textContent = filtroDeRuidoLigado ? 'Ruído reduzido' : 'Sem filtro';
-  noiseBtn.setAttribute('aria-pressed', String(filtroDeRuidoLigado));
-  noiseBtn.classList.toggle('secondary', !filtroDeRuidoLigado);
+  liberarContextoDeAudio();
   escolherFaixaDoMic();
   status.textContent = filtroDeRuidoLigado
     ? 'Redução de ruído ligada: o ruído de fundo para de sair quando você não está falando.'
