@@ -160,8 +160,15 @@
     position: relative; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden;
     background: var(--bg-3); display: grid; place-items: center;
   }
-  /* Anel verde de "esta falando", como no Discord. */
-  .participant.falando .avatar-wrap { box-shadow: inset 0 0 0 2px var(--online); }
+  /* Anel verde de "esta falando", como no Discord. Fica num pseudo-elemento por cima do
+     video: o <video> e posicionado, entao cobria um box-shadow aplicado no proprio quadro
+     e o anel sumia justo em quem estava com a camera ligada. */
+  .avatar-wrap::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    border-radius: 8px; pointer-events: none; z-index: 2;
+    box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .12s ease-out;
+  }
+  .participant.falando .avatar-wrap::after { box-shadow: inset 0 0 0 2px var(--online); }
   /* Mesmo motivo do palco, e "contain" no lugar de "cover": recortar uma camera vertical
      num quadro 16/10 deixava so uma tira do meio, ampliada. */
   .cam-video {
