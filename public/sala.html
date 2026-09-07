@@ -496,6 +496,17 @@ const agenteDownload = document.getElementById('agenteDownload');
 const confirmScreenBtn = document.getElementById('confirmScreenBtn');
 const cancelScreenBtn = document.getElementById('cancelScreenBtn');
 
+// ---------- O que este navegador suporta ----------
+// Safari usa webkitAudioContext; celulares em geral nao tem getDisplayMedia; e nenhum
+// navegador fora do Windows tem o agente. Detectar uma vez aqui evita erro espalhado.
+const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+const temMediaDevices = Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+const suportaCompartilharTela = Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+const ehWindows = /Windows/i.test(navigator.userAgent);
+const suportaTelaCheia = Boolean(
+  document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen
+);
+
 let socket = null;
 let myId = null;
 let myName = '';
@@ -578,7 +589,9 @@ async function iniciarConexao() {
       });
       micTrack = micStream.getAudioTracks()[0];
     } catch (err) {
-      status.textContent = 'Não foi possível acessar o microfone: ' + err.message;
+      status.textContent = temMediaDevices
+        ? 'Não foi possível acessar o microfone: ' + err.message
+        : 'Este navegador não libera microfone nesta página. É preciso abrir por HTTPS (ou localhost).';
     }
 
     socket.emit('join-room', roomCode, myName, (response) => {
@@ -587,12 +600,21 @@ async function iniciarConexao() {
         return;
       }
       criarTileLocal();
+      acompanharVoz('self', micStream);
+      if (Array.isArray(response.historico) && response.historico.length) {
+        chatMsgs.innerHTML = '';
+        response.historico.forEach(mostrarMensagem);
+        naoLidas = 0;
+        chatBadge.classList.add('hidden');
+      }
       // Acabei de entrar: sou eu quem inicia a negociacao com quem ja estava na sala.
       response.peers.forEach(peer => {
         criarConexaoPar(peer.id, peer.name, peer.state, true);
       });
       status.textContent = 'Conectado. Use os botões abaixo para ligar câmera, tela ou microfone.';
       atualizarContador();
+      // Alguem pode ja estar compartilhando desde antes de eu entrar.
+      avaliarDestaque();
     });
 
     // Liga este navegador ao agente local (se houver um instalado) e descobre quais
@@ -605,8 +627,9 @@ async function iniciarConexao() {
     });
   });
 
-  socket.on('agente-status', ({ conectado }) => {
+  socket.on('agente-status', ({ conectado, portaLocal }) => {
     audioCapabilities.agenteConectado = Boolean(conectado);
+    audioCapabilities.portaLocalDoAgente = portaLocal || null;
     status.textContent = conectado
       ? 'Agente de áudio conectado: você já pode compartilhar o som do seu computador.'
       : 'Agente de áudio desconectado.';
@@ -617,21 +640,28 @@ async function iniciarConexao() {
     // Alguem acabou de entrar: espero a oferta dessa pessoa antes de adicionar minha midia.
     criarConexaoPar(id, name, state, false);
     atualizarContador();
+    avaliarDestaque();
   });
 
   socket.on('peer-left', ({ id }) => {
     removerPar(id);
     atualizarContador();
+    avaliarDestaque();
   });
 
   socket.on('media-state', ({ id, ...state }) => {
     const peer = peers.get(id);
     if (!peer) return;
+    const antes = peer.state || {};
     peer.state = state;
+    // Carimba o inicio de cada fonte; zera quando ela acaba, para nao "furar a fila" ao
+    // voltar depois.
+    if (state.screen && !antes.screen) peer.ordem.screen = ++sequenciaDeCompartilhamento;
+    if (!state.screen) peer.ordem.screen = 0;
+    if (state.camera && !antes.camera) peer.ordem.camera = ++sequenciaDeCompartilhamento;
+    if (!state.camera) peer.ordem.camera = 0;
     atualizarTile(id);
-    if (!state.screen && pinned?.id === id && pinned.source === 'screen') despinar();
-    if (!state.camera && pinned?.id === id && pinned.source === 'camera') despinar();
-    if (state.screen && !pinned) pin(id, 'screen');
+    avaliarDestaque();
   });
 
   socket.on('offer', async (fromId, description, mediaInfo) => {
@@ -698,21 +728,11 @@ async function iniciarConexao() {
     }
   }
 
-  socket.on('audio-data', (data) => {
-    if (!appAudioNode) return;
-    const incoming = new Uint8Array(data);
-    const combined = new Uint8Array(pendingPcm.length + incoming.length);
-    combined.set(pendingPcm);
-    combined.set(incoming, pendingPcm.length);
-    const usableLength = combined.length - (combined.length % 4);
-    if (usableLength) {
-      const pcm = combined.slice(0, usableLength).buffer;
-      appAudioNode.port.postMessage(pcm, [pcm]);
-    }
-    pendingPcm = combined.slice(usableLength);
-  });
+  socket.on('audio-data', (data) => receberPcm(data));
 
   socket.on('audio-error', (message) => { status.textContent = message; });
+
+  socket.on('chat-mensagem', (msg) => mostrarMensagem(msg));
 
   socket.on('disconnect', () => {
     status.textContent = 'Desconectado do servidor. Tentando reconectar...';
@@ -752,15 +772,45 @@ function preferirCodecsDeVideo(pc, mimeTypesEmOrdem) {
   });
 }
 
-function aplicarParametrosDeEnvio(sender, kind) {
+// Rampa de bitrate do video.
+//
+// No comeco da transmissao o WebRTC ainda nao mediu a banda disponivel. Se ja sairmos
+// mandando no maximo, a fila do roteador enche e TODA a transmissao chega atrasada --
+// e o atraso demora a ceder mesmo depois que o excesso para. Comecando baixo e subindo
+// aos poucos, a imagem entra fluida na hora e a qualidade melhora sozinha em ~20s.
+const BITRATE_VIDEO_INICIAL = 400_000;
+const BITRATE_VIDEO_ALVO = 2_500_000;
+const PASSO_DA_RAMPA = 5000;
+
+function definirBitrate(sender, bits) {
   const params = sender.getParameters();
-  if (!params.encodings) params.encodings = [{}];
+  if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+  params.encodings[0].maxBitrate = bits;
+  // Preferir manter a fluidez a manter a resolucao: quadro atrasado incomoda mais que
+  // quadro menos nitido.
+  params.degradationPreference = 'maintain-framerate';
+  return sender.setParameters(params).catch(() => {});
+}
+
+function iniciarRampaDeBitrate(sender) {
+  let atual = BITRATE_VIDEO_INICIAL;
+  const timer = setInterval(() => {
+    if (!sender.track || sender.track.readyState === 'ended') { clearInterval(timer); return; }
+    atual = Math.min(BITRATE_VIDEO_ALVO, Math.round(atual * 1.7));
+    definirBitrate(sender, atual);
+    if (atual >= BITRATE_VIDEO_ALVO) clearInterval(timer);
+  }, PASSO_DA_RAMPA);
+}
+
+function aplicarParametrosDeEnvio(sender, kind) {
   if (kind === 'video') {
-    params.encodings[0].maxBitrate = 2_500_000;
-    params.degradationPreference = 'maintain-framerate';
-  } else {
-    params.encodings[0].maxBitrate = 256_000;
+    definirBitrate(sender, BITRATE_VIDEO_INICIAL);
+    iniciarRampaDeBitrate(sender);
+    return;
   }
+  const params = sender.getParameters();
+  if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+  params.encodings[0].maxBitrate = 256_000;
   sender.setParameters(params).catch(() => {});
 }
 
@@ -783,12 +833,22 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     faixasAdicionadas: false,
     timeoutIniciador: null,
     senders: { mic: null, camera: null, screen: null, screenAudio: null },
-    remoteStreams: { camera: new MediaStream(), screen: new MediaStream(), combinedAudio: new MediaStream() },
+    // Voz e som de tela ficam em streams separados. Juntos num unico <audio>, duas pessoas
+    // compartilhando tela fariam o espectador ouvir as duas ao mesmo tempo.
+    remoteStreams: {
+      camera: new MediaStream(), screen: new MediaStream(),
+      micAudio: new MediaStream(), screenAudio: new MediaStream()
+    },
     remoteStreamIds: {},
     pendingCandidates: [],
+    // Quando cada fonte comecou, para o destaque automatico saber quem foi primeiro.
+    ordem: { screen: 0, camera: 0 },
     state: state || { camera: false, screen: false, screenAudio: false, micMuted: false }
   };
   peers.set(id, peer);
+  // Quem ja estava compartilhando quando entramos tambem entra na fila do destaque.
+  if (peer.state.screen) peer.ordem.screen = ++sequenciaDeCompartilhamento;
+  if (peer.state.camera) peer.ordem.camera = ++sequenciaDeCompartilhamento;
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -815,6 +875,10 @@ function criarConexaoPar(id, name, state, ehIniciador) {
   };
 
   pc.ontrack = (event) => {
+    // Pede o menor buffer de jitter possivel. Sem isto o Chrome guarda algumas centenas
+    // de ms "por seguranca", que somam ao atraso que o audio do sistema ja tem.
+    try { if ("playoutDelayHint" in event.receiver) event.receiver.playoutDelayHint = 0; }
+    catch (_) { /* navegador sem suporte: segue com o padrao */ }
     const track = event.track;
     const stream = event.streams[0];
     let source = null;
@@ -823,16 +887,23 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     else if (stream && stream.id === peer.remoteStreamIds.screenStreamId) source = track.kind === 'video' ? 'screen' : 'screen-audio';
     else source = track.kind === 'audio' ? 'mic' : 'camera';
 
-    if (source === 'mic' || source === 'screen-audio') {
-      if (!peer.remoteStreams.combinedAudio.getTracks().some(t => t.id === track.id)) {
-        peer.remoteStreams.combinedAudio.addTrack(track);
+    if (source === 'mic') {
+      if (!peer.remoteStreams.micAudio.getTracks().some(t => t.id === track.id)) {
+        peer.remoteStreams.micAudio.addTrack(track);
       }
+    } else if (source === 'screen-audio') {
+      peer.remoteStreams.screenAudio = new MediaStream([track]);
     } else if (source === 'camera') {
       peer.remoteStreams.camera = new MediaStream([track]);
     } else if (source === 'screen') {
       peer.remoteStreams.screen = new MediaStream([track]);
     }
-    track.onended = () => atualizarTile(id);
+    // Parar de compartilhar nem sempre encerra a faixa: com replaceTrack(null) ela apenas
+    // fica muda. Sem reagir aos tres eventos, o palco ficava com a imagem congelada ate a
+    // pessoa apertar F5.
+    track.onended = () => { atualizarTile(id); avaliarDestaque(); };
+    track.onmute = () => avaliarDestaque();
+    track.onunmute = () => { ligarMidiaDoTile(id); avaliarDestaque(); };
     ligarMidiaDoTile(id);
   };
 
@@ -902,6 +973,7 @@ function removerPar(id) {
   if (!peer) return;
   peer.pc.close();
   peers.delete(id);
+  pararDeAcompanhar(id);
   removerTile(id);
   if (pinned?.id === id) despinar();
 }
@@ -1019,7 +1091,9 @@ function atualizarExplicacaoDeAudio() {
 // configurado com a URL desta sala e com o token deste navegador.
 function atualizarCaixaDoAgente(plano) {
   const relevante = plano !== 'nenhum' && plano !== 'aba';
-  agenteBox.hidden = !relevante || !audioCapabilities.agenteDisponivel;
+  // O agente e um .exe: nao faz sentido oferece-lo a quem esta no Linux, no Mac ou no
+  // celular. Sem o agente, essas pessoas usam o audio pelo proprio navegador.
+  agenteBox.hidden = !relevante || !audioCapabilities.agenteDisponivel || !ehWindows;
   if (agenteBox.hidden) return;
 
   const conectado = Boolean(audioCapabilities.agenteConectado);
@@ -1040,25 +1114,101 @@ fixEchoBtn.onclick = () => {
   atualizarExplicacaoDeAudio();
 };
 
+let wsAgenteLocal = null;
+
+// O PCM chega por dois caminhos possíveis e é tratado igual nos dois: pelo WebSocket
+// local do agente (curto) ou pelo servidor da sala (reserva).
+function receberPcm(data) {
+  if (!appAudioNode) return;
+  const incoming = new Uint8Array(data);
+  const combined = new Uint8Array(pendingPcm.length + incoming.length);
+  combined.set(pendingPcm);
+  combined.set(incoming, pendingPcm.length);
+  const usableLength = combined.length - (combined.length % 4);
+  if (usableLength) {
+    const pcm = combined.slice(0, usableLength).buffer;
+    appAudioNode.port.postMessage(pcm, [pcm]);
+  }
+  pendingPcm = combined.slice(usableLength);
+}
+
+// Conecta direto ao agente que roda NESTE computador, cortando a volta pela internet: sem
+// isso o som sai daqui, vai até o servidor da sala e retorna para esta mesma máquina.
+//
+// Se não der certo (agente antigo, porta ocupada, navegador que bloqueie loopback), não há
+// prejuízo: o agente continua enviando pelo servidor e o áudio funciona igual, só com mais
+// atraso. Por isso nada aqui interrompe a transmissão em caso de falha.
+function conectarAgenteLocal() {
+  const porta = audioCapabilities.portaLocalDoAgente;
+  if (!porta || wsAgenteLocal) return;
+  let ws;
+  try { ws = new WebSocket(`ws://127.0.0.1:${porta}/?token=${encodeURIComponent(tokenDoAgente)}`); }
+  catch (_) { return; }
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => { wsAgenteLocal = ws; console.info('Áudio do sistema vindo direto do agente, sem passar pelo servidor.'); };
+  ws.onmessage = (event) => receberPcm(event.data);
+  ws.onclose = () => { if (wsAgenteLocal === ws) wsAgenteLocal = null; };
+  ws.onerror = () => { if (wsAgenteLocal === ws) wsAgenteLocal = null; };
+}
+
+function fecharAgenteLocal() {
+  if (!wsAgenteLocal) return;
+  try { wsAgenteLocal.close(); } catch (_) { /* já estava fechado */ }
+  wsAgenteLocal = null;
+}
+
 // O PCM chega pelo evento 'audio-data' (do agente local ou do helper do servidor) e vira
 // uma faixa de audio comum, que entra na transmissao WebRTC como qualquer outra.
 async function iniciarAudioDoSistema(targetStream, origem) {
-  appAudioContext = new AudioContext({ sampleRate: 44100 });
+  // latencyHint 'interactive' pede o menor buffer possivel de saida.
+  appAudioContext = new AudioContextClass({ sampleRate: 44100, latencyHint: 'interactive' });
   const workletCode = `
     class PcmPlayer extends AudioWorkletProcessor {
       constructor() {
-        super(); this.queue = []; this.current = null; this.offset = 0;
-        this.port.onmessage = event => this.queue.push(new Int16Array(event.data));
+        super();
+        this.blocos = [];
+        this.offset = 0;    // posicao dentro de blocos[0], em amostras
+        this.total = 0;     // soma do tamanho de todos os blocos da fila
+        // Este audio ja chega atrasado: ele sai do PC de quem compartilha, vai ate o
+        // servidor e volta. Guardar mais um tanto aqui so aumentaria o atraso, entao o
+        // alvo e curto e o teto e rigido.
+        this.alvo = Math.round(sampleRate * 0.04) * 2;
+        this.teto = Math.round(sampleRate * 0.12) * 2;
+        this.port.onmessage = event => {
+          const bloco = new Int16Array(event.data);
+          if (!bloco.length) return;
+          this.blocos.push(bloco);
+          this.total += bloco.length;
+          this.descartarExcesso();
+        };
       }
+
+      // Sem isto a fila so cresce. Qualquer engasgo da rede (ou a diferenca minima entre o
+      // relogio da placa de som e o do navegador) vira atraso PERMANENTE, porque tudo que
+      // entrou na fila precisa ser tocado em tempo real. Preferimos um pulo curto agora a
+      // carregar o atraso para o resto da transmissao.
+      descartarExcesso() {
+        if (this.total - this.offset <= this.teto) return;
+        while (this.blocos.length > 1 && this.total - this.offset > this.alvo) {
+          this.total -= this.blocos.shift().length;
+          this.offset = 0;
+        }
+        const sobra = this.total - this.offset - this.alvo;
+        if (sobra > 0) this.offset += sobra - (sobra % 2);  // par: nao trocar os canais
+      }
+
       process(inputs, outputs) {
         const left = outputs[0][0];
         const right = outputs[0][1] || left;
         for (let i = 0; i < left.length; i++) {
-          if (!this.current || this.offset + 1 >= this.current.length) {
-            this.current = this.queue.shift(); this.offset = 0;
+          while (this.blocos.length && this.offset + 1 >= this.blocos[0].length) {
+            this.total -= this.blocos.shift().length;
+            this.offset = 0;
           }
-          left[i] = this.current ? this.current[this.offset++] / 32768 : 0;
-          right[i] = this.current ? this.current[this.offset++] / 32768 : 0;
+          const bloco = this.blocos[0];
+          if (!bloco) { left[i] = 0; right[i] = 0; continue; }
+          left[i] = bloco[this.offset++] / 32768;
+          right[i] = bloco[this.offset++] / 32768;
         }
         return true;
       }
@@ -1074,11 +1224,13 @@ async function iniciarAudioDoSistema(targetStream, origem) {
   appAudioTrack = destination.stream.getAudioTracks()[0];
   targetStream.addTrack(appAudioTrack);
   await appAudioContext.resume();
+  if (origem === 'agente') conectarAgenteLocal();
   socket.emit('audio-start', { origem, familia: familiaDoNavegador(), version: audioCaptureVersion });
 }
 
 async function limparAudioDoAplicativo() {
   audioCaptureVersion += 1;
+  fecharAgenteLocal();
   socket.emit('audio-stop');
   if (appAudioTrack) appAudioTrack.stop();
   if (appAudioContext) await appAudioContext.close();
@@ -1094,7 +1246,9 @@ async function capturarTela() {
   // video sem audio para nao capturar a mesma coisa duas vezes.
   const audioPeloNavegador = plano === 'aba' || plano === 'navegador-sistema';
 
-  const stream = await navigator.mediaDevices.getDisplayMedia({
+  // As chaves fora de "video"/"audio" (systemAudio, selfBrowserSurface...) so existem no
+  // Chrome/Edge. Firefox e Safari as ignoram, o que e o comportamento desejado.
+  const restricoes = {
     video: {
       displaySurface: captureMode.value,
       cursor: 'always',
@@ -1115,7 +1269,19 @@ async function capturarTela() {
     windowAudio: captureMode.value === 'window' ? 'window' : 'exclude',
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include'
-  });
+  };
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia(restricoes);
+  } catch (err) {
+    // Firefox e Safari nao capturam audio de tela e podem recusar o pedido inteiro por
+    // causa dele. Melhor compartilhar so o video do que nao compartilhar nada.
+    if (!audioPeloNavegador || err?.name === 'NotAllowedError') throw err;
+    restricoes.audio = false;
+    stream = await navigator.mediaDevices.getDisplayMedia(restricoes);
+    status.textContent = 'Tela compartilhada sem áudio: este navegador não captura som da tela.';
+  }
   stream.getVideoTracks().forEach(track => { track.contentHint = 'motion'; });
 
   if (plano === 'agente' || plano === 'helper') {
@@ -1143,7 +1309,7 @@ confirmScreenBtn.onclick = async () => {
     screenBtn.setAttribute('aria-pressed', 'true');
     updateScreenBtn.hidden = false;
     atualizarTile('self');
-    if (!pinned) pin('self', 'screen');
+    avaliarDestaque();
 
     // Diz exatamente que audio esta indo junto. Esquecer de marcar a caixa de audio no
     // seletor do Chrome e o motivo mais comum de "compartilhei mas nao sai som".
@@ -1178,12 +1344,26 @@ function pararTela() {
   screenBtn.setAttribute('aria-pressed', 'false');
   updateScreenBtn.hidden = true;
   atualizarTile('self');
-  if (pinned?.id === 'self' && pinned.source === 'screen') despinar();
+  if (pinned?.id === 'self' && pinned.source === 'screen') { pinned = null; destaqueManual = false; }
+  avaliarDestaque();
   status.textContent = 'Compartilhamento de tela encerrado.';
   enviarEstado();
 }
 
+// Celulares (iOS e Android) nao implementam getDisplayMedia: em vez de deixar o botao
+// falhar no clique, ele fica desativado com o motivo à vista. Câmera e microfone
+// continuam funcionando normalmente nesses aparelhos.
+if (!suportaCompartilharTela) {
+  screenBtn.disabled = true;
+  screenBtn.title = 'Este navegador não permite compartilhar tela (comum em celulares).';
+  screenBtn.textContent = 'Tela indisponível';
+}
+
 screenBtn.onclick = () => {
+  if (!suportaCompartilharTela) {
+    status.textContent = 'Compartilhar tela não é possível neste navegador. Use um computador para isso.';
+    return;
+  }
   if (screenStream) pararTela();
   else abrirPainelDeTela('start');
 };
@@ -1191,7 +1371,7 @@ updateScreenBtn.onclick = () => abrirPainelDeTela('update');
 
 // ---------- Teste de áudio ----------
 testAudioBtn.onclick = async () => {
-  testAudioContext ||= new AudioContext();
+  testAudioContext ||= new AudioContextClass();
   await testAudioContext.resume();
   const oscillator = testAudioContext.createOscillator();
   const gain = testAudioContext.createGain();
@@ -1249,19 +1429,27 @@ stageVideo.addEventListener('pointerup', () => { arrastandoPalco = null; });
 stageVideo.addEventListener('dblclick', () => alternarTelaCheia());
 
 function alternarTelaCheia() {
-  if (!document.fullscreenElement) {
-    (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);
-  } else {
-    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  const emTelaCheia = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!emTelaCheia) {
+    const pedir = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (pedir) { pedir.call(stage); return; }
+    // iPhone nao deixa um <div> entrar em tela cheia; so o proprio <video> consegue.
+    if (stageVideo.webkitEnterFullscreen) stageVideo.webkitEnterFullscreen();
+    return;
   }
+  (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
 }
+if (!suportaTelaCheia && !stageVideo.webkitEnterFullscreen) fullscreenBtn.hidden = true;
 fullscreenBtn.onclick = () => alternarTelaCheia();
-document.addEventListener('fullscreenchange', () => {
-  fullscreenBtn.textContent = document.fullscreenElement ? '⛝' : '⛶';
-  fullscreenBtn.title = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
+function aoMudarTelaCheia() {
+  const cheio = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  fullscreenBtn.textContent = cheio ? '⛝' : '⛶';
+  fullscreenBtn.title = cheio ? 'Sair da tela cheia' : 'Tela cheia';
   limitarPan();
   aplicarTransformDoPalco();
-});
+}
+document.addEventListener('fullscreenchange', aoMudarTelaCheia);
+document.addEventListener('webkitfullscreenchange', aoMudarTelaCheia);
 
 // ---------- Sair ----------
 leaveBtn.onclick = () => { window.location.href = '/'; };
@@ -1301,11 +1489,12 @@ function criarTileBase(id, name, state, isSelf) {
     <div class="participant-name">${name}${isSelf ? ' (você)' : ''}</div>
     <div class="volume-row"></div>
     <audio class="peer-audio" autoplay></audio>
+    <audio class="screen-audio" autoplay></audio>
   `;
   const volumeRow = el.querySelector('.volume-row');
   if (!isSelf) {
     volumeRow.innerHTML = `
-      <input type="range" class="volume-slider" min="0" max="150" value="100">
+      <input type="range" class="volume-slider" min="0" max="100" value="100">
       <button class="mute-peer-btn" type="button" title="Silenciar participante">🔊</button>
     `;
   }
@@ -1318,6 +1507,7 @@ function criarTileBase(id, name, state, isSelf) {
     micIcon: el.querySelector('.mic-icon'),
     screenBadge: el.querySelector('.screen-badge'),
     peerAudio: el.querySelector('.peer-audio'),
+    screenAudio: el.querySelector('.screen-audio'),
     volumeSlider: el.querySelector('.volume-slider'),
     muteBtn: el.querySelector('.mute-peer-btn'),
     localMute: false
@@ -1327,19 +1517,25 @@ function criarTileBase(id, name, state, isSelf) {
   el.querySelector('.avatar-wrap').addEventListener('click', () => {
     const peer = peers.get(id);
     const estado = id === 'self' ? meuEstado() : peer?.state;
-    if (estado?.screen) pin(id, 'screen');
-    else if (estado?.camera) pin(id, 'camera');
+    // Escolha manual: a partir daqui o destaque nao muda sozinho, ate esta fonte acabar.
+    if (estado?.screen) pin(id, 'screen', true);
+    else if (estado?.camera) pin(id, 'camera', true);
   });
 
   if (!isSelf) {
     refs.volumeSlider.addEventListener('input', () => {
-      refs.peerAudio.volume = Math.min(1.5, Number(refs.volumeSlider.value) / 100);
-      if (pinned?.id === id) stageVideo.volume = refs.peerAudio.volume;
+      // volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
+      // IndexSizeError e o ajuste inteiro se perde.
+      const nivel = Math.max(0, Math.min(1, Number(refs.volumeSlider.value) / 100));
+      refs.peerAudio.volume = nivel;
+      refs.screenAudio.volume = nivel;
+      if (pinned?.id === id) stageVideo.volume = nivel;
     });
     refs.muteBtn.addEventListener('click', () => {
       refs.localMute = !refs.localMute;
       refs.peerAudio.muted = refs.localMute;
       refs.muteBtn.textContent = refs.localMute ? '🔇' : '🔊';
+      atualizarAudioDeTela();
     });
   }
 
@@ -1358,11 +1554,15 @@ function ligarMidiaDoTile(id) {
   const peer = peers.get(id);
   if (!refs || !peer) return;
   if (peer.remoteStreams.camera.getTracks().length) refs.camVideo.srcObject = peer.remoteStreams.camera;
-  if (peer.remoteStreams.combinedAudio.getTracks().length) refs.peerAudio.srcObject = peer.remoteStreams.combinedAudio;
-  if (pinned?.id === id) atualizarPalco();
+  if (peer.remoteStreams.micAudio.getTracks().length) {
+    refs.peerAudio.srcObject = peer.remoteStreams.micAudio;
+    acompanharVoz(id, peer.remoteStreams.micAudio);
+  }
   atualizarTile(id);
   garantirReproducao(refs.peerAudio);
   garantirReproducao(refs.camVideo);
+  // A chegada de uma faixa e justamente quando o palco pode finalmente mostrar algo.
+  avaliarDestaque();
 }
 
 function atualizarTile(id) {
@@ -1384,43 +1584,146 @@ function atualizarContador() {
 }
 
 // ---------- Palco (spotlight) ----------
-function pin(id, source) {
+// Destaque automatico, para ninguem precisar clicar em nada:
+//  - tela tem prioridade sobre camera;
+//  - entre fontes do mesmo tipo, ganha quem comecou primeiro;
+//  - a propria imagem so vai ao centro se nao houver mais ninguem compartilhando (ver a
+//    propria tela no palco gera o efeito de espelho infinito);
+//  - uma escolha manual manda mais que tudo, ate aquela fonte acabar.
+const TEXTO_PALCO_VAZIO = stageEmpty.textContent;
+let sequenciaDeCompartilhamento = 0;
+let destaqueManual = false;
+
+// Fonte anunciada pelo estado, mesmo que o video ainda nao tenha chegado: e o que permite
+// destacar na hora e esperar a imagem, em vez de largar o palco vazio.
+function fonteAnunciada(id, source) {
+  if (id === 'self') {
+    const stream = source === 'screen' ? screenStream : cameraStream;
+    return Boolean(stream && stream.getVideoTracks().length);
+  }
+  const peer = peers.get(id);
+  if (!peer) return false;
+  return Boolean(source === 'screen' ? peer.state?.screen : peer.state?.camera);
+}
+
+function candidatosDeDestaque() {
+  const lista = [];
+  peers.forEach((peer, id) => {
+    if (peer.state?.screen) lista.push({ id, source: 'screen', prioridade: 0, ordem: peer.ordem.screen });
+    if (peer.state?.camera) lista.push({ id, source: 'camera', prioridade: 1, ordem: peer.ordem.camera });
+  });
+  // A propria imagem entra por ultimo, so como preenchimento quando estou sozinho.
+  if (screenStream) lista.push({ id: 'self', source: 'screen', prioridade: 2, ordem: 0 });
+  if (cameraStream) lista.push({ id: 'self', source: 'camera', prioridade: 3, ordem: 0 });
+  lista.sort((a, b) => a.prioridade - b.prioridade || a.ordem - b.ordem);
+  return lista;
+}
+
+function avaliarDestaque() {
+  const atualValido = pinned && fonteAnunciada(pinned.id, pinned.source);
+
+  // Escolha manual manda enquanto aquela fonte existir.
+  if (destaqueManual && atualValido) {
+    atualizarPalco();
+    atualizarAudioDeTela();
+    return;
+  }
+
+  // O que ja esta no palco nao sai de la so porque apareceu mais gente compartilhando:
+  // quem esta assistindo uma tela continua nela, e nao e puxado para a tela de quem
+  // chegou depois. So duas situacoes justificam a troca automatica.
+  if (atualValido) {
+    const candidato = candidatosDeDestaque()[0];
+    const trocaJustificada = candidato && (
+      // estava numa camera e surgiu uma tela, que tem prioridade
+      (pinned.source === 'camera' && candidato.source === 'screen') ||
+      // estava na propria imagem, que e so preenchimento para quando estou sozinho
+      (pinned.id === 'self' && candidato.id !== 'self')
+    );
+    if (trocaJustificada) pin(candidato.id, candidato.source, false);
+    else atualizarPalco();
+    atualizarAudioDeTela();
+    return;
+  }
+
+  // Chegou aqui: o que estava no palco acabou. Escolhe o melhor disponivel.
+  destaqueManual = false;
+  const melhor = candidatosDeDestaque()[0];
+  if (!melhor) { despinar(); atualizarAudioDeTela(); return; }
+  if (!pinned || pinned.id !== melhor.id || pinned.source !== melhor.source) pin(melhor.id, melhor.source, false);
+  else atualizarPalco();
+  atualizarAudioDeTela();
+}
+
+// Som de tela: toca o da tela em destaque. Se existe uma unica tela na sala, ela toca de
+// qualquer jeito -- assim ninguem fica mudo por ter clicado numa camera.
+function atualizarAudioDeTela() {
+  const comSom = [];
+  peers.forEach((peer, id) => { if (peer.remoteStreams.screenAudio.getTracks().length) comSom.push(id); });
+  tiles.forEach((refs, id) => {
+    if (!refs.screenAudio) return;
+    const peer = peers.get(id);
+    if (!peer) return;
+    const stream = peer.remoteStreams.screenAudio;
+    if (refs.screenAudio.srcObject !== stream) refs.screenAudio.srcObject = stream;
+    const emDestaque = pinned?.id === id && pinned.source === 'screen';
+    const unicaTelaComSom = comSom.length === 1 && comSom[0] === id;
+    const deveTocar = emDestaque || unicaTelaComSom;
+    refs.screenAudio.muted = refs.localMute || !deveTocar;
+    if (deveTocar && !refs.localMute) garantirReproducao(refs.screenAudio);
+  });
+}
+
+function pin(id, source, manual) {
   if (!id) { despinar(); return; }
+  const mudou = !pinned || pinned.id !== id || pinned.source !== source;
   pinned = { id, source };
-  definirZoom(1);
+  if (manual) destaqueManual = true;
+  if (mudou) definirZoom(1);
   atualizarPalco();
+  // O som de tela segue o destaque, entao precisa ser reavaliado aqui tambem: o clique
+  // manual no participante chama pin() direto, sem passar por avaliarDestaque().
+  atualizarAudioDeTela();
   stageControls.classList.remove('hidden');
   document.querySelectorAll('.participant').forEach(el => el.classList.toggle('pinned', el.dataset.id === id));
 }
 
 function despinar() {
   pinned = null;
+  destaqueManual = false;
   stageVideo.srcObject = null;
+  stageEmpty.textContent = TEXTO_PALCO_VAZIO;
   stageEmpty.classList.remove('hidden');
   stageLabel.classList.add('hidden');
   stageControls.classList.add('hidden');
   definirZoom(1);
   if (document.fullscreenElement === stage) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
   document.querySelectorAll('.participant').forEach(el => el.classList.remove('pinned'));
+  atualizarAudioDeTela();
 }
 
 function atualizarPalco() {
   if (!pinned) return;
   const { id, source } = pinned;
-  let stream = null;
-  let nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
-  if (id === 'self') {
-    stream = source === 'screen' ? screenStream : cameraStream;
-  } else {
-    const peer = peers.get(id);
-    stream = peer ? peer.remoteStreams[source] : null;
-  }
-  if (!stream || !stream.getVideoTracks().length) { despinar(); return; }
-  stageVideo.srcObject = stream;
-  stageVideo.muted = true; // audio já é reproduzido pelo <audio> por participante
-  stageEmpty.classList.add('hidden');
+  const nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
+  const stream = id === 'self'
+    ? (source === 'screen' ? screenStream : cameraStream)
+    : (peers.get(id)?.remoteStreams[source] || null);
+
   stageLabel.classList.remove('hidden');
   stageLabel.textContent = `${nome} — ${source === 'screen' ? 'Tela' : 'Câmera'}`;
+
+  if (!stream || !stream.getVideoTracks().length) {
+    // O estado ja anunciou a fonte, mas a faixa de video ainda nao chegou. Antes o palco
+    // se desfazia sozinho aqui e so voltava com F5; agora ele espera.
+    stageVideo.srcObject = null;
+    stageEmpty.textContent = 'Recebendo vídeo...';
+    stageEmpty.classList.remove('hidden');
+    return;
+  }
+  if (stageVideo.srcObject !== stream) stageVideo.srcObject = stream;
+  stageVideo.muted = true; // audio já é reproduzido pelo <audio> por participante
+  stageEmpty.classList.add('hidden');
   garantirReproducao(stageVideo);
 }
 
@@ -1432,7 +1735,10 @@ function garantirReproducao(mediaEl) {
   }
 }
 enableSoundBtn.onclick = () => {
-  tiles.forEach(refs => { refs.peerAudio.play().catch(() => {}); });
+  tiles.forEach(refs => {
+    refs.peerAudio.play().catch(() => {});
+    refs.screenAudio?.play().catch(() => {});
+  });
   stageVideo.play().catch(() => {});
   enableSoundBtn.classList.add('hidden');
   needsUserGesture = false;
@@ -1443,6 +1749,307 @@ window.addEventListener('beforeunload', () => {
   cameraStream?.getTracks().forEach(t => t.stop());
   screenStream?.getTracks().forEach(t => t.stop());
 });
+
+// ---------- Janela de compartilhamento ----------
+// Antes era um bloco no meio da pagina, e era preciso rolar ate o fim para achar o botao.
+settingsPanel.addEventListener('click', (e) => { if (e.target === settingsPanel) fecharPainelDeTela(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!lightbox.classList.contains('hidden')) { fecharImagem(); return; }
+  if (!settingsPanel.classList.contains('hidden')) { fecharPainelDeTela(); return; }
+  if (chatPanel.classList.contains('aberto')) fecharChat();
+});
+
+// ---------- Chat da sala ----------
+// Mensagens trafegam pela conexao de sinalizacao, que ja existe e fica ociosa. Video e voz
+// continuam ponto a ponto: o chat nao passa perto deles.
+const chatPanel = document.getElementById('chatPanel');
+const chatMsgs = document.getElementById('chatMsgs');
+const chatInput = document.getElementById('chatInput');
+const chatSend = document.getElementById('chatSend');
+const chatToggle = document.getElementById('chatToggle');
+const chatClose = document.getElementById('chatClose');
+const chatBadge = document.getElementById('chatBadge');
+
+const LARGURA_MAXIMA_DA_IMAGEM = 1280;
+const BYTES_MAXIMOS_DA_IMAGEM = 700 * 1024;
+let naoLidas = 0;
+
+function chatVisivel() {
+  return window.matchMedia('(min-width: 901px)').matches || chatPanel.classList.contains('aberto');
+}
+function abrirChat() {
+  chatPanel.classList.add('aberto');
+  naoLidas = 0;
+  chatBadge.classList.add('hidden');
+  chatInput.focus();
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+function fecharChat() { chatPanel.classList.remove('aberto'); }
+chatToggle.onclick = () => (chatPanel.classList.contains('aberto') ? fecharChat() : abrirChat());
+chatClose.onclick = fecharChat;
+
+function horaCurta(ms) {
+  return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+const EXTENSOES_DE_IMAGEM = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+
+// O texto NUNCA vira HTML: cada pedaco entra como nó de texto e so os links viram <a>.
+// E o que impede alguem de injetar marcacao pelo chat.
+function montarTexto(destino, texto) {
+  const partes = texto.split(/(https?:\/\/[^\s<]+)/gi);
+  partes.forEach((parte, i) => {
+    if (!parte) return;
+    if (i % 2 === 1) {
+      const a = document.createElement('a');
+      a.href = parte;
+      a.textContent = parte;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      destino.appendChild(a);
+      if (EXTENSOES_DE_IMAGEM.test(parte)) {
+        const img = document.createElement('img');
+        img.className = 'msg-img';
+        img.loading = 'lazy';
+        img.alt = 'imagem compartilhada';
+        img.src = parte;
+        img.onerror = () => img.remove();   // link quebrado: fica so o endereco
+        img.onload = () => { if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight; };
+        destino.appendChild(img);
+      }
+    } else {
+      destino.appendChild(document.createTextNode(parte));
+    }
+  });
+}
+
+let perto = true;
+chatMsgs.addEventListener('scroll', () => {
+  perto = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight < 80;
+});
+
+function mostrarMensagem(msg) {
+  const vazio = chatMsgs.querySelector('.chat-vazio');
+  if (vazio) vazio.remove();
+  perto = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight < 80;
+
+  const el = document.createElement('div');
+  el.className = 'msg';
+
+  const topo = document.createElement('div');
+  topo.className = 'msg-topo';
+  const autor = document.createElement('span');
+  autor.className = 'msg-autor';
+  autor.textContent = msg.autor || 'Alguém';
+  autor.style.color = corDoNome(msg.autor || '');
+  const hora = document.createElement('span');
+  hora.className = 'msg-hora';
+  hora.textContent = horaCurta(msg.em || Date.now());
+  topo.append(autor, hora);
+
+  const corpo = document.createElement('div');
+  corpo.className = 'msg-texto';
+  if (msg.texto) montarTexto(corpo, msg.texto);
+  if (msg.imagem) {
+    const img = document.createElement('img');
+    img.className = 'msg-img';
+    img.alt = 'imagem enviada no chat';
+    img.src = msg.imagem;
+    img.onload = () => { if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight; };
+    corpo.appendChild(img);
+  }
+
+  el.append(topo, corpo);
+  chatMsgs.appendChild(el);
+  if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+  if (!chatVisivel() && msg.autorId !== myId) {
+    naoLidas++;
+    chatBadge.textContent = naoLidas > 99 ? '99+' : String(naoLidas);
+    chatBadge.classList.remove('hidden');
+  }
+}
+
+function mostrarVazio() {
+  chatMsgs.innerHTML = '';
+  const p = document.createElement('div');
+  p.className = 'chat-vazio';
+  p.textContent = 'Nenhuma mensagem ainda. Links e imagens funcionam por aqui.';
+  chatMsgs.appendChild(p);
+}
+mostrarVazio();
+
+function enviarMensagem(texto, imagem) {
+  if (!socket || (!texto && !imagem)) return;
+  socket.emit('chat-message', { texto: texto || '', imagem: imagem || null });
+}
+
+chatSend.onclick = () => {
+  const texto = chatInput.value.trim();
+  if (!texto) return;
+  enviarMensagem(texto, null);
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+};
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend.click(); }
+});
+chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(120, chatInput.scrollHeight) + 'px';
+});
+
+// Imagem colada ou arrastada: reduzida no proprio navegador antes de sair. Mandar o
+// original de uma captura de tela (varios MB) entupiria a sinalizacao a toa.
+// JPEG nao tem canal alfa: converter um PNG transparente para JPEG pinta o fundo de preto.
+// Por isso, antes de escolher o formato, olhamos se a imagem realmente usa transparencia.
+function temTransparencia(ctx, tela) {
+  try {
+    const dados = ctx.getImageData(0, 0, tela.width, tela.height).data;
+    for (let i = 3; i < dados.length; i += 4) if (dados[i] < 250) return true;
+    return false;
+  } catch (_) {
+    return false;  // canvas marcado por imagem de outra origem: nao da para inspecionar
+  }
+}
+
+function reduzir(origem, fator) {
+  const menor = document.createElement('canvas');
+  menor.width = Math.max(1, Math.round(origem.width / fator));
+  menor.height = Math.max(1, Math.round(origem.height / fator));
+  menor.getContext('2d').drawImage(origem, 0, 0, menor.width, menor.height);
+  return menor;
+}
+
+async function encolherImagem(arquivo) {
+  const bitmap = await createImageBitmap(arquivo);
+  const escala = Math.min(1, LARGURA_MAXIMA_DA_IMAGEM / Math.max(bitmap.width, bitmap.height));
+  const tela = document.createElement('canvas');
+  tela.width = Math.round(bitmap.width * escala);
+  tela.height = Math.round(bitmap.height * escala);
+  const ctx = tela.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, tela.width, tela.height);
+  bitmap.close?.();
+
+  if (temTransparencia(ctx, tela)) {
+    // PNG e sem perdas, entao nao ha qualidade para baixar: o que cabe no limite e ir
+    // diminuindo as dimensoes, preservando o fundo transparente.
+    let atual = tela;
+    for (let i = 0; i < 5; i++) {
+      const url = atual.toDataURL('image/png');
+      if (url.length <= BYTES_MAXIMOS_DA_IMAGEM) return url;
+      atual = reduzir(atual, 1.5);
+    }
+    return null;
+  }
+
+  for (const qualidade of [0.82, 0.65, 0.5, 0.35]) {
+    const url = tela.toDataURL('image/jpeg', qualidade);
+    if (url.length <= BYTES_MAXIMOS_DA_IMAGEM) return url;
+  }
+  return null;
+}
+
+async function mandarArquivoDeImagem(arquivo) {
+  if (!arquivo || !arquivo.type.startsWith('image/')) return;
+  // GIF animado perde a animacao ao passar pelo canvas, entao so vai se ja for pequeno.
+  if (arquivo.type === 'image/gif') {
+    if (arquivo.size > BYTES_MAXIMOS_DA_IMAGEM) {
+      status.textContent = 'Esse GIF é grande demais para o chat. Cole o link dele que ele aparece igual.';
+      return;
+    }
+    const leitor = new FileReader();
+    leitor.onload = () => enviarMensagem(chatInput.value.trim(), leitor.result);
+    leitor.readAsDataURL(arquivo);
+    chatInput.value = '';
+    return;
+  }
+  try {
+    const url = await encolherImagem(arquivo);
+    if (!url) { status.textContent = 'Não consegui reduzir essa imagem o bastante. Envie o link dela.'; return; }
+    enviarMensagem(chatInput.value.trim(), url);
+    chatInput.value = '';
+  } catch (_) {
+    status.textContent = 'Não consegui ler essa imagem.';
+  }
+}
+
+chatInput.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  e.preventDefault();
+  mandarArquivoDeImagem(item.getAsFile());
+});
+chatPanel.addEventListener('dragover', (e) => e.preventDefault());
+chatPanel.addEventListener('drop', (e) => {
+  const arquivo = e.dataTransfer?.files?.[0];
+  if (!arquivo) return;
+  e.preventDefault();
+  mandarArquivoDeImagem(arquivo);
+});
+
+// ---------- Visualizador de imagem ----------
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+const lightboxFechar = document.getElementById('lightboxFechar');
+const lightboxBaixar = document.getElementById('lightboxBaixar');
+
+function abrirImagem(src) {
+  lightboxImg.classList.remove('real');
+  lightboxImg.src = src;
+  lightboxBaixar.href = src;
+  lightbox.classList.remove('hidden');
+}
+
+function fecharImagem() {
+  lightbox.classList.add('hidden');
+  lightboxImg.src = '';
+}
+
+// Delegacao: as mensagens sao criadas o tempo todo, entao o ouvinte fica no container.
+chatMsgs.addEventListener('click', (e) => {
+  const img = e.target.closest('.msg-img');
+  if (img && img.src) abrirImagem(img.src);
+});
+lightbox.addEventListener('click', (e) => { if (e.target === lightbox) fecharImagem(); });
+lightboxImg.addEventListener('click', () => lightboxImg.classList.toggle('real'));
+lightboxFechar.onclick = fecharImagem;
+
+// ---------- Indicador de quem esta falando ----------
+// Um unico AudioContext analisa o volume de cada participante e acende o anel verde. Tudo
+// dentro de try: se algum navegador nao deixar, o pior que acontece e nao ter o anel.
+let contextoDeAnalise = null;
+const analisadores = new Map(); // id -> { analisador, dados }
+
+function acompanharVoz(id, stream) {
+  try {
+    if (!stream || !stream.getAudioTracks().length) return;
+    contextoDeAnalise ||= new AudioContextClass();
+    if (analisadores.has(id)) return;
+    const fonte = contextoDeAnalise.createMediaStreamSource(stream);
+    const analisador = contextoDeAnalise.createAnalyser();
+    analisador.fftSize = 512;
+    analisador.smoothingTimeConstant = 0.6;
+    fonte.connect(analisador);
+    analisadores.set(id, { analisador, dados: new Uint8Array(analisador.frequencyBinCount) });
+  } catch (_) { /* sem indicador de fala neste navegador */ }
+}
+
+function pararDeAcompanhar(id) { analisadores.delete(id); }
+
+function pulsoDeVoz() {
+  analisadores.forEach(({ analisador, dados }, id) => {
+    analisador.getByteFrequencyData(dados);
+    let soma = 0;
+    for (let i = 0; i < dados.length; i++) soma += dados[i];
+    const media = soma / dados.length;
+    const tile = tiles.get(id);
+    if (tile) tile.root.classList.toggle('falando', media > 12);
+  });
+  requestAnimationFrame(pulsoDeVoz);
+}
+requestAnimationFrame(pulsoDeVoz);
 </script>
 </body>
 </html>
