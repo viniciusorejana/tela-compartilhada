@@ -6,6 +6,8 @@
 #include <iostream>
 #include <io.h>
 #include "LoopbackCapture.h"
+#include "Aplicativos.h"
+#include <string>
 
 void usage()
 {
@@ -30,6 +32,43 @@ void usage()
 
 int wmain(int argc, wchar_t* argv[])
 {
+    // Modo listagem: imprime em JSON os programas com audio neste computador. E o que
+    // permite escolher qual nao transmitir tambem para quem abre a sala na propria maquina
+    // do servidor, sem precisar baixar o agente.
+    //   ApplicationLoopback.exe --listar [chrome.exe]
+    if (argc >= 2 && wcscmp(argv[1], L"--listar") == 0)
+    {
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        const std::wstring navegador = (argc >= 3) ? argv[2] : L"";
+        const auto lista = AplicativosComAudioComNavegador(navegador);
+        const std::string json = ListaEmJson(lista, navegador);
+        fwrite(json.data(), 1, json.size(), stdout);
+        CoUninitialize();
+        return 0;
+    }
+
+    // Exclusao por NOME do programa: o helper mesmo descobre a raiz da arvore. Antes quem
+    // descobria era o servidor, por PowerShell, o que exigia montar um filtro com texto
+    // vindo de fora -- agora nao passa mais nome nenhum para um shell.
+    //   ApplicationLoopback.exe --excluir chrome.exe
+    if (argc >= 3 && wcscmp(argv[1], L"--excluir") == 0)
+    {
+        const DWORD raiz = ProcessoRaizDe(argv[2]);
+        if (!raiz)
+        {
+            fwprintf(stderr, L"programa nao encontrado: %s\n", argv[2]);
+            return 2;
+        }
+        _setmode(_fileno(stdout), _O_BINARY);
+        CLoopbackCapture captura;
+        HRESULT hr = captura.StartCaptureAsync(raiz, false, nullptr);
+        if (FAILED(hr)) { fwprintf(stderr, L"falha ao iniciar a captura: 0x%08x\n", hr); return 3; }
+        // Mesma espera do modo antigo: quem encerra e o servidor, matando o processo.
+        // (stdin vem fechado no spawn, entao esperar por ele terminaria na hora.)
+        Sleep(INFINITE);
+        return 0;
+    }
+
     if (argc != 3)
     {
         usage();

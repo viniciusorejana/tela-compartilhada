@@ -14,8 +14,8 @@ const AGENTE_PATH = path.join(__dirname, 'native', 'audio-agent', 'x64', 'Releas
 // proprio nome ao iniciar -- por isso o participante so precisa dar um duplo clique.
 const MARCADOR_NOME_CONFIG = '.cfg-';
 
-// Familias de navegador aceitas na captura por processo. Whitelist fechada: o nome vai
-// para um filtro do PowerShell, entao nada que venha do cliente pode passar direto.
+// Familias de navegador aceitas na captura por processo. Whitelist fechada: o valor vira
+// argumento de um processo nativo, entao nada que venha do cliente passa direto.
 const FAMILIAS_DE_NAVEGADOR = {
   chrome: 'chrome.exe',
   msedge: 'msedge.exe',
@@ -214,6 +214,23 @@ wssAgentes.on('connection', (ws) => {
   ws.on('error', () => ws.terminate());
 });
 
+// Nome de executavel aceitavel. Fechado de proposito: esse valor vira argumento de um
+// processo nativo, entao nada de caminho, aspas ou espaco esquisito.
+const EXECUTAVEL_VALIDO = /^[A-Za-z0-9._+-]{1,60}\.exe$/;
+
+// Pergunta ao helper quais programas tem audio nesta maquina. E o mesmo codigo que o
+// agente usa; a diferenca e so quem executa.
+function listarAplicativosLocais(familia) {
+  const navegador = FAMILIAS_DE_NAVEGADOR[familia] || '';
+  return new Promise((resolve) => {
+    execFile(HELPER_PATH, ['--listar', navegador].filter(Boolean),
+      { windowsHide: true, maxBuffer: 512 * 1024 }, (erro, stdout) => {
+        if (erro) return resolve(null);
+        try { resolve(JSON.parse(stdout || 'null')); } catch (_) { resolve(null); }
+      });
+  });
+}
+
 // O agente usa a familia para saber qual e o navegador desta pessoa: e ele que fica na
 // lista como escolha automatica, mesmo quando nao esta tocando nada.
 function familiaLimpa(valor) {
@@ -292,43 +309,6 @@ function diagnosticarHelper(handshake) {
     return { podeUsarHelper: false, motivo: 'helper-ausente' };
   }
   return { podeUsarHelper: true, motivo: null };
-}
-
-// Descobre sozinho o processo raiz do navegador. Como o helper exclui a arvore inteira
-// de processos ("excludetree"), excluir a raiz do Chrome remove tambem todas as abas,
-// que sao processos filhos -- inclusive a aba desta chamada.
-function resolverPidRaizDoNavegador(familia) {
-  const executavel = FAMILIAS_DE_NAVEGADOR[familia];
-  if (!executavel) return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-Command',
-      `Get-CimInstance Win32_Process -Filter "Name='${executavel}'" | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress`],
-      { windowsHide: true, maxBuffer: 2 * 1024 * 1024 }, (error, stdout) => {
-        if (error) return resolve(null);
-        try {
-          const bruto = JSON.parse(stdout || '[]');
-          const processos = (Array.isArray(bruto) ? bruto : [bruto])
-            .filter(item => item && item.ProcessId)
-            .map(item => ({ pid: Number(item.ProcessId), pai: Number(item.ParentProcessId) }));
-          if (!processos.length) return resolve(null);
-
-          // Raiz = processo cujo pai nao e outro processo do mesmo navegador.
-          const pids = new Set(processos.map(p => p.pid));
-          const raizes = processos.filter(p => !pids.has(p.pai));
-          if (!raizes.length) return resolve(processos[0].pid);
-
-          // Com mais de uma instancia aberta, fica com a que tem mais filhos diretos:
-          // e a janela principal, nao um processo utilitario solto.
-          const filhosPorPai = new Map();
-          processos.forEach(p => filhosPorPai.set(p.pai, (filhosPorPai.get(p.pai) || 0) + 1));
-          raizes.sort((a, b) => (filhosPorPai.get(b.pid) || 0) - (filhosPorPai.get(a.pid) || 0));
-          resolve(raizes[0].pid);
-        } catch (_) {
-          resolve(null);
-        }
-      });
-  });
 }
 
 function pararCapturaAudio(socketId) {
@@ -479,34 +459,44 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const familia = familiaPedida;
-    const pidRaiz = await resolverPidRaizDoNavegador(familia);
-    if (!pidRaiz) {
-      socket.emit('audio-error', 'Nao foi possivel identificar o processo do navegador para excluir do audio.');
+    await iniciarCapturaLocal(socket, familiaPedida);
+  });
+
+  // Sobe (ou refaz) a captura local excluindo UM programa: o escolhido pela pessoa ou,
+  // por padrao, o navegador dela. Quem descobre a raiz da arvore agora e o proprio helper,
+  // pelo nome do executavel -- some a volta pelo PowerShell.
+  async function iniciarCapturaLocal(socket, familia) {
+    const escolhido = socket.data.excluirExecutavel;
+    const executavel = (escolhido && EXECUTAVEL_VALIDO.test(escolhido))
+      ? escolhido
+      : FAMILIAS_DE_NAVEGADOR[familia];
+    if (!executavel) {
+      socket.emit('audio-error', 'Nao foi possivel identificar o programa a excluir do audio.');
       return;
     }
 
     pararCapturaAudio(socket.id);
-    const capture = spawn(HELPER_PATH, [String(pidRaiz), 'exclude'], {
+    const capture = spawn(HELPER_PATH, ['--excluir', executavel], {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
     const captures = [capture];
     audioCaptureProcesses.set(socket.id, captures);
     misturarAudio(socket, captures);
-    console.log(`Audio do sistema para ${socket.id}, excluindo a arvore do processo ${pidRaiz} (${familia}).`);
+    console.log(`Audio do sistema para ${socket.id}, excluindo a arvore de ${executavel}.`);
 
     capture.stderr.on('data', (chunk) => console.error(`Audio helper: ${chunk}`));
-    capture.on('close', () => {
+    capture.on('close', (codigo) => {
       if (audioCaptureProcesses.get(socket.id)?.includes(capture)) {
         audioCaptureProcesses.set(socket.id, audioCaptureProcesses.get(socket.id).filter(item => item !== capture));
       }
+      if (codigo === 2) socket.emit('audio-error', `O programa ${executavel} nao esta aberto.`);
     });
     capture.on('error', (error) => {
       console.error(`Nao foi possivel iniciar o audio helper: ${error.message}`);
       socket.emit('audio-error', 'Helper de audio nao encontrado. Compile o projeto nativo.');
     });
-  });
+  }
 
   socket.on('chat-message', (dados) => {
     const roomCode = roomCodeForSocket(socket);
@@ -528,9 +518,23 @@ io.on('connection', (socket) => {
 
   // A escolha de qual programa fica fora da captura. Vale na hora: se o agente ja estiver
   // capturando, ele mesmo refaz a captura com o novo alvo, sem interromper a tela.
-  socket.on('agente-aplicativos', (familia) => {
+  socket.on('agente-aplicativos', async (familia) => {
+    const limpa = familiaLimpa(familia);
     const token = socket.data.tokenAgente;
-    if (token) comandarAgente(token, { acao: 'listar-aplicativos', familia: familiaLimpa(familia) });
+    if (token && agentesPorToken.has(token)) {
+      comandarAgente(token, { acao: 'listar-aplicativos', familia: limpa });
+      return;
+    }
+    // Sem agente, mas com o helper disponivel e a pagina aberta na propria maquina do
+    // servidor: a captura ja acontece aqui, entao a escolha tambem pode.
+    const diagnostico = diagnosticarHelper(socket.handshake);
+    if (!diagnostico.podeUsarHelper) return;
+    const resposta = await listarAplicativosLocais(limpa);
+    if (!resposta || !Array.isArray(resposta.lista)) return;
+    socket.emit('agente-aplicativos', {
+      lista: resposta.lista.slice(0, 40),
+      atual: socket.data.excluirExecutavel || String(resposta.atual || '')
+    });
   });
 
   socket.on('agente-excluir', (executavel, familia) => {
@@ -538,8 +542,17 @@ io.on('connection', (socket) => {
     if (!token) return;
     // Nome de arquivo simples: nada de caminho, para o agente so procurar por nome.
     const limpo = String(executavel || '').slice(0, 120);
-    if (limpo && !/^[\w .+-]+$/.test(limpo)) return;
+    if (limpo && !EXECUTAVEL_VALIDO.test(limpo)) return;
     comandarAgente(token, { acao: 'excluir', executavel: limpo, familia: familiaLimpa(familia) });
+  });
+
+  // Mesma escolha, no caminho do helper local. Guardada por socket, para valer na proxima
+  // captura -- e aplicada na hora quando ja existe uma em andamento.
+  socket.on('helper-excluir', async (executavel, familia) => {
+    const limpo = String(executavel || '').slice(0, 120);
+    if (limpo && !EXECUTAVEL_VALIDO.test(limpo)) return;
+    socket.data.excluirExecutavel = limpo;
+    if (audioCaptureProcesses.has(socket.id)) await iniciarCapturaLocal(socket, familiaLimpa(familia));
   });
 
   socket.on('audio-stop', () => {
