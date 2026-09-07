@@ -995,6 +995,26 @@ function removerPar(id) {
   if (pinned?.id === id) despinar();
 }
 
+// ---------- Captura de camera ----------
+// O navegador so entrega o que a gente pede. Sem pedir resolucao, o Chrome devolve
+// 640x480 (4:3) mesmo numa webcam widescreen -- e o padrao dele, nao o formato da camera,
+// e o resultado e uma imagem quase quadrada, mais estreita do que a camera enxerga.
+// Pedindo 1280x720 como "ideal", o navegador escolhe o modo nativo mais proximo: 16:9 em
+// quem tem 16:9, 4:3 em quem so tem 4:3. Nada e forcado, entao ninguem e recortado.
+async function abrirCamera() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+  } catch (err) {
+    // Permissao negada e um nao definitivo; o resto pode ser so a camera nao aceitar essa
+    // combinacao, e ai uma camera em 4:3 e melhor que camera nenhuma.
+    if (err && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')) throw err;
+    return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  }
+}
+
 // ---------- Mic ----------
 function alternarMic() {
   if (!micTrack) return;
@@ -1018,7 +1038,7 @@ async function alternarCamera() {
     cameraBtn.setAttribute('aria-pressed', 'false');
   } else {
     try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      cameraStream = await abrirCamera();
     } catch (err) {
       status.textContent = 'Não foi possível acessar a câmera: ' + err.message;
       return;
@@ -1028,6 +1048,10 @@ async function alternarCamera() {
     track.onended = alternarCamera;
     cameraBtn.textContent = 'Desligar câmera';
     cameraBtn.setAttribute('aria-pressed', 'true');
+    const medida = track.getSettings?.() || {};
+    if (medida.width && medida.height) {
+      status.textContent = `Câmera ligada em ${medida.width}x${medida.height}.`;
+    }
   }
   atualizarTile('self');
   // Precisa passar pelo avaliador, e nao so desfazer o destaque: ligar a propria camera
