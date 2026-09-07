@@ -156,6 +156,9 @@
   }
   .participant:hover { background: var(--bg-3); }
   .participant.pinned { border-color: var(--accent); }
+  /* O quadradinho da tela nao tem microfone nem volume: e so a imagem e o rotulo. */
+  .participant-tela .avatar-wrap { background: #06080a; }
+  .participant-tela .screen-badge { pointer-events: none; }
   .avatar-wrap {
     position: relative; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden;
     background: var(--bg-3); display: grid; place-items: center;
@@ -1948,6 +1951,7 @@ function criarTileBase(id, name, state, isSelf) {
   const el = document.createElement('div');
   el.className = 'participant';
   el.dataset.id = id;
+  el.dataset.source = 'camera';
   el.innerHTML = `
     <div class="avatar-wrap">
       <video class="cam-video" autoplay playsinline ${isSelf ? 'muted' : ''}></video>
@@ -1984,11 +1988,13 @@ function criarTileBase(id, name, state, isSelf) {
   tiles.set(id, refs);
 
   el.querySelector('.avatar-wrap').addEventListener('click', () => {
-    const peer = peers.get(id);
-    const estado = id === 'self' ? meuEstado() : peer?.state;
+    const estado = id === 'self' ? meuEstado() : peers.get(id)?.state;
+    // Este quadradinho e o da PESSOA: clicar nele foca a camera dela. A tela tem o proprio
+    // quadradinho ao lado -- antes a tela vinha na frente aqui, e quem compartilhava as
+    // duas coisas nunca conseguia por a propria camera no centro.
     // Escolha manual: a partir daqui o destaque nao muda sozinho, ate esta fonte acabar.
-    if (estado?.screen) pin(id, 'screen', true);
-    else if (estado?.camera) pin(id, 'camera', true);
+    if (estado?.camera) pin(id, 'camera', true);
+    else if (estado?.screen) pin(id, 'screen', true);
   });
 
   if (!isSelf) {
@@ -2012,6 +2018,7 @@ function criarTileBase(id, name, state, isSelf) {
 }
 
 function removerTile(id) {
+  removerTileDeTela(id);
   const refs = tiles.get(id);
   if (!refs) return;
   refs.root.remove();
@@ -2023,6 +2030,7 @@ function ligarMidiaDoTile(id) {
   const peer = peers.get(id);
   if (!refs || !peer) return;
   if (peer.remoteStreams.camera.getTracks().length) refs.camVideo.srcObject = peer.remoteStreams.camera;
+  if (peer.remoteStreams.screen.getTracks().length) atualizarTileDeTela(id);
   if (peer.remoteStreams.micAudio.getTracks().length) {
     refs.peerAudio.srcObject = peer.remoteStreams.micAudio;
     acompanharVoz(id, peer.remoteStreams.micAudio);
@@ -2034,6 +2042,62 @@ function ligarMidiaDoTile(id) {
   avaliarDestaque();
 }
 
+// ---------- Quadradinho da tela ----------
+// Como no Discord, quem compartilha a tela ganha um quadradinho SEPARADO. E o que permite
+// escolher entre a camera e a tela da mesma pessoa: um clique em cada.
+const tilesDeTela = new Map(); // id -> { root, video, nome }
+
+function nomeDe(id) {
+  return id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
+}
+
+function garantirTileDeTela(id) {
+  if (tilesDeTela.has(id)) return tilesDeTela.get(id);
+  const el = document.createElement('div');
+  el.className = 'participant participant-tela';
+  el.dataset.id = id;
+  el.dataset.source = 'screen';
+  el.innerHTML = `
+    <div class="avatar-wrap">
+      <video class="cam-video active" autoplay playsinline muted></video>
+      <span class="screen-badge">Tela</span>
+    </div>
+    <div class="participant-name"></div>
+    <div class="volume-row"></div>
+  `;
+  // Fica logo depois do quadradinho da pessoa, para os dois andarem juntos.
+  const daPessoa = tiles.get(id)?.root;
+  if (daPessoa && daPessoa.parentNode === participantsEl) daPessoa.after(el);
+  else participantsEl.appendChild(el);
+
+  const refs = { root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name') };
+  tilesDeTela.set(id, refs);
+
+  el.querySelector('.avatar-wrap').addEventListener('click', () => pin(id, 'screen', true));
+  return refs;
+}
+
+function removerTileDeTela(id) {
+  const refs = tilesDeTela.get(id);
+  if (!refs) return;
+  refs.video.srcObject = null;
+  refs.root.remove();
+  tilesDeTela.delete(id);
+  if (pinned?.id === id && pinned.source === 'screen') avaliarDestaque();
+}
+
+function atualizarTileDeTela(id) {
+  const estado = id === 'self' ? meuEstado() : (peers.get(id)?.state || {});
+  if (!estado.screen) { removerTileDeTela(id); return; }
+
+  const refs = garantirTileDeTela(id);
+  refs.nome.textContent = `${nomeDe(id)} — Tela`;
+  const stream = id === 'self' ? screenStream : peers.get(id)?.remoteStreams.screen;
+  if (stream && refs.video.srcObject !== stream) refs.video.srcObject = stream;
+  garantirReproducao(refs.video);
+  refs.root.classList.toggle('pinned', pinned?.id === id && pinned.source === 'screen');
+}
+
 function atualizarTile(id) {
   const refs = tiles.get(id);
   if (!refs) return;
@@ -2043,8 +2107,10 @@ function atualizarTile(id) {
 
   refs.camVideo.classList.toggle('active', temCamera);
   refs.avatar.classList.toggle('hidden', temCamera);
-  refs.screenBadge.classList.toggle('hidden', !estado.screen);
+  // O selo "Tela" some do quadradinho da pessoa: agora a tela tem o proprio quadradinho.
+  refs.screenBadge.classList.add('hidden');
   refs.micIcon.textContent = estado.micMuted ? '🔇' : '🎙️';
+  atualizarTileDeTela(id);
 }
 
 function atualizarContador() {
@@ -2154,7 +2220,9 @@ function pin(id, source, manual) {
   // manual no participante chama pin() direto, sem passar por avaliarDestaque().
   atualizarAudioDeTela();
   stageControls.classList.remove('hidden');
-  document.querySelectorAll('.participant').forEach(el => el.classList.toggle('pinned', el.dataset.id === id));
+  // O destaque agora e por FONTE: a mesma pessoa pode ter dois quadradinhos.
+  document.querySelectorAll('.participant').forEach(el =>
+    el.classList.toggle('pinned', el.dataset.id === id && el.dataset.source === source));
 }
 
 function despinar() {
