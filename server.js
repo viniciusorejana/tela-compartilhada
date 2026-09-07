@@ -69,10 +69,12 @@ app.get('/', (req, res) => {
 
 const TOKEN_VALIDO = /^[a-f0-9]{16,64}$/i;
 
-// A configuracao do agente viaja no NOME do arquivo, nunca dentro dele. Modificar bytes
-// de um executavel ja compilado faz o Windows Defender barrar o download como
-// Trojan:Win32/Wacatac.B!ml (deteccao heuristica), enquanto o binario intacto passa.
-// Entregando o arquivo sem tocar em nada, todo mundo recebe exatamente o mesmo binario.
+// A configuracao do agente viaja no NOME do arquivo, nunca dentro dele. Modificar bytes de
+// um executavel ja compilado faz o Windows Defender barrar o download como
+// Trojan:Win32/Wacatac!ml. Entregando o arquivo sem tocar em nada, todo mundo recebe
+// exatamente o mesmo binario -- o que ajuda, mas nao basta: por ser pequeno, sem assinatura
+// e capturar audio, o binario ja foi marcado assim mesmo intacto. Ver o aviso de antivirus
+// no README (metadados de versao, ganho de reputacao e envio de falso positivo).
 app.get('/api/agente', (req, res) => {
   const token = String(req.query.token || '');
   if (!TOKEN_VALIDO.test(token)) return res.status(400).send('Token invalido.');

@@ -1283,7 +1283,7 @@ function atualizarCaixaDoAgente(plano) {
   agenteTitulo.textContent = conectado ? 'Agente de áudio conectado' : 'Agente de áudio não encontrado';
   agenteTexto.textContent = conectado
     ? 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.'
-    : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta.';
+    : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
   agenteDownload.hidden = conectado;
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
 }

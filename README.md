@@ -137,13 +137,40 @@ privado: quem tiver o token consegue parear com o agente.
 
 **Como hospedar e testar com amigos:** veja a secao "Testando com outras pessoas" mais abaixo.
 
-> **Aviso de antivirus:** o executavel nao e assinado digitalmente, entao o SmartScreen mostra
-> "O Windows protegeu o seu computador" na primeira execucao (e preciso clicar em *Mais
-> informacoes -> Executar assim mesmo*). Evitar isso exigiria um certificado de assinatura de
-> codigo, que e pago. Por esse mesmo motivo o servidor entrega o binario **sem alterar um unico
-> byte**: a primeira versao gravava a configuracao dentro do `.exe` e o Windows Defender passou
-> a barrar o download como `Trojan:Win32/Wacatac.B!ml` (deteccao heuristica), enquanto o binario
-> intacto passa normalmente.
+> **Aviso de antivirus.** O executavel nao e assinado digitalmente -- assinar exige um
+> certificado de assinatura de codigo, que e pago. Dois avisos sao esperados:
+>
+> 1. **SmartScreen** ("O Windows protegeu o seu computador") na primeira execucao: *Mais
+>    informacoes -> Executar assim mesmo*.
+> 2. **Deteccao como `Trojan:Win32/Wacatac.B!ml` ou `.C!ml`.** O sufixo `!ml` diz que quem
+>    acusou foi o modelo de aprendizado de maquina do Defender, na nuvem: nao houve
+>    correspondencia com assinatura de malware nenhuma. Um binario pequeno, recem-compilado,
+>    sem assinatura, que captura audio e abre um socket cai direitinho nesse perfil generico.
+>    Uma varredura local do mesmo arquivo (`MpCmdRun -Scan -ScanType 3 -File ...`) nao acusa
+>    nada -- o veredito so aparece no download ou na execucao, quando a nuvem opina.
+>
+> O que ja e feito para reduzir isso, sem pagar nada:
+>
+> - o binario carrega **informacoes de versao, icone e manifesto** (`AgenteAudio.rc` e
+>   `AgenteAudio.manifest`). Executavel sem metadado nenhum e um dos sinais mais fortes a favor
+>   da deteccao, e era exatamente o caso antes;
+> - o servidor entrega o binario **sem alterar um unico byte** -- a configuracao viaja no nome
+>   do arquivo. A primeira versao gravava a configuracao dentro do `.exe`, e so isso ja bastava
+>   para o download ser barrado.
+>
+> Se mesmo assim for barrado:
+>
+> - **para liberar agora:** na lista de downloads do Chrome, escolha *Manter*. Se o Defender ja
+>   tiver removido, va em *Seguranca do Windows -> Protecao contra virus e ameacas -> Historico
+>   de protecao* e escolha *Permitir no dispositivo*;
+> - **para resolver de vez, e de graca:** envie o arquivo como falso positivo em
+>   <https://www.microsoft.com/en-us/wdsi/filesubmission>. A correcao costuma sair em algumas
+>   horas e vale para todo mundo, nao so para o seu computador;
+> - **no computador que hospeda:** o Defender pode apagar o `.exe` logo depois de compilado. Se
+>   isso acontecer, `/api/agente` responde que o agente nao foi compilado, os participantes
+>   ficam sem agente e a sala volta a capturar o audio pelo navegador -- que e justamente o modo
+>   **com** eco. Ou seja: **eco que volta do nada costuma ser o antivirus tendo apagado
+>   `native/audio-agent/x64/Release/AgenteAudio.exe`.** Vale conferir se o arquivo existe.
 
 **Banda:** o PCM vai cru (44,1 kHz, estereo, 16 bits), cerca de 1,4 Mbps por participante que
 esteja compartilhando, e passa pelo servidor duas vezes (sobe do agente, desce para o navegador
