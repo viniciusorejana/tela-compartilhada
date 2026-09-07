@@ -96,6 +96,29 @@ app.get('/api/agente', (req, res) => {
 
 // roomCode -> Map<socketId, { name, state }>
 const roomMembers = new Map();
+
+// Chat da sala. Fica na conexao de sinalizacao, que ja existe e passa o tempo todo ociosa:
+// video e voz vao ponto a ponto e nao encostam nisso. O historico serve para quem entra
+// depois nao achar a sala muda, e vive so na memoria -- some quando a sala esvazia.
+const HISTORICO_MAXIMO = 80;
+const BYTES_MAXIMOS_DO_HISTORICO = 6 * 1024 * 1024;
+const TAMANHO_MAXIMO_DO_TEXTO = 2000;
+const TAMANHO_MAXIMO_DA_IMAGEM = 820 * 1024;
+const IMAGEM_VALIDA = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
+const historicoPorSala = new Map();
+
+const tamanhoDaMensagem = (m) => (m.texto ? m.texto.length : 0) + (m.imagem ? m.imagem.length : 0);
+
+function guardarNoHistorico(roomCode, msg) {
+  const lista = historicoPorSala.get(roomCode) || [];
+  lista.push(msg);
+  while (lista.length > HISTORICO_MAXIMO) lista.shift();
+  // Imagens sao pesadas: alem do limite de mensagens ha um teto de bytes, senao algumas
+  // capturas de tela coladas no chat prenderiam dezenas de MB por sala.
+  let bytes = lista.reduce((soma, m) => soma + tamanhoDaMensagem(m), 0);
+  while (bytes > BYTES_MAXIMOS_DO_HISTORICO && lista.length > 1) bytes -= tamanhoDaMensagem(lista.shift());
+  historicoPorSala.set(roomCode, lista);
+}
 const socketRoomCodes = new Map();
 const audioCaptureProcesses = new Map();
 
@@ -331,7 +354,8 @@ io.on('connection', (socket) => {
     const membros = roomMembers.get(roomCode);
     if (membros) {
       membros.delete(socket.id);
-      if (!membros.size) roomMembers.delete(roomCode);
+      // Sala vazia: o historico do chat some junto, nada fica guardado em disco.
+      if (!membros.size) { roomMembers.delete(roomCode); historicoPorSala.delete(roomCode); }
     }
     socket.to(roomName(roomCode)).emit('peer-left', { id: socket.id });
     pararCapturaAudio(socket.id);
@@ -354,7 +378,10 @@ io.on('connection', (socket) => {
     const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state }));
     membros.set(socket.id, { name, state: estadoPadrao() });
 
-    if (typeof callback === 'function') callback({ ok: true, roomCode, selfId: socket.id, peers });
+    if (typeof callback === 'function') {
+      // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda.
+      callback({ ok: true, roomCode, selfId: socket.id, peers, historico: historicoPorSala.get(roomCode) || [] });
+    }
     socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao() });
     console.log(`${socket.id} (${name}) entrou na sala ${roomCode}`);
   });
@@ -462,6 +489,24 @@ io.on('connection', (socket) => {
       console.error(`Nao foi possivel iniciar o audio helper: ${error.message}`);
       socket.emit('audio-error', 'Helper de audio nao encontrado. Compile o projeto nativo.');
     });
+  });
+
+  socket.on('chat-message', (dados) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return;
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return;
+
+    const texto = String(dados?.texto || '').slice(0, TAMANHO_MAXIMO_DO_TEXTO).trim();
+    const bruta = typeof dados?.imagem === 'string' ? dados.imagem : '';
+    // Aceita apenas data URL de imagem, dentro do limite: o navegador de quem recebe vai
+    // colocar isso num <img>, entao nao pode entrar qualquer coisa aqui.
+    const imagem = (bruta.length <= TAMANHO_MAXIMO_DA_IMAGEM && IMAGEM_VALIDA.test(bruta)) ? bruta : null;
+    if (!texto && !imagem) return;
+
+    const mensagem = { autor: membro.name, autorId: socket.id, texto, imagem, em: Date.now() };
+    guardarNoHistorico(roomCode, mensagem);
+    io.to(roomName(roomCode)).emit('chat-mensagem', mensagem);
   });
 
   socket.on('audio-stop', () => {
