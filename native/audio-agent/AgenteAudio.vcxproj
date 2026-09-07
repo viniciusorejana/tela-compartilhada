@@ -60,10 +60,12 @@
   <ItemGroup>
     <ClCompile Include="AgenteAudio.cpp" />
     <ClCompile Include="..\audio-helper\LoopbackCapture.cpp" />
+    <ClCompile Include="..\audio-helper\Aplicativos.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\audio-helper\Common.h" />
     <ClInclude Include="..\audio-helper\LoopbackCapture.h" />
+    <ClInclude Include="..\audio-helper\Aplicativos.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

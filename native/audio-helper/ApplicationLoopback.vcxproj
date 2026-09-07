@@ -148,10 +148,12 @@
   <ItemGroup>
     <ClCompile Include="ApplicationLoopback.cpp" />
     <ClCompile Include="LoopbackCapture.cpp" />
+    <ClCompile Include="Aplicativos.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.h" />
     <ClInclude Include="LoopbackCapture.h" />
+    <ClInclude Include="Aplicativos.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
