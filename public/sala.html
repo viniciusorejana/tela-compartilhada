@@ -115,8 +115,13 @@
     display: grid; place-items: center;
   }
   .stage:fullscreen { border-radius: 0; border: 0; }
+  /* Absoluto de proposito. Como item de grid centralizado, o "height: 100%" nao resolvia
+     e a caixa do video acabava adotando o aspect da fonte: uma camera vertical virava uma
+     caixa muito mais alta que o palco, alinhada ao topo e cortada pelo overflow. Preso as
+     quatro bordas, o "contain" volta a valer e a sobra mostra o fundo do palco. */
   #stageVideo {
-    width: 100%; height: 100%; object-fit: contain; display: block;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: contain; display: block;
     transform-origin: center center; transition: transform .12s ease-out;
   }
   .stage-empty {
@@ -157,7 +162,12 @@
   }
   /* Anel verde de "esta falando", como no Discord. */
   .participant.falando .avatar-wrap { box-shadow: inset 0 0 0 2px var(--online); }
-  .cam-video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  /* Mesmo motivo do palco, e "contain" no lugar de "cover": recortar uma camera vertical
+     num quadro 16/10 deixava so uma tira do meio, ampliada. */
+  .cam-video {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: contain; display: none;
+  }
   .cam-video.active { display: block; }
   .avatar-fallback {
     position: absolute; width: 38px; height: 38px; border-radius: 50%;
@@ -1392,10 +1402,22 @@ function aplicarTransformDoPalco() {
   stageVideo.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
 }
 
-function limitarPan() {
+// Tamanho que a imagem realmente ocupa no palco depois do encaixe por "contain".
+// Em video vertical isso e bem mais estreito que o palco, e as barras dos lados nao sao
+// conteudo: arrastar ate elas so jogaria a imagem para fora da vista.
+function areaDaImagem() {
   const rect = stage.getBoundingClientRect();
-  const maxX = (rect.width * (zoomLevel - 1)) / 2;
-  const maxY = (rect.height * (zoomLevel - 1)) / 2;
+  const largura = stageVideo.videoWidth;
+  const altura = stageVideo.videoHeight;
+  if (!largura || !altura) return { rect, largura: rect.width, altura: rect.height };
+  const escala = Math.min(rect.width / largura, rect.height / altura);
+  return { rect, largura: largura * escala, altura: altura * escala };
+}
+
+function limitarPan() {
+  const { rect, largura, altura } = areaDaImagem();
+  const maxX = Math.max(0, (largura * zoomLevel - rect.width) / 2);
+  const maxY = Math.max(0, (altura * zoomLevel - rect.height) / 2);
   panX = Math.max(-maxX, Math.min(maxX, panX));
   panY = Math.max(-maxY, Math.min(maxY, panY));
 }
@@ -1426,6 +1448,11 @@ stageVideo.addEventListener('pointermove', event => {
   aplicarTransformDoPalco();
 });
 stageVideo.addEventListener('pointerup', () => { arrastandoPalco = null; });
+// Dispara quando a fonte muda de tamanho (celular girando, tela trocada). O encaixe em si
+// e do CSS, mas o limite do arrasto depende do novo aspect.
+stageVideo.addEventListener('resize', () => { limitarPan(); aplicarTransformDoPalco(); });
+// Girar o celular ou redimensionar a janela muda o palco, e com ele o limite do arrasto.
+window.addEventListener('resize', () => { limitarPan(); aplicarTransformDoPalco(); });
 stageVideo.addEventListener('dblclick', () => alternarTelaCheia());
 
 function alternarTelaCheia() {
