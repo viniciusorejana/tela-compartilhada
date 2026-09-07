@@ -1227,6 +1227,24 @@ function atualizarBotaoDeRuido() {
       : 'Redução de ruído pedida, mas o navegador ainda não liberou o áudio desta página. Toque na tela.');
 }
 
+// Com a aba em segundo plano o navegador PARA o requestAnimationFrame -- medido: zero
+// quadros em 2 s. Como e o laco de analise que comanda a porteira, ela congelaria no
+// ultimo estado; se esse estado fosse "fechada", a pessoa ficaria muda ao trocar de aba
+// (num jogo, por exemplo) sem nenhum aviso. Fora da vista, entao, a porteira abre e fica
+// aberta: passar ruido e muito melhor que sumir da conversa. A supressao do proprio
+// navegador continua valendo, e ela e a que trabalha durante a fala.
+function ajustarPorteiraAoSairDeVista() {
+  if (!cadeiaDeRuido) return;
+  if (!document.hidden) return;
+  cadeiaDeRuido.aberta = true;
+  const alvo = cadeiaDeRuido.ganho.gain;
+  const t = cadeiaDeRuido.contexto.currentTime;
+  alvo.cancelScheduledValues(t);
+  alvo.setValueAtTime(alvo.value, t);
+  alvo.linearRampToValueAtTime(1, t + 0.02);
+}
+document.addEventListener('visibilitychange', ajustarPorteiraAoSairDeVista);
+
 // Celular costuma criar o contexto de audio suspenso, e contexto suspenso nao processa
 // nada: a faixa filtrada sairia muda, entao ate liberar quem vai para a sala e a crua.
 // Qualquer toque na pagina serve para liberar.
@@ -1240,6 +1258,7 @@ function liberarContextoDeAudio() {
 
 function ajustarPorteira(nivel) {
   if (!cadeiaDeRuido || faixaEnviadaDoMic !== cadeiaDeRuido.faixa) return;
+  if (document.hidden) return;   // sem medida confiavel, nao se corta ninguem
   const agora = performance.now();
 
   // O piso desce na hora e sobe devagar: qualquer pausa na fala ja o traz de volta ao
