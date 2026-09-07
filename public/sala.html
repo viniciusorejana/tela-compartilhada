@@ -6,160 +6,334 @@
 <title>Sala</title>
 <style>
   :root {
-    --bg: #101418;
-    --panel: #181e24;
-    --panel-strong: #202830;
-    --line: #303a44;
-    --text: #edf2f5;
-    --muted: #94a2ad;
-    --accent: #69a9ff;
-    --accent-strong: #4389e8;
-    --success: #75d6a0;
-    --danger: #e56a6a;
+    --bg: #0b0e11;
+    --bg-2: #12161b;
+    --bg-3: #1a1f26;
+    --bg-4: #232a33;
+    --line: #242c35;
+    --text: #e6ebf0;
+    --muted: #8b98a5;
+    --accent: #5b6ef5;
+    --accent-hi: #7787ff;
+    --online: #3ba55d;
+    --danger: #ed4245;
+    --raio: 12px;
+    --barra: 68px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    font-family: "Aptos", "Segoe UI", sans-serif;
+    margin: 0;
     background: var(--bg);
     color: var(--text);
-    margin: 0;
-    min-height: 100vh;
+    font-family: "Aptos", "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    overflow: hidden;            /* nada de rolar a pagina: cada area rola por dentro */
+    -webkit-font-smoothing: antialiased;
   }
+  .hidden { display: none !important; }
+
+  /* Barra de rolagem discreta, igual em todas as areas que rolam. A borda transparente
+     com background-clip deixa o polegar "flutuando", sem trilho pesado. */
+  * { scrollbar-width: thin; scrollbar-color: #46556a transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #46556a; border-radius: 10px;
+    border: 2px solid transparent; background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #5f7189; background-clip: padding-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  /* ---------- Botoes ---------- */
   button {
-    border: 0; border-radius: 7px; padding: 10px 15px; font: inherit; font-size: 13px; font-weight: 700;
-    background: var(--accent-strong); color: white; cursor: pointer; transition: background .18s, transform .18s;
+    border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 600;
+    background: var(--accent); color: #fff; cursor: pointer;
+    transition: background .15s, transform .1s, opacity .15s;
   }
-  button:hover:not(:disabled) { background: #5a9bf0; }
-  button:disabled { background: #34404b; color: #7c8994; cursor: not-allowed; }
-  button.secondary { background: transparent; border: 1px solid var(--line); color: #cbd8e2; }
-  button.secondary:hover:not(:disabled) { background: var(--panel-strong); }
-  button.danger { background: #6b2f34; color: #ffd8d8; }
-  button.danger:hover:not(:disabled) { background: #83373d; }
-  select, input[type="text"] {
-    width: 100%; padding: 11px 12px; border-radius: 7px; border: 1px solid var(--line);
-    background: var(--panel-strong); color: var(--text); font: inherit; font-size: 14px;
+  button:hover:not(:disabled) { background: var(--accent-hi); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { background: var(--bg-4); color: #6d7883; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--muted); }
+  button.ghost:hover:not(:disabled) { background: var(--bg-3); color: var(--text); }
+  button.secondary { background: var(--bg-3); color: var(--text); }
+  button.secondary:hover:not(:disabled) { background: var(--bg-4); }
+  button.danger { background: transparent; color: var(--danger); }
+  button.danger:hover:not(:disabled) { background: #2a1416; }
+  select, input[type="text"], textarea {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg-3); color: var(--text); font: inherit; font-size: 14px;
+  }
+  select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  /* ---------- Portao de nome ---------- */
+  #nameGate { position: fixed; inset: 0; background: #06080ae6; display: grid; place-items: center; z-index: 90; padding: 20px; }
+  #nameGate.hidden { display: none !important; }
+  .gate-card { width: min(100%, 380px); background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+  .gate-card h1 { font-size: 21px; margin: 0 0 6px; }
+  .gate-card p { color: var(--muted); font-size: 13px; margin: 0 0 20px; line-height: 1.5; }
+  .gate-card label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .gate-card button { width: 100%; margin-top: 16px; padding: 12px; }
+
+  /* ---------- Esqueleto ---------- */
+  .app {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: 52px 1fr var(--barra);
+    grid-template-areas:
+      "topo   chat"
+      "palco  chat"
+      "barra  chat";
   }
 
-  /* Portal de nome */
-  #nameGate {
-    position: fixed; inset: 0; background: #0a0d10ee; display: grid; place-items: center; z-index: 50; padding: 20px;
+  .topbar {
+    grid-area: topo; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 16px; background: var(--bg-2); border-bottom: 1px solid var(--line);
   }
-  #nameGate.hidden { display: none; }
-  .gate-card { width: min(100%, 380px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 26px; }
-  .gate-card h1 { font-size: 22px; margin: 0 0 8px; }
-  .gate-card p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
-  .gate-card label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #cbd4db; }
-  .gate-card .actions { margin-top: 16px; }
-  .gate-card button { width: 100%; }
+  .room-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .room-id .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); flex: none; }
+  h1#roomTitle {
+    font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #participantCount {
+    color: var(--muted); font-size: 12px; white-space: nowrap;
+    padding: 3px 8px; background: var(--bg-3); border-radius: 20px;
+  }
+  .topbar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
-  .room-shell { width: min(100% - 32px, 1100px); margin: 0 auto; padding: 22px 0 110px; }
-  .room-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
-  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 4px; }
-  h1#roomTitle { font-size: clamp(22px, 3.6vw, 30px); margin: 0; letter-spacing: -.02em; }
-  .room-actions { display: flex; align-items: center; gap: 12px; }
-  #participantCount { color: var(--muted); font-size: 13px; white-space: nowrap; }
-  .status-line { color: var(--success); font-size: 13px; margin: 10px 0 16px; min-height: 18px; }
-
-  .stage-wrap { margin-bottom: 18px; }
+  /* ---------- Palco ---------- */
+  .palco-area {
+    grid-area: palco; min-height: 0; min-width: 0;
+    display: grid; grid-template-rows: 1fr auto auto; gap: 10px; padding: 12px 16px 0;
+  }
   .stage {
-    position: relative; width: 100%; aspect-ratio: 16/9; background: #05070a; border: 1px solid var(--line);
-    border-radius: 10px; overflow: hidden; display: grid; place-items: center;
+    position: relative; min-height: 0; border-radius: var(--raio); overflow: hidden;
+    background: #06080a radial-gradient(circle at 50% 40%, #131922 0%, #06080a 70%);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
   }
-  .stage:fullscreen { aspect-ratio: unset; border-radius: 0; border: 0; }
-  .stage video { width: 100%; height: 100%; object-fit: contain; background: #05070a; cursor: grab; touch-action: none; }
-  .stage video:active { cursor: grabbing; }
-  .stage-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; padding: 20px; text-align: center; }
-  .stage-empty.hidden { display: none; }
+  .stage:fullscreen { border-radius: 0; border: 0; }
+  #stageVideo {
+    width: 100%; height: 100%; object-fit: contain; display: block;
+    transform-origin: center center; transition: transform .12s ease-out;
+  }
+  .stage-empty {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    color: var(--muted); font-size: 13px; padding: 24px; pointer-events: none; line-height: 1.6;
+  }
   .stage-label {
-    position: absolute; left: 12px; bottom: 10px; background: #000a; padding: 5px 11px; border-radius: 6px; font-size: 12px;
+    position: absolute; left: 12px; bottom: 12px; z-index: 2;
+    background: #0b0e11cc; backdrop-filter: blur(8px);
+    padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--line);
   }
-  .stage-label.hidden { display: none; }
   .stage-controls {
-    position: absolute; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 4px;
-    background: #000a; padding: 5px; border-radius: 8px;
+    position: absolute; right: 12px; bottom: 12px; z-index: 2;
+    display: flex; align-items: center; gap: 4px;
+    background: #0b0e11cc; backdrop-filter: blur(8px);
+    padding: 4px; border-radius: 22px; border: 1px solid var(--line);
   }
-  .stage-controls.hidden { display: none; }
-  .stage-controls button {
-    padding: 6px 10px; font-size: 13px; font-weight: 700; background: transparent; color: #fff; min-width: 0;
-  }
-  .stage-controls button:hover:not(:disabled) { background: #ffffff26; }
-  .stage-controls span { font-size: 11px; color: var(--muted); min-width: 38px; text-align: center; }
+  .stage-controls button { background: transparent; color: var(--text); padding: 6px 10px; border-radius: 18px; font-size: 14px; }
+  .stage-controls button:hover { background: var(--bg-4); }
+  #zoomLevelLabel { font-size: 11px; color: var(--muted); min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
 
-  .participants { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .participant {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  /* ---------- Tira de participantes ---------- */
+  .participants {
+    display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px;
+    scrollbar-width: thin;
   }
+  .participants::-webkit-scrollbar { height: 10px; }
+  .participant {
+    flex: none; width: 132px; cursor: pointer; border-radius: 10px; padding: 6px;
+    background: var(--bg-2); border: 1px solid transparent; transition: border-color .15s, background .15s;
+  }
+  .participant:hover { background: var(--bg-3); }
   .participant.pinned { border-color: var(--accent); }
   .avatar-wrap {
-    position: relative; width: 100%; aspect-ratio: 4/3; border-radius: 7px; overflow: hidden; background: #0c1116;
-    cursor: pointer; display: grid; place-items: center;
+    position: relative; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden;
+    background: var(--bg-3); display: grid; place-items: center;
   }
-  .avatar-wrap video { width: 100%; height: 100%; object-fit: cover; display: none; }
-  .avatar-wrap video.active { display: block; }
+  /* Anel verde de "esta falando", como no Discord. */
+  .participant.falando .avatar-wrap { box-shadow: inset 0 0 0 2px var(--online); }
+  .cam-video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  .cam-video.active { display: block; }
   .avatar-fallback {
-    width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 18px; color: #0a0d10;
+    position: absolute; width: 38px; height: 38px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #0b0e11;
   }
-  .avatar-fallback.hidden { display: none; }
-  .mic-icon {
-    position: absolute; left: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 50%; background: #000a;
-    display: grid; place-items: center; font-size: 12px;
-  }
+  .avatar-fallback.hidden { display: none !important; }
+  .mic-icon { position: absolute; left: 5px; bottom: 4px; font-size: 11px; filter: drop-shadow(0 1px 2px #000); }
   .screen-badge {
-    position: absolute; right: 6px; top: 6px; background: #1c3a63cc; color: #bcdcff; font-size: 10px; font-weight: 700;
-    padding: 3px 7px; border-radius: 5px; letter-spacing: .03em;
+    position: absolute; right: 5px; top: 5px; font-size: 9px; font-weight: 700;
+    background: var(--accent); color: #fff; padding: 2px 6px; border-radius: 20px; letter-spacing: .04em;
   }
-  .screen-badge.hidden { display: none; }
-  .participant-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .volume-row { display: flex; align-items: center; gap: 6px; }
-  .volume-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-  .volume-row button { padding: 5px 8px; font-size: 12px; }
+  .participant-name {
+    font-size: 12px; font-weight: 600; margin-top: 6px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .volume-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; min-height: 20px; }
+  .volume-slider { flex: 1; min-width: 0; height: 3px; accent-color: var(--accent); cursor: pointer; }
+  .mute-peer-btn { background: transparent; padding: 2px 4px; font-size: 12px; }
+  .mute-peer-btn:hover { background: var(--bg-4); }
+  .peer-audio, .screen-audio { display: none; }
 
-  .settings-panel {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px;
-  }
-  .settings-panel.hidden { display: none; }
-  .settings-panel h2 { font-size: 15px; margin: 0 0 14px; }
-  .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin-bottom: 14px; }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field label { font-size: 12px; font-weight: 700; color: #cbd4db; }
-  .settings-panel small { color: var(--muted); font-size: 11px; }
-  .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
-  .echo-warning {
-    margin-top: 10px; padding: 12px; border-radius: 7px; background: #3a2a12; border: 1px solid #6b4c1e;
-    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  }
-  .echo-warning small { color: #f0c47a; }
-  .echo-warning[hidden] { display: none; }
-  .agente-box {
-    margin-top: 10px; padding: 12px; border-radius: 7px; background: var(--panel-strong);
-    border: 1px solid var(--line); display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
-  }
-  .agente-box[hidden] { display: none; }
-  .agente-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .agente-bolinha { width: 9px; height: 9px; border-radius: 50%; background: #7c8994; flex: none; }
-  .agente-bolinha.ligado { background: var(--success); }
-  .agente-download {
-    display: inline-block; padding: 8px 14px; border-radius: 7px; background: var(--accent-strong);
-    color: #fff; font-size: 13px; font-weight: 700; text-decoration: none;
-  }
-  .agente-download:hover { background: #5a9bf0; }
-  .agente-download[hidden] { display: none; }
+  .status-line { color: var(--muted); font-size: 12px; margin: 0 0 8px; min-height: 16px; line-height: 1.4; }
 
+  /* ---------- Barra de controles ---------- */
   .control-bar {
-    position: fixed; left: 0; right: 0; bottom: 0; background: #12171cee; border-top: 1px solid var(--line);
-    padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; backdrop-filter: blur(6px);
+    grid-area: barra; display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--bg-2); border-top: 1px solid var(--line); padding: 0 12px;
   }
-  .control-btn { min-width: 96px; }
-  .control-btn[aria-pressed="true"] { background: var(--accent-strong); }
-  .control-btn.secondary[aria-pressed="true"] { background: #2e5da8; color: #fff; border-color: transparent; }
-
-  #enableSoundBtn { position: fixed; top: 16px; right: 16px; z-index: 20; }
-  #enableSoundBtn.hidden { display: none; }
-
-  @media (max-width: 640px) {
-    .field-grid { grid-template-columns: 1fr; }
-    .control-bar { justify-content: flex-start; overflow-x: auto; }
+  .control-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 22px; padding: 10px 16px; }
+  .control-btn::before { font-size: 15px; line-height: 1; }
+  /* Icones no CSS de proposito: o texto dos botoes e trocado pelo JS e apagaria o simbolo. */
+  #micBtn::before { content: "\1F3A4"; }
+  #micBtn[aria-pressed="false"]::before { content: "\1F507"; }
+  #cameraBtn::before { content: "\1F4F7"; }
+  #screenBtn::before { content: "\1F5A5"; }
+  #updateScreenBtn::before { content: "\1F504"; }
+  #testAudioBtn::before { content: "\1F50A"; }
+  #leaveBtn::before { content: "\23CF"; }
+  #micBtn[aria-pressed="true"], #cameraBtn[aria-pressed="true"], #screenBtn[aria-pressed="true"] {
+    background: var(--accent); color: #fff;
   }
+  #micBtn[aria-pressed="false"] { background: var(--danger); color: #fff; }
+
+  #enableSoundBtn {
+    position: fixed; left: 50%; top: 62px; transform: translateX(-50%); z-index: 60;
+    box-shadow: 0 8px 28px #0009;
+  }
+
+  /* ---------- Chat ---------- */
+  .chat {
+    grid-area: chat; min-height: 0; display: grid; grid-template-rows: 46px 1fr auto;
+    background: var(--bg-2); border-left: 1px solid var(--line);
+  }
+  .chat-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .chat-msgs {
+    overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px;
+    scrollbar-width: thin;
+  }
+  .chat-vazio { color: var(--muted); font-size: 12px; text-align: center; margin: auto 0; line-height: 1.6; }
+  .msg { display: grid; gap: 3px; }
+  .msg-topo { display: flex; align-items: baseline; gap: 8px; }
+  .msg-autor { font-size: 13px; font-weight: 700; }
+  .msg-hora { font-size: 10px; color: var(--muted); }
+  .msg-texto { font-size: 13px; line-height: 1.5; word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .msg-texto a { color: var(--accent-hi); }
+  /* Sem fundo proprio: e o que faz um PNG transparente se misturar ao chat em vez de
+     ganhar um retangulo solido atras. */
+  .msg-img { max-width: 100%; max-height: 260px; border-radius: 8px; margin-top: 4px; display: block; cursor: zoom-in; }
+  .msg-sistema { font-size: 11px; color: var(--muted); text-align: center; font-style: italic; }
+
+  .chat-compose { display: flex; gap: 6px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--line); }
+  #chatInput { resize: none; max-height: 120px; line-height: 1.4; padding: 9px 12px; border-radius: 10px; }
+  #chatSend { flex: none; padding: 9px 12px; border-radius: 10px; }
+  .chat-hint { display: block; padding: 0 12px 8px; color: #5f6b76; font-size: 10px; }
+
+  .badge {
+    display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px;
+    background: var(--danger); color: #fff; border-radius: 9px; font-size: 10px; font-weight: 700; margin-left: 5px;
+  }
+  #chatToggle { display: none; }
+
+  /* ---------- Visualizador de imagem ---------- */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 95; padding: 28px;
+    display: grid; place-items: center; overflow: auto;
+    background: #04060af7;
+  }
+  .lightbox.hidden { display: none !important; }
+  #lightboxImg {
+    max-width: 94vw; max-height: 86vh; object-fit: contain;
+    border-radius: 10px; cursor: zoom-in; display: block; margin: auto;
+  }
+  /* Em tamanho real a imagem pode passar da tela: o proprio .lightbox rola. */
+  #lightboxImg.real { max-width: none; max-height: none; cursor: zoom-out; }
+  .lightbox-barra {
+    position: fixed; top: 14px; right: 18px; z-index: 96; display: flex; gap: 6px;
+  }
+  .lightbox-barra button {
+    background: var(--bg-3); color: var(--text); border-radius: 8px; padding: 8px 12px;
+  }
+  .lightbox-barra button:hover { background: var(--bg-4); }
+  .lightbox-legenda {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 96;
+    color: var(--muted); font-size: 11px; background: #0b0e11cc; padding: 6px 12px; border-radius: 20px;
+  }
+
+  /* ---------- Janela de compartilhamento ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px;
+    /* Fundo solido em vez de backdrop-filter: o desfoque cria camadas de composicao
+       proprias e imagens do chat chegavam a aparecer por cima do escurecimento. */
+    background: #06080af2;
+  }
+  .modal.hidden { display: none !important; }
+  .modal-card {
+    width: min(100%, 470px); max-height: min(88vh, 720px); overflow-y: auto;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; padding: 22px;
+    box-shadow: 0 24px 60px #000a;
+  }
+  .modal-card h2 { font-size: 17px; margin: 0 0 4px; }
+  .modal-sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; line-height: 1.5; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  #echoHint { display: block; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .echo-warning {
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+    margin-top: 12px; padding: 12px; border-radius: 10px;
+    background: #2a2113; border: 1px solid #4a3a17; color: #f0d9a8; font-size: 12px; line-height: 1.5;
+  }
+  .echo-warning[hidden] { display: none !important; }
+  .agente-box {
+    margin-top: 12px; padding: 12px; border-radius: 10px;
+    background: var(--bg-3); border: 1px solid var(--line); font-size: 12px; line-height: 1.55; color: var(--muted);
+  }
+  .agente-box[hidden] { display: none !important; }
+  .agente-status { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--text); font-size: 13px; }
+  .agente-bolinha { width: 8px; height: 8px; border-radius: 50%; background: #6d7883; flex: none; }
+  .agente-bolinha.ligado { background: var(--online); }
+  .agente-download {
+    display: inline-block; margin-top: 10px; padding: 8px 14px; border-radius: 8px;
+    background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; font-size: 12px;
+  }
+  .agente-download:hover { background: var(--accent-hi); }
+  .agente-download[hidden] { display: none !important; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+  .modal-actions button { flex: 1; padding: 11px; }
+
+  /* ---------- Telas estreitas ---------- */
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; grid-template-areas: "topo" "palco" "barra"; }
+    #chatToggle { display: inline-flex; align-items: center; }
+    .chat {
+      position: fixed; inset: 0; z-index: 70; border-left: 0;
+      grid-template-rows: 52px 1fr auto;
+      transform: translateX(100%); transition: transform .22s ease;
+    }
+    .chat.aberto { transform: translateX(0); }
+  }
+  @media (max-width: 720px) {
+    .palco-area { padding: 8px 10px 0; }
+    .participant { width: 108px; }
+    .control-bar { gap: 6px; padding: 0 8px; }
+    /* So os icones: em celular o rotulo nao cabe, mas o titulo continua acessivel. */
+    .control-btn { font-size: 0; gap: 0; padding: 12px 14px; }
+    .control-btn::before { font-size: 18px; }
+    #participantCount { display: none; }
+    #copyLinkBtn { font-size: 0; padding: 9px 11px; }
+    #copyLinkBtn::before { content: "\1F517"; font-size: 14px; }
+  }
+  @media (max-height: 520px) {
+    .participants { display: none; }   /* em paisagem no celular, o palco e o que importa */
+  }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -170,29 +344,29 @@
     <p>Escolha um nome para os outros participantes reconhecerem você.</p>
     <label for="nameInput">Seu nome</label>
     <input id="nameInput" type="text" maxlength="40" placeholder="ex.: Vinicius" autocomplete="off">
-    <div class="actions"><button id="nameConfirmBtn">Entrar</button></div>
+    <button id="nameConfirmBtn">Entrar</button>
   </div>
 </div>
 
 <button id="enableSoundBtn" class="hidden">Ativar som</button>
 
-<main class="room-shell">
-  <header class="room-header">
-    <div>
-      <p class="eyebrow">Sala</p>
+<div class="app">
+  <header class="topbar">
+    <div class="room-id">
+      <span class="dot"></span>
       <h1 id="roomTitle">sala</h1>
-    </div>
-    <div class="room-actions">
       <span id="participantCount">1 pessoa na sala</span>
-      <button id="copyLinkBtn" class="secondary" type="button">Copiar link</button>
+    </div>
+    <div class="topbar-actions">
+      <button id="copyLinkBtn" class="ghost" type="button">Copiar link</button>
+      <button id="chatToggle" class="ghost" type="button">Chat<span id="chatBadge" class="badge hidden">0</span></button>
     </div>
   </header>
-  <p id="status" class="status-line">Conectando...</p>
 
-  <div class="stage-wrap">
+  <main class="palco-area">
     <div class="stage" id="stage">
       <video id="stageVideo" autoplay playsinline muted></video>
-      <div class="stage-empty" id="stageEmpty">Clique na câmera ou na tela de alguém para destacar aqui.</div>
+      <div class="stage-empty" id="stageEmpty">Ninguém está compartilhando ainda. Quando alguém ligar a câmera ou a tela, aparece aqui automaticamente.</div>
       <div class="stage-label hidden" id="stageLabel"></div>
       <div class="stage-controls hidden" id="stageControls">
         <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
@@ -201,28 +375,61 @@
         <button id="fullscreenBtn" type="button" title="Tela cheia">⛶</button>
       </div>
     </div>
+
+    <div class="participants" id="participants"></div>
+    <p id="status" class="status-line">Conectando...</p>
+  </main>
+
+  <aside class="chat" id="chatPanel">
+    <div class="chat-head">
+      <strong>Chat da sala</strong>
+      <button id="chatClose" class="ghost" type="button" title="Fechar chat">✕</button>
+    </div>
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-compose">
+      <textarea id="chatInput" rows="1" maxlength="2000" placeholder="Mensagem, link ou imagem colada..."></textarea>
+      <button id="chatSend" type="button" title="Enviar">➤</button>
+    </div>
+    <small class="chat-hint">Enter envia · Shift+Enter quebra linha</small>
+  </aside>
+
+  <nav class="control-bar">
+    <button id="micBtn" class="control-btn" type="button" aria-pressed="true" title="Microfone">Mic ligado</button>
+    <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
+    <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
+    <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
+    <button id="testAudioBtn" class="control-btn secondary" type="button" title="Testar áudio">Testar áudio</button>
+    <button id="leaveBtn" class="control-btn danger" type="button" title="Sair da sala">Sair</button>
+  </nav>
+</div>
+
+<div class="lightbox hidden" id="lightbox">
+  <div class="lightbox-barra">
+    <a id="lightboxBaixar" download="imagem" href="#"><button type="button">Baixar</button></a>
+    <button id="lightboxFechar" type="button" title="Fechar (Esc)">✕</button>
   </div>
+  <img id="lightboxImg" alt="Imagem ampliada">
+  <span class="lightbox-legenda">Clique na imagem para alternar entre ajustada e tamanho real</span>
+</div>
 
-  <div class="participants" id="participants"></div>
-
-  <section class="settings-panel hidden" id="settingsPanel">
-    <h2 id="settingsTitle">Configurar compartilhamento de tela</h2>
-    <div class="field-grid">
-      <div class="field">
-        <label for="captureMode">Tipo de tela</label>
-        <select id="captureMode">
-          <option value="browser">Aba do navegador</option>
-          <option value="window">Janela ou aplicativo</option>
-          <option value="monitor">Tela inteira</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="audioPolicy">Áudio</label>
-        <select id="audioPolicy">
-          <option value="auto">Compartilhar áudio (automático)</option>
-          <option value="none">Sem áudio</option>
-        </select>
-      </div>
+<div class="modal hidden" id="settingsPanel">
+  <div class="modal-card">
+    <h2 id="settingsTitle">Compartilhar tela</h2>
+    <p class="modal-sub">Escolha o que transmitir. A janela do navegador para escolher a tela aparece depois de confirmar.</p>
+    <div class="field">
+      <label for="captureMode">O que compartilhar</label>
+      <select id="captureMode">
+        <option value="browser">Aba do navegador</option>
+        <option value="window">Janela ou aplicativo</option>
+        <option value="monitor">Tela inteira</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="audioPolicy">Áudio</label>
+      <select id="audioPolicy">
+        <option value="auto">Compartilhar áudio (automático)</option>
+        <option value="none">Sem áudio</option>
+      </select>
     </div>
     <small id="echoHint"></small>
     <div id="echoWarning" class="echo-warning" hidden>
@@ -237,20 +444,11 @@
       <small id="agenteTexto"></small>
       <a id="agenteDownload" class="agente-download" href="#" hidden>Baixar o agente (.exe)</a>
     </div>
-    <div class="settings-actions">
+    <div class="modal-actions">
       <button id="confirmScreenBtn" type="button">Compartilhar</button>
       <button id="cancelScreenBtn" class="secondary" type="button">Cancelar</button>
     </div>
-  </section>
-</main>
-
-<div class="control-bar">
-  <button id="micBtn" class="control-btn" type="button" aria-pressed="true">Mic ligado</button>
-  <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false">Ligar câmera</button>
-  <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false">Compartilhar tela</button>
-  <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden>Atualizar tela</button>
-  <button id="testAudioBtn" class="control-btn secondary" type="button">Testar áudio</button>
-  <button id="leaveBtn" class="control-btn danger" type="button">Sair</button>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
