@@ -17,6 +17,10 @@
 #include <bcrypt.h>
 #include <tlhelp32.h>
 #include <mfapi.h>
+#include <mmdeviceapi.h>
+#include <audiopolicy.h>
+#include <map>
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -32,6 +36,7 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "version.lib")
 
 // ---------------------------------------------------------------------------
 // Configuracao pelo NOME DO ARQUIVO.
@@ -225,6 +230,157 @@ static DWORD ProcessoRaizDoNavegador(const std::wstring& executavel)
     return melhorPid;
 }
 
+// Nome que o proprio programa declara ("Google Chrome", "Discord"), lido das informacoes
+// de versao do executavel. Sem isso a lista mostraria "chrome.exe" e "Discord.exe", que e
+// tecnico demais para quem so quer escolher o que nao transmitir.
+static std::wstring NomeAmigavel(DWORD pid, const std::wstring& executavel)
+{
+    std::wstring caminho;
+    HANDLE processo = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (processo)
+    {
+        wchar_t buffer[MAX_PATH] = L"";
+        DWORD tamanho = MAX_PATH;
+        if (QueryFullProcessImageNameW(processo, 0, buffer, &tamanho)) caminho = buffer;
+        CloseHandle(processo);
+    }
+
+    if (!caminho.empty())
+    {
+        DWORD ignorado = 0;
+        const DWORD bytes = GetFileVersionInfoSizeW(caminho.c_str(), &ignorado);
+        if (bytes)
+        {
+            std::vector<BYTE> dados(bytes);
+            if (GetFileVersionInfoW(caminho.c_str(), 0, bytes, dados.data()))
+            {
+                struct Idioma { WORD idioma; WORD pagina; };
+                Idioma* idiomas = nullptr;
+                UINT tamanhoIdiomas = 0;
+                if (VerQueryValueW(dados.data(), L"\\VarFileInfo\\Translation",
+                                   (void**)&idiomas, &tamanhoIdiomas) && tamanhoIdiomas >= sizeof(Idioma))
+                {
+                    wchar_t consulta[128];
+                    swprintf_s(consulta, L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                               idiomas[0].idioma, idiomas[0].pagina);
+                    wchar_t* descricao = nullptr;
+                    UINT tamanhoDescricao = 0;
+                    if (VerQueryValueW(dados.data(), consulta, (void**)&descricao, &tamanhoDescricao)
+                        && descricao && *descricao)
+                        return descricao;
+                }
+            }
+        }
+    }
+
+    // Sobrou o nome do arquivo, sem a extensao.
+    std::wstring nome = executavel;
+    const size_t ponto = nome.rfind(L'.');
+    if (ponto != std::wstring::npos) nome.erase(ponto);
+    return nome;
+}
+
+// Aplicativos que tem som, um por programa. A lista de sessoes do Windows traz um item por
+// PROCESSO, e um mesmo programa costuma ter varios; agrupar pelo executavel e o que
+// transforma isso na lista curta que interessa a quem vai escolher.
+struct AplicativoComAudio
+{
+    std::wstring executavel;
+    std::wstring nome;
+    bool tocando = false;
+    bool padrao = false;   // o navegador de quem compartilha, que e a escolha automatica
+};
+
+static std::vector<AplicativoComAudio> AplicativosComAudio()
+{
+    std::vector<AplicativoComAudio> lista;
+    std::map<std::wstring, size_t> porExecutavel;
+
+    ComPtr<IMMDeviceEnumerator> enumerador;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+        IID_PPV_ARGS(&enumerador)))) return lista;
+
+    ComPtr<IMMDevice> dispositivo;
+    if (FAILED(enumerador->GetDefaultAudioEndpoint(eRender, eConsole, &dispositivo))) return lista;
+
+    ComPtr<IAudioSessionManager2> gerente;
+    if (FAILED(dispositivo->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
+        (void**)gerente.GetAddressOf()))) return lista;
+
+    ComPtr<IAudioSessionEnumerator> sessoes;
+    if (FAILED(gerente->GetSessionEnumerator(&sessoes))) return lista;
+
+    int total = 0;
+    if (FAILED(sessoes->GetCount(&total))) return lista;
+
+    const DWORD meuPid = GetCurrentProcessId();
+    for (int i = 0; i < total; i++)
+    {
+        ComPtr<IAudioSessionControl> controle;
+        if (FAILED(sessoes->GetSession(i, &controle))) continue;
+        ComPtr<IAudioSessionControl2> controle2;
+        if (FAILED(controle.As(&controle2))) continue;
+
+        // Sessao do proprio Windows (mistura do sistema), sem processo dono.
+        if (controle2->IsSystemSoundsSession() == S_OK) continue;
+
+        DWORD pid = 0;
+        if (FAILED(controle2->GetProcessId(&pid)) || !pid || pid == meuPid) continue;
+
+        wchar_t caminho[MAX_PATH] = L"";
+        HANDLE processo = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!processo) continue;
+        DWORD tamanho = MAX_PATH;
+        const bool obteve = QueryFullProcessImageNameW(processo, 0, caminho, &tamanho) != 0;
+        CloseHandle(processo);
+        if (!obteve) continue;
+
+        const wchar_t* barra = wcsrchr(caminho, L'\\');
+        std::wstring executavel = barra ? barra + 1 : caminho;
+        if (executavel.empty() || _wcsicmp(executavel.c_str(), L"audiodg.exe") == 0) continue;
+
+        std::wstring chave = executavel;
+        for (auto& c : chave) c = towlower(c);
+
+        AudioSessionState estado = AudioSessionStateInactive;
+        controle->GetState(&estado);
+        const bool tocando = (estado == AudioSessionStateActive);
+
+        auto achado = porExecutavel.find(chave);
+        if (achado != porExecutavel.end())
+        {
+            // Mesmo programa em outro processo: continua sendo uma linha so.
+            lista[achado->second].tocando = lista[achado->second].tocando || tocando;
+            continue;
+        }
+        porExecutavel[chave] = lista.size();
+        lista.push_back({ executavel, NomeAmigavel(pid, executavel), tocando });
+    }
+    return lista;
+}
+
+static std::string ParaUtf8(const std::wstring& texto)
+{
+    if (texto.empty()) return {};
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, texto.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 1) return {};
+    std::string saida(bytes - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, texto.c_str(), -1, &saida[0], bytes, nullptr, nullptr);
+    return saida;
+}
+
+static std::string EscaparJson(const std::string& texto)
+{
+    std::string saida;
+    for (const char c : texto)
+    {
+        if (c == '"' || c == '\\') { saida += '\\'; saida += c; }
+        else if (static_cast<unsigned char>(c) < 0x20) saida += ' ';
+        else saida += c;
+    }
+    return saida;
+}
+
 static std::wstring ExecutavelDaFamilia(const std::string& familia)
 {
     if (familia == "chrome") return L"chrome.exe";
@@ -386,11 +542,82 @@ static void PararCaptura()
     std::wcout << L"[agente] captura parada\n";
 }
 
+static void EnviarListaDeAplicativos(const std::string& familia)
+{
+    std::vector<AplicativoComAudio> lista = AplicativosComAudio();
+
+    // O navegador precisa estar sempre presente, mesmo calado. Ele e a escolha automatica
+    // e o destino de volta ("quero conversar por aqui de novo"), e um navegador que nao
+    // esta tocando nada nao tem sessao de audio -- some da lista justo quando mais faz
+    // falta. Aqui basta o processo existir.
+    const std::wstring navegador = ExecutavelDaFamilia(familia);
+    if (!navegador.empty() && ProcessoRaizDoNavegador(navegador))
+    {
+        std::wstring chave = navegador;
+        for (auto& c : chave) c = towlower(c);
+        auto igual = [&](const AplicativoComAudio& a) {
+            std::wstring outro = a.executavel;
+            for (auto& c : outro) c = towlower(c);
+            return outro == chave;
+        };
+        auto achado = std::find_if(lista.begin(), lista.end(), igual);
+        if (achado != lista.end())
+        {
+            achado->padrao = true;
+            std::rotate(lista.begin(), achado, achado + 1);   // o padrao vem primeiro
+        }
+        else
+        {
+            lista.insert(lista.begin(), { navegador,
+                NomeAmigavel(ProcessoRaizDoNavegador(navegador), navegador), false, true });
+        }
+    }
+
+    // Vai junto qual programa esta excluido AGORA, para a tela mostrar a verdade em vez
+    // de supor (a escolha vive no agente e sobrevive a um F5 no navegador).
+    std::wstring escolhidoAgora;
+    {
+        std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
+        escolhidoAgora = g_executavelExcluido;
+    }
+    if (escolhidoAgora.empty()) escolhidoAgora = navegador;
+
+    std::string json = "{\"evento\":\"aplicativos\",\"atual\":\""
+                       + EscaparJson(ParaUtf8(escolhidoAgora)) + "\",\"lista\":[";
+    bool primeiro = true;
+    for (const auto& app : lista)
+    {
+        if (!primeiro) json += ",";
+        primeiro = false;
+        json += "{\"executavel\":\"" + EscaparJson(ParaUtf8(app.executavel)) + "\"";
+        json += ",\"nome\":\"" + EscaparJson(ParaUtf8(app.nome)) + "\"";
+        json += ",\"tocando\":" + std::string(app.tocando ? "true" : "false");
+        json += ",\"padrao\":" + std::string(app.padrao ? "true" : "false") + "}";
+    }
+    json += "]}";
+    g_conexao.EnviarTexto(json);
+}
+
+// Qual programa fica de fora da captura. Vazio = o navegador de quem esta compartilhando,
+// que e o padrao e evita o eco. Escolher outro serve para quem conversa por fora (Discord,
+// por exemplo) e quer o resto do som do computador na transmissao.
+static std::mutex g_mutexDaEscolha;
+static std::wstring g_executavelExcluido;
+static std::string g_ultimaFamilia;
+
+static std::wstring ExecutavelParaExcluir(const std::string& familia)
+{
+    std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
+    if (!g_executavelExcluido.empty()) return g_executavelExcluido;
+    return ExecutavelDaFamilia(familia);
+}
+
 static void IniciarCaptura(const std::string& familia)
 {
     PararCaptura();
+    g_ultimaFamilia = familia;
 
-    const std::wstring executavel = ExecutavelDaFamilia(familia);
+    const std::wstring executavel = ExecutavelParaExcluir(familia);
     if (executavel.empty())
     {
         g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"navegador desconhecido\"}");
@@ -400,7 +627,7 @@ static void IniciarCaptura(const std::string& familia)
     const DWORD pid = ProcessoRaizDoNavegador(executavel);
     if (!pid)
     {
-        g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"processo do navegador nao encontrado\"}");
+        g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"programa escolhido nao esta aberto\"}");
         return;
     }
 
@@ -422,7 +649,8 @@ static void IniciarCaptura(const std::string& familia)
     }
 
     g_capturando = true;
-    g_conexao.EnviarTexto("{\"evento\":\"capturando\"}");
+    g_conexao.EnviarTexto("{\"evento\":\"capturando\",\"excluindo\":\""
+                          + EscaparJson(ParaUtf8(executavel)) + "\"}");
     std::wcout << L"[agente] capturando o audio do sistema, excluindo o processo " << pid
                << L" (" << executavel << L") e seus filhos\n";
 }
@@ -831,6 +1059,19 @@ int wmain(int argc, wchar_t* argv[])
             const std::string acao = ValorDeTexto(mensagem, "acao");
             if (acao == "iniciar") IniciarCaptura(ValorDeTexto(mensagem, "familia"));
             else if (acao == "parar") PararCaptura();
+            else if (acao == "listar-aplicativos") EnviarListaDeAplicativos(ValorDeTexto(mensagem, "familia"));
+            else if (acao == "excluir")
+            {
+                // Troca ao vivo: se ja estiver capturando, a captura e refeita na hora com
+                // o novo alvo. E o que permite passar o microfone do Discord para o
+                // navegador no meio da conversa, sem parar o compartilhamento.
+                {
+                    std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
+                    g_executavelExcluido = ParaWide(ValorDeTexto(mensagem, "executavel"));
+                }
+                if (g_capturando) IniciarCaptura(g_ultimaFamilia);
+                EnviarListaDeAplicativos(ValorDeTexto(mensagem, "familia"));
+            }
         }
 
         PararCaptura();

@@ -184,6 +184,14 @@ wssAgentes.on('connection', (ws) => {
     // conexao direta nunca era usada.
     try {
       const mensagem = JSON.parse(dados.toString());
+      // Lista de aplicativos com audio, para a pessoa escolher qual nao transmitir.
+      if (mensagem.evento === 'aplicativos' && Array.isArray(mensagem.lista)) {
+        const destino = navegadoresPorToken.get(token);
+        if (destino) io.to(destino).emit('agente-aplicativos', {
+          lista: mensagem.lista.slice(0, 40),
+          atual: String(mensagem.atual || '').slice(0, 120)
+        });
+      }
       if (mensagem.evento === 'porta-local' && Number.isInteger(mensagem.porta) && mensagem.porta > 0 && mensagem.porta < 65536) {
         portasLocaisPorToken.set(token, mensagem.porta);
         avisarStatusDoAgente(token);
@@ -205,6 +213,13 @@ wssAgentes.on('connection', (ws) => {
   });
   ws.on('error', () => ws.terminate());
 });
+
+// O agente usa a familia para saber qual e o navegador desta pessoa: e ele que fica na
+// lista como escolha automatica, mesmo quando nao esta tocando nada.
+function familiaLimpa(valor) {
+  const f = String(valor || '').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(FAMILIAS_DE_NAVEGADOR, f) ? f : '';
+}
 
 function comandarAgente(token, comando) {
   const ws = agentesPorToken.get(token);
@@ -509,6 +524,22 @@ io.on('connection', (socket) => {
     const mensagem = { autor: membro.name, autorId: socket.id, texto, imagem, em: Date.now() };
     guardarNoHistorico(roomCode, mensagem);
     io.to(roomName(roomCode)).emit('chat-mensagem', mensagem);
+  });
+
+  // A escolha de qual programa fica fora da captura. Vale na hora: se o agente ja estiver
+  // capturando, ele mesmo refaz a captura com o novo alvo, sem interromper a tela.
+  socket.on('agente-aplicativos', (familia) => {
+    const token = socket.data.tokenAgente;
+    if (token) comandarAgente(token, { acao: 'listar-aplicativos', familia: familiaLimpa(familia) });
+  });
+
+  socket.on('agente-excluir', (executavel, familia) => {
+    const token = socket.data.tokenAgente;
+    if (!token) return;
+    // Nome de arquivo simples: nada de caminho, para o agente so procurar por nome.
+    const limpo = String(executavel || '').slice(0, 120);
+    if (limpo && !/^[\w .+-]+$/.test(limpo)) return;
+    comandarAgente(token, { acao: 'excluir', executavel: limpo, familia: familiaLimpa(familia) });
   });
 
   socket.on('audio-stop', () => {
