@@ -323,6 +323,9 @@
   }
   .agente-download:hover { background: var(--accent-hi); }
   .agente-download[hidden] { display: none !important; }
+  .campo-excluir { margin-top: 14px; margin-bottom: 0; }
+  .campo-excluir[hidden] { display: none !important; }
+  .campo-excluir small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
   .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
   .modal-actions button { flex: 1; padding: 11px; }
 
@@ -462,6 +465,11 @@
       </div>
       <small id="agenteTexto"></small>
       <a id="agenteDownload" class="agente-download" href="#" hidden>Baixar o agente (.exe)</a>
+      <div class="field campo-excluir" id="excluirAppCampo" hidden>
+        <label for="excluirApp">Programa que NÃO será transmitido</label>
+        <select id="excluirApp"></select>
+        <small id="excluirAppDica">Vale na hora, mesmo com a tela já sendo compartilhada.</small>
+      </div>
     </div>
     <div class="modal-actions">
       <button id="confirmScreenBtn" type="button">Compartilhar</button>
@@ -502,6 +510,9 @@ const leaveBtn = document.getElementById('leaveBtn');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 const enableSoundBtn = document.getElementById('enableSoundBtn');
 const noiseBtn = document.getElementById('noiseBtn');
+const excluirAppCampo = document.getElementById('excluirAppCampo');
+const excluirApp = document.getElementById('excluirApp');
+const excluirAppDica = document.getElementById('excluirAppDica');
 const settingsPanel = document.getElementById('settingsPanel');
 const settingsTitle = document.getElementById('settingsTitle');
 const captureMode = document.getElementById('captureMode');
@@ -660,6 +671,12 @@ async function iniciarConexao() {
         if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
       });
     });
+  });
+
+  socket.on('agente-aplicativos', ({ lista, atual }) => {
+    aplicativosDoAgente = Array.isArray(lista) ? lista : [];
+    if (atual) excluidoAtual = atual;
+    desenharAplicativos();
   });
 
   socket.on('agente-status', ({ conectado, portaLocal }) => {
@@ -1345,9 +1362,13 @@ function abrirPainelDeTela(modo) {
   settingsTitle.textContent = modo === 'update' ? 'Atualizar tela compartilhada' : 'Configurar compartilhamento de tela';
   confirmScreenBtn.textContent = modo === 'update' ? 'Atualizar' : 'Compartilhar';
   settingsPanel.classList.remove('hidden');
+  acompanharAplicativos(true);
   atualizarExplicacaoDeAudio();
 }
-function fecharPainelDeTela() { settingsPanel.classList.add('hidden'); }
+function fecharPainelDeTela() {
+  settingsPanel.classList.add('hidden');
+  acompanharAplicativos(false);
+}
 
 // Qual navegador esta rodando: o servidor usa isso para achar sozinho a arvore de
 // processos a excluir do audio do sistema.
@@ -1384,12 +1405,25 @@ function planoDeAudio() {
   return 'navegador-sistema';
 }
 
+// O texto muda conforme o programa escolhido, porque a consequencia muda: excluir o
+// navegador e o caso sem eco; excluir outro programa deixa o navegador entrar na captura,
+// e ai a voz dos outros participantes volta se a conversa for por aqui.
+function textoDoAgente() {
+  const app = aplicativosDoAgente.find(a => a.executavel === excluidoAtual);
+  if (!app || app.padrao) {
+    return 'O agente instalado neste computador vai transmitir todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar marcar nada na janela do Chrome.';
+  }
+  return `O agente vai transmitir todo o áudio do SEU sistema, exceto o de ${app.nome}. `
+       + 'Como o navegador entra na captura, use assim só enquanto a conversa por voz for por fora: '
+       + 'falando por aqui, sua própria sala volta como eco.';
+}
+
 function atualizarExplicacaoDeAudio() {
   const plano = planoDeAudio();
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
     aba: 'O áudio da aba escolhida será transmitido. Marque "Compartilhar áudio da guia" na janela do navegador. Como é o áudio só daquela aba, não existe risco de eco.',
-    agente: 'O agente instalado neste computador vai transmitir todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar marcar nada na janela do Chrome.',
+    agente: textoDoAgente(),
     helper: 'Todo o áudio deste computador será transmitido, exceto o do seu navegador — ou seja, sem a voz dos outros participantes voltando como eco. O aplicativo a excluir é detectado automaticamente.',
     'navegador-sistema': 'O áudio do SEU computador será capturado pelo navegador. Marque "Compartilhar áudio do sistema" na janela que abrir — sem isso o Chrome não envia áudio nenhum.'
   };
@@ -1420,11 +1454,69 @@ function atualizarCaixaDoAgente(plano) {
   const conectado = Boolean(audioCapabilities.agenteConectado);
   agenteBolinha.classList.toggle('ligado', conectado);
   agenteTitulo.textContent = conectado ? 'Agente de áudio conectado' : 'Agente de áudio não encontrado';
+  const excluindoOutro = aplicativosDoAgente.some(a => a.executavel === excluidoAtual && !a.padrao);
   agenteTexto.textContent = conectado
-    ? 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.'
+    ? (excluindoOutro
+      ? 'O som do seu computador vai junto com a tela, sem o programa escolhido abaixo.'
+      : 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.')
     : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
   agenteDownload.hidden = conectado;
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
+  excluirAppCampo.hidden = !conectado;
+  if (conectado && !aplicativosDoAgente.length) pedirAplicativos();
+}
+
+// ---------- Programa que fica fora da captura ----------
+// O agente exclui UMA arvore de processos do som que envia. Por padrao e o navegador desta
+// pessoa, o que evita o eco. Mas quem conversa por fora (Discord, por exemplo) quer o
+// contrario: excluir o Discord e deixar o navegador entrar. A troca vale na hora -- o
+// agente refaz a captura sozinho, sem interromper o compartilhamento.
+let aplicativosDoAgente = [];
+let excluidoAtual = '';
+let timerDeAplicativos = null;
+
+function pedirAplicativos() {
+  if (!audioCapabilities.agenteConectado) return;
+  socket.emit('agente-aplicativos', familiaDoNavegador());
+}
+
+function desenharAplicativos() {
+  const anterior = excluirApp.value;
+  excluirApp.innerHTML = '';
+  for (const app of aplicativosDoAgente) {
+    const opcao = document.createElement('option');
+    opcao.value = app.executavel;
+    const marcas = [];
+    if (app.padrao) marcas.push('padrão, evita eco');
+    if (app.tocando) marcas.push('tocando agora');
+    opcao.textContent = app.nome + (marcas.length ? ` — ${marcas.join(', ')}` : '');
+    excluirApp.appendChild(opcao);
+  }
+  const desejado = excluidoAtual || anterior;
+  if (desejado && aplicativosDoAgente.some(a => a.executavel === desejado)) excluirApp.value = desejado;
+}
+
+excluirApp.onchange = () => {
+  const escolhido = excluirApp.value;
+  excluidoAtual = escolhido;
+  socket.emit('agente-excluir', escolhido, familiaDoNavegador());
+  const app = aplicativosDoAgente.find(a => a.executavel === escolhido);
+  const nome = app ? app.nome : escolhido;
+  excluirAppDica.textContent = app && !app.padrao
+    ? `O som de ${nome} fica fora da transmissão. Vale na hora — mas o navegador passa a entrar, então evite conversar por voz aqui enquanto isso.`
+    : `O som de ${nome} fica fora da transmissão. Vale na hora.`;
+  status.textContent = `O som de ${nome} não será transmitido.`;
+  atualizarExplicacaoDeAudio();
+};
+
+// Enquanto o painel esta aberto a lista se mantem viva: um programa que comeca a tocar
+// agora aparece sozinho, sem precisar fechar e abrir.
+function acompanharAplicativos(ligar) {
+  clearInterval(timerDeAplicativos);
+  timerDeAplicativos = null;
+  if (!ligar) return;
+  pedirAplicativos();
+  timerDeAplicativos = setInterval(pedirAplicativos, 3000);
 }
 
 captureMode.onchange = atualizarExplicacaoDeAudio;
