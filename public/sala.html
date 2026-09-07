@@ -465,11 +465,11 @@
       </div>
       <small id="agenteTexto"></small>
       <a id="agenteDownload" class="agente-download" href="#" hidden>Baixar o agente (.exe)</a>
-      <div class="field campo-excluir" id="excluirAppCampo" hidden>
-        <label for="excluirApp">Programa que NÃO será transmitido</label>
-        <select id="excluirApp"></select>
-        <small id="excluirAppDica">Vale na hora, mesmo com a tela já sendo compartilhada.</small>
-      </div>
+    </div>
+    <div class="field campo-excluir" id="excluirAppCampo" hidden>
+      <label for="excluirApp">Programa que NÃO será transmitido</label>
+      <select id="excluirApp"></select>
+      <small id="excluirAppDica">Vale na hora, mesmo com a tela já sendo compartilhada.</small>
     </div>
     <div class="modal-actions">
       <button id="confirmScreenBtn" type="button">Compartilhar</button>
@@ -1418,17 +1418,35 @@ function textoDoAgente() {
        + 'falando por aqui, sua própria sala volta como eco.';
 }
 
+function textoDoHelper() {
+  const app = aplicativosDoAgente.find(a => a.executavel === excluidoAtual);
+  if (!app || app.padrao) {
+    return 'Todo o áudio deste computador será transmitido, exceto o do seu navegador — ou seja, sem a voz dos outros participantes voltando como eco.';
+  }
+  return `Todo o áudio deste computador será transmitido, exceto o de ${app.nome}. `
+       + 'Como o navegador entra na captura, use assim só enquanto a conversa por voz for por fora: '
+       + 'falando por aqui, sua própria sala volta como eco.';
+}
+
 function atualizarExplicacaoDeAudio() {
   const plano = planoDeAudio();
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
     aba: 'O áudio da aba escolhida será transmitido. Marque "Compartilhar áudio da guia" na janela do navegador. Como é o áudio só daquela aba, não existe risco de eco.',
     agente: textoDoAgente(),
-    helper: 'Todo o áudio deste computador será transmitido, exceto o do seu navegador — ou seja, sem a voz dos outros participantes voltando como eco. O aplicativo a excluir é detectado automaticamente.',
+    helper: textoDoHelper(),
     'navegador-sistema': 'O áudio do SEU computador será capturado pelo navegador. Marque "Compartilhar áudio do sistema" na janela que abrir — sem isso o Chrome não envia áudio nenhum.'
   };
   echoHint.textContent = textos[plano];
   atualizarCaixaDoAgente(plano);
+
+  // A escolha do programa vale nos dois caminhos de captura nativa: pelo agente (no PC de
+  // cada participante) e pelo helper (quando a sala esta aberta na propria maquina do
+  // servidor). Antes o seletor morava dentro da caixa do agente e sumia no modo local, o
+  // que fazia parecer que era preciso baixar o agente sem necessidade.
+  const capturaNativa = plano === 'agente' || plano === 'helper';
+  excluirAppCampo.hidden = !capturaNativa;
+  if (capturaNativa && !aplicativosDoAgente.length) pedirAplicativos();
 
   const riscoDeEco = plano === 'navegador-sistema';
   echoWarning.hidden = !riscoDeEco;
@@ -1462,8 +1480,6 @@ function atualizarCaixaDoAgente(plano) {
     : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
   agenteDownload.hidden = conectado;
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
-  excluirAppCampo.hidden = !conectado;
-  if (conectado && !aplicativosDoAgente.length) pedirAplicativos();
 }
 
 // ---------- Programa que fica fora da captura ----------
@@ -1476,13 +1492,31 @@ let excluidoAtual = '';
 let timerDeAplicativos = null;
 
 function pedirAplicativos() {
-  if (!audioCapabilities.agenteConectado) return;
+  const plano = planoDeAudio();
+  if (plano !== 'agente' && plano !== 'helper') return;
   socket.emit('agente-aplicativos', familiaDoNavegador());
 }
 
 function desenharAplicativos() {
   const anterior = excluirApp.value;
   excluirApp.innerHTML = '';
+
+  // Lista vazia nao pode virar um seletor mudo. Ou nada tem audio, ou -- bem mais provavel
+  // -- o agente que esta rodando e de uma versao anterior a este recurso e simplesmente
+  // ignora o pedido da lista.
+  if (!aplicativosDoAgente.length) {
+    const opcao = document.createElement('option');
+    opcao.value = '';
+    opcao.textContent = 'Nenhum programa encontrado';
+    excluirApp.appendChild(opcao);
+    excluirApp.disabled = true;
+    excluirAppDica.textContent = audioCapabilities.agenteConectado
+      ? 'O agente não respondeu com a lista. Se você o baixou antes desta versão, baixe e execute de novo.'
+      : 'Nenhum programa com áudio foi encontrado neste computador.';
+    return;
+  }
+
+  excluirApp.disabled = false;
   for (const app of aplicativosDoAgente) {
     const opcao = document.createElement('option');
     opcao.value = app.executavel;
@@ -1499,7 +1533,9 @@ function desenharAplicativos() {
 excluirApp.onchange = () => {
   const escolhido = excluirApp.value;
   excluidoAtual = escolhido;
-  socket.emit('agente-excluir', escolhido, familiaDoNavegador());
+  // Quem recebe a ordem depende de quem esta capturando.
+  const evento = audioCapabilities.agenteConectado ? 'agente-excluir' : 'helper-excluir';
+  socket.emit(evento, escolhido, familiaDoNavegador());
   const app = aplicativosDoAgente.find(a => a.executavel === escolhido);
   const nome = app ? app.nome : escolhido;
   excluirAppDica.textContent = app && !app.padrao
