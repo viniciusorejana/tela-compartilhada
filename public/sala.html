@@ -2198,22 +2198,43 @@ const analisadores = new Map(); // id -> { analisador, dados }
 
 function acompanharVoz(id, stream) {
   try {
-    if (!stream || !stream.getAudioTracks().length) return;
+    const faixa = stream && stream.getAudioTracks()[0];
+    if (!faixa) return;
+    const atual = analisadores.get(id);
+    // Refaz o analisador quando a faixa mudou ou quando ele foi montado sobre uma faixa
+    // que ainda estava muda. Faixa que vem da rede chega SEMPRE muda: o ontrack acontece
+    // antes do primeiro pacote, e um no de audio criado nesse instante pode ficar surdo
+    // para sempre. Antes a segunda chamada (a do "desmutou") saia na hora porque ja havia
+    // uma entrada, e o anel do outro participante nunca acendia -- so o proprio, cuja
+    // faixa nasce fluindo.
+    if (atual && atual.faixa === faixa && !atual.montadoMudo) return;
     contextoDeAnalise ||= new AudioContextClass();
-    if (analisadores.has(id)) return;
+    if (atual && atual.fonte) { try { atual.fonte.disconnect(); } catch (_) {} }
     const fonte = contextoDeAnalise.createMediaStreamSource(stream);
     const analisador = contextoDeAnalise.createAnalyser();
     analisador.fftSize = 512;
     analisador.smoothingTimeConstant = 0.6;
     fonte.connect(analisador);
-    analisadores.set(id, { analisador, dados: new Uint8Array(analisador.frequencyBinCount) });
+    // A fonte fica guardada de proposito: sem nenhuma referencia viva, o coletor de lixo
+    // pode leva-la e o analisador emudece sozinho no meio da conversa.
+    analisadores.set(id, {
+      analisador, dados: new Uint8Array(analisador.frequencyBinCount),
+      fonte, stream, faixa, montadoMudo: faixa.muted
+    });
   } catch (_) { /* sem indicador de fala neste navegador */ }
 }
 
 function pararDeAcompanhar(id) { analisadores.delete(id); }
 
 function pulsoDeVoz() {
-  analisadores.forEach(({ analisador, dados }, id) => {
+  analisadores.forEach((entrada, id) => {
+    // Se a faixa chegou muda e o evento de "desmutou" nao veio (acontece em rede ruim),
+    // o conserto sai daqui mesmo, sem depender do evento.
+    if (entrada.montadoMudo && entrada.faixa && !entrada.faixa.muted) {
+      acompanharVoz(id, entrada.stream);
+      return;
+    }
+    const { analisador, dados } = entrada;
     analisador.getByteFrequencyData(dados);
     let soma = 0;
     for (let i = 0; i < dados.length; i++) soma += dados[i];
