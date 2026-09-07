@@ -105,11 +105,14 @@ const audioCaptureProcesses = new Map();
 // nao invalida os agentes ja baixados.
 const agentesPorToken = new Map();     // token -> WebSocket
 const navegadoresPorToken = new Map(); // token -> socketId
+// Porta que o agente abriu em 127.0.0.1 do computador DELE. O navegador daquela pessoa usa
+// essa porta para receber o audio direto, sem a volta ate aqui.
+const portasLocaisPorToken = new Map(); // token -> porta
 
 function avisarStatusDoAgente(token) {
   const socketId = navegadoresPorToken.get(token);
   if (!socketId) return;
-  io.to(socketId).emit('agente-status', { conectado: agentesPorToken.has(token) });
+  io.to(socketId).emit('agente-status', { conectado: agentesPorToken.has(token), portaLocal: portasLocaisPorToken.get(token) || null });
 }
 
 // Os agentes falam WebSocket puro (bem mais simples de implementar em C++ que o
@@ -142,23 +145,35 @@ wssAgentes.on('connection', (ws) => {
   avisarStatusDoAgente(token);
 
   ws.on('message', (dados, ehBinario) => {
-    const socketId = navegadoresPorToken.get(token);
-    if (!socketId) return;
     if (ehBinario) {
       // PCM do computador do participante -> navegador dele, no mesmo formato que o
-      // caminho local ja usa (44100 Hz, estereo, 16 bits).
-      io.to(socketId).emit('audio-data', dados);
+      // caminho local ja usa (44100 Hz, estereo, 16 bits). So faz sentido com um
+      // navegador do outro lado; sem ele o audio nao tem destino.
+      const socketId = navegadoresPorToken.get(token);
+      if (socketId) io.to(socketId).emit('audio-data', dados);
       return;
     }
+    // As mensagens de controle NAO podem depender de haver navegador registrado: o
+    // agente e aberto antes de a pessoa entrar na sala, e e logo ao conectar que ele
+    // informa a porta local. Exigir o navegador aqui fazia esse anuncio se perder, e a
+    // conexao direta nunca era usada.
     try {
       const mensagem = JSON.parse(dados.toString());
-      if (mensagem.evento === 'erro') io.to(socketId).emit('audio-error', `Agente: ${mensagem.mensagem || 'falha'}`);
+      if (mensagem.evento === 'porta-local' && Number.isInteger(mensagem.porta) && mensagem.porta > 0 && mensagem.porta < 65536) {
+        portasLocaisPorToken.set(token, mensagem.porta);
+        avisarStatusDoAgente(token);
+      }
+      if (mensagem.evento === 'erro') {
+        const socketId = navegadoresPorToken.get(token);
+        if (socketId) io.to(socketId).emit('audio-error', `Agente: ${mensagem.mensagem || 'falha'}`);
+      }
     } catch (_) { /* mensagem de controle malformada e ignorada */ }
   });
 
   ws.on('close', () => {
     if (agentesPorToken.get(token) === ws) {
       agentesPorToken.delete(token);
+      portasLocaisPorToken.delete(token);
       console.log(`Agente desconectado (token ${token.slice(0, 8)}...)`);
       avisarStatusDoAgente(token);
     }
@@ -367,7 +382,8 @@ io.on('connection', (socket) => {
       ...diagnosticarHelper(socket.handshake),
       urlLocal: `http://localhost:${PORT}`,
       agenteDisponivel: fs.existsSync(AGENTE_PATH),
-      agenteConectado: Boolean(token && agentesPorToken.has(token))
+      agenteConectado: Boolean(token && agentesPorToken.has(token)),
+      portaLocalDoAgente: (token && portasLocaisPorToken.get(token)) || null
     });
   });
 

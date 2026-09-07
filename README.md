@@ -93,6 +93,20 @@ participante** transmita o som do proprio computador sem eco existe o `AgenteAud
 executavel unico, de ~360 KB, sem instalacao e sem dependencia nenhuma (nem .NET, nem Node,
 nem VC++ Redistributable -- so DLLs do proprio Windows).
 
+**Caminho do audio.** O agente entrega o PCM direto ao navegador da propria pessoa, por um
+WebSocket em `127.0.0.1` numa porta escolhida na hora. O navegador descobre essa porta pelo
+servidor da sala, que ja sabe qual navegador corresponde a cada agente -- ninguem digita nada,
+nao ha porta fixa para dar conflito, e **nao e preciso abrir porta no roteador nem criar excecao
+de firewall**, porque trafego de loopback nao passa por nenhum dos dois. A conexao exige o mesmo
+token da sala, entao nenhuma outra pagina aberta no computador consegue pedir esse audio.
+
+Sem isso o som fazia uma volta absurda: saia do PC de quem compartilha, atravessava a internet
+ate o servidor e voltava para o navegador da MESMA maquina -- duas travessias do tunel, enquanto
+o video ia direto P2P. Era essa a causa do audio atrasado em relacao a imagem.
+
+Se a conexao direta nao puder ser aberta (agente antigo, navegador que bloqueie loopback), o
+agente volta sozinho a mandar pelo servidor: o audio continua funcionando, so com mais atraso.
+
 **Como o participante usa:** dentro da sala, ao configurar o compartilhamento de tela, aparece
 a caixa "Agente de audio" com um botao de download. Ele baixa, da um duplo clique e deixa a
 janelinha aberta. Nao ha nada para digitar: o token e o endereco do servidor vao no **nome do

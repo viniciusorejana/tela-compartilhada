@@ -8,8 +8,13 @@
 // O agente e sempre CLIENTE: ele conecta para fora. Por isso nao precisa de certificado
 // nem de porta aberta, e nao esbarra na regra de mixed content do navegador.
 
+// winsock2.h antes de Windows.h de proposito: na ordem inversa o Windows.h puxa o
+// winsock.h antigo e os dois entram em conflito.
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <Windows.h>
 #include <winhttp.h>
+#include <bcrypt.h>
 #include <tlhelp32.h>
 #include <mfapi.h>
 #include <iostream>
@@ -24,6 +29,9 @@
 #include "../audio-helper/LoopbackCapture.h"
 
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "bcrypt.lib")
+#pragma comment(lib, "crypt32.lib")
 
 // ---------------------------------------------------------------------------
 // Configuracao pelo NOME DO ARQUIVO.
@@ -236,7 +244,10 @@ static std::mutex g_mutexFila;
 static std::condition_variable g_filaTemDados;
 static std::deque<std::vector<BYTE>> g_fila;
 static std::atomic<bool> g_encerrando{ false };
-static const size_t kMaximoDeBlocosNaFila = 120;  // ~1,5 s de audio
+// Teto curto de proposito. Guardar 1,5 s aqui nao evitava perda nenhuma: so empurrava
+// o audio inteiro para tras, porque tudo enfileirado ainda precisa ser tocado em tempo
+// real do outro lado. Melhor descartar cedo e manter a conversa em sincronia.
+static const size_t kMaximoDeBlocosNaFila = 20;  // ~250 ms de audio
 
 static void EnfileirarPcm(const BYTE* dados, DWORD bytes)
 {
@@ -417,6 +428,198 @@ static void IniciarCaptura(const std::string& familia)
 }
 
 // ---------------------------------------------------------------------------
+// Servidor WebSocket local (so 127.0.0.1).
+//
+// O audio do sistema fazia um desvio absurdo: saia daqui, atravessava a internet ate o
+// servidor da sala e voltava para o navegador desta MESMA maquina. Duas travessias do
+// tunel para percorrer meio milimetro de placa de rede -- enquanto o video, que vai
+// direto P2P, chegava muito na frente. Era essa a origem do audio atrasado.
+//
+// Agora o agente tambem escuta no loopback e entrega o PCM direto ao navegador ao lado.
+// O caminho pelo servidor continua existindo como reserva, para quando o navegador nao
+// conseguir abrir a conexao local.
+//
+// Escutar em 127.0.0.1 nao exige abrir porta no roteador nem excecao de firewall: o
+// trafego de loopback nao passa por nenhum dos dois.
+// ---------------------------------------------------------------------------
+static SOCKET g_escutaLocal = INVALID_SOCKET;
+static std::atomic<SOCKET> g_navegadorLocal{ INVALID_SOCKET };
+static unsigned short g_portaLocal = 0;
+static std::string g_tokenEsperado;
+
+static std::string Base64(const BYTE* dados, DWORD bytes)
+{
+    DWORD tamanho = 0;
+    if (!CryptBinaryToStringA(dados, bytes, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &tamanho)) return std::string();
+    std::string saida(tamanho, '\0');
+    if (!CryptBinaryToStringA(dados, bytes, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, saida.data(), &tamanho)) return std::string();
+    saida.resize(strlen(saida.c_str()));
+    return saida;
+}
+
+static bool Sha1(const std::string& entrada, BYTE saida[20])
+{
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA1_ALGORITHM, nullptr, 0) != 0) return false;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    const bool ok = BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0
+        && BCryptHashData(hash, (PUCHAR)entrada.data(), (ULONG)entrada.size(), 0) == 0
+        && BCryptFinishHash(hash, saida, 20, 0) == 0;
+    if (hash) BCryptDestroyHash(hash);
+    BCryptCloseAlgorithmProvider(alg, 0);
+    return ok;
+}
+
+static bool EnviarTudo(SOCKET s, const BYTE* dados, size_t bytes)
+{
+    size_t enviados = 0;
+    while (enviados < bytes)
+    {
+        const int n = send(s, reinterpret_cast<const char*>(dados + enviados), static_cast<int>(bytes - enviados), 0);
+        if (n <= 0) return false;
+        enviados += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+// Quadro do servidor para o cliente: nunca mascarado, sempre completo (FIN=1).
+static bool EnviarQuadroBinario(SOCKET s, const BYTE* dados, size_t bytes)
+{
+    BYTE cabecalho[10];
+    size_t tamanhoCabecalho = 0;
+    cabecalho[tamanhoCabecalho++] = 0x82;  // FIN + opcode binario
+    if (bytes < 126)
+    {
+        cabecalho[tamanhoCabecalho++] = static_cast<BYTE>(bytes);
+    }
+    else if (bytes <= 0xFFFF)
+    {
+        cabecalho[tamanhoCabecalho++] = 126;
+        cabecalho[tamanhoCabecalho++] = static_cast<BYTE>((bytes >> 8) & 0xFF);
+        cabecalho[tamanhoCabecalho++] = static_cast<BYTE>(bytes & 0xFF);
+    }
+    else
+    {
+        cabecalho[tamanhoCabecalho++] = 127;
+        for (int i = 7; i >= 0; i--) cabecalho[tamanhoCabecalho++] = static_cast<BYTE>((bytes >> (i * 8)) & 0xFF);
+    }
+    return EnviarTudo(s, cabecalho, tamanhoCabecalho) && EnviarTudo(s, dados, bytes);
+}
+
+static std::string CabecalhoDe(const std::string& pedido, const std::string& nome)
+{
+    // Comparacao sem diferenciar maiusculas: o navegador escolhe a grafia que quiser.
+    std::string alvoMinusculo = nome;
+    for (auto& c : alvoMinusculo) c = static_cast<char>(tolower(c));
+    std::string pedidoMinusculo = pedido;
+    for (auto& c : pedidoMinusculo) c = static_cast<char>(tolower(c));
+
+    size_t posicao = pedidoMinusculo.find(alvoMinusculo);
+    if (posicao == std::string::npos) return std::string();
+    posicao = pedido.find(':', posicao);
+    if (posicao == std::string::npos) return std::string();
+    size_t fim = pedido.find('\r', posicao);
+    if (fim == std::string::npos) return std::string();
+    std::string valor = pedido.substr(posicao + 1, fim - posicao - 1);
+    while (!valor.empty() && (valor.front() == ' ' || valor.front() == '\t')) valor.erase(valor.begin());
+    return valor;
+}
+
+// O token e a unica coisa que impede outra pagina aberta no computador de pedir o audio
+// do sistema da pessoa. Ele e o mesmo da sala: so quem tem o par navegador/agente o
+// conhece.
+static bool TokenConfere(const std::string& pedido)
+{
+    const size_t inicio = pedido.find("token=");
+    if (inicio == std::string::npos) return false;
+    size_t fim = inicio + 6;
+    while (fim < pedido.size() && (isalnum(static_cast<unsigned char>(pedido[fim])) != 0)) fim++;
+    const std::string recebido = pedido.substr(inicio + 6, fim - inicio - 6);
+    if (recebido.empty() || recebido.size() != g_tokenEsperado.size()) return false;
+    return _stricmp(recebido.c_str(), g_tokenEsperado.c_str()) == 0;
+}
+
+static bool ApertoDeMao(SOCKET cliente)
+{
+    std::string pedido;
+    char buffer[1024];
+    while (pedido.find("\r\n\r\n") == std::string::npos)
+    {
+        if (pedido.size() > 8192) return false;  // cabecalho absurdo: nao e o nosso navegador
+        const int n = recv(cliente, buffer, sizeof(buffer), 0);
+        if (n <= 0) return false;
+        pedido.append(buffer, n);
+    }
+
+    if (!TokenConfere(pedido)) return false;
+    const std::string chave = CabecalhoDe(pedido, "sec-websocket-key");
+    if (chave.empty()) return false;
+
+    BYTE digest[20];
+    if (!Sha1(chave + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", digest)) return false;
+
+    const std::string resposta =
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: " + Base64(digest, 20) + "\r\n\r\n";
+    return EnviarTudo(cliente, reinterpret_cast<const BYTE*>(resposta.data()), resposta.size());
+}
+
+static void FecharNavegadorLocal()
+{
+    const SOCKET antigo = g_navegadorLocal.exchange(INVALID_SOCKET);
+    if (antigo != INVALID_SOCKET) closesocket(antigo);
+}
+
+static void ThreadDeEscutaLocal()
+{
+    while (!g_encerrando)
+    {
+        sockaddr_in de{};
+        int tamanho = sizeof(de);
+        const SOCKET cliente = accept(g_escutaLocal, reinterpret_cast<sockaddr*>(&de), &tamanho);
+        if (cliente == INVALID_SOCKET) { if (g_encerrando) return; continue; }
+
+        if (!ApertoDeMao(cliente)) { closesocket(cliente); continue; }
+
+        // Sem Nagle: blocos de audio sao pequenos e frequentes, e esperar para agrupar
+        // seria justamente devolver o atraso que viemos eliminar.
+        int ligado = 1;
+        setsockopt(cliente, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&ligado), sizeof(ligado));
+
+        const SOCKET antigo = g_navegadorLocal.exchange(cliente);  // recarregar a pagina troca o cliente
+        if (antigo != INVALID_SOCKET) closesocket(antigo);
+        std::wcout << L"[agente] navegador conectado direto, sem passar pelo servidor.\n";
+    }
+}
+
+// Porta 0 = o Windows escolhe uma livre. O navegador descobre qual foi pelo proprio
+// servidor da sala, entao nao existe porta fixa para dar conflito com outro programa.
+static bool IniciarServidorLocal()
+{
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
+
+    g_escutaLocal = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (g_escutaLocal == INVALID_SOCKET) return false;
+
+    sockaddr_in endereco{};
+    endereco.sin_family = AF_INET;
+    endereco.sin_port = 0;
+    inet_pton(AF_INET, "127.0.0.1", &endereco.sin_addr);  // so loopback: nunca exposto na rede
+    if (bind(g_escutaLocal, reinterpret_cast<sockaddr*>(&endereco), sizeof(endereco)) != 0) return false;
+    if (listen(g_escutaLocal, 4) != 0) return false;
+
+    sockaddr_in atribuido{};
+    int tamanho = sizeof(atribuido);
+    if (getsockname(g_escutaLocal, reinterpret_cast<sockaddr*>(&atribuido), &tamanho) != 0) return false;
+    g_portaLocal = ntohs(atribuido.sin_port);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Envio do PCM: prefere o navegador local; o servidor da sala e a reserva.
 static void ThreadDeEnvio()
 {
     while (!g_encerrando)
@@ -431,7 +634,18 @@ static void ThreadDeEnvio()
             bloco = std::move(g_fila.front());
             g_fila.pop_front();
         }
-        if (!bloco.empty()) g_conexao.EnviarBinario(bloco.data(), static_cast<DWORD>(bloco.size()));
+        if (bloco.empty()) continue;
+
+        // Caminho curto: o navegador esta do lado, no mesmo computador. Se ele cair, o
+        // bloco seguinte ja volta a sair pelo servidor sem perder a transmissao.
+        const SOCKET local = g_navegadorLocal.load();
+        if (local != INVALID_SOCKET)
+        {
+            if (EnviarQuadroBinario(local, bloco.data(), bloco.size())) continue;
+            FecharNavegadorLocal();
+            std::wcout << L"[agente] conexao direta caiu; voltando a enviar pelo servidor.\n";
+        }
+        g_conexao.EnviarBinario(bloco.data(), static_cast<DWORD>(bloco.size()));
     }
 }
 
@@ -548,6 +762,15 @@ int wmain(int argc, wchar_t* argv[])
 
     if (!AssumirInstanciaUnica()) return 1;
 
+    // O token da URL e o mesmo que o navegador vai apresentar na conexao local.
+    const size_t posToken = url.find("token=");
+    if (posToken != std::string::npos) g_tokenEsperado = url.substr(posToken + 6);
+
+    if (IniciarServidorLocal())
+        std::wcout << L"Conexao direta com o navegador: 127.0.0.1:" << g_portaLocal << L"\n";
+    else
+        std::wcout << L"Sem conexao direta com o navegador; o audio vai pelo servidor.\n";
+
     std::wcout << L"Servidor: " << endereco.host << L"\n";
     if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE)))
     {
@@ -560,6 +783,7 @@ int wmain(int argc, wchar_t* argv[])
     std::thread envio(ThreadDeEnvio);
     std::thread substituicao(ThreadDeSubstituicao);
     substituicao.detach();
+    if (g_escutaLocal != INVALID_SOCKET) { std::thread escuta(ThreadDeEscutaLocal); escuta.detach(); }
 
     int tentativa = 0;
     bool jaAvisouDoEndereco = false;
@@ -595,6 +819,10 @@ int wmain(int argc, wchar_t* argv[])
         jaAvisouDoEndereco = false;
         std::wcout << L"[agente] conectado. Pode compartilhar a tela pelo navegador.\n";
         g_conexao.EnviarTexto("{\"evento\":\"pronto\"}");
+        // O navegador nao adivinha a porta: ele a recebe pelo servidor da sala, que ja
+        // sabe qual navegador corresponde a este token.
+        if (g_portaLocal)
+            g_conexao.EnviarTexto("{\"evento\":\"porta-local\",\"porta\":" + std::to_string(g_portaLocal) + "}");
         SalvarConfig(url);  // permite reabrir mesmo se o arquivo for renomeado depois
 
         std::string mensagem;
@@ -615,6 +843,8 @@ int wmain(int argc, wchar_t* argv[])
     g_encerrando = true;
     g_filaTemDados.notify_all();
     if (envio.joinable()) envio.join();
+    FecharNavegadorLocal();
+    if (g_escutaLocal != INVALID_SOCKET) { closesocket(g_escutaLocal); WSACleanup(); }
     MFShutdown();
     LiberarInstanciaUnica();
     return 0;
