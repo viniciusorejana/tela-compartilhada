@@ -211,6 +211,7 @@
   #cameraBtn::before { content: "\1F4F7"; }
   #screenBtn::before { content: "\1F5A5"; }
   #updateScreenBtn::before { content: "\1F504"; }
+  #noiseBtn::before { content: "\1F39A"; }
   #testAudioBtn::before { content: "\1F50A"; }
   #leaveBtn::before { content: "\23CF"; }
   #micBtn[aria-pressed="true"], #cameraBtn[aria-pressed="true"], #screenBtn[aria-pressed="true"] {
@@ -412,6 +413,7 @@
 
   <nav class="control-bar">
     <button id="micBtn" class="control-btn" type="button" aria-pressed="true" title="Microfone">Mic ligado</button>
+    <button id="noiseBtn" class="control-btn" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone">Ruído reduzido</button>
     <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
@@ -499,6 +501,7 @@ const testAudioBtn = document.getElementById('testAudioBtn');
 const leaveBtn = document.getElementById('leaveBtn');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 const enableSoundBtn = document.getElementById('enableSoundBtn');
+const noiseBtn = document.getElementById('noiseBtn');
 const settingsPanel = document.getElementById('settingsPanel');
 const settingsTitle = document.getElementById('settingsTitle');
 const captureMode = document.getElementById('captureMode');
@@ -601,10 +604,9 @@ async function iniciarConexao() {
   socket.on('connect', async () => {
     myId = socket.id;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
+      micStream = await abrirMicrofone();
       micTrack = micStream.getAudioTracks()[0];
+      faixaEnviadaDoMic = micTrack;
     } catch (err) {
       status.textContent = temMediaDevices
         ? 'Não foi possível acessar o microfone: ' + err.message
@@ -618,6 +620,7 @@ async function iniciarConexao() {
       }
       criarTileLocal();
       acompanharVoz('self', micStream);
+      montarFiltroDeRuido();
       if (Array.isArray(response.historico) && response.historico.length) {
         chatMsgs.innerHTML = '';
         response.historico.forEach(mostrarMensagem);
@@ -958,7 +961,9 @@ function adicionarFaixasLocaisAoPar(peer) {
     aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio');
   };
 
-  enviar('mic', micTrack, micStream);
+  // Vai a faixa filtrada quando ela existe. O stream continua sendo o micStream: e o id
+  // dele que o outro lado usa para saber que aquilo e voz, e nao som de tela.
+  enviar('mic', faixaEnviadaDoMic || micTrack, micStream);
   if (cameraStream) enviar('camera', cameraStream.getVideoTracks()[0], cameraStream);
   if (screenStream) {
     enviar('screen', screenStream.getVideoTracks()[0], screenStream);
@@ -995,7 +1000,7 @@ function removerPar(id) {
   if (pinned?.id === id) despinar();
 }
 
-// ---------- Captura de camera ----------
+// ---------- Captura de microfone e camera ----------
 // O navegador so entrega o que a gente pede. Sem pedir resolucao, o Chrome devolve
 // 640x480 (4:3) mesmo numa webcam widescreen -- e o padrao dele, nao o formato da camera,
 // e o resultado e uma imagem quase quadrada, mais estreita do que a camera enxerga.
@@ -1015,11 +1020,120 @@ async function abrirCamera() {
   }
 }
 
+async function abrirMicrofone() {
+  const suportadas = navigator.mediaDevices.getSupportedConstraints?.() || {};
+  const pedido = {
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1
+  };
+  // Supressor de ruido novo do Chrome (bem melhor que o classico, e existe no Android).
+  if (suportadas.voiceIsolation) pedido.voiceIsolation = true;
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: pedido });
+  } catch (err) {
+    if (err && err.name === 'NotAllowedError') throw err;
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+}
+
+// ---------- Reducao de ruido ----------
+// Duas camadas. A de baixo e do proprio navegador (noiseSuppression e, onde existe,
+// voiceIsolation) e roda antes de o audio chegar aqui. A de cima e uma porteira: com o
+// microfone parado o ganho cai a zero, entao ventilador, rua e o chiado do proprio
+// aparelho -- o que mais atrapalha em celular -- nao viajam para a sala.
+//
+// A porteira nasce ABERTA de proposito. Se o laco de analise falhar, o pior que acontece
+// e ela nunca fechar; ninguem fica mudo sem saber.
+//
+// A porteira se ajusta ao aparelho em vez de usar um numero fixo: o piso de ruido de um
+// celular na rua nao tem nada a ver com o de um microfone de mesa, e um limiar unico ou
+// deixaria a rua passar ou cortaria quem fala baixo.
+const RUIDO_MARGEM_ABRE = 8;  // acima do piso medido, e voz
+const RUIDO_MARGEM_FECHA = 4; // ate aqui ainda e fundo
+const RUIDO_MINIMO_ABRE = 6;  // piso absoluto, para nao abrir com silencio digital
+const RUIDO_SEGURA_MS = 400;  // depois da ultima voz, ainda deixa passar um tempinho
+const RUIDO_SUBIDA_DO_PISO = 0.0005; // ~30 s para o piso acompanhar um ruido novo
+let filtroDeRuidoLigado = true;
+let cadeiaDeRuido = null;
+let faixaEnviadaDoMic = null;
+
+function montarFiltroDeRuido() {
+  if (!micStream || !micTrack || cadeiaDeRuido) return;
+  try {
+    contextoDeAnalise ||= new AudioContextClass();
+    const contexto = contextoDeAnalise;
+    const fonte = contexto.createMediaStreamSource(micStream);
+    const ganho = contexto.createGain();
+    ganho.gain.value = 1;
+    const destino = contexto.createMediaStreamDestination();
+    fonte.connect(ganho);
+    ganho.connect(destino);
+    const faixa = destino.stream.getAudioTracks()[0];
+    if (!faixa) return;
+    faixa.enabled = !micMuted;
+    cadeiaDeRuido = { contexto, ganho, faixa, aberta: true, ultimoSom: 0, piso: 0 };
+    // Um contexto suspenso nao produz som nenhum: enquanto ele nao estiver rodando, quem
+    // vai para a sala e a faixa crua.
+    contexto.addEventListener?.('statechange', escolherFaixaDoMic);
+    escolherFaixaDoMic();
+  } catch (_) {
+    cadeiaDeRuido = null;
+    noiseBtn.hidden = true;
+  }
+}
+
+function escolherFaixaDoMic() {
+  if (!micTrack) return;
+  const podeFiltrar = filtroDeRuidoLigado && cadeiaDeRuido && cadeiaDeRuido.contexto.state === 'running';
+  const desejada = podeFiltrar ? cadeiaDeRuido.faixa : micTrack;
+  if (desejada === faixaEnviadaDoMic) return;
+  faixaEnviadaDoMic = desejada;
+  desejada.enabled = !micMuted;
+  definirFaixaEmTodosOsPares('mic', desejada, micStream);
+}
+
+function ajustarPorteira(nivel) {
+  if (!cadeiaDeRuido || faixaEnviadaDoMic !== cadeiaDeRuido.faixa) return;
+  const agora = performance.now();
+
+  // O piso desce na hora e sobe devagar: qualquer pausa na fala ja o traz de volta ao
+  // ruido real do ambiente, entao falar sem parar nao vai fechando a porteira aos poucos.
+  if (nivel < cadeiaDeRuido.piso) cadeiaDeRuido.piso = nivel;
+  else cadeiaDeRuido.piso += (nivel - cadeiaDeRuido.piso) * RUIDO_SUBIDA_DO_PISO;
+  const abreEm = Math.max(RUIDO_MINIMO_ABRE, cadeiaDeRuido.piso + RUIDO_MARGEM_ABRE);
+  const fechaEm = cadeiaDeRuido.piso + RUIDO_MARGEM_FECHA;
+
+  if (nivel > abreEm) cadeiaDeRuido.ultimoSom = agora;
+  const abrir = nivel > abreEm
+    || (cadeiaDeRuido.aberta && (nivel > fechaEm || agora - cadeiaDeRuido.ultimoSom < RUIDO_SEGURA_MS));
+  if (abrir === cadeiaDeRuido.aberta) return;
+  cadeiaDeRuido.aberta = abrir;
+  const alvo = cadeiaDeRuido.ganho.gain;
+  const t = cadeiaDeRuido.contexto.currentTime;
+  // Abre rapido para nao comer o comeco da palavra e fecha devagar para nao cortar seco.
+  alvo.cancelScheduledValues(t);
+  alvo.setValueAtTime(alvo.value, t);
+  alvo.linearRampToValueAtTime(abrir ? 1 : 0, t + (abrir ? 0.01 : 0.18));
+}
+
+noiseBtn.onclick = () => {
+  filtroDeRuidoLigado = !filtroDeRuidoLigado;
+  noiseBtn.textContent = filtroDeRuidoLigado ? 'Ruído reduzido' : 'Sem filtro';
+  noiseBtn.setAttribute('aria-pressed', String(filtroDeRuidoLigado));
+  noiseBtn.classList.toggle('secondary', !filtroDeRuidoLigado);
+  escolherFaixaDoMic();
+  status.textContent = filtroDeRuidoLigado
+    ? 'Redução de ruído ligada: o ruído de fundo para de sair quando você não está falando.'
+    : 'Redução de ruído desligada: seu microfone vai cru para a sala.';
+};
+
 // ---------- Mic ----------
 function alternarMic() {
   if (!micTrack) return;
   micMuted = !micMuted;
   micTrack.enabled = !micMuted;
+  // A faixa filtrada e outra faixa: sem isso, o mudo nao valeria para quem esta com o
+  // filtro ligado.
+  if (faixaEnviadaDoMic && faixaEnviadaDoMic !== micTrack) faixaEnviadaDoMic.enabled = !micMuted;
   micBtn.textContent = micMuted ? 'Mic mudo' : 'Mic ligado';
   micBtn.setAttribute('aria-pressed', String(!micMuted));
   micBtn.classList.toggle('secondary', micMuted);
@@ -2106,6 +2220,9 @@ function pulsoDeVoz() {
     const media = soma / dados.length;
     const tile = tiles.get(id);
     if (tile) tile.root.classList.toggle('falando', media > 12);
+    // O mesmo nivel que acende o anel comanda a porteira do proprio microfone. Ele e
+    // medido antes do ganho, entao continua enxergando a voz mesmo com a porteira fechada.
+    if (id === 'self') ajustarPorteira(media);
   });
   requestAnimationFrame(pulsoDeVoz);
 }
