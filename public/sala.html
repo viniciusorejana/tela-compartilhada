@@ -602,11 +602,23 @@ async function iniciarConexao() {
   await rtcConfigReady;
 
   socket.on('connect', async () => {
+    // O Socket.IO reconecta sozinho depois de qualquer oscilacao de rede, e este mesmo
+    // handler roda de novo. Sem separar a primeira vez da volta, cada queda abria OUTRO
+    // microfone (o anterior seguia capturando) e duplicava o proprio quadradinho.
+    const voltando = sessaoIniciada;
     myId = socket.id;
+    if (voltando) {
+      // O servidor ja tirou este navegador da sala e deu um id novo: as conexoes antigas
+      // apontam para alguem que, para os outros, nao existe mais. Limpa e refaz a malha.
+      Array.from(peers.keys()).forEach(removerPar);
+      atualizarContador();
+      status.textContent = 'Reconectado. Refazendo as conexões...';
+    }
+    sessaoIniciada = true;
     try {
-      micStream = await abrirMicrofone();
+      if (!micStream) micStream = await abrirMicrofone();
       micTrack = micStream.getAudioTracks()[0];
-      faixaEnviadaDoMic = micTrack;
+      if (!faixaEnviadaDoMic) faixaEnviadaDoMic = micTrack;
     } catch (err) {
       status.textContent = temMediaDevices
         ? 'Não foi possível acessar o microfone: ' + err.message
@@ -632,6 +644,9 @@ async function iniciarConexao() {
         criarConexaoPar(peer.id, peer.name, peer.state, true);
       });
       status.textContent = 'Conectado. Use os botões abaixo para ligar câmera, tela ou microfone.';
+      // Depois de reconectar, quem ja estava na sala precisa saber o que este navegador
+      // esta transmitindo: o join-room so leva o nome.
+      enviarEstado();
       atualizarContador();
       // Alguem pode ja estar compartilhando desde antes de eu entrar.
       avaliarDestaque();
@@ -863,6 +878,12 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     pendingCandidates: [],
     // Quando cada fonte comecou, para o destaque automatico saber quem foi primeiro.
     ordem: { screen: 0, camera: 0 },
+    // Recuperacao de queda e limpeza: tentativas de reatar a conexao e os temporizadores
+    // que precisam morrer junto com o par.
+    tentativasDeReatar: 0,
+    timeoutDeQueda: null,
+    timeoutDeSaude: null,
+    temporizadores: [],
     state: state || { camera: false, screen: false, screenAudio: false, micMuted: false }
   };
   peers.set(id, peer);
@@ -890,8 +911,30 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     if (event.candidate) socket.emit('candidate', id, event.candidate);
   };
 
+  pc.oniceconnectionstatechange = () => {
+    if (['connected', 'completed'].includes(pc.iceConnectionState)) marcarConexaoSaudavel(peer);
+  };
+
   pc.onconnectionstatechange = () => {
-    if (['failed', 'closed'].includes(pc.connectionState)) removerPar(id);
+    const estado = pc.connectionState;
+    if (estado === 'closed') { removerPar(id); return; }
+
+    if (estado === 'connected') { marcarConexaoSaudavel(peer); return; }
+
+    // "disconnected" costuma ser passageiro (troca de rede, Wi-Fi oscilando) e volta
+    // sozinho. So se demorar demais vale mexer.
+    if (estado === 'disconnected' && !peer.timeoutDeQueda) {
+      peer.timeoutDeQueda = setTimeout(() => {
+        peer.timeoutDeQueda = null;
+        if (peer.pc.connectionState === 'disconnected') reatarConexao(peer);
+      }, SEGUNDOS_ATE_REATAR * 1000);
+      return;
+    }
+
+    // "failed" antes destruia o par para sempre: uma oscilacao de rede derrubava a imagem
+    // e ela so voltava com F5, porque nada recria o par (o socket continua conectado, e
+    // ninguem "entrou" de novo). Agora tenta o caminho normal do WebRTC.
+    if (estado === 'failed') reatarConexao(peer);
   };
 
   pc.ontrack = (event) => {
@@ -971,6 +1014,49 @@ function adicionarFaixasLocaisAoPar(peer) {
   }
 }
 
+// Quantos segundos de "disconnected" ainda sao aceitaveis antes de forcar o reatamento.
+const SEGUNDOS_ATE_REATAR = 5;
+const MAXIMO_DE_TENTATIVAS = 4;
+// Tempo de conexao firme que faz uma tentativa de reatamento deixar de contar.
+const SEGUNDOS_PARA_CONSIDERAR_SAUDAVEL = 6;
+
+function marcarConexaoSaudavel(peer) {
+  peer.tentativasDeReatar = 0;
+  clearTimeout(peer.timeoutDeQueda);
+  peer.timeoutDeQueda = null;
+  clearTimeout(peer.timeoutDeSaude);
+  peer.timeoutDeSaude = null;
+}
+
+// Reatar e o mecanismo padrao do WebRTC: novas credenciais de ICE, os candidatos sao
+// trocados de novo e a midia volta sem refazer a sala. So desiste depois de insistir.
+function reatarConexao(peer) {
+  if (!peers.has(peer.id)) return;
+  if (peer.tentativasDeReatar >= MAXIMO_DE_TENTATIVAS) { removerPar(peer.id); return; }
+  peer.tentativasDeReatar++;
+  status.textContent = `Reconectando com ${peer.name}... (tentativa ${peer.tentativasDeReatar})`;
+  try {
+    // restartIce dispara negotiationneeded, e a negociacao perfeita que ja existe cuida
+    // do caso de os dois lados tentarem ao mesmo tempo.
+    peer.pc.restartIce();
+  } catch (_) {
+    removerPar(peer.id);
+    return;
+  }
+  // Num reatamento que da certo, o connectionState nem chega a sair de "connected" e o
+  // iceConnectionState tambem nao muda -- o Chrome so troca de par de candidatos quando o
+  // novo esta validado. Sem isto o contador nunca zerava, e quatro quedas passageiras
+  // espalhadas por uma conversa longa acabariam derrubando o par de vez, como se fossem
+  // quatro fracassos seguidos. O criterio, entao, e permanecer conectado.
+  clearTimeout(peer.timeoutDeSaude);
+  peer.timeoutDeSaude = setTimeout(() => {
+    if (peers.get(peer.id) === peer && peer.pc.connectionState === 'connected') {
+      marcarConexaoSaudavel(peer);
+      status.textContent = `Conexão com ${peer.name} restabelecida.`;
+    }
+  }, SEGUNDOS_PARA_CONSIDERAR_SAUDAVEL * 1000);
+}
+
 function paraCadaPar(fn) { peers.forEach(fn); }
 
 function definirFaixaEmTodosOsPares(source, track, stream) {
@@ -993,6 +1079,12 @@ function definirFaixaEmTodosOsPares(source, track, stream) {
 function removerPar(id) {
   const peer = peers.get(id);
   if (!peer) return;
+  // Sem isto, cada pessoa que sai deixa temporizadores rodando para sempre, mexendo em
+  // uma conexao ja fechada.
+  peer.temporizadores.forEach(clearInterval);
+  peer.temporizadores.length = 0;
+  clearTimeout(peer.timeoutDeQueda);
+  clearTimeout(peer.timeoutDeSaude);
   peer.pc.close();
   peers.delete(id);
   pararDeAcompanhar(id);
@@ -1297,6 +1389,8 @@ fixEchoBtn.onclick = () => {
 };
 
 let wsAgenteLocal = null;
+// Distingue a primeira conexao da reconexao automatica do Socket.IO.
+let sessaoIniciada = false;
 
 // O PCM chega por dois caminhos possíveis e é tratado igual nos dois: pelo WebSocket
 // local do agente (curto) ou pelo servidor da sala (reserva).
@@ -1675,6 +1769,7 @@ function criarTile(id, name, state) {
 }
 
 function criarTileBase(id, name, state, isSelf) {
+  if (tiles.has(id)) return;   // reconexao nao pode criar um segundo quadradinho
   const el = document.createElement('div');
   el.className = 'participant';
   el.dataset.id = id;
@@ -2249,7 +2344,11 @@ function acompanharVoz(id, stream) {
   } catch (_) { /* sem indicador de fala neste navegador */ }
 }
 
-function pararDeAcompanhar(id) { analisadores.delete(id); }
+function pararDeAcompanhar(id) {
+  const entrada = analisadores.get(id);
+  if (entrada && entrada.fonte) { try { entrada.fonte.disconnect(); } catch (_) {} }
+  analisadores.delete(id);
+}
 
 function pulsoDeVoz() {
   analisadores.forEach((entrada, id) => {
