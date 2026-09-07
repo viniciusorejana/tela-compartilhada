@@ -675,12 +675,14 @@ async function iniciarConexao() {
     // Alguem acabou de entrar: espero a oferta dessa pessoa antes de adicionar minha midia.
     criarConexaoPar(id, name, state, false);
     atualizarContador();
+    reajustarTetosDeBitrate();
     avaliarDestaque();
   });
 
   socket.on('peer-left', ({ id }) => {
     removerPar(id);
     atualizarContador();
+    reajustarTetosDeBitrate();
     avaliarDestaque();
   });
 
@@ -815,6 +817,9 @@ function preferirCodecsDeVideo(pc, mimeTypesEmOrdem) {
 // aos poucos, a imagem entra fluida na hora e a qualidade melhora sozinha em ~20s.
 const BITRATE_VIDEO_INICIAL = 400_000;
 const BITRATE_VIDEO_ALVO = 2_500_000;
+const BITRATE_VIDEO_MINIMO = 600_000;
+// Orcamento de subida repartido entre todos os destinos da malha.
+const BITRATE_TOTAL_DE_SUBIDA = 3_500_000;
 const PASSO_DA_RAMPA = 5000;
 
 function definirBitrate(sender, bits) {
@@ -827,20 +832,43 @@ function definirBitrate(sender, bits) {
   return sender.setParameters(params).catch(() => {});
 }
 
-function iniciarRampaDeBitrate(sender) {
+// A malha e ponto a ponto: cada video sai uma vez POR pessoa na sala. Com quatro
+// participantes, um alvo de 2,5 Mbps viraria 7,5 Mbps de subida so de video -- mais do que
+// muita conexao domestica aguenta, e o congestionamento aparece como travamento. O teto
+// entao divide um orcamento total, com um piso para nao virar borrao.
+function tetoDeBitrateDeVideo() {
+  const parcela = Math.round(BITRATE_TOTAL_DE_SUBIDA / Math.max(1, peers.size));
+  return Math.max(BITRATE_VIDEO_MINIMO, Math.min(BITRATE_VIDEO_ALVO, parcela));
+}
+
+// Entrou ou saiu gente: o teto mudou e vale para os envios que ja estao no ar.
+function reajustarTetosDeBitrate() {
+  const teto = tetoDeBitrateDeVideo();
+  paraCadaPar(peer => {
+    for (const fonte of ['camera', 'screen']) {
+      const sender = peer.senders[fonte];
+      if (sender && sender.track && sender.track.readyState === 'live') definirBitrate(sender, teto);
+    }
+  });
+}
+
+function iniciarRampaDeBitrate(sender, peer) {
   let atual = BITRATE_VIDEO_INICIAL;
   const timer = setInterval(() => {
     if (!sender.track || sender.track.readyState === 'ended') { clearInterval(timer); return; }
-    atual = Math.min(BITRATE_VIDEO_ALVO, Math.round(atual * 1.7));
+    const teto = tetoDeBitrateDeVideo();
+    atual = Math.min(teto, Math.round(atual * 1.7));
     definirBitrate(sender, atual);
-    if (atual >= BITRATE_VIDEO_ALVO) clearInterval(timer);
+    if (atual >= teto) clearInterval(timer);
   }, PASSO_DA_RAMPA);
+  // Guardado no par para morrer junto com ele.
+  if (peer) peer.temporizadores.push(timer);
 }
 
-function aplicarParametrosDeEnvio(sender, kind) {
+function aplicarParametrosDeEnvio(sender, kind, peer) {
   if (kind === 'video') {
     definirBitrate(sender, BITRATE_VIDEO_INICIAL);
-    iniciarRampaDeBitrate(sender);
+    iniciarRampaDeBitrate(sender, peer);
     return;
   }
   const params = sender.getParameters();
@@ -1001,7 +1029,7 @@ function adicionarFaixasLocaisAoPar(peer) {
       return;
     }
     peer.senders[source] = pc.addTrack(track, stream);
-    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio');
+    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio', peer);
   };
 
   // Vai a faixa filtrada quando ela existe. O stream continua sendo o micStream: e o id
@@ -1067,8 +1095,8 @@ function definirFaixaEmTodosOsPares(source, track, stream) {
         sender.replaceTrack(track);
       } else {
         peer.senders[source] = peer.pc.addTrack(track, stream);
-        if (track.kind === 'video') aplicarParametrosDeEnvio(peer.senders[source], 'video');
-        else aplicarParametrosDeEnvio(peer.senders[source], 'audio');
+        if (track.kind === 'video') aplicarParametrosDeEnvio(peer.senders[source], 'video', peer);
+        else aplicarParametrosDeEnvio(peer.senders[source], 'audio', peer);
       }
     } else if (sender) {
       sender.replaceTrack(null);
