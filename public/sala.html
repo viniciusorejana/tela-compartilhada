@@ -140,6 +140,16 @@
     background: #0b0e11cc; backdrop-filter: blur(8px);
     padding: 4px; border-radius: 22px; border: 1px solid var(--line);
   }
+  /* O rotulo e os controles ficavam parados por cima da imagem o tempo todo, atrapalhando
+     justamente quem esta assistindo -- em tela cheia, o tempo inteiro. Agora somem sozinhos
+     e voltam a qualquer movimento do ponteiro ou toque. */
+  .stage-label, .stage-controls { transition: opacity .2s ease, transform .2s ease; }
+  .stage.ocioso .stage-label, .stage.ocioso .stage-controls {
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+  }
+  /* Em tela cheia o proprio cursor tambem some: la ele nao tem para onde sair da imagem. */
+  .stage.ocioso:fullscreen { cursor: none; }
+  .stage.ocioso:-webkit-full-screen { cursor: none; }
   .stage-controls button { background: transparent; color: var(--text); padding: 6px 10px; border-radius: 18px; font-size: 14px; }
   .stage-controls button:hover { background: var(--bg-4); }
   #zoomLevelLabel { font-size: 11px; color: var(--muted); min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -422,8 +432,8 @@
   </aside>
 
   <nav class="control-bar">
-    <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Microfone">Mic mudo</button>
-    <button id="noiseBtn" class="control-btn" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone">Ruído reduzido</button>
+    <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Ativar o microfone">Ativar mic</button>
+    <button id="noiseBtn" class="control-btn" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button>
     <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
@@ -635,16 +645,10 @@ async function iniciarConexao() {
       status.textContent = 'Reconectado. Refazendo as conexões...';
     }
     sessaoIniciada = true;
-    try {
-      if (!micStream) micStream = await abrirMicrofone();
-      micTrack = micStream.getAudioTracks()[0];
-      if (micTrack) micTrack.enabled = !micMuted;
-      if (!faixaEnviadaDoMic) faixaEnviadaDoMic = micTrack;
-    } catch (err) {
-      status.textContent = temMediaDevices
-        ? 'Não foi possível acessar o microfone: ' + err.message
-        : 'Este navegador não libera microfone nesta página. É preciso abrir por HTTPS (ou localhost).';
-    }
+    // O microfone NAO e aberto ao entrar. Num celular, abrir o microfone aqui tira o audio
+    // de quem esta falando em outro aplicativo -- a pessoa entra para assistir e fica muda
+    // no Discord sem entender por que. Como se entra mudo de qualquer forma, o microfone so
+    // e pedido no clique do botao, que e tambem quando a permissao faz sentido para quem ve.
 
     socket.emit('join-room', roomCode, myName, (response) => {
       if (!response?.ok) {
@@ -652,8 +656,9 @@ async function iniciarConexao() {
         return;
       }
       criarTileLocal();
-      acompanharVoz('self', micStream);
-      montarFiltroDeRuido();
+      // Numa reconexao o microfone ja pode estar aberto; numa entrada normal, nao existe
+      // microfone nenhum ainda e nao ha o que acompanhar.
+      if (micStream) { acompanharVoz('self', micStream); montarFiltroDeRuido(); }
       if (Array.isArray(response.historico) && response.historico.length) {
         chatMsgs.innerHTML = '';
         response.historico.forEach(mostrarMensagem);
@@ -1318,16 +1323,63 @@ noiseBtn.onclick = () => {
 };
 
 // ---------- Mic ----------
+function atualizarBotaoDoMic() {
+  const semMicrofone = !micTrack;
+  micBtn.textContent = semMicrofone ? 'Ativar mic' : (micMuted ? 'Mic mudo' : 'Mic ligado');
+  micBtn.setAttribute('aria-pressed', String(!semMicrofone && !micMuted));
+  micBtn.classList.toggle('secondary', semMicrofone || micMuted);
+  micBtn.title = semMicrofone ? 'Ativar o microfone' : 'Microfone';
+}
+
+let abrindoMicrofone = false;
+
+// Primeiro clique: e aqui que o microfone e pedido ao navegador, e nao ao entrar na sala.
+async function ativarMicrofone() {
+  if (abrindoMicrofone) return;
+  if (!temMediaDevices) {
+    status.textContent = 'Este navegador não libera microfone nesta página. É preciso abrir por HTTPS (ou localhost).';
+    return;
+  }
+  abrindoMicrofone = true;
+  micBtn.disabled = true;
+  micBtn.textContent = 'Abrindo...';
+  try {
+    micStream = await abrirMicrofone();
+    micTrack = micStream.getAudioTracks()[0];
+    faixaEnviadaDoMic = micTrack;
+    micMuted = false;
+    micTrack.enabled = true;
+    noiseBtn.hidden = false;
+    // O clique e um gesto do usuario -- exatamente o que o celular exige para deixar o
+    // AudioContext do filtro sair de "suspended".
+    montarFiltroDeRuido();
+    // A faixa nao estava na conexao: entra agora, e o navegador renegocia sozinho.
+    definirFaixaEmTodosOsPares('mic', faixaEnviadaDoMic, micStream);
+    acompanharVoz('self', micStream);
+    status.textContent = 'Microfone ligado.';
+  } catch (err) {
+    micStream = null;
+    micTrack = null;
+    micMuted = true;
+    noiseBtn.hidden = true;
+    status.textContent = 'Não foi possível acessar o microfone: ' + err.message;
+  } finally {
+    abrindoMicrofone = false;
+    micBtn.disabled = false;
+    atualizarBotaoDoMic();
+    atualizarTile('self');
+    enviarEstado();
+  }
+}
+
 function alternarMic() {
-  if (!micTrack) return;
+  if (!micTrack) { ativarMicrofone(); return; }
   micMuted = !micMuted;
   micTrack.enabled = !micMuted;
   // A faixa filtrada e outra faixa: sem isso, o mudo nao valeria para quem esta com o
   // filtro ligado.
   if (faixaEnviadaDoMic && faixaEnviadaDoMic !== micTrack) faixaEnviadaDoMic.enabled = !micMuted;
-  micBtn.textContent = micMuted ? 'Mic mudo' : 'Mic ligado';
-  micBtn.setAttribute('aria-pressed', String(!micMuted));
-  micBtn.classList.toggle('secondary', micMuted);
+  atualizarBotaoDoMic();
   atualizarTile('self');
   enviarEstado();
 }
@@ -1929,6 +1981,37 @@ function aoMudarTelaCheia() {
 document.addEventListener('fullscreenchange', aoMudarTelaCheia);
 document.addEventListener('webkitfullscreenchange', aoMudarTelaCheia);
 
+// ---------- Rotulo e controles que somem sozinhos ----------
+const SEGUNDOS_ATE_SUMIR = 2.5;
+let timerDoPalco = null;
+let ponteiroSobreControles = false;
+
+function mostrarControlesDoPalco() {
+  stage.classList.remove('ocioso');
+  clearTimeout(timerDoPalco);
+  // Com o ponteiro parado em cima dos botoes, sumir seria tirar o botao debaixo do dedo.
+  if (ponteiroSobreControles) return;
+  timerDoPalco = setTimeout(() => stage.classList.add('ocioso'), SEGUNDOS_ATE_SUMIR * 1000);
+}
+
+['pointermove', 'pointerdown', 'wheel'].forEach(evento =>
+  stage.addEventListener(evento, mostrarControlesDoPalco, { passive: true }));
+
+// Tirar o mouse do palco esconde na hora. Num toque nao existe "sair": quem cuida e o tempo.
+stage.addEventListener('pointerleave', (ev) => {
+  if (ev.pointerType !== 'touch') { clearTimeout(timerDoPalco); stage.classList.add('ocioso'); }
+});
+
+[stageControls, stageLabel].forEach(el => {
+  el.addEventListener('pointerenter', () => { ponteiroSobreControles = true; mostrarControlesDoPalco(); });
+  el.addEventListener('pointerleave', () => { ponteiroSobreControles = false; mostrarControlesDoPalco(); });
+});
+// Quem chega nos botoes pelo teclado tambem precisa ve-los.
+stageControls.addEventListener('focusin', mostrarControlesDoPalco);
+// Entrar e sair da tela cheia e movimento suficiente para mostrar o que ha ali.
+document.addEventListener('fullscreenchange', mostrarControlesDoPalco);
+document.addEventListener('webkitfullscreenchange', mostrarControlesDoPalco);
+
 // ---------- Sair ----------
 leaveBtn.onclick = () => { window.location.href = '/'; };
 
@@ -2282,6 +2365,8 @@ function pin(id, source, manual) {
   // manual no participante chama pin() direto, sem passar por avaliarDestaque().
   atualizarAudioDeTela();
   stageControls.classList.remove('hidden');
+  // Trocar o destaque muda o rotulo: mostra o novo antes de deixar sumir de novo.
+  mostrarControlesDoPalco();
   // O destaque agora e por FONTE: a mesma pessoa pode ter dois quadradinhos.
   document.querySelectorAll('.participant').forEach(el =>
     el.classList.toggle('pinned', el.dataset.id === id && el.dataset.source === source));
