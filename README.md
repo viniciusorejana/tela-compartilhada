@@ -131,15 +131,39 @@ npm start
 Na primeira vez ele pergunta o endereco do servidor (`http://localhost:3000` na maquina que o
 hospeda, ou o IP dela na rede para os outros) e guarda a resposta.
 
-Para gerar o executavel portatil, sem instalacao:
+### Gerar o executavel
 
 ```bash
+npm run build:helper   # na raiz: compila o helper e o AgenteAudio.exe
 cd app
-npx electron-builder --win portable
+npm install            # so na primeira vez
+npm run empacotar
 ```
 
-O `AgenteAudio.exe` compilado vai junto no pacote. Vale o mesmo alerta de antivirus do agente --
-e um executavel sem assinatura, e um maior ainda tende a chamar mais atencao da heuristica.
+Sai um arquivo unico em **`app/dist/SalaCompartilhada.exe`**, com cerca de 96 MB. Nao precisa de
+instalacao: dois cliques e abre. O `AgenteAudio.exe` vai embutido dentro dele -- quem recebe nao
+baixa mais nada.
+
+O tamanho e do Chromium, que vai inteiro no pacote. E o preco de a sala rodar fora do navegador.
+
+> Compile o agente **antes** de empacotar. O empacotamento le
+> `native/audio-agent/x64/Release/AgenteAudio.exe`; se ele nao existir, o pacote sai sem o agente
+> e o som do sistema nao e capturado.
+
+### Distribuir para outras pessoas
+
+Mande so o `SalaCompartilhada.exe`. Cada pessoa abre, digita o endereco do seu servidor uma vez
+(o IP da sua maquina na rede, ou o endereco publico se voce usa tunel) e pronto.
+
+Tres coisas que vao acontecer e valem ser ditas antes:
+
+- **SmartScreen** vai mostrar "O Windows protegeu o computador" na primeira execucao, porque o
+  executavel nao e assinado. O caminho e *Mais informacoes* -> *Executar assim mesmo*. Assinatura
+  exige certificado pago; nao ha atalho gratuito.
+- **Antivirus** pode barrar, pelo mesmo motivo do agente -- so que agora com um arquivo bem maior
+  e que captura audio do sistema. Se sumir da pasta, foi alarme falso.
+- **So Windows.** O aplicativo depende da captura de audio por processo, que e uma API do Windows.
+  Quem estiver no celular, no Mac ou no Linux continua entrando pelo navegador normalmente.
 
 > **Rodando pelo terminal do VS Code:** ele exporta `ELECTRON_RUN_AS_NODE=1`, e com essa variavel
 > o Electron sobe como Node puro -- nenhuma janela abre e o erro nao tem relacao aparente com a
