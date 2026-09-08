@@ -437,6 +437,7 @@
     <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
+    <button id="qualidadeBtn" class="control-btn secondary" type="button" aria-pressed="false">Fluidez</button>
     <button id="testAudioBtn" class="control-btn secondary" type="button" title="Testar áudio">Testar áudio</button>
     <button id="leaveBtn" class="control-btn danger" type="button" title="Sair da sala">Sair</button>
   </nav>
@@ -516,6 +517,7 @@ const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomLevelLabel = document.getElementById('zoomLevelLabel');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const qualidadeBtn = document.getElementById('qualidadeBtn');
 const echoWarning = document.getElementById('echoWarning');
 const fixEchoBtn = document.getElementById('fixEchoBtn');
 const micBtn = document.getElementById('micBtn');
@@ -665,6 +667,7 @@ async function iniciarConexao() {
         naoLidas = 0;
         chatBadge.classList.add('hidden');
       }
+      iniciarMedicaoDeBanda();
       // Acabei de entrar: sou eu quem inicia a negociacao com quem ja estava na sala.
       response.peers.forEach(peer => {
         criarConexaoPar(peer.id, peer.name, peer.state, true);
@@ -860,47 +863,81 @@ function preferirCodecsDeVideo(pc, mimeTypesEmOrdem) {
 // e o atraso demora a ceder mesmo depois que o excesso para. Comecando baixo e subindo
 // aos poucos, a imagem entra fluida na hora e a qualidade melhora sozinha em ~20s.
 const BITRATE_VIDEO_INICIAL = 400_000;
-const BITRATE_VIDEO_ALVO = 2_500_000;
 const BITRATE_VIDEO_MINIMO = 600_000;
-// Orcamento de subida repartido entre todos os destinos da malha.
-const BITRATE_TOTAL_DE_SUBIDA = 3_500_000;
+// Teto por fonte. A tela e o que mais precisa: numa cena cheia de movimento quase toda a
+// area muda a cada quadro, e e ai que falta bit. Uma camera falante se resolve com bem menos.
+const BITRATE_MAXIMO_TELA = 5_000_000;
+const BITRATE_MAXIMO_CAMERA = 2_500_000;
 const PASSO_DA_RAMPA = 5000;
+
+// Quanto do orcamento cada fonte leva quando as duas estao no ar ao mesmo tempo. Dividir em
+// partes iguais seria tratar um rosto parado e um jogo em movimento como o mesmo problema.
+const PESO_DA_FONTE = { screen: 4, camera: 1 };
+
+// ---------- Orcamento de subida ----------
+// Este numero era fixo: 3,5 Mbps, um palpite. Se a conexao dava mais, sobrava banda parada;
+// se dava menos, a transmissao afogava a propria internet de quem compartilha. O WebRTC ja
+// mede a banda disponivel o tempo todo -- e o trabalho do controle de congestionamento --
+// entao o palpite virou apenas o ponto de partida: dali em diante quem manda e a medicao.
+const ORCAMENTO_INICIAL = 3_500_000;
+const PISO_DO_ORCAMENTO = 800_000;
+const TETO_DO_ORCAMENTO = 12_000_000;
+let orcamentoDeSubida = ORCAMENTO_INICIAL;
+let bandaMedida = 0;
+
+// Nitidez ou fluidez: quando falta bit, o codificador tem de sacrificar um dos dois. Nao da
+// para adivinhar qual -- num jogo rapido a fluidez vale mais, numa planilha ou num mapa a
+// nitidez vale mais -- entao a escolha e de quem compartilha.
+let prioridadeDeVideo = 'fluidez'; // 'fluidez' | 'nitidez'
 
 function definirBitrate(sender, bits) {
   const params = sender.getParameters();
   if (!params.encodings || !params.encodings.length) params.encodings = [{}];
   params.encodings[0].maxBitrate = bits;
-  // Preferir manter a fluidez a manter a resolucao: quadro atrasado incomoda mais que
-  // quadro menos nitido.
-  params.degradationPreference = 'maintain-framerate';
+  params.degradationPreference = prioridadeDeVideo === 'nitidez'
+    ? 'maintain-resolution'   // segura o detalhe, deixa o fps cair
+    : 'maintain-framerate';   // segura o fps, deixa o detalhe cair
   return sender.setParameters(params).catch(() => {});
+}
+
+function fontesDeVideoAtivas() {
+  const lista = [];
+  if (screenStream) lista.push('screen');
+  if (cameraStream) lista.push('camera');
+  return lista;
 }
 
 // A malha e ponto a ponto: cada video sai uma vez POR pessoa na sala. Com quatro
 // participantes, um alvo de 2,5 Mbps viraria 7,5 Mbps de subida so de video -- mais do que
 // muita conexao domestica aguenta, e o congestionamento aparece como travamento. O teto
-// entao divide um orcamento total, com um piso para nao virar borrao.
-function tetoDeBitrateDeVideo() {
-  const parcela = Math.round(BITRATE_TOTAL_DE_SUBIDA / Math.max(1, peers.size));
-  return Math.max(BITRATE_VIDEO_MINIMO, Math.min(BITRATE_VIDEO_ALVO, parcela));
+// entao reparte o orcamento medido, com um piso para nao virar borrao.
+function tetoDeBitrateDeVideo(fonte) {
+  const ativas = fontesDeVideoAtivas();
+  const peso = PESO_DA_FONTE[fonte] || 1;
+  const pesoTotal = ativas.reduce((soma, f) => soma + (PESO_DA_FONTE[f] || 1), 0) || peso;
+  const porPessoa = orcamentoDeSubida / Math.max(1, peers.size);
+  const parcela = Math.round(porPessoa * peso / pesoTotal);
+  const maximo = fonte === 'screen' ? BITRATE_MAXIMO_TELA : BITRATE_MAXIMO_CAMERA;
+  return Math.max(BITRATE_VIDEO_MINIMO, Math.min(maximo, parcela));
 }
 
-// Entrou ou saiu gente: o teto mudou e vale para os envios que ja estao no ar.
+// Entrou ou saiu gente, o orcamento mudou ou a prioridade mudou: vale para o que ja esta no ar.
 function reajustarTetosDeBitrate() {
-  const teto = tetoDeBitrateDeVideo();
   paraCadaPar(peer => {
     for (const fonte of ['camera', 'screen']) {
       const sender = peer.senders[fonte];
-      if (sender && sender.track && sender.track.readyState === 'live') definirBitrate(sender, teto);
+      if (sender && sender.track && sender.track.readyState === 'live') {
+        definirBitrate(sender, tetoDeBitrateDeVideo(fonte));
+      }
     }
   });
 }
 
-function iniciarRampaDeBitrate(sender, peer) {
+function iniciarRampaDeBitrate(sender, peer, fonte) {
   let atual = BITRATE_VIDEO_INICIAL;
   const timer = setInterval(() => {
     if (!sender.track || sender.track.readyState === 'ended') { clearInterval(timer); return; }
-    const teto = tetoDeBitrateDeVideo();
+    const teto = tetoDeBitrateDeVideo(fonte);
     atual = Math.min(teto, Math.round(atual * 1.7));
     definirBitrate(sender, atual);
     if (atual >= teto) clearInterval(timer);
@@ -909,10 +946,68 @@ function iniciarRampaDeBitrate(sender, peer) {
   if (peer) peer.temporizadores.push(timer);
 }
 
-function aplicarParametrosDeEnvio(sender, kind, peer) {
+// ---------- Medicao da banda ----------
+// Duas leituras, com papeis diferentes:
+//   availableOutgoingBitrate  -- quanto o controle de congestionamento acredita que cabe.
+//   qualityLimitationReason   -- por que o codificador esta se segurando: 'bandwidth' quer
+//                                dizer que a rede e o gargalo; 'none', que ha folga.
+// O motivo manda na direcao e a medida limita o quanto. O passo e travado em +-20% para o
+// ajuste nao virar um sobe-e-desce visivel na imagem.
+const INTERVALO_DE_MEDICAO = 4000;
+let temporizadorDeMedicao = null;
+
+async function medirBandaDeSubida() {
+  if (!peers.size) return;
+  let soma = 0, medidos = 0;
+  let limitadoPelaRede = false, comFolga = false, viuMotivo = false;
+
+  for (const peer of peers.values()) {
+    let estimativa = 0;
+    try {
+      const relatorio = await peer.pc.getStats();
+      relatorio.forEach(item => {
+        if (item.type === 'candidate-pair' && item.availableOutgoingBitrate) {
+          estimativa = Math.max(estimativa, item.availableOutgoingBitrate);
+        }
+        if (item.type === 'outbound-rtp' && item.kind === 'video' && item.qualityLimitationReason) {
+          viuMotivo = true;
+          if (item.qualityLimitationReason === 'bandwidth') limitadoPelaRede = true;
+          else if (item.qualityLimitationReason === 'none') comFolga = true;
+        }
+      });
+    } catch (_) { continue; }
+    if (estimativa > 0) { soma += estimativa; medidos++; }
+  }
+  if (!medidos) return;
+  bandaMedida = Math.round(soma);
+
+  let alvo;
+  if (limitadoPelaRede) alvo = orcamentoDeSubida * 0.85;
+  // Safari nao informa o motivo. Sem ele, resta seguir a medida pura.
+  else if (!viuMotivo) alvo = bandaMedida;
+  else if (comFolga) alvo = Math.min(orcamentoDeSubida * 1.2, bandaMedida);
+  else alvo = orcamentoDeSubida; // limitado por CPU: mais bits nao resolveriam
+
+  // Passo travado: nunca mais de 20% para cima ou para baixo de uma vez. Sem isso, uma
+  // medida ruim passageira derrubaria a imagem de todo mundo de uma vez so.
+  alvo = Math.max(orcamentoDeSubida * 0.8, Math.min(orcamentoDeSubida * 1.25, alvo));
+  alvo = Math.max(PISO_DO_ORCAMENTO, Math.min(TETO_DO_ORCAMENTO, Math.round(alvo)));
+
+  atualizarBotaoDeQualidade();
+  if (Math.abs(alvo - orcamentoDeSubida) < orcamentoDeSubida * 0.05) return; // ruido, ignora
+  orcamentoDeSubida = alvo;
+  reajustarTetosDeBitrate();
+}
+
+function iniciarMedicaoDeBanda() {
+  if (temporizadorDeMedicao) return;
+  temporizadorDeMedicao = setInterval(() => { medirBandaDeSubida().catch(() => {}); }, INTERVALO_DE_MEDICAO);
+}
+
+function aplicarParametrosDeEnvio(sender, kind, peer, fonte) {
   if (kind === 'video') {
     definirBitrate(sender, BITRATE_VIDEO_INICIAL);
-    iniciarRampaDeBitrate(sender, peer);
+    iniciarRampaDeBitrate(sender, peer, fonte);
     return;
   }
   const params = sender.getParameters();
@@ -1077,7 +1172,7 @@ function adicionarFaixasLocaisAoPar(peer) {
       return;
     }
     peer.senders[source] = pc.addTrack(track, stream);
-    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio', peer);
+    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio', peer, source);
   };
 
   // Vai a faixa filtrada quando ela existe. O stream continua sendo o micStream: e o id
@@ -1143,8 +1238,8 @@ function definirFaixaEmTodosOsPares(source, track, stream) {
         sender.replaceTrack(track);
       } else {
         peer.senders[source] = peer.pc.addTrack(track, stream);
-        if (track.kind === 'video') aplicarParametrosDeEnvio(peer.senders[source], 'video', peer);
-        else aplicarParametrosDeEnvio(peer.senders[source], 'audio', peer);
+        if (track.kind === 'video') aplicarParametrosDeEnvio(peer.senders[source], 'video', peer, source);
+        else aplicarParametrosDeEnvio(peer.senders[source], 'audio', peer, source);
       }
     } else if (sender) {
       sender.replaceTrack(null);
@@ -1400,6 +1495,38 @@ function alternarMic() {
   enviarEstado();
 }
 micBtn.onclick = alternarMic;
+
+// ---------- Nitidez x fluidez ----------
+function emMegabits(bits) {
+  return (bits / 1_000_000).toFixed(1).replace('.', ',') + ' Mbps';
+}
+
+function atualizarBotaoDeQualidade() {
+  const nitidez = prioridadeDeVideo === 'nitidez';
+  qualidadeBtn.textContent = nitidez ? 'Nitidez' : 'Fluidez';
+  qualidadeBtn.setAttribute('aria-pressed', String(nitidez));
+  const explicacao = nitidez
+    ? 'Prioriza o detalhe: quando faltar banda, a imagem perde quadros em vez de embaçar'
+    : 'Prioriza o movimento: quando faltar banda, a imagem embaça em vez de perder quadros';
+  const medida = bandaMedida
+    ? `\nBanda medida: ${emMegabits(bandaMedida)} · enviando até ${emMegabits(orcamentoDeSubida)}`
+    : '';
+  qualidadeBtn.title = explicacao + medida;
+}
+
+qualidadeBtn.onclick = () => {
+  prioridadeDeVideo = prioridadeDeVideo === 'nitidez' ? 'fluidez' : 'nitidez';
+  // A dica de conteudo anda junto: ela diz ao codificador o que doi mais perder.
+  screenStream?.getVideoTracks().forEach(t => {
+    t.contentHint = prioridadeDeVideo === 'nitidez' ? 'detail' : 'motion';
+  });
+  reajustarTetosDeBitrate();
+  atualizarBotaoDeQualidade();
+  status.textContent = prioridadeDeVideo === 'nitidez'
+    ? 'Prioridade: nitidez. Numa cena cheia de movimento a imagem vai perder quadros, mas para de virar borrão.'
+    : 'Prioridade: fluidez. A imagem se mantém suave e perde detalhe quando a cena enche de movimento.';
+};
+atualizarBotaoDeQualidade();
 
 // ---------- Câmera ----------
 async function alternarCamera() {
@@ -1811,7 +1938,10 @@ async function capturarTela() {
     stream = await navigator.mediaDevices.getDisplayMedia(restricoes);
     status.textContent = 'Tela compartilhada sem áudio: este navegador não captura som da tela.';
   }
-  stream.getVideoTracks().forEach(track => { track.contentHint = 'motion'; });
+  // A dica segue a prioridade escolhida: uma tela nova nao pode desfazer a escolha.
+  stream.getVideoTracks().forEach(track => {
+    track.contentHint = prioridadeDeVideo === 'nitidez' ? 'detail' : 'motion';
+  });
 
   if (plano === 'agente' || plano === 'helper') {
     await iniciarAudioDoSistema(stream, plano === 'agente' ? 'agente' : 'local');
