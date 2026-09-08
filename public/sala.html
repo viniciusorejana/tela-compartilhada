@@ -86,6 +86,14 @@
       "palco  chat"
       "barra  chat";
   }
+  /* Chat fechado na tela larga: a coluna some e o palco ocupa o lugar. Antes o X so tinha
+     efeito na tela estreita, onde o chat e uma camada por cima -- na tela larga ele e uma
+     coluna do grid, e tirar a classe "aberto" nao mexia em nada. */
+  .app.sem-chat {
+    grid-template-columns: 1fr;
+    grid-template-areas: "topo" "palco" "barra";
+  }
+  .app.sem-chat .chat { display: none; }
 
   .topbar {
     grid-area: topo; display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -275,7 +283,9 @@
     display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px;
     background: var(--danger); color: #fff; border-radius: 9px; font-size: 10px; font-weight: 700; margin-left: 5px;
   }
+  /* Na tela larga o botao so aparece com o chat fechado: e o unico caminho de volta. */
   #chatToggle { display: none; }
+  .app.sem-chat #chatToggle { display: inline-flex; align-items: center; }
 
   /* ---------- Visualizador de imagem ---------- */
   .lightbox {
@@ -2774,17 +2784,24 @@ const BYTES_MAXIMOS_DA_IMAGEM = 700 * 1024;
 let naoLidas = 0;
 
 function chatVisivel() {
+  if (document.querySelector('.app').classList.contains('sem-chat')) return false;
   return window.matchMedia('(min-width: 901px)').matches || chatPanel.classList.contains('aberto');
 }
 function abrirChat() {
   chatPanel.classList.add('aberto');
+  document.querySelector('.app').classList.remove('sem-chat');
   naoLidas = 0;
   chatBadge.classList.add('hidden');
   chatInput.focus();
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
-function fecharChat() { chatPanel.classList.remove('aberto'); }
-chatToggle.onclick = () => (chatPanel.classList.contains('aberto') ? fecharChat() : abrirChat());
+// "aberto" vale na tela estreita, onde o chat e uma camada; "sem-chat" vale na tela larga,
+// onde ele e uma coluna. O X mexe nos dois, entao fechar funciona nas duas larguras.
+function fecharChat() {
+  chatPanel.classList.remove('aberto');
+  document.querySelector('.app').classList.add('sem-chat');
+}
+chatToggle.onclick = () => (chatVisivel() ? fecharChat() : abrirChat());
 chatClose.onclick = fecharChat;
 
 function horaCurta(ms) {
