@@ -156,7 +156,7 @@
   }
   .participant:hover { background: var(--bg-3); }
   .participant.pinned { border-color: var(--accent); }
-  /* O quadradinho da tela nao tem microfone nem volume: e so a imagem e o rotulo. */
+  /* O quadradinho da tela nao tem microfone: tem a imagem, o rotulo e o proprio volume. */
   .participant-tela .avatar-wrap { background: #06080a; }
   .participant-tela .screen-badge { pointer-events: none; }
   .avatar-wrap {
@@ -197,6 +197,10 @@
   .volume-slider { flex: 1; min-width: 0; height: 3px; accent-color: var(--accent); cursor: pointer; }
   .mute-peer-btn { background: transparent; padding: 2px 4px; font-size: 12px; }
   .mute-peer-btn:hover { background: var(--bg-4); }
+  /* Tela compartilhada sem som: os controles ficam a vista, mas apagados. */
+  .volume-slider:disabled { accent-color: var(--bg-4); cursor: default; }
+  .mute-peer-btn:disabled { opacity: .35; cursor: default; }
+  .mute-peer-btn:disabled:hover { background: transparent; }
   .peer-audio, .screen-audio { display: none; }
 
   .status-line { color: var(--muted); font-size: 12px; margin: 0 0 8px; min-height: 16px; line-height: 1.4; }
@@ -1971,7 +1975,7 @@ function criarTileBase(id, name, state, isSelf) {
   if (!isSelf) {
     volumeRow.innerHTML = `
       <input type="range" class="volume-slider" min="0" max="100" value="100">
-      <button class="mute-peer-btn" type="button" title="Silenciar participante">🔊</button>
+      <button class="mute-peer-btn" type="button" title="Silenciar a voz deste participante">🔊</button>
     `;
   }
   participantsEl.appendChild(el);
@@ -2006,14 +2010,12 @@ function criarTileBase(id, name, state, isSelf) {
       // IndexSizeError e o ajuste inteiro se perde.
       const nivel = Math.max(0, Math.min(1, Number(refs.volumeSlider.value) / 100));
       refs.peerAudio.volume = nivel;
-      refs.screenAudio.volume = nivel;
       if (pinned?.id === id) stageVideo.volume = nivel;
     });
     refs.muteBtn.addEventListener('click', () => {
       refs.localMute = !refs.localMute;
       refs.peerAudio.muted = refs.localMute;
       refs.muteBtn.textContent = refs.localMute ? '🔇' : '🔊';
-      atualizarAudioDeTela();
     });
   }
 
@@ -2022,6 +2024,8 @@ function criarTileBase(id, name, state, isSelf) {
 
 function removerTile(id) {
   removerTileDeTela(id);
+  // A pessoa saiu da sala: o volume guardado dela nao serve mais para ninguem.
+  volumeDaTela.delete(id);
   const refs = tiles.get(id);
   if (!refs) return;
   refs.root.remove();
@@ -2048,7 +2052,18 @@ function ligarMidiaDoTile(id) {
 // ---------- Quadradinho da tela ----------
 // Como no Discord, quem compartilha a tela ganha um quadradinho SEPARADO. E o que permite
 // escolher entre a camera e a tela da mesma pessoa: um clique em cada.
-const tilesDeTela = new Map(); // id -> { root, video, nome }
+const tilesDeTela = new Map(); // id -> { root, video, nome, slider, muteBtn }
+
+// Volume do som da tela, guardado por participante e nao dentro do quadradinho: o
+// quadradinho da tela nasce e morre junto com o compartilhamento, entao um volume guardado
+// nele voltaria sozinho para 100 assim que a pessoa parasse e recomecasse a compartilhar.
+const volumeDaTela = new Map(); // id -> { nivel, mudo }
+
+function preferenciaDeTela(id) {
+  let pref = volumeDaTela.get(id);
+  if (!pref) { pref = { nivel: 1, mudo: false }; volumeDaTela.set(id, pref); }
+  return pref;
+}
 
 function nomeDe(id) {
   return id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
@@ -2073,10 +2088,39 @@ function garantirTileDeTela(id) {
   if (daPessoa && daPessoa.parentNode === participantsEl) daPessoa.after(el);
   else participantsEl.appendChild(el);
 
-  const refs = { root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name') };
+  const refs = {
+    root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name'),
+    linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null
+  };
   tilesDeTela.set(id, refs);
 
   el.querySelector('.avatar-wrap').addEventListener('click', () => pin(id, 'screen', true));
+
+  // A propria tela nao toca neste computador (seria o som saindo e voltando), entao os
+  // controles so fazem sentido para quem esta assistindo.
+  if (id !== 'self') {
+    const pref = preferenciaDeTela(id);
+    refs.linhaDeVolume.innerHTML = `
+      <input type="range" class="volume-slider" min="0" max="100" value="${Math.round(pref.nivel * 100)}">
+      <button class="mute-peer-btn" type="button" title="Silenciar o som desta tela">${pref.mudo ? '🔇' : '🔊'}</button>
+    `;
+    refs.slider = refs.linhaDeVolume.querySelector('.volume-slider');
+    refs.muteBtn = refs.linhaDeVolume.querySelector('.mute-peer-btn');
+
+    refs.slider.addEventListener('input', () => {
+      // volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
+      // IndexSizeError e o ajuste inteiro se perde.
+      pref.nivel = Math.max(0, Math.min(1, Number(refs.slider.value) / 100));
+      // Arrastar o volume para cima quer dizer "quero ouvir": tira do mudo sozinho.
+      if (pref.mudo && pref.nivel > 0) { pref.mudo = false; refs.muteBtn.textContent = '🔊'; }
+      atualizarAudioDeTela();
+    });
+    refs.muteBtn.addEventListener('click', () => {
+      pref.mudo = !pref.mudo;
+      refs.muteBtn.textContent = pref.mudo ? '🔇' : '🔊';
+      atualizarAudioDeTela();
+    });
+  }
   return refs;
 }
 
@@ -2099,6 +2143,17 @@ function atualizarTileDeTela(id) {
   if (stream && refs.video.srcObject !== stream) refs.video.srcObject = stream;
   garantirReproducao(refs.video);
   refs.root.classList.toggle('pinned', pinned?.id === id && pinned.source === 'screen');
+
+  // Da para compartilhar a tela sem som nenhum. Nesse caso os controles ficam apagados, em
+  // vez de sumirem: some a duvida de "abaixei o volume e nao mudou nada".
+  if (refs.slider) {
+    const temSom = Boolean(peers.get(id)?.remoteStreams.screenAudio.getTracks().length);
+    refs.slider.disabled = !temSom;
+    refs.muteBtn.disabled = !temSom;
+    refs.linhaDeVolume.title = temSom
+      ? 'Volume do som desta tela'
+      : 'Esta tela está sendo compartilhada sem som';
+  }
 }
 
 function atualizarTile(id) {
@@ -2207,8 +2262,12 @@ function atualizarAudioDeTela() {
     const emDestaque = pinned?.id === id && pinned.source === 'screen';
     const unicaTelaComSom = comSom.length === 1 && comSom[0] === id;
     const deveTocar = emDestaque || unicaTelaComSom;
-    refs.screenAudio.muted = refs.localMute || !deveTocar;
-    if (deveTocar && !refs.localMute) garantirReproducao(refs.screenAudio);
+    // O mudo do participante vale para a VOZ dele; o som da tela tem o proprio controle, no
+    // quadradinho da tela. Antes os dois andavam juntos e nao dava para calar so a tela.
+    const pref = preferenciaDeTela(id);
+    refs.screenAudio.volume = pref.nivel;
+    refs.screenAudio.muted = pref.mudo || !deveTocar;
+    if (deveTocar && !pref.mudo) garantirReproducao(refs.screenAudio);
   });
 }
 
