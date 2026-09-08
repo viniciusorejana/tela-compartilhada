@@ -29,6 +29,11 @@
   }
   button:hover { background: #4b93f8; }
   .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
+  .falha {
+    background: #3a1410; border: 1px solid #7c2d20; color: #ffb4a4;
+    border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 16px;
+  }
+  .falha[hidden] { display: none; }
   .dica { margin-top: 18px; padding-top: 16px; border-top: 1px solid #1e2833; font-size: 12px; color: #93a3b3; }
   code { background: #070b0f; padding: 2px 6px; border-radius: 5px; font-size: 11px; }
 </style>
@@ -38,6 +43,8 @@
     <h1>Endereço da sala</h1>
     <p>O endereço do servidor que hospeda a sala. Fica guardado — só é perguntado uma vez.</p>
 
+    <div class="falha" id="falha" hidden></div>
+
     <label for="endereco">Endereço</label>
     <input id="endereco" type="text" placeholder="http://192.168.0.10:3000" autofocus>
     <button id="entrar" type="button">Abrir</button>
@@ -45,13 +52,29 @@
 
     <div class="dica">
       No computador que roda o servidor, use <code>http://localhost:3000</code>.
-      Nos outros, o IP dessa máquina na rede — por exemplo <code>http://192.168.0.10:3000</code>.
+      Nos outros, o IP dessa máquina na rede — por exemplo <code>http://192.168.0.10:3000</code>,
+      ou o endereço público, se houver.
+      <br><br>
+      Para voltar aqui depois: <code>Ctrl+Shift+S</code>.
     </div>
   </div>
 
 <script>
   const campo = document.getElementById('endereco');
   const erro = document.getElementById('erro');
+
+  // Quando a página anterior não carregou, o motivo vem junto -- e o endereço tentado volta
+  // preenchido, porque quase sempre ele está certo e o servidor é que estava fora do ar.
+  const parametros = new URLSearchParams(location.search);
+  const anterior = parametros.get('anterior') || '';
+  const falhou = parametros.get('erro') || '';
+  if (anterior) campo.value = anterior;
+  if (falhou) {
+    const faixa = document.getElementById('falha');
+    faixa.hidden = false;
+    faixa.textContent = 'Não foi possível abrir o endereço anterior: ' + falhou
+      + '. Confira se o servidor está rodando ("npm start" na máquina que hospeda) e tente de novo.';
+  }
 
   async function abrir() {
     let valor = campo.value.trim();

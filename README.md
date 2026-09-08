@@ -129,7 +129,12 @@ npm start
 ```
 
 Na primeira vez ele pergunta o endereco do servidor (`http://localhost:3000` na maquina que o
-hospeda, ou o IP dela na rede para os outros) e guarda a resposta.
+hospeda, o IP dela na rede para os outros, ou o endereco publico) e guarda a resposta.
+
+O endereco so e guardado **depois** de a pagina carregar. Se ele nao abrir -- servidor fora do
+ar, endereco errado --, o aplicativo volta para a tela de endereco dizendo o motivo, com o que
+foi digitado ja preenchido. Para trocar de servidor a qualquer momento: **Ctrl+Shift+S** (a barra
+de menu fica escondida; `Alt` mostra).
 
 ### Gerar o executavel
 

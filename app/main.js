@@ -14,7 +14,7 @@
 // A interface não é copiada para cá: a janela carrega a mesma URL do servidor. Uma
 // interface só, um lugar para manter.
 
-const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -35,6 +35,23 @@ function salvarConfig(dados) {
 
 let janela = null;
 let agente = null;
+// Endereço que está sendo tentado agora. Só vira configuração se a página carregar.
+let enderecoPendente = null;
+
+function mostrarTelaDeEndereco(erro, anterior) {
+  if (!janela) return;
+  enderecoPendente = null;
+  const consulta = {};
+  if (erro) consulta.erro = erro;
+  if (anterior) consulta.anterior = anterior;
+  janela.loadFile(path.join(__dirname, 'endereco.html'), { query: consulta });
+}
+
+function irParaEndereco(url) {
+  if (!janela) return;
+  enderecoPendente = url;
+  janela.loadURL(url);
+}
 
 // ---------------------------------------------------------------- janela principal
 function criarJanela() {
@@ -58,8 +75,26 @@ function criarJanela() {
     }
   });
 
+  // Um endereço só é guardado depois de carregar de verdade. Guardar antes prendia a pessoa
+  // numa página quebrada -- e, sem tela de endereço, sem forma de corrigir: foi o que
+  // aconteceu quando o servidor estava fora do ar no momento em que o endereço foi digitado.
+  janela.webContents.on('did-finish-load', () => {
+    if (!enderecoPendente) return;
+    salvarConfig({ endereco: enderecoPendente });
+    enderecoPendente = null;
+  });
+
+  janela.webContents.on('did-fail-load', (evento, codigo, descricao, urlQueFalhou, ehJanelaPrincipal) => {
+    // -3 é navegação abortada (a própria troca de página), não é falha.
+    if (!ehJanelaPrincipal || codigo === -3) return;
+    const tentado = enderecoPendente || urlQueFalhou;
+    // O endereço anterior que funcionava continua guardado: o servidor pode só estar fora do
+    // ar por um momento, e apagar a configuração obrigaria a redigitar por nada.
+    mostrarTelaDeEndereco(`${descricao || 'falha ao carregar'} (${codigo})`, tentado);
+  });
+
   const config = lerConfig();
-  if (config.endereco) janela.loadURL(config.endereco);
+  if (config.endereco) irParaEndereco(config.endereco);
   else janela.loadFile(path.join(__dirname, 'endereco.html'));
 
   // Link externo abre no navegador de verdade, não dentro da sala.
@@ -193,17 +228,51 @@ ipcMain.handle('endereco:definir', (evento, endereco) => {
   let alvo;
   try { alvo = new URL(String(endereco)); } catch (_) { return { ok: false }; }
   if (alvo.protocol !== 'http:' && alvo.protocol !== 'https:') return { ok: false };
-  salvarConfig({ endereco: alvo.toString() });
-  if (janela) janela.loadURL(alvo.toString());
+  irParaEndereco(alvo.toString());
   return { ok: true };
 });
 
 // Serve para voltar à tela de endereço sem precisar apagar arquivo nenhum.
 ipcMain.handle('endereco:esquecer', () => {
-  salvarConfig({});
-  if (janela) janela.loadFile(path.join(__dirname, 'endereco.html'));
+  mostrarTelaDeEndereco('', lerConfig().endereco || '');
   return { ok: true };
 });
+
+// ---------------------------------------------------------------- menu
+// A barra fica escondida (Alt mostra), mas os atalhos valem sempre. Sem isto, um endereço
+// que parou de funcionar não teria como ser trocado de dentro do aplicativo.
+function instalarMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'Sala',
+      submenu: [
+        {
+          label: 'Trocar de servidor...',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => mostrarTelaDeEndereco('', lerConfig().endereco || '')
+        },
+        { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => janela?.reload() },
+        { type: 'separator' },
+        {
+          label: 'Ferramentas de desenvolvedor',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => janela?.webContents.toggleDevTools()
+        },
+        { type: 'separator' },
+        { role: 'quit', label: 'Sair' }
+      ]
+    },
+    {
+      label: 'Editar',
+      submenu: [
+        { role: 'cut', label: 'Recortar' },
+        { role: 'copy', label: 'Copiar' },
+        { role: 'paste', label: 'Colar' },
+        { role: 'selectAll', label: 'Selecionar tudo' }
+      ]
+    }
+  ]));
+}
 
 // ---------------------------------------------------------------- ciclo de vida
 // Duas janelas do mesmo aplicativo brigariam pelo mesmo agente e pelo mesmo token.
@@ -217,6 +286,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    instalarMenu();
     instalarSeletorDeTela();
     criarJanela();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
