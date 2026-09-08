@@ -218,6 +218,24 @@ wssAgentes.on('connection', (ws) => {
 // processo nativo, entao nada de caminho, aspas ou espaco esquisito.
 const EXECUTAVEL_VALIDO = /^[A-Za-z0-9._+-]{1,60}\.exe$/;
 
+// A escolha de audio de uma pessoa. Tres modos, e so estes:
+//   excluir      todo o som, menos um programa (vazio = o navegador dela)
+//   incluir      SOMENTE o som de um programa
+//   excluir-pid  todo o som, menos a arvore de um PID -- o modo do aplicativo proprio
+const MODOS_DE_AUDIO = ['excluir', 'incluir', 'excluir-pid'];
+
+function escolhaLimpa(bruta) {
+  const dados = bruta && typeof bruta === 'object' ? bruta : {};
+  const modo = MODOS_DE_AUDIO.includes(dados.modo) ? dados.modo : 'excluir';
+  const executavel = String(dados.executavel || '').slice(0, 120);
+  const pid = Number(dados.pid);
+  if (executavel && !EXECUTAVEL_VALIDO.test(executavel)) return null;
+  // PID vem de um processo que existe de verdade: inteiro positivo e dentro da faixa.
+  if (modo === 'excluir-pid' && (!Number.isInteger(pid) || pid <= 0 || pid > 0xFFFFFFFF)) return null;
+  if (modo === 'incluir' && !executavel) return null;
+  return { modo, executavel, pid: modo === 'excluir-pid' ? pid : 0 };
+}
+
 // Pergunta ao helper quais programas tem audio nesta maquina. E o mesmo codigo que o
 // agente usa; a diferenca e so quem executa.
 function listarAplicativosLocais(familia) {
@@ -462,35 +480,44 @@ io.on('connection', (socket) => {
     await iniciarCapturaLocal(socket, familiaPedida);
   });
 
-  // Sobe (ou refaz) a captura local excluindo UM programa: o escolhido pela pessoa ou,
-  // por padrao, o navegador dela. Quem descobre a raiz da arvore agora e o proprio helper,
-  // pelo nome do executavel -- some a volta pelo PowerShell.
+  // Sobe (ou refaz) a captura local com a escolha da pessoa. Quem descobre a raiz da arvore
+  // e o proprio helper, pelo nome do executavel ou pelo PID -- some a volta pelo PowerShell.
   async function iniciarCapturaLocal(socket, familia) {
-    const escolhido = socket.data.excluirExecutavel;
-    const executavel = (escolhido && EXECUTAVEL_VALIDO.test(escolhido))
-      ? escolhido
-      : FAMILIAS_DE_NAVEGADOR[familia];
-    if (!executavel) {
-      socket.emit('audio-error', 'Nao foi possivel identificar o programa a excluir do audio.');
-      return;
+    const escolha = socket.data.escolhaDeAudio || { modo: 'excluir', executavel: '', pid: 0 };
+    let argumentos;
+    let alvo;
+
+    if (escolha.modo === 'excluir-pid') {
+      argumentos = ['--excluir-pid', String(escolha.pid)];
+      alvo = `pid ${escolha.pid}`;
+    } else {
+      // No modo "incluir" nao existe padrao: incluir o navegador por engano mandaria para a
+      // sala exatamente o que a sala acabou de tocar.
+      const executavel = escolha.executavel || (escolha.modo === 'incluir' ? '' : FAMILIAS_DE_NAVEGADOR[familia]);
+      if (!executavel) {
+        socket.emit('audio-error', 'Nao foi possivel identificar o programa do audio.');
+        return;
+      }
+      argumentos = [escolha.modo === 'incluir' ? '--incluir' : '--excluir', executavel];
+      alvo = executavel;
     }
 
     pararCapturaAudio(socket.id);
-    const capture = spawn(HELPER_PATH, ['--excluir', executavel], {
+    const capture = spawn(HELPER_PATH, argumentos, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
     const captures = [capture];
     audioCaptureProcesses.set(socket.id, captures);
     misturarAudio(socket, captures);
-    console.log(`Audio do sistema para ${socket.id}, excluindo a arvore de ${executavel}.`);
+    console.log(`Audio do sistema para ${socket.id}: ${argumentos[0]} ${alvo}.`);
 
     capture.stderr.on('data', (chunk) => console.error(`Audio helper: ${chunk}`));
     capture.on('close', (codigo) => {
       if (audioCaptureProcesses.get(socket.id)?.includes(capture)) {
         audioCaptureProcesses.set(socket.id, audioCaptureProcesses.get(socket.id).filter(item => item !== capture));
       }
-      if (codigo === 2) socket.emit('audio-error', `O programa ${executavel} nao esta aberto.`);
+      if (codigo === 2) socket.emit('audio-error', `O programa ${alvo} nao esta aberto.`);
     });
     capture.on('error', (error) => {
       console.error(`Nao foi possivel iniciar o audio helper: ${error.message}`);
@@ -533,26 +560,37 @@ io.on('connection', (socket) => {
     if (!resposta || !Array.isArray(resposta.lista)) return;
     socket.emit('agente-aplicativos', {
       lista: resposta.lista.slice(0, 40),
-      atual: socket.data.excluirExecutavel || String(resposta.atual || '')
+      atual: socket.data.escolhaDeAudio?.executavel || String(resposta.atual || ''),
+      modo: socket.data.escolhaDeAudio?.modo || 'excluir'
     });
   });
 
-  socket.on('agente-excluir', (executavel, familia) => {
-    const token = socket.data.tokenAgente;
-    if (!token) return;
-    // Nome de arquivo simples: nada de caminho, para o agente so procurar por nome.
-    const limpo = String(executavel || '').slice(0, 120);
-    if (limpo && !EXECUTAVEL_VALIDO.test(limpo)) return;
-    comandarAgente(token, { acao: 'excluir', executavel: limpo, familia: familiaLimpa(familia) });
-  });
+  // Uma escolha so, para os dois caminhos de captura: o agente no PC da pessoa e o helper
+  // aqui no servidor. Antes eram dois eventos com nome de "excluir", que deixou de descrever
+  // o que acontece desde que existe o modo "somente este programa".
+  socket.on('audio-escolha', async (bruta) => {
+    const escolha = escolhaLimpa(bruta);
+    if (!escolha) return;
+    const familia = familiaLimpa(bruta && bruta.familia);
 
-  // Mesma escolha, no caminho do helper local. Guardada por socket, para valer na proxima
-  // captura -- e aplicada na hora quando ja existe uma em andamento.
-  socket.on('helper-excluir', async (executavel, familia) => {
-    const limpo = String(executavel || '').slice(0, 120);
-    if (limpo && !EXECUTAVEL_VALIDO.test(limpo)) return;
-    socket.data.excluirExecutavel = limpo;
-    if (audioCaptureProcesses.has(socket.id)) await iniciarCapturaLocal(socket, familiaLimpa(familia));
+    const token = socket.data.tokenAgente;
+    if (token && agentesPorToken.has(token)) {
+      // "escolha" e uma acao nova. Um agente antigo simplesmente a ignora -- e nao faz nada,
+      // que e o unico desfecho seguro: entender "somente este programa" como "todos menos
+      // este" seria fazer o oposto do pedido, e devolver eco para a sala inteira.
+      comandarAgente(token, {
+        acao: 'escolha',
+        modo: escolha.modo,
+        executavel: escolha.executavel,
+        // Texto de proposito: o leitor de JSON do agente so le valor entre aspas.
+        pid: String(escolha.pid || ''),
+        familia
+      });
+      return;
+    }
+
+    socket.data.escolhaDeAudio = escolha;
+    if (audioCaptureProcesses.has(socket.id)) await iniciarCapturaLocal(socket, familia);
   });
 
   socket.on('audio-stop', () => {

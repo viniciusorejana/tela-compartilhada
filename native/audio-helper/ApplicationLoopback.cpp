@@ -47,21 +47,47 @@ int wmain(int argc, wchar_t* argv[])
         return 0;
     }
 
-    // Exclusao por NOME do programa: o helper mesmo descobre a raiz da arvore. Antes quem
-    // descobria era o servidor, por PowerShell, o que exigia montar um filtro com texto
-    // vindo de fora -- agora nao passa mais nome nenhum para um shell.
-    //   ApplicationLoopback.exe --excluir chrome.exe
-    if (argc >= 3 && wcscmp(argv[1], L"--excluir") == 0)
+    // Captura por NOME do programa ou por PID; o helper mesmo descobre a raiz da arvore.
+    // Antes quem descobria era o servidor, por PowerShell, o que exigia montar um filtro
+    // com texto vindo de fora -- agora nao passa mais nome nenhum para um shell.
+    //
+    //   --excluir     chrome.exe   todo o som do computador, menos o desse programa
+    //   --incluir     jogo.exe     SOMENTE o som desse programa
+    //   --excluir-pid 1234         todo o som, menos o dessa arvore de processos
+    //
+    // O modo "incluir" existe porque a API do Windows aceita UM alvo, e nao da para somar
+    // duas exclusoes: misturar audio e uniao, nao intersecao. Quem precisa deixar dois
+    // programas de fora (a voz num aplicativo e o cliente noutro) tem de dizer o que ENTRA.
+    if (argc >= 3 && (wcscmp(argv[1], L"--excluir") == 0
+                      || wcscmp(argv[1], L"--incluir") == 0
+                      || wcscmp(argv[1], L"--excluir-pid") == 0))
     {
-        const DWORD raiz = ProcessoRaizDe(argv[2]);
-        if (!raiz)
+        const bool porPid = wcscmp(argv[1], L"--excluir-pid") == 0;
+        const bool incluir = wcscmp(argv[1], L"--incluir") == 0;
+
+        DWORD raiz = 0;
+        if (porPid)
         {
-            fwprintf(stderr, L"programa nao encontrado: %s\n", argv[2]);
-            return 2;
+            raiz = wcstoul(argv[2], nullptr, 10);
+            if (!raiz)
+            {
+                fwprintf(stderr, L"pid invalido: %s\n", argv[2]);
+                return 2;
+            }
         }
+        else
+        {
+            raiz = ProcessoRaizDe(argv[2]);
+            if (!raiz)
+            {
+                fwprintf(stderr, L"programa nao encontrado: %s\n", argv[2]);
+                return 2;
+            }
+        }
+
         _setmode(_fileno(stdout), _O_BINARY);
         CLoopbackCapture captura;
-        HRESULT hr = captura.StartCaptureAsync(raiz, false, nullptr);
+        HRESULT hr = captura.StartCaptureAsync(raiz, incluir, nullptr);
         if (FAILED(hr)) { fwprintf(stderr, L"falha ao iniciar a captura: 0x%08x\n", hr); return 3; }
         // Mesma espera do modo antigo: quem encerra e o servidor, matando o processo.
         // (stdin vem fechado no spawn, entao esperar por ele terminaria na hora.)

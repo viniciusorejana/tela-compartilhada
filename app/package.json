@@ -1,0 +1,40 @@
+{
+  "name": "sala-compartilhada-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicativo de mesa da sala compartilhada: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
+  "main": "main.js",
+  "scripts": {
+    "start": "node lancar.js",
+    "empacotar": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.telacompartilhada.app",
+    "productName": "Sala compartilhada",
+    "files": [
+      "main.js",
+      "preload.js",
+      "endereco.html",
+      "escolher.html",
+      "package.json",
+      "lancar.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../native/audio-agent/x64/Release/AgenteAudio.exe",
+        "to": "AgenteAudio.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "SalaCompartilhada.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.2.0"
+  }
+}

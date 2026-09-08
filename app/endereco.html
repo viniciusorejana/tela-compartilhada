@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Sala compartilhada</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    background: #06080a radial-gradient(circle at 50% 30%, #131922 0%, #06080a 70%);
+    color: #e7edf3; font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .cartao {
+    width: 100%; max-width: 460px; background: #0f151b; border: 1px solid #1e2833;
+    border-radius: 14px; padding: 26px;
+  }
+  h1 { font-size: 19px; margin: 0 0 6px; }
+  p { color: #93a3b3; font-size: 13px; margin: 0 0 18px; }
+  label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #263341;
+    background: #070b0f; color: inherit; font: inherit;
+  }
+  input:focus { outline: 2px solid #2f81f7; outline-offset: 1px; }
+  button {
+    width: 100%; margin-top: 14px; padding: 11px; border: 0; border-radius: 8px;
+    background: #2f81f7; color: #fff; font: 600 14px system-ui; cursor: pointer;
+  }
+  button:hover { background: #4b93f8; }
+  .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
+  .dica { margin-top: 18px; padding-top: 16px; border-top: 1px solid #1e2833; font-size: 12px; color: #93a3b3; }
+  code { background: #070b0f; padding: 2px 6px; border-radius: 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="cartao">
+    <h1>Endereço da sala</h1>
+    <p>O endereço do servidor que hospeda a sala. Fica guardado — só é perguntado uma vez.</p>
+
+    <label for="endereco">Endereço</label>
+    <input id="endereco" type="text" placeholder="http://192.168.0.10:3000" autofocus>
+    <button id="entrar" type="button">Abrir</button>
+    <div class="erro" id="erro"></div>
+
+    <div class="dica">
+      No computador que roda o servidor, use <code>http://localhost:3000</code>.
+      Nos outros, o IP dessa máquina na rede — por exemplo <code>http://192.168.0.10:3000</code>.
+    </div>
+  </div>
+
+<script>
+  const campo = document.getElementById('endereco');
+  const erro = document.getElementById('erro');
+
+  async function abrir() {
+    let valor = campo.value.trim();
+    if (!valor) { erro.textContent = 'Digite o endereço.'; return; }
+    // Quem digita "192.168.0.10:3000" quer dizer http://; completar é mais gentil que recusar.
+    if (!/^https?:\/\//i.test(valor)) valor = 'http://' + valor;
+    erro.textContent = '';
+    const resposta = await window.appNativo.definirEndereco(valor);
+    if (!resposta.ok) erro.textContent = 'Endereço inválido. Use algo como http://192.168.0.10:3000';
+  }
+
+  document.getElementById('entrar').onclick = abrir;
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') abrir(); });
+</script>
+</body>
+</html>

@@ -340,6 +340,12 @@
   }
   .agente-download:hover { background: var(--accent-hi); }
   .agente-download[hidden] { display: none !important; }
+  .aviso-eco {
+    background: #3a2a06; border: 1px solid #7c5e10; color: #ffd98a;
+    border-radius: var(--raio); padding: 8px 12px; font-size: 12px; line-height: 1.5;
+  }
+  .aviso-eco.hidden { display: none !important; }
+  .campo-excluir label + label { margin-top: 12px; }
   .campo-excluir { margin-top: 14px; margin-bottom: 0; }
   .campo-excluir[hidden] { display: none !important; }
   .campo-excluir small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
@@ -414,6 +420,7 @@
       </div>
     </div>
 
+    <div class="aviso-eco hidden" id="avisoDeEco"></div>
     <div class="participants" id="participants"></div>
     <p id="status" class="status-line">Conectando...</p>
   </main>
@@ -485,7 +492,13 @@
       <a id="agenteDownload" class="agente-download" href="#" hidden>Baixar o agente (.exe)</a>
     </div>
     <div class="field campo-excluir" id="excluirAppCampo" hidden>
-      <label for="excluirApp">Programa que NÃO será transmitido</label>
+      <label for="modoDeAudio">Som do sistema que vai junto com a tela</label>
+      <select id="modoDeAudio">
+        <option value="excluir">Tudo, menos um programa</option>
+        <option value="incluir">Somente um programa</option>
+        <option value="excluir-pid" hidden>Tudo, menos este aplicativo</option>
+      </select>
+      <label for="excluirApp" id="excluirAppRotulo">Programa que NÃO será transmitido</label>
       <select id="excluirApp"></select>
       <small id="excluirAppDica">Vale na hora, mesmo com a tela já sendo compartilhada.</small>
     </div>
@@ -529,6 +542,9 @@ const leaveBtn = document.getElementById('leaveBtn');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 const enableSoundBtn = document.getElementById('enableSoundBtn');
 const noiseBtn = document.getElementById('noiseBtn');
+const avisoDeEco = document.getElementById('avisoDeEco');
+const modoDeAudioSelect = document.getElementById('modoDeAudio');
+const excluirAppRotulo = document.getElementById('excluirAppRotulo');
 const excluirAppCampo = document.getElementById('excluirAppCampo');
 const excluirApp = document.getElementById('excluirApp');
 const excluirAppDica = document.getElementById('excluirAppDica');
@@ -668,6 +684,8 @@ async function iniciarConexao() {
         chatBadge.classList.add('hidden');
       }
       iniciarMedicaoDeBanda();
+      // O agente precisa saber o modo ANTES de comecar a capturar.
+      enviarEscolhaDeAudio();
       // Acabei de entrar: sou eu quem inicia a negociacao com quem ja estava na sala.
       response.peers.forEach(peer => {
         criarConexaoPar(peer.id, peer.name, peer.state, true);
@@ -689,15 +707,21 @@ async function iniciarConexao() {
         if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
       });
     });
+    ligarAgenteDoAplicativo();
   });
 
-  socket.on('agente-aplicativos', ({ lista, atual }) => {
+  socket.on('agente-aplicativos', ({ lista, atual, modo }) => {
     aplicativosDoAgente = Array.isArray(lista) ? lista : [];
-    if (atual) excluidoAtual = atual;
+    if (atual) appEscolhido = atual;
+    // Um agente anterior a este recurso responde sem o modo. Ele nao vai obedecer a escolha,
+    // e e melhor dizer isso do que deixar a pessoa achar que escolheu.
+    agenteSemModo = audioCapabilities.agenteConectado && modo === undefined;
     desenharAplicativos();
   });
 
   socket.on('agente-status', ({ conectado, portaLocal }) => {
+    // O agente pode ter conectado depois de nos: repete a escolha para ele.
+    if (conectado) setTimeout(enviarEscolhaDeAudio, 0);
     audioCapabilities.agenteConectado = Boolean(conectado);
     audioCapabilities.portaLocalDoAgente = portaLocal || null;
     status.textContent = conectado
@@ -734,6 +758,8 @@ async function iniciarConexao() {
     if (!state.camera) peer.ordem.camera = 0;
     atualizarTile(id);
     avaliarDestaque();
+    // O risco de eco depende de quem mais esta mandando som de tela.
+    avaliarRiscoDeEco();
   });
 
   socket.on('offer', async (fromId, description, mediaInfo) => {
@@ -825,6 +851,7 @@ function meuEstado() {
 
 function enviarEstado() {
   socket?.emit('media-state', meuEstado());
+  avaliarRiscoDeEco();
 }
 
 // ---------- Codec preferido (corrige tela preta ao compartilhar tela+câmera) ----------
@@ -1613,22 +1640,36 @@ function planoDeAudio() {
 // O texto muda conforme o programa escolhido, porque a consequencia muda: excluir o
 // navegador e o caso sem eco; excluir outro programa deixa o navegador entrar na captura,
 // e ai a voz dos outros participantes volta se a conversa for por aqui.
-function textoDoAgente() {
-  const app = aplicativosDoAgente.find(a => a.executavel === excluidoAtual);
-  if (!app || app.padrao) {
-    return 'O agente instalado neste computador vai transmitir todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar marcar nada na janela do Chrome.';
-  }
-  return `O agente vai transmitir todo o áudio do SEU sistema, exceto o de ${app.nome}. `
-       + 'Como o navegador entra na captura, use assim só enquanto a conversa por voz for por fora: '
-       + 'falando por aqui, sua própria sala volta como eco.';
-}
+// O texto muda conforme o modo, porque a consequencia muda: excluir o navegador (ou o
+// aplicativo) e o caso sem eco; excluir outro programa deixa o navegador entrar na captura,
+// e ai tudo que ele toca volta para a sala.
+function textoDaCaptura(quem) {
+  const origem = quem === 'agente'
+    ? 'O agente instalado neste computador vai transmitir'
+    : 'Este computador vai transmitir';
 
-function textoDoHelper() {
-  const app = aplicativosDoAgente.find(a => a.executavel === excluidoAtual);
-  if (!app || app.padrao) {
-    return 'Todo o áudio deste computador será transmitido, exceto o do seu navegador — ou seja, sem a voz dos outros participantes voltando como eco.';
+  if (modoDeAudio === 'excluir-pid') {
+    return `${origem} todo o áudio do sistema, exceto o deste aplicativo. `
+         + 'Como quem toca a sala é o próprio aplicativo, nada volta como eco — e o navegador '
+         + 'continua na captura, então um vídeo aberto nele vai junto normalmente.';
   }
-  return `Todo o áudio deste computador será transmitido, exceto o de ${app.nome}. `
+  if (modoDeAudio === 'incluir') {
+    if (!appEscolhido) {
+      return 'Escolha abaixo o programa cujo som deve ir para a sala. Enquanto nenhum for '
+           + 'escolhido, a tela é compartilhada sem áudio.';
+    }
+    const nome = nomeDoApp(appEscolhido);
+    return `${origem} SOMENTE o áudio de ${nome}. Nada mais do computador vai para a sala: `
+         + 'nem a voz de outro aplicativo, nem esta página. É o modo para quem conversa por fora '
+         + '(Discord, por exemplo) e compartilha tela ao mesmo tempo, porque é a única forma de '
+         + 'deixar os dois de fora.';
+  }
+  const app = aplicativosDoAgente.find(a => a.executavel === appEscolhido);
+  if (!app || app.padrao) {
+    return `${origem} todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar `
+         + 'marcar nada na janela do Chrome.';
+  }
+  return `${origem} todo o áudio do SEU sistema, exceto o de ${app.nome}. `
        + 'Como o navegador entra na captura, use assim só enquanto a conversa por voz for por fora: '
        + 'falando por aqui, sua própria sala volta como eco.';
 }
@@ -1638,8 +1679,8 @@ function atualizarExplicacaoDeAudio() {
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
     aba: 'O áudio da aba escolhida será transmitido. Marque "Compartilhar áudio da guia" na janela do navegador. Como é o áudio só daquela aba, não existe risco de eco.',
-    agente: textoDoAgente(),
-    helper: textoDoHelper(),
+    agente: textoDaCaptura('agente'),
+    helper: textoDaCaptura('helper'),
     'navegador-sistema': 'O áudio do SEU computador será capturado pelo navegador. Marque "Compartilhar áudio do sistema" na janela que abrir — sem isso o Chrome não envia áudio nenhum.'
   };
   echoHint.textContent = textos[plano];
@@ -1677,24 +1718,70 @@ function atualizarCaixaDoAgente(plano) {
   const conectado = Boolean(audioCapabilities.agenteConectado);
   agenteBolinha.classList.toggle('ligado', conectado);
   agenteTitulo.textContent = conectado ? 'Agente de áudio conectado' : 'Agente de áudio não encontrado';
-  const excluindoOutro = aplicativosDoAgente.some(a => a.executavel === excluidoAtual && !a.padrao);
+  const excluindoOutro = modoDeAudio !== 'excluir'
+    || aplicativosDoAgente.some(a => a.executavel === appEscolhido && !a.padrao);
   agenteTexto.textContent = conectado
     ? (excluindoOutro
       ? 'O som do seu computador vai junto com a tela, sem o programa escolhido abaixo.'
       : 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.')
     : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
-  agenteDownload.hidden = conectado;
+  // Dentro do aplicativo o agente vem junto: oferecer o download seria mandar a pessoa
+  // resolver a mao um problema que o proprio aplicativo ja resolve.
+  agenteDownload.hidden = conectado || Boolean(appNativo);
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
+  if (!conectado && appNativo) {
+    agenteTexto.textContent = 'O aplicativo está subindo o agente de áudio. Se esta mensagem '
+      + 'não sair em alguns segundos, o AgenteAudio.exe não foi encontrado ao lado do aplicativo.';
+  }
 }
 
-// ---------- Programa que fica fora da captura ----------
-// O agente exclui UMA arvore de processos do som que envia. Por padrao e o navegador desta
-// pessoa, o que evita o eco. Mas quem conversa por fora (Discord, por exemplo) quer o
-// contrario: excluir o Discord e deixar o navegador entrar. A troca vale na hora -- o
-// agente refaz a captura sozinho, sem interromper o compartilhamento.
+// ---------- O que do som do sistema vai para a transmissao ----------
+// A API do Windows captura com UM alvo: ou tudo menos uma arvore de processos, ou somente
+// ela. Nao da para somar duas exclusoes -- misturar audio e uniao, nao intersecao -- entao
+// quem precisa deixar DOIS programas de fora (a voz no Discord e o navegador que toca a
+// sala) so tem uma saida: dizer o que ENTRA.
+//
+//   excluir      tudo, menos um programa. Padrao: o navegador desta pessoa, que evita o eco.
+//   incluir      somente um programa. E o modo de quem conversa por fora e compartilha tela.
+//   excluir-pid  tudo, menos o aplicativo proprio. So existe rodando pelo aplicativo, que
+//                manda o proprio PID -- e a exclusao que nao depende de acertar nome nenhum.
 let aplicativosDoAgente = [];
-let excluidoAtual = '';
+let appEscolhido = '';
+let modoDeAudio = 'excluir';
+let agenteSemModo = false;   // agente antigo, que nao entende a escolha de modo
 let timerDeAplicativos = null;
+
+// Quando a pagina roda dentro do aplicativo proprio, ele se apresenta com o proprio PID.
+const appNativo = (typeof window !== 'undefined' && window.appNativo) || null;
+if (appNativo?.pid) {
+  modoDeAudio = 'excluir-pid';
+  modoDeAudioSelect.querySelector('option[value="excluir-pid"]').hidden = false;
+}
+modoDeAudioSelect.value = modoDeAudio;
+
+// Pelo aplicativo ninguem baixa nem executa nada a parte: ele mesmo levanta o agente,
+// apontando para esta sala. O agente e o mesmo binario de sempre.
+async function ligarAgenteDoAplicativo() {
+  if (!appNativo?.iniciarAgente) return;
+  const protocolo = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${protocolo}://${location.host}/agente?token=${encodeURIComponent(tokenDoAgente)}`;
+  try {
+    const resposta = await appNativo.iniciarAgente(url);
+    if (!resposta?.rodando && resposta?.motivo === 'nao-encontrado') {
+      status.textContent = 'O aplicativo não encontrou o AgenteAudio.exe ao lado dele, '
+        + 'então o som do sistema não será capturado.';
+    }
+  } catch (_) { /* sem agente: a sala continua funcionando, so sem som do sistema */ }
+}
+
+function enviarEscolhaDeAudio() {
+  socket?.emit('audio-escolha', {
+    modo: modoDeAudio,
+    executavel: modoDeAudio === 'excluir-pid' ? '' : appEscolhido,
+    pid: appNativo?.pid || 0,
+    familia: familiaDoNavegador()
+  });
+}
 
 function pedirAplicativos() {
   const plano = planoDeAudio();
@@ -1703,6 +1790,19 @@ function pedirAplicativos() {
 }
 
 function desenharAplicativos() {
+  // No modo "menos este aplicativo" nao ha nada a escolher: o alvo e o proprio aplicativo.
+  const precisaEscolher = modoDeAudio !== 'excluir-pid';
+  excluirApp.hidden = !precisaEscolher;
+  excluirAppRotulo.hidden = !precisaEscolher;
+  excluirAppRotulo.textContent = modoDeAudio === 'incluir'
+    ? 'Programa cujo som SERÁ transmitido'
+    : 'Programa que NÃO será transmitido';
+  if (!precisaEscolher) {
+    excluirAppDica.textContent = 'O som deste aplicativo fica fora da captura, então a voz e as '
+      + 'telas dos outros não voltam como eco. Todo o resto do computador vai junto — inclusive o navegador.';
+    return;
+  }
+
   const anterior = excluirApp.value;
   excluirApp.innerHTML = '';
 
@@ -1721,6 +1821,11 @@ function desenharAplicativos() {
     return;
   }
 
+  if (agenteSemModo) {
+    excluirAppDica.textContent = 'O agente que está rodando é anterior a este recurso e não obedece '
+      + 'a esta escolha. Baixe e execute o agente de novo para que ela valha.';
+  }
+
   excluirApp.disabled = false;
   for (const app of aplicativosDoAgente) {
     const opcao = document.createElement('option');
@@ -1731,24 +1836,65 @@ function desenharAplicativos() {
     opcao.textContent = app.nome + (marcas.length ? ` — ${marcas.join(', ')}` : '');
     excluirApp.appendChild(opcao);
   }
-  const desejado = excluidoAtual || anterior;
+  const desejado = appEscolhido || anterior;
   if (desejado && aplicativosDoAgente.some(a => a.executavel === desejado)) excluirApp.value = desejado;
 }
 
-excluirApp.onchange = () => {
-  const escolhido = excluirApp.value;
-  excluidoAtual = escolhido;
-  // Quem recebe a ordem depende de quem esta capturando.
-  const evento = audioCapabilities.agenteConectado ? 'agente-excluir' : 'helper-excluir';
-  socket.emit(evento, escolhido, familiaDoNavegador());
-  const app = aplicativosDoAgente.find(a => a.executavel === escolhido);
-  const nome = app ? app.nome : escolhido;
-  excluirAppDica.textContent = app && !app.padrao
-    ? `O som de ${nome} fica fora da transmissão. Vale na hora — mas o navegador passa a entrar, então evite conversar por voz aqui enquanto isso.`
-    : `O som de ${nome} fica fora da transmissão. Vale na hora.`;
-  status.textContent = `O som de ${nome} não será transmitido.`;
+function nomeDoApp(executavel) {
+  const app = aplicativosDoAgente.find(a => a.executavel === executavel);
+  return app ? app.nome : executavel;
+}
+
+modoDeAudioSelect.onchange = () => {
+  modoDeAudio = modoDeAudioSelect.value;
+  // Trocar para "somente" sem alvo mandaria silencio: adota o que estiver selecionado.
+  if (modoDeAudio === 'incluir' && !appEscolhido) appEscolhido = excluirApp.value || '';
+  enviarEscolhaDeAudio();
+  desenharAplicativos();
   atualizarExplicacaoDeAudio();
+  avaliarRiscoDeEco();
 };
+
+excluirApp.onchange = () => {
+  appEscolhido = excluirApp.value;
+  enviarEscolhaDeAudio();
+  const nome = nomeDoApp(appEscolhido);
+  const app = aplicativosDoAgente.find(a => a.executavel === appEscolhido);
+  if (modoDeAudio === 'incluir') {
+    excluirAppDica.textContent = `Só o som de ${nome} vai para a sala. Nada mais do computador é transmitido — nem a voz de outro aplicativo, nem esta página.`;
+    status.textContent = `Somente o som de ${nome} será transmitido.`;
+  } else {
+    excluirAppDica.textContent = app && !app.padrao
+      ? `O som de ${nome} fica fora da transmissão. Vale na hora — mas o navegador passa a entrar, então evite conversar por voz aqui enquanto isso.`
+      : `O som de ${nome} fica fora da transmissão. Vale na hora.`;
+    status.textContent = `O som de ${nome} não será transmitido.`;
+  }
+  atualizarExplicacaoDeAudio();
+  avaliarRiscoDeEco();
+};
+
+// ---------- Aviso de eco entre telas ----------
+// Cenario que so aparece com gente demais compartilhando: se o meu navegador entra na
+// captura (porque quem esta excluido e outro programa) e ele esta tocando a tela de outra
+// pessoa, eu devolvo o som dela para a sala. Com duas pessoas compartilhando som de tela ao
+// mesmo tempo, o eco e certo -- entao vale dizer antes, e nao depois de todo mundo ouvir.
+function avaliarRiscoDeEco() {
+  const plano = planoDeAudio();
+  const capturaNativa = plano === 'agente' || plano === 'helper';
+  const navegadorNaCaptura = capturaNativa && modoDeAudio === 'excluir'
+    && aplicativosDoAgente.some(a => a.executavel === appEscolhido && !a.padrao);
+
+  const euMando = Boolean(meuEstado().screenAudio);
+  const outrosQueMandam = [];
+  peers.forEach((peer, id) => { if (peer.state?.screenAudio) outrosQueMandam.push(nomeDe(id)); });
+
+  const emRisco = navegadorNaCaptura && euMando && outrosQueMandam.length > 0;
+  avisoDeEco.classList.toggle('hidden', !emRisco);
+  if (!emRisco) return;
+  avisoDeEco.textContent = `Eco à vista: o som da sua tela inclui este navegador, que está tocando a tela de `
+    + `${outrosQueMandam.join(', ')}. O som deles volta para a sala pela sua transmissão. `
+    + `Para resolver, troque o modo para "Somente um programa" e escolha o que você quer transmitir.`;
+}
 
 // Enquanto o painel esta aberto a lista se mantem viva: um programa que comeca a tocar
 // agora aparece sozinho, sem precisar fechar e abrir.

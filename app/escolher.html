@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>O que você quer compartilhar?</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px; background: #0b0e11; color: #e7edf3;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p { color: #93a3b3; font-size: 12px; margin: 0 0 16px; }
+  .grupo-titulo {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #7e8c9a; margin: 18px 0 8px;
+  }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .fonte {
+    background: #0f151b; border: 2px solid transparent; border-radius: 10px; padding: 8px;
+    cursor: pointer; text-align: left; color: inherit; font: inherit; overflow: hidden;
+  }
+  .fonte:hover { background: #141c24; border-color: #2f81f7; }
+  .fonte:focus-visible { outline: 2px solid #2f81f7; outline-offset: 2px; }
+  .fonte img {
+    width: 100%; aspect-ratio: 16 / 9; object-fit: contain;
+    background: #06080a; border-radius: 6px; display: block;
+  }
+  .fonte span {
+    display: block; margin-top: 7px; font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .vazio { color: #93a3b3; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>O que você quer compartilhar?</h1>
+  <p>O som não vem daqui: quem cuida dele é o agente, com a escolha feita na sala.</p>
+  <div id="conteudo"><p class="vazio">Procurando telas e janelas...</p></div>
+
+<script>
+  // Página local do próprio aplicativo, sem nada remoto: aqui o Node é seguro.
+  const { ipcRenderer } = require('electron');
+  const conteudo = document.getElementById('conteudo');
+
+  function montarGrupo(titulo, fontes) {
+    if (!fontes.length) return null;
+    const bloco = document.createDocumentFragment();
+    const cabecalho = document.createElement('div');
+    cabecalho.className = 'grupo-titulo';
+    cabecalho.textContent = titulo;
+    bloco.appendChild(cabecalho);
+
+    const grade = document.createElement('div');
+    grade.className = 'grade';
+    for (const fonte of fontes) {
+      const botao = document.createElement('button');
+      botao.className = 'fonte';
+      botao.type = 'button';
+      const imagem = document.createElement('img');
+      imagem.src = fonte.miniatura;
+      imagem.alt = '';
+      const nome = document.createElement('span');
+      nome.textContent = fonte.nome;
+      botao.append(imagem, nome);
+      botao.onclick = () => ipcRenderer.send('escolher:pronto', fonte.id);
+      grade.appendChild(botao);
+    }
+    bloco.appendChild(grade);
+    return bloco;
+  }
+
+  ipcRenderer.on('escolher:fontes', (evento, fontes) => {
+    conteudo.innerHTML = '';
+    if (!fontes.length) {
+      conteudo.innerHTML = '<p class="vazio">Nenhuma tela ou janela foi encontrada.</p>';
+      return;
+    }
+    const telas = montarGrupo('Telas', fontes.filter(f => f.tipo === 'tela'));
+    const janelas = montarGrupo('Janelas', fontes.filter(f => f.tipo === 'janela'));
+    if (telas) conteudo.appendChild(telas);
+    if (janelas) conteudo.appendChild(janelas);
+    const primeiro = conteudo.querySelector('.fonte');
+    if (primeiro) primeiro.focus();
+  });
+
+  // Esc desiste, como em qualquer seletor.
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+</script>
+</body>
+</html>

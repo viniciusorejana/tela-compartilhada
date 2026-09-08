@@ -86,6 +86,66 @@ botao para trocar para compartilhamento de aba.
 > a captura nativa, abra a sala por `http://localhost:3000/{codigo}/sala` no proprio computador,
 > mesmo que os outros entrem pelo endereco publico. A interface mostra esse aviso sozinha.
 
+### Escolhendo o que do som do sistema vai junto
+
+O Windows captura audio de processo com **um** alvo por captura: ou tudo **menos** uma arvore
+de processos, ou **somente** ela. Nao da para somar duas exclusoes -- misturar audio e uniao,
+nao intersecao -- e e isso que faz existirem tres modos, no painel de compartilhar tela:
+
+| Modo | O que vai para a sala | Quando usar |
+| --- | --- | --- |
+| **Tudo, menos um programa** (padrao) | Todo o som, menos o navegador desta pessoa | A conversa por voz e aqui. E o caso sem eco. |
+| **Somente um programa** | So o som do programa escolhido | A conversa por voz e por fora (Discord) **e** voce compartilha tela |
+| **Tudo, menos este aplicativo** | Todo o som, menos o aplicativo de mesa | Aparece so rodando pelo aplicativo (veja abaixo) |
+
+**Por que "somente um programa" existe.** Com voz no Discord e tela compartilhada por aqui, as
+duas escolhas do modo padrao quebram: excluindo o Discord, o navegador entra na captura e
+devolve para a sala a tela que os outros estao compartilhando; excluindo o navegador, o Discord
+entra e a voz de todo mundo volta. Sao os dois que precisam ficar de fora, e a unica forma de
+conseguir isso e dizer o que **entra**. Escolha o jogo (ou o que estiver tocando) e nada mais sai.
+
+A sala tambem **avisa antes** de o eco acontecer: se voce esta mandando som de tela, alguem mais
+tambem esta, e o modo escolhido deixa o navegador dentro da captura, aparece uma faixa dizendo
+quem esta voltando como eco e o que fazer.
+
+## Aplicativo de mesa (opcional, Windows)
+
+No navegador o Chrome faz dois papeis ao mesmo tempo: e o **cliente** (toca a voz e as telas dos
+outros) e e uma **fonte legitima** de som (um video que voce quer compartilhar). Como a captura
+exclui uma arvore de processos so, os dois papeis nao cabem na mesma escolha -- ou voce perde o
+Chrome como fonte, ou ele devolve para a rede o que acabou de receber dela.
+
+O aplicativo de mesa desfaz o conflito: o cliente passa a ser ele. Ele manda o proprio PID para o
+agente, que exclui essa arvore da captura, e o navegador volta a ser apenas mais um programa que
+faz som -- podendo ir inteiro para a transmissao.
+
+A interface nao e duplicada: a janela carrega a mesma URL do servidor que o navegador carregaria.
+O aplicativo tambem sobe o `AgenteAudio.exe` sozinho, entao ninguem precisa baixar nada a parte.
+
+```bash
+cd app
+npm install
+npm start
+```
+
+Na primeira vez ele pergunta o endereco do servidor (`http://localhost:3000` na maquina que o
+hospeda, ou o IP dela na rede para os outros) e guarda a resposta.
+
+Para gerar o executavel portatil, sem instalacao:
+
+```bash
+cd app
+npx electron-builder --win portable
+```
+
+O `AgenteAudio.exe` compilado vai junto no pacote. Vale o mesmo alerta de antivirus do agente --
+e um executavel sem assinatura, e um maior ainda tende a chamar mais atencao da heuristica.
+
+> **Rodando pelo terminal do VS Code:** ele exporta `ELECTRON_RUN_AS_NODE=1`, e com essa variavel
+> o Electron sobe como Node puro -- nenhuma janela abre e o erro nao tem relacao aparente com a
+> causa. O `npm start` daqui limpa a variavel sozinho; se voce chamar `electron .` na mao, limpe-a
+> antes.
+
 ## Agente de audio (para qualquer participante, em qualquer computador)
 
 O helper acima roda na maquina do servidor, entao serve so ao host. Para que **qualquer
@@ -403,6 +463,12 @@ tela-compartilhada/
 ├── build-helper.ps1                # build Release x64 do helper C++
 ├── native/audio-helper/            # captura de audio por processo no Windows
 ├── native/audio-agent/             # agente que cada participante roda no proprio PC
+├── app/                            # aplicativo de mesa (Electron): a sala fora do navegador
+│   ├── main.js                     # janela, seletor de tela e ciclo de vida do agente
+│   ├── preload.js                  # a ponte estreita entre a sala e o aplicativo
+│   ├── lancar.js                   # sobe o Electron com o ambiente limpo
+│   ├── endereco.html               # onde fica o servidor (perguntado uma vez)
+│   └── escolher.html               # seletor de tela/janela com miniaturas
 └── public/
     ├── index.html                  # criar/entrar em uma sala
     └── sala.html                   # sala de voz/video (mesh WebRTC)

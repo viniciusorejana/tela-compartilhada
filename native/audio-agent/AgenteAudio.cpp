@@ -344,33 +344,37 @@ static void PararCaptura()
     std::wcout << L"[agente] captura parada\n";
 }
 
-// Qual programa fica de fora da captura. Vazio = o navegador de quem esta compartilhando,
-// que e o padrao e evita o eco. Escolher outro serve para quem conversa por fora (Discord,
-// por exemplo) e quer o resto do som do computador na transmissao.
+// O que vai (ou nao vai) para a transmissao. Tres modos:
+//
+//   "excluir"      todo o som do computador, menos um programa. Vazio = o navegador de quem
+//                  compartilha, que e o padrao e evita o eco da propria sala.
+//   "incluir"      SOMENTE o som de um programa. E a unica saida para quem precisa deixar
+//                  DOIS programas de fora -- a API do Windows aceita um alvo so, e nao da
+//                  para somar duas exclusoes (misturar audio e uniao, nao intersecao).
+//   "excluir-pid"  todo o som, menos a arvore de um PID. E o modo do aplicativo proprio:
+//                  ele manda o proprio PID e nao depende de acertar nome de executavel.
 static std::mutex g_mutexDaEscolha;
-static std::wstring g_executavelExcluido;
+static std::wstring g_executavelEscolhido;
+static std::string g_modoDeAudio = "excluir";
+static DWORD g_pidExcluido = 0;
 static std::string g_ultimaFamilia;
 
 static void EnviarListaDeAplicativos(const std::string& familia)
 {
     std::wstring escolhidoAgora;
+    std::string modoAgora;
     {
         std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
-        escolhidoAgora = g_executavelExcluido;
+        escolhidoAgora = g_executavelEscolhido;
+        modoAgora = g_modoDeAudio;
     }
     const std::wstring navegador = ExecutavelDaFamilia(familia);
-    if (escolhidoAgora.empty()) escolhidoAgora = navegador;
+    if (escolhidoAgora.empty() && modoAgora == "excluir") escolhidoAgora = navegador;
 
     const std::string corpo = ListaEmJson(AplicativosComAudioComNavegador(navegador), escolhidoAgora);
-    // O corpo ja vem como objeto JSON; basta anunciar o evento junto.
-    g_conexao.EnviarTexto("{\"evento\":\"aplicativos\"," + corpo.substr(1));
-}
-
-static std::wstring ExecutavelParaExcluir(const std::string& familia)
-{
-    std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
-    if (!g_executavelExcluido.empty()) return g_executavelExcluido;
-    return ExecutavelDaFamilia(familia);
+    // O corpo ja vem como objeto JSON; basta anunciar o evento e o modo junto.
+    g_conexao.EnviarTexto("{\"evento\":\"aplicativos\",\"modo\":\"" + modoAgora + "\","
+                          + corpo.substr(1));
 }
 
 static void IniciarCaptura(const std::string& familia)
@@ -378,18 +382,54 @@ static void IniciarCaptura(const std::string& familia)
     PararCaptura();
     g_ultimaFamilia = familia;
 
-    const std::wstring executavel = ExecutavelParaExcluir(familia);
-    if (executavel.empty())
+    std::string modo;
+    std::wstring executavel;
+    DWORD pidDoAplicativo = 0;
     {
-        g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"navegador desconhecido\"}");
-        return;
+        std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
+        modo = g_modoDeAudio;
+        executavel = g_executavelEscolhido;
+        pidDoAplicativo = g_pidExcluido;
     }
 
-    const DWORD pid = ProcessoRaizDe(executavel);
-    if (!pid)
+    DWORD pid = 0;
+    bool incluir = false;
+    std::wstring alvo;
+
+    if (modo == "excluir-pid")
     {
-        g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"programa escolhido nao esta aberto\"}");
-        return;
+        pid = pidDoAplicativo;
+        if (!pid)
+        {
+            g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"pid do aplicativo invalido\"}");
+            return;
+        }
+        alvo = L"pid " + std::to_wstring(pid);
+    }
+    else
+    {
+        incluir = (modo == "incluir");
+        if (executavel.empty())
+        {
+            if (incluir)
+            {
+                g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"escolha o programa que sera transmitido\"}");
+                return;
+            }
+            executavel = ExecutavelDaFamilia(familia);
+        }
+        if (executavel.empty())
+        {
+            g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"navegador desconhecido\"}");
+            return;
+        }
+        pid = ProcessoRaizDe(executavel);
+        if (!pid)
+        {
+            g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"programa escolhido nao esta aberto\"}");
+            return;
+        }
+        alvo = executavel;
     }
 
     DefinirDestinoPcm(EnfileirarPcm);
@@ -399,8 +439,7 @@ static void IniciarCaptura(const std::string& familia)
         g_conexao.EnviarTexto("{\"evento\":\"erro\",\"mensagem\":\"falha ao criar a captura\"}");
         return;
     }
-    // false = excluir a arvore de processos indicada (todo o som, menos o navegador).
-    const HRESULT hr = g_captura->StartCaptureAsync(pid, false, nullptr);
+    const HRESULT hr = g_captura->StartCaptureAsync(pid, incluir, nullptr);
     if (FAILED(hr))
     {
         g_captura.Reset();
@@ -410,10 +449,11 @@ static void IniciarCaptura(const std::string& familia)
     }
 
     g_capturando = true;
-    g_conexao.EnviarTexto("{\"evento\":\"capturando\",\"excluindo\":\""
-                          + EscaparJson(ParaUtf8(executavel)) + "\"}");
-    std::wcout << L"[agente] capturando o audio do sistema, excluindo o processo " << pid
-               << L" (" << executavel << L") e seus filhos\n";
+    g_conexao.EnviarTexto("{\"evento\":\"capturando\",\"modo\":\"" + modo + "\",\"alvo\":\""
+                          + EscaparJson(ParaUtf8(alvo)) + "\"}");
+    std::wcout << L"[agente] capturando o audio do sistema, "
+               << (incluir ? L"somente" : L"menos") << L" o processo " << pid
+               << L" (" << alvo << L") e seus filhos\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -821,14 +861,21 @@ int wmain(int argc, wchar_t* argv[])
             if (acao == "iniciar") IniciarCaptura(ValorDeTexto(mensagem, "familia"));
             else if (acao == "parar") PararCaptura();
             else if (acao == "listar-aplicativos") EnviarListaDeAplicativos(ValorDeTexto(mensagem, "familia"));
-            else if (acao == "excluir")
+            else if (acao == "excluir" || acao == "escolha")
             {
                 // Troca ao vivo: se ja estiver capturando, a captura e refeita na hora com
                 // o novo alvo. E o que permite passar o microfone do Discord para o
                 // navegador no meio da conversa, sem parar o compartilhamento.
                 {
                     std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
-                    g_executavelExcluido = ParaWide(ValorDeTexto(mensagem, "executavel"));
+                    const std::string modo = ValorDeTexto(mensagem, "modo");
+                    g_modoDeAudio = (modo == "incluir" || modo == "excluir-pid") ? modo : "excluir";
+                    g_executavelEscolhido = ParaWide(ValorDeTexto(mensagem, "executavel"));
+                    // O PID vem como TEXTO de proposito: o leitor de JSON daqui so sabe ler
+                    // valor entre aspas, e diante de um numero cru ele pularia para a chave
+                    // seguinte e devolveria lixo.
+                    g_pidExcluido = static_cast<DWORD>(
+                        strtoul(ValorDeTexto(mensagem, "pid").c_str(), nullptr, 10));
                 }
                 if (g_capturando) IniciarCaptura(g_ultimaFamilia);
                 EnviarListaDeAplicativos(ValorDeTexto(mensagem, "familia"));

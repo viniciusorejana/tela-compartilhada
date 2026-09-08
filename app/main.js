@@ -1,0 +1,227 @@
+'use strict';
+
+// Aplicativo de mesa: a MESMA sala que roda no navegador, só que fora dele.
+//
+// O motivo não é estético. No navegador o Chrome usa dois chapéus ao mesmo tempo: ele é o
+// cliente (toca a voz e as telas dos outros) e é uma fonte legítima de som (um vídeo que
+// você quer compartilhar). A captura do Windows exclui UMA árvore de processos, então os
+// dois papéis não cabem na mesma escolha -- ou você perde o Chrome como fonte, ou ele
+// devolve para a rede tudo o que acabou de receber dela.
+//
+// Aqui o cliente é este aplicativo. Ele entrega o próprio PID para o agente, que exclui
+// esta árvore da captura, e o navegador volta a ser apenas mais um programa que faz som.
+//
+// A interface não é copiada para cá: a janela carrega a mesma URL do servidor. Uma
+// interface só, um lugar para manter.
+
+const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
+
+const ARQUIVO_DE_CONFIG = () => path.join(app.getPath('userData'), 'config.json');
+
+function lerConfig() {
+  try { return JSON.parse(fs.readFileSync(ARQUIVO_DE_CONFIG(), 'utf8')); }
+  catch (_) { return {}; }
+}
+
+function salvarConfig(dados) {
+  try {
+    fs.mkdirSync(path.dirname(ARQUIVO_DE_CONFIG()), { recursive: true });
+    fs.writeFileSync(ARQUIVO_DE_CONFIG(), JSON.stringify(dados, null, 2));
+  } catch (erro) { console.error('Não foi possível salvar a configuração:', erro.message); }
+}
+
+let janela = null;
+let agente = null;
+
+// ---------------------------------------------------------------- janela principal
+function criarJanela() {
+  janela = new BrowserWindow({
+    width: 1360,
+    height: 860,
+    minWidth: 900,
+    minHeight: 600,
+    backgroundColor: '#06080a',
+    autoHideMenuBar: true,
+    title: 'Sala compartilhada',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      // A sala é conteúdo REMOTO: fica isolada do Node, como qualquer página.
+      contextIsolation: true,
+      nodeIntegration: false,
+      // É por aqui que o PID do aplicativo chega até a página. O PID que interessa é o do
+      // processo principal: ele é a raiz da árvore, e excluir a raiz exclui os filhos --
+      // inclusive o processo de áudio, que é quem realmente toca o som.
+      additionalArguments: [`--pid-do-app=${process.pid}`]
+    }
+  });
+
+  const config = lerConfig();
+  if (config.endereco) janela.loadURL(config.endereco);
+  else janela.loadFile(path.join(__dirname, 'endereco.html'));
+
+  // Link externo abre no navegador de verdade, não dentro da sala.
+  janela.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  janela.on('closed', () => { janela = null; });
+}
+
+// ---------------------------------------------------------------- escolha da tela
+// O Electron não traz seletor de tela: quem pergunta "qual janela?" é a aplicação. Esta é
+// a janelinha com as miniaturas.
+function escolherFonte(fontes) {
+  return new Promise((resolver) => {
+    const escolha = new BrowserWindow({
+      width: 900,
+      height: 620,
+      parent: janela,
+      modal: true,
+      backgroundColor: '#0b0e11',
+      autoHideMenuBar: true,
+      title: 'O que você quer compartilhar?',
+      webPreferences: {
+        // Página local, nossa, sem nada remoto: aqui o Node é seguro e evita mais um preload.
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    });
+
+    let respondido = false;
+    const responder = (valor) => {
+      if (respondido) return;
+      respondido = true;
+      ipcMain.removeListener('escolher:pronto', aoEscolher);
+      if (!escolha.isDestroyed()) escolha.close();
+      resolver(valor);
+    };
+
+    const aoEscolher = (evento, id) => {
+      if (evento.sender !== escolha.webContents) return;
+      responder(fontes.find(f => f.id === id) || null);
+    };
+
+    ipcMain.on('escolher:pronto', aoEscolher);
+    // Fechar a janela no X é uma resposta válida: quer dizer "desisti".
+    escolha.on('closed', () => responder(null));
+
+    escolha.webContents.once('did-finish-load', () => {
+      escolha.webContents.send('escolher:fontes', fontes.map(f => ({
+        id: f.id,
+        nome: f.name,
+        tipo: f.id.startsWith('screen:') ? 'tela' : 'janela',
+        miniatura: f.thumbnail.toDataURL()
+      })));
+    });
+    escolha.loadFile(path.join(__dirname, 'escolher.html'));
+  });
+}
+
+function instalarSeletorDeTela() {
+  session.defaultSession.setDisplayMediaRequestHandler(async (pedido, responder) => {
+    try {
+      const fontes = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 320, height: 180 }
+      });
+      const escolhida = await escolherFonte(fontes);
+      // Sem áudio de propósito. O Electron sabe capturar o som do sistema aqui
+      // ('audio: loopback'), mas seria TODO o som, sem forma de tirar este aplicativo de
+      // dentro -- ou seja, exatamente o eco que o aplicativo existe para evitar. Quem
+      // captura som continua sendo o agente, que sabe excluir uma árvore de processos.
+      responder(escolhida ? { video: escolhida } : undefined);
+    } catch (erro) {
+      console.error('Falha ao listar as telas:', erro.message);
+      responder(undefined);
+    }
+  }, { useSystemPicker: false });
+}
+
+// ---------------------------------------------------------------- agente de áudio
+function caminhoDoAgente() {
+  const candidatos = [
+    path.join(process.resourcesPath || '', 'AgenteAudio.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'AgenteAudio.exe'),
+    path.join(__dirname, '..', 'native', 'audio-agent', 'x64', 'Release', 'AgenteAudio.exe')
+  ];
+  return candidatos.find(c => c && fs.existsSync(c)) || null;
+}
+
+function pararAgente() {
+  if (agente && !agente.killed) { try { agente.kill(); } catch (_) { /* já morreu */ } }
+  agente = null;
+}
+
+ipcMain.handle('agente:iniciar', (evento, url) => {
+  // A sala é conteúdo remoto, e isto aqui lança um processo. O endereço tem de ser um
+  // WebSocket do MESMO servidor que a janela está mostrando -- senão uma página qualquer
+  // poderia apontar o agente desta máquina para onde quisesse.
+  let alvo;
+  try { alvo = new URL(String(url)); } catch (_) { return { rodando: false, motivo: 'url-invalida' }; }
+  if (alvo.protocol !== 'ws:' && alvo.protocol !== 'wss:') return { rodando: false, motivo: 'url-invalida' };
+
+  let atual;
+  try { atual = new URL(evento.sender.getURL()); } catch (_) { return { rodando: false, motivo: 'url-invalida' }; }
+  if (atual.host !== alvo.host) return { rodando: false, motivo: 'outro-servidor' };
+
+  if (agente && !agente.killed) return { rodando: true, jaEstava: true };
+
+  const caminho = caminhoDoAgente();
+  if (!caminho) return { rodando: false, motivo: 'nao-encontrado' };
+
+  try {
+    agente = spawn(caminho, [alvo.toString()], { windowsHide: true, stdio: 'ignore' });
+    agente.on('exit', () => { agente = null; });
+    agente.on('error', () => { agente = null; });
+    return { rodando: true, caminho };
+  } catch (erro) {
+    agente = null;
+    return { rodando: false, motivo: erro.message };
+  }
+});
+
+ipcMain.handle('agente:estado', () => ({
+  rodando: Boolean(agente && !agente.killed),
+  disponivel: Boolean(caminhoDoAgente())
+}));
+
+ipcMain.handle('endereco:definir', (evento, endereco) => {
+  let alvo;
+  try { alvo = new URL(String(endereco)); } catch (_) { return { ok: false }; }
+  if (alvo.protocol !== 'http:' && alvo.protocol !== 'https:') return { ok: false };
+  salvarConfig({ endereco: alvo.toString() });
+  if (janela) janela.loadURL(alvo.toString());
+  return { ok: true };
+});
+
+// Serve para voltar à tela de endereço sem precisar apagar arquivo nenhum.
+ipcMain.handle('endereco:esquecer', () => {
+  salvarConfig({});
+  if (janela) janela.loadFile(path.join(__dirname, 'endereco.html'));
+  return { ok: true };
+});
+
+// ---------------------------------------------------------------- ciclo de vida
+// Duas janelas do mesmo aplicativo brigariam pelo mesmo agente e pelo mesmo token.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!janela) return;
+    if (janela.isMinimized()) janela.restore();
+    janela.focus();
+  });
+
+  app.whenReady().then(() => {
+    instalarSeletorDeTela();
+    criarJanela();
+    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
+  });
+
+  app.on('window-all-closed', () => { pararAgente(); app.quit(); });
+  app.on('before-quit', pararAgente);
+}
