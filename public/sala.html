@@ -1727,9 +1727,9 @@ function atualizarCaixaDoAgente(plano) {
     : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
   // Dentro do aplicativo o agente vem junto: oferecer o download seria mandar a pessoa
   // resolver a mao um problema que o proprio aplicativo ja resolve.
-  agenteDownload.hidden = conectado || Boolean(appNativo);
+  agenteDownload.hidden = conectado || Boolean(aplicativoNativo);
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
-  if (!conectado && appNativo) {
+  if (!conectado && aplicativoNativo) {
     agenteTexto.textContent = 'O aplicativo está subindo o agente de áudio. Se esta mensagem '
       + 'não sair em alguns segundos, o AgenteAudio.exe não foi encontrado ao lado do aplicativo.';
   }
@@ -1752,8 +1752,14 @@ let agenteSemModo = false;   // agente antigo, que nao entende a escolha de modo
 let timerDeAplicativos = null;
 
 // Quando a pagina roda dentro do aplicativo proprio, ele se apresenta com o proprio PID.
-const appNativo = (typeof window !== 'undefined' && window.appNativo) || null;
-if (appNativo?.pid) {
+//
+// O nome da constante NAO pode ser "appNativo": o aplicativo publica esse nome no window
+// como propriedade nao-configuravel, e um `const` de mesmo nome no escopo global e um
+// SyntaxError -- que derruba o SCRIPT INTEIRO, nao so esta linha. No navegador comum nada
+// disso existe e o erro nao aparece; dentro do aplicativo, a sala parava de funcionar por
+// completo, sem socket e sem nenhum botao respondendo.
+const aplicativoNativo = (typeof window !== 'undefined' && window.appNativo) || null;
+if (aplicativoNativo?.pid) {
   modoDeAudio = 'excluir-pid';
   modoDeAudioSelect.querySelector('option[value="excluir-pid"]').hidden = false;
 }
@@ -1762,11 +1768,11 @@ modoDeAudioSelect.value = modoDeAudio;
 // Pelo aplicativo ninguem baixa nem executa nada a parte: ele mesmo levanta o agente,
 // apontando para esta sala. O agente e o mesmo binario de sempre.
 async function ligarAgenteDoAplicativo() {
-  if (!appNativo?.iniciarAgente) return;
+  if (!aplicativoNativo?.iniciarAgente) return;
   const protocolo = location.protocol === 'https:' ? 'wss' : 'ws';
   const url = `${protocolo}://${location.host}/agente?token=${encodeURIComponent(tokenDoAgente)}`;
   try {
-    const resposta = await appNativo.iniciarAgente(url);
+    const resposta = await aplicativoNativo.iniciarAgente(url);
     if (!resposta?.rodando && resposta?.motivo === 'nao-encontrado') {
       status.textContent = 'O aplicativo não encontrou o AgenteAudio.exe ao lado dele, '
         + 'então o som do sistema não será capturado.';
@@ -1778,7 +1784,7 @@ function enviarEscolhaDeAudio() {
   socket?.emit('audio-escolha', {
     modo: modoDeAudio,
     executavel: modoDeAudio === 'excluir-pid' ? '' : appEscolhido,
-    pid: appNativo?.pid || 0,
+    pid: aplicativoNativo?.pid || 0,
     familia: familiaDoNavegador()
   });
 }
