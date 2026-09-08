@@ -418,7 +418,7 @@
   </aside>
 
   <nav class="control-bar">
-    <button id="micBtn" class="control-btn" type="button" aria-pressed="true" title="Microfone">Mic ligado</button>
+    <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Microfone">Mic mudo</button>
     <button id="noiseBtn" class="control-btn" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone">Ruído reduzido</button>
     <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
@@ -548,7 +548,9 @@ let micStream = null;
 let micTrack = null;
 let cameraStream = null;
 let screenStream = null;
-let micMuted = false;
+// Entra-se na sala em silencio: o microfone e aberto (a permissao vale de uma vez so),
+// mas a faixa vai desligada ate a pessoa apertar o botao.
+let micMuted = true;
 let appAudioContext = null;
 let appAudioNode = null;
 let appAudioTrack = null;
@@ -632,6 +634,7 @@ async function iniciarConexao() {
     try {
       if (!micStream) micStream = await abrirMicrofone();
       micTrack = micStream.getAudioTracks()[0];
+      if (micTrack) micTrack.enabled = !micMuted;
       if (!faixaEnviadaDoMic) faixaEnviadaDoMic = micTrack;
     } catch (err) {
       status.textContent = temMediaDevices
