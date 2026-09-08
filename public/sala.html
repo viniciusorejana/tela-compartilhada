@@ -825,11 +825,23 @@ function enviarEstado() {
 }
 
 // ---------- Codec preferido (corrige tela preta ao compartilhar tela+câmera) ----------
+// A ordem tambem vale para o que se RECEBE, e nao so para o que se envia. O filtro antigo
+// era "existe faixa saindo por este transceiver": quem entra so para assistir nao tem faixa
+// nenhuma saindo, entao respondia sem pedir H.264 na frente e recebia o que o outro lado
+// preferisse. Num iPhone isso e a diferenca entre decodificar por hardware e nao dar conta:
+// o decodificador de video do aparelho e H.264, e VP8/VP9 ficam por conta do processador.
 function preferirCodecsDeVideo(pc, mimeTypesEmOrdem) {
-  const caps = window.RTCRtpSender?.getCapabilities?.('video');
-  if (!caps) return;
+  const capsDeEnvio = window.RTCRtpSender?.getCapabilities?.('video');
+  const capsDeRecepcao = window.RTCRtpReceiver?.getCapabilities?.('video');
+  if (!capsDeEnvio && !capsDeRecepcao) return;
   pc.getTransceivers().forEach(transceiver => {
-    if (!transceiver.sender?.track || transceiver.sender.track.kind !== 'video' || !transceiver.setCodecPreferences) return;
+    if (!transceiver.setCodecPreferences) return;
+    const enviando = Boolean(transceiver.sender?.track);
+    const tipo = transceiver.sender?.track?.kind || transceiver.receiver?.track?.kind;
+    if (tipo !== 'video') return;
+    // Quem so recebe deve ordenar pelo que consegue DECODIFICAR.
+    const caps = (enviando ? capsDeEnvio : capsDeRecepcao) || capsDeEnvio || capsDeRecepcao;
+    if (!caps?.codecs) return;
     const ordenados = [];
     mimeTypesEmOrdem.forEach(mt => {
       caps.codecs.forEach(c => {
@@ -958,7 +970,11 @@ function criarConexaoPar(id, name, state, ehIniciador) {
       // original e causava a tela preta ao compartilhar tela+camera (o 2o video track
       // ficava sem prioridade de codec e o navegador remoto podia nao decodifica-lo).
       preferirCodecsDeVideo(pc, ['video/H264', 'video/VP8', 'video/VP9']);
-      await pc.setLocalDescription();
+      // createOffer explicito em vez de setLocalDescription() sem argumento: a forma curta
+      // so existe no Safari a partir do 15.4 e, onde nao existe, lanca -- a oferta nunca
+      // saia e o aparelho ficava na sala sem enviar nem receber midia.
+      const oferta = await pc.createOffer();
+      await pc.setLocalDescription(oferta);
       socket.emit('offer', id, pc.localDescription, buildMediaInfo());
     } catch (err) {
       console.warn('negotiationneeded:', err);
@@ -2119,7 +2135,7 @@ function ligarMidiaDoTile(id) {
   const refs = tiles.get(id);
   const peer = peers.get(id);
   if (!refs || !peer) return;
-  if (peer.remoteStreams.camera.getTracks().length) refs.camVideo.srcObject = peer.remoteStreams.camera;
+  if (peer.remoteStreams.camera.getTracks().length) ligarFluxo(refs.camVideo, peer.remoteStreams.camera);
   if (peer.remoteStreams.screen.getTracks().length) atualizarTileDeTela(id);
   if (peer.remoteStreams.micAudio.getTracks().length) {
     refs.peerAudio.srcObject = peer.remoteStreams.micAudio;
@@ -2223,7 +2239,7 @@ function atualizarTileDeTela(id) {
   const refs = garantirTileDeTela(id);
   refs.nome.textContent = `${nomeDe(id)} — Tela`;
   const stream = id === 'self' ? screenStream : peers.get(id)?.remoteStreams.screen;
-  if (stream && refs.video.srcObject !== stream) refs.video.srcObject = stream;
+  ligarFluxo(refs.video, stream);
   garantirReproducao(refs.video);
   refs.root.classList.toggle('pinned', pinned?.id === id && pinned.source === 'screen');
 
@@ -2244,7 +2260,7 @@ function atualizarTile(id) {
   if (!refs) return;
   const estado = id === 'self' ? meuEstado() : (peers.get(id)?.state || {});
   const temCamera = id === 'self' ? Boolean(cameraStream) : Boolean(estado.camera);
-  if (id === 'self' && cameraStream) refs.camVideo.srcObject = cameraStream;
+  if (id === 'self' && cameraStream) ligarFluxo(refs.camVideo, cameraStream);
 
   refs.camVideo.classList.toggle('active', temCamera);
   refs.avatar.classList.toggle('hidden', temCamera);
@@ -2405,10 +2421,26 @@ function atualizarPalco() {
     stageEmpty.classList.remove('hidden');
     return;
   }
-  if (stageVideo.srcObject !== stream) stageVideo.srcObject = stream;
+  ligarFluxo(stageVideo, stream);
   stageVideo.muted = true; // audio já é reproduzido pelo <audio> por participante
   stageEmpty.classList.add('hidden');
   garantirReproducao(stageVideo);
+}
+
+// O mesmo MediaStream ligado a dois <video> ao mesmo tempo nao e renderizado pelo Safari do
+// iPhone: um dos dois fica preto. E exatamente o nosso caso -- o palco e o quadradinho
+// mostram a mesma fonte. Cada elemento passa a receber o proprio MediaStream, com as mesmas
+// faixas dentro; para o WebRTC nao muda nada, porque o que chega pela rede e a faixa.
+function ligarFluxo(el, stream) {
+  if (!el) return;
+  const faixas = stream ? stream.getTracks() : [];
+  if (!faixas.length) { if (el.srcObject) el.srcObject = null; return; }
+  // Trocar o srcObject a cada passagem reiniciaria o video e faria piscar. So troca quando
+  // as faixas realmente mudam.
+  const atuais = el.srcObject ? el.srcObject.getTracks() : [];
+  const iguais = atuais.length === faixas.length && faixas.every(f => atuais.some(a => a.id === f.id));
+  if (iguais) return;
+  el.srcObject = new MediaStream(faixas);
 }
 
 // ---------- Autoplay (som bloqueado pelo navegador) ----------
