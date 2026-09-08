@@ -359,6 +359,10 @@
   .campo-excluir { margin-top: 14px; margin-bottom: 0; }
   .campo-excluir[hidden] { display: none !important; }
   .campo-excluir small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  #devicesPanel .field + .field { margin-top: 14px; }
+  #devicesPanel small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  #devicesDica { margin-top: 16px; }
+  #devicesDica:empty { display: none; }
   .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
   .modal-actions button { flex: 1; padding: 11px; }
 
@@ -455,6 +459,7 @@
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
     <button id="qualidadeBtn" class="control-btn secondary" type="button" aria-pressed="false">Fluidez</button>
+    <button id="devicesBtn" class="control-btn secondary" type="button" title="Escolher microfone, fone e câmera">Dispositivos</button>
     <button id="testAudioBtn" class="control-btn secondary" type="button" title="Testar áudio">Testar áudio</button>
     <button id="leaveBtn" class="control-btn danger" type="button" title="Sair da sala">Sair</button>
   </nav>
@@ -467,6 +472,35 @@
   </div>
   <img id="lightboxImg" alt="Imagem ampliada">
   <span class="lightbox-legenda">Clique na imagem para alternar entre ajustada e tamanho real</span>
+</div>
+
+<div class="modal hidden" id="devicesPanel">
+  <div class="modal-card">
+    <h2>Dispositivos</h2>
+    <p class="modal-sub">Vale na hora, mesmo no meio da conversa.</p>
+
+    <div class="field">
+      <label for="micDevice">Microfone</label>
+      <select id="micDevice"></select>
+    </div>
+
+    <div class="field" id="saidaCampo">
+      <label for="outDevice">Fone / alto-falante</label>
+      <select id="outDevice"></select>
+      <small id="saidaDica">Onde você ouve a sala.</small>
+    </div>
+
+    <div class="field">
+      <label for="camDevice">Câmera</label>
+      <select id="camDevice"></select>
+    </div>
+
+    <small id="devicesDica" class="modal-sub"></small>
+
+    <div class="modal-actions">
+      <button id="devicesClose" type="button">Fechar</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal hidden" id="settingsPanel">
@@ -541,6 +575,14 @@ const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomLevelLabel = document.getElementById('zoomLevelLabel');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const qualidadeBtn = document.getElementById('qualidadeBtn');
+const devicesBtn = document.getElementById('devicesBtn');
+const devicesPanel = document.getElementById('devicesPanel');
+const devicesClose = document.getElementById('devicesClose');
+const devicesDica = document.getElementById('devicesDica');
+const micDevice = document.getElementById('micDevice');
+const outDevice = document.getElementById('outDevice');
+const camDevice = document.getElementById('camDevice');
+const saidaCampo = document.getElementById('saidaCampo');
 const echoWarning = document.getElementById('echoWarning');
 const fixEchoBtn = document.getElementById('fixEchoBtn');
 const micBtn = document.getElementById('micBtn');
@@ -1307,12 +1349,26 @@ function removerPar(id) {
 // Pedindo 1280x720 como "ideal", o navegador escolhe o modo nativo mais proximo: 16:9 em
 // quem tem 16:9, 4:3 em quem so tem 4:3. Nada e forcado, entao ninguem e recortado.
 async function abrirCamera() {
+  const escolhida = dispositivoEscolhido('camera');
   try {
     return await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      video: {
+        // "exact" porque "ideal" e apenas uma sugestao: o navegador entregaria a camera
+        // padrao sem avisar, e a escolha da pessoa sumiria em silencio.
+        ...(escolhida ? { deviceId: { exact: escolhida } } : {}),
+        width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }
+      },
       audio: false
     });
   } catch (err) {
+    // Dispositivo escolhido sumiu (desconectado, trocado de porta): melhor a camera padrao
+    // do que camera nenhuma -- mas a preferencia fica guardada para quando ele voltar.
+    if (escolhida && err && err.name !== 'NotAllowedError') {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: false
+      });
+    }
     // Permissao negada e um nao definitivo; o resto pode ser so a camera nao aceitar essa
     // combinacao, e ai uma camera em 4:3 e melhor que camera nenhuma.
     if (err && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')) throw err;
@@ -1320,17 +1376,20 @@ async function abrirCamera() {
   }
 }
 
-async function abrirMicrofone() {
+async function abrirMicrofone(forcarDispositivo) {
   const suportadas = navigator.mediaDevices.getSupportedConstraints?.() || {};
+  const escolhido = forcarDispositivo || dispositivoEscolhido('microfone');
   const pedido = {
     echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1
   };
+  if (escolhido) pedido.deviceId = { exact: escolhido };
   // Supressor de ruido novo do Chrome (bem melhor que o classico, e existe no Android).
   if (suportadas.voiceIsolation) pedido.voiceIsolation = true;
   try {
     return await navigator.mediaDevices.getUserMedia({ audio: pedido });
   } catch (err) {
     if (err && err.name === 'NotAllowedError') throw err;
+    // Sem o dispositivo escolhido, o padrao serve; a preferencia continua guardada.
     return await navigator.mediaDevices.getUserMedia({ audio: true });
   }
 }
@@ -1370,7 +1429,9 @@ function montarFiltroDeRuido() {
     const faixa = destino.stream.getAudioTracks()[0];
     if (!faixa) return;
     faixa.enabled = !micMuted;
-    cadeiaDeRuido = { contexto, ganho, faixa, aberta: true, ultimoSom: 0, piso: 0 };
+    // A fonte fica guardada para poder ser desligada na troca de microfone: sem soltar o
+    // grafo antigo, o microfone velho continuaria alimentando a sala.
+    cadeiaDeRuido = { contexto, ganho, faixa, fonte, aberta: true, ultimoSom: 0, piso: 0 };
     // Um contexto suspenso nao produz som nenhum: enquanto ele nao estiver rodando, quem
     // vai para a sala e a faixa crua.
     contexto.addEventListener?.('statechange', escolherFaixaDoMic);
@@ -1380,6 +1441,14 @@ function montarFiltroDeRuido() {
     cadeiaDeRuido = null;
     noiseBtn.hidden = true;
   }
+}
+
+function desmontarFiltroDeRuido() {
+  if (!cadeiaDeRuido) return;
+  try { cadeiaDeRuido.fonte.disconnect(); } catch (_) { /* ja solto */ }
+  try { cadeiaDeRuido.ganho.disconnect(); } catch (_) { /* ja solto */ }
+  try { cadeiaDeRuido.faixa.stop(); } catch (_) { /* ja parada */ }
+  cadeiaDeRuido = null;
 }
 
 function escolherFaixaDoMic() {
@@ -1504,6 +1573,8 @@ async function ativarMicrofone() {
     // A faixa nao estava na conexao: entra agora, e o navegador renegocia sozinho.
     definirFaixaEmTodosOsPares('mic', faixaEnviadaDoMic, micStream);
     acompanharVoz('self', micStream);
+    // Com a permissao concedida, os dispositivos finalmente tem nome.
+    listarDispositivos();
     status.textContent = 'Microfone ligado.';
   } catch (err) {
     micStream = null;
@@ -1532,6 +1603,158 @@ function alternarMic() {
   enviarEstado();
 }
 micBtn.onclick = alternarMic;
+
+// ---------- Microfone, fone e camera ----------
+// O navegador so revela o NOME dos dispositivos depois de conceder permissao a um deles.
+// Antes disso a lista existe, mas vem anonima -- e por isso ela e refeita assim que o
+// microfone ou a camera abrem pela primeira vez.
+const CHAVES_DE_DISPOSITIVO = {
+  microfone: 'sala.dispositivo.microfone',
+  saida: 'sala.dispositivo.saida',
+  camera: 'sala.dispositivo.camera'
+};
+
+function dispositivoEscolhido(tipo) {
+  try { return localStorage.getItem(CHAVES_DE_DISPOSITIVO[tipo]) || ''; }
+  catch (_) { return ''; }   // navegacao privada, armazenamento bloqueado
+}
+
+function guardarDispositivo(tipo, valor) {
+  try {
+    if (valor) localStorage.setItem(CHAVES_DE_DISPOSITIVO[tipo], valor);
+    else localStorage.removeItem(CHAVES_DE_DISPOSITIVO[tipo]);
+  } catch (_) { /* sem armazenamento: vale so nesta sessao */ }
+}
+
+// setSinkId so existe em navegadores baseados no Chromium. Onde nao existe, quem escolhe a
+// saida e o sistema operacional, e o seletor sai da tela em vez de fingir que funciona.
+const podeEscolherSaida = typeof HTMLMediaElement !== 'undefined'
+  && 'setSinkId' in HTMLMediaElement.prototype;
+
+function aplicarSaidaEm(elemento) {
+  if (!podeEscolherSaida || !elemento?.setSinkId) return;
+  const id = dispositivoEscolhido('saida');
+  // '' e o padrao do sistema, e e um valor valido para o setSinkId.
+  elemento.setSinkId(id).catch(() => { /* dispositivo sumiu: segue no padrao */ });
+}
+
+function aplicarSaidaEmTodos() {
+  if (!podeEscolherSaida) return;
+  tiles.forEach(refs => { aplicarSaidaEm(refs.peerAudio); aplicarSaidaEm(refs.screenAudio); });
+  tilesDeTela.forEach(refs => aplicarSaidaEm(refs.video));
+  aplicarSaidaEm(stageVideo);
+}
+
+function preencher(seletor, lista, escolhido, rotuloPadrao) {
+  seletor.innerHTML = '';
+  const padrao = document.createElement('option');
+  padrao.value = '';
+  padrao.textContent = rotuloPadrao;
+  seletor.appendChild(padrao);
+  lista.forEach((d, i) => {
+    const opcao = document.createElement('option');
+    opcao.value = d.deviceId;
+    opcao.textContent = d.label || `${rotuloPadrao.replace('Padrão do sistema', 'Dispositivo')} ${i + 1}`;
+    seletor.appendChild(opcao);
+  });
+  // Um dispositivo guardado que nao esta mais na lista nao pode ser selecionado: o seletor
+  // mostraria o padrao enquanto a preferencia continua valendo. Melhor anuncia-lo ausente.
+  if (escolhido && !lista.some(d => d.deviceId === escolhido)) {
+    const sumido = document.createElement('option');
+    sumido.value = escolhido;
+    sumido.textContent = 'Escolhido anteriormente (desconectado)';
+    seletor.appendChild(sumido);
+  }
+  seletor.value = escolhido || '';
+}
+
+async function listarDispositivos() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  let lista = [];
+  try { lista = await navigator.mediaDevices.enumerateDevices(); }
+  catch (_) { return; }
+
+  const entradas = lista.filter(d => d.kind === 'audioinput');
+  const saidas = lista.filter(d => d.kind === 'audiooutput');
+  const cameras = lista.filter(d => d.kind === 'videoinput');
+
+  preencher(micDevice, entradas, dispositivoEscolhido('microfone'), 'Padrão do sistema');
+  preencher(camDevice, cameras, dispositivoEscolhido('camera'), 'Padrão do sistema');
+  if (podeEscolherSaida) preencher(outDevice, saidas, dispositivoEscolhido('saida'), 'Padrão do sistema');
+  saidaCampo.hidden = !podeEscolherSaida;
+
+  // Sem permissao concedida a lista vem sem nome nenhum -- dizer isso e melhor que mostrar
+  // "Dispositivo 1, Dispositivo 2" e deixar a pessoa adivinhar.
+  const semNomes = [...entradas, ...cameras].some(d => !d.label);
+  devicesDica.textContent = semNomes
+    ? 'Os nomes dos dispositivos só aparecem depois que você ativa o microfone ou a câmera pelo menos uma vez.'
+    : (podeEscolherSaida ? '' : 'Este navegador não deixa escolher a saída de áudio; quem decide é o sistema.');
+}
+
+async function trocarMicrofone(id) {
+  guardarDispositivo('microfone', id);
+  // Sem microfone aberto ainda, guardar basta: ele já nasce no dispositivo certo.
+  if (!micTrack) return;
+
+  const anterior = micStream;
+  let novo;
+  try { novo = await abrirMicrofone(id); }
+  catch (err) { status.textContent = 'Não foi possível abrir esse microfone: ' + err.message; return; }
+
+  micStream = novo;
+  micTrack = novo.getAudioTracks()[0];
+  micTrack.enabled = !micMuted;
+
+  // O filtro e o medidor de voz vivem presos ao stream antigo: os dois são refeitos.
+  desmontarFiltroDeRuido();
+  faixaEnviadaDoMic = micTrack;
+  montarFiltroDeRuido();
+  definirFaixaEmTodosOsPares('mic', faixaEnviadaDoMic, micStream);
+  acompanharVoz('self', micStream);
+
+  // Só depois de o novo estar no ar: parar antes deixaria um buraco de silêncio.
+  anterior?.getTracks().forEach(t => t.stop());
+  status.textContent = 'Microfone trocado.';
+  listarDispositivos();
+}
+
+async function trocarCamera(id) {
+  guardarDispositivo('camera', id);
+  if (!cameraStream) return;
+
+  const anterior = cameraStream;
+  let novo;
+  try { novo = await abrirCamera(); }
+  catch (err) { status.textContent = 'Não foi possível abrir essa câmera: ' + err.message; return; }
+
+  cameraStream = novo;
+  const faixa = novo.getVideoTracks()[0];
+  definirFaixaEmTodosOsPares('camera', faixa, novo);
+  faixa.onended = alternarCamera;
+  anterior.getTracks().forEach(t => t.stop());
+  atualizarTile('self');
+  atualizarPalco();
+  status.textContent = 'Câmera trocada.';
+  listarDispositivos();
+}
+
+micDevice.onchange = () => trocarMicrofone(micDevice.value);
+camDevice.onchange = () => trocarCamera(camDevice.value);
+outDevice.onchange = () => {
+  guardarDispositivo('saida', outDevice.value);
+  aplicarSaidaEmTodos();
+  status.textContent = 'Saída de áudio trocada.';
+};
+
+devicesBtn.onclick = () => { listarDispositivos(); devicesPanel.classList.remove('hidden'); };
+devicesClose.onclick = () => devicesPanel.classList.add('hidden');
+devicesPanel.addEventListener('click', (e) => {
+  if (e.target === devicesPanel) devicesPanel.classList.add('hidden');
+});
+
+// Fone conectado ou removido no meio da conversa: a lista se atualiza sozinha.
+navigator.mediaDevices?.addEventListener?.('devicechange', listarDispositivos);
+listarDispositivos();
 
 // ---------- Nitidez x fluidez ----------
 function emMegabits(bits) {
@@ -1589,6 +1812,7 @@ async function alternarCamera() {
     if (medida.width && medida.height) {
       status.textContent = `Câmera ligada em ${medida.width}x${medida.height}.`;
     }
+    listarDispositivos();
   }
   atualizarTile('self');
   // Precisa passar pelo avaliador, e nao so desfazer o destaque: ligar a propria camera
@@ -2384,6 +2608,10 @@ function criarTileBase(id, name, state, isSelf) {
     localMute: false
   };
   tiles.set(id, refs);
+  // Elemento novo nasce na saida escolhida: sem isto, so quem ja estava na sala sairia
+  // pelo fone certo, e quem entrasse depois voltaria para o padrao do sistema.
+  aplicarSaidaEm(refs.peerAudio);
+  aplicarSaidaEm(refs.screenAudio);
 
   el.querySelector('.avatar-wrap').addEventListener('click', () => {
     const estado = id === 'self' ? meuEstado() : peers.get(id)?.state;

@@ -86,6 +86,23 @@ botao para trocar para compartilhamento de aba.
 > a captura nativa, abra a sala por `http://localhost:3000/{codigo}/sala` no proprio computador,
 > mesmo que os outros entrem pelo endereco publico. A interface mostra esse aviso sozinha.
 
+### Escolher microfone, fone e camera
+
+O botao **Dispositivos**, na barra de baixo, escolhe qual microfone, qual saida de audio e
+qual camera usar. A troca vale na hora, no meio da conversa: o microfone novo entra sem cortar
+a chamada, o filtro de ruido e remontado nele e o mudo continua valendo se estava mudo.
+
+A escolha fica guardada no navegador. Se o aparelho escolhido nao estiver mais ligado, a sala
+usa o padrao do sistema e mostra o escolhido como "desconectado" -- a preferencia continua la
+para quando ele voltar.
+
+Duas limitacoes que vem do navegador, nao daqui:
+
+- Os **nomes** dos aparelhos so aparecem depois de conceder a permissao de microfone ou camera
+  uma vez. Antes disso a lista existe, mas vem anonima; a propria tela avisa.
+- Escolher a **saida** de audio (`setSinkId`) so existe em navegadores baseados no Chromium. No
+  Firefox e no Safari quem decide e o sistema operacional, e o seletor nao aparece.
+
 ### Escolhendo o que do som do sistema vai junto
 
 O Windows captura audio de processo com **um** alvo por captura: ou tudo **menos** uma arvore
