@@ -15,7 +15,7 @@ const net = require('node:net');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const { caminhoDoBinario, VERSAO } = require('./scripts/baixar-livekit.cjs');
 
 const PASTA = path.join(__dirname, 'native', 'livekit');
@@ -184,6 +184,24 @@ async function escreverConfig() {
   return { ipPublico };
 }
 
+// Se o Node for encerrado à força (Ctrl+C não chega, o Gerenciador de Tarefas mata, a
+// máquina desliga no tranco), o servidor de mídia fica rodando sozinho segurando a porta --
+// e o próximo "npm start" sobe um que não consegue abri-la e encerra em seguida, num ciclo
+// que não se resolve sozinho. Só processos deste MESMO executável são encerrados: outro
+// LiveKit que a pessoa tenha instalado para outra coisa não é da nossa conta.
+function encerrarOrfaos(binario) {
+  try {
+    if (process.platform === 'win32') {
+      const escapado = binario.replace(/'/g, "''");
+      execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        `Get-Process livekit-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${escapado}' } | Stop-Process -Force`
+      ], { stdio: 'ignore', timeout: 8000, windowsHide: true });
+    } else {
+      execFileSync('pkill', ['-f', binario], { stdio: 'ignore', timeout: 8000 });
+    }
+  } catch (_) { /* Nenhum órfão, ou nada que possamos encerrar: seguir e deixar o log dizer. */ }
+}
+
 async function iniciarSfu() {
   const binario = caminhoDoBinario();
   if (!fs.existsSync(binario)) {
@@ -194,6 +212,9 @@ async function iniciarSfu() {
     return estado;
   }
 
+  // Só na primeira subida: num reinício supervisionado o processo anterior já morreu, e
+  // varrer de novo só atrasaria a volta.
+  if (!tentativasSeguidas) encerrarOrfaos(binario);
   const { ipPublico } = await escreverConfig();
   if (encerrando) return estado;
   horaDoUltimoInicio = Date.now();
@@ -246,7 +267,7 @@ function reiniciarDepoisDeCair() {
   if (Date.now() - horaDoUltimoInicio > SEGUNDOS_PARA_CONSIDERAR_ESTAVEL * 1000) tentativasSeguidas = 0;
   if (tentativasSeguidas >= MAXIMO_DE_REINICIOS) {
     estado.motivo = 'nao-sobe';
-    console.error(`Ele não sobe depois de ${MAXIMO_DE_REINICIOS} tentativas. A sala segue com chat; vídeo e voz voltam quando o motivo acima for resolvido e o servidor reiniciado.\n`);
+    console.error(`Ele não sobe depois de ${MAXIMO_DE_REINICIOS} tentativas. A causa mais comum é a porta de mídia ocupada por outro processo -- confira com "netstat -ano | findstr 7882". A sala segue com chat; vídeo e voz voltam quando o motivo acima for resolvido e o servidor reiniciado.\n`);
     return;
   }
   const espera = Math.min(30, 2 ** tentativasSeguidas);

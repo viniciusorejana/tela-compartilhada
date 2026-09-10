@@ -213,7 +213,9 @@ async function iniciarConexao() {
         avaliarDestaque();
       },
       aoMudarMidia: id => { ligarMidiaDoTile(id); avaliarDestaque(); },
-      aoMudarEstado: par => { atualizarTile(par.id); avaliarDestaque(); avaliarRiscoDeEco(); }
+      // A ordem em que a tela de alguém entrou só é conhecida aqui -- o quadradinho dela
+      // já foi criado quando a faixa chegou, antes de o estado ser recalculado.
+      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); }
     });
     try {
       await transporte.conectar(salaConfig.url, salaConfig.token);
@@ -1759,6 +1761,9 @@ confirmScreenBtn.onclick = async () => {
     const telaAntiga = screenStream;
     screenStream = novaTela;
     screenStream.getVideoTracks()[0].onended = pararTela;
+    // Entra na mesma fila das telas dos outros: quem comecou antes fica mais a esquerda.
+    // Trocar a fonte da tela nao renova o lugar -- a transmissao e a mesma.
+    if (!telaAntiga) ordemDaMinhaTela = ++sequenciaDeCompartilhamento;
 
     definirFaixaEmTodosOsPares('screen', screenStream.getVideoTracks()[0], screenStream);
     definirFaixaEmTodosOsPares('screenAudio', screenStream.getAudioTracks()[0] || null, screenStream);
@@ -1800,6 +1805,7 @@ function pararTela() {
   if (!screenStream) return;
   screenStream.getTracks().forEach(t => t.stop());
   screenStream = null;
+  ordemDaMinhaTela = 0;
   limparAudioDoAplicativo();
   definirFaixaEmTodosOsPares('screen', null, null);
   definirFaixaEmTodosOsPares('screenAudio', null, null);
@@ -2095,6 +2101,7 @@ function criarTileBase(id, name, state, isSelf) {
     localMute: false
   };
   tiles.set(id, refs);
+  reordenarQuadradinhos();
   // Elemento novo nasce na saida escolhida: sem isto, so quem ja estava na sala sairia
   // pelo fone certo, e quem entrasse depois voltaria para o padrao do sistema.
   aplicarSaidaEm(refs.peerAudio);
@@ -2136,6 +2143,7 @@ function removerTile(id) {
   if (!refs) return;
   refs.root.remove();
   tiles.delete(id);
+  reordenarQuadradinhos();
 }
 
 function ligarMidiaDoTile(id) {
@@ -2171,6 +2179,31 @@ function preferenciaDeTela(id) {
   return pref;
 }
 
+// As telas ficam todas juntas, à esquerda, na ordem em que começaram; as pessoas vêm depois,
+// cada câmera no quadradinho de quem ela é.
+//
+// Ordenar por ORDEM DE INÍCIO, e não por nome, tem um motivo prático: quem chega depois entra
+// no fim da fila e nada se mexe. Por nome, alguém chamado "Ana" empurraria todas as telas para
+// a direita no meio da transmissão, bem quando as pessoas já sabem onde cada uma está.
+//
+// A reordenação é feita com a propriedade "order" do CSS, não movendo os elementos: tirar um
+// <video> do lugar no meio da árvore faz a imagem piscar, e não há por que pagar isso.
+const ORDEM_DAS_PESSOAS = 1000;
+let ordemDaMinhaTela = 0;
+
+function ordemDaTela(id) {
+  if (id === 'self') return ordemDaMinhaTela;
+  return peers.get(id)?.ordem?.screen || 0;
+}
+
+function reordenarQuadradinhos() {
+  const telas = [...tilesDeTela.entries()]
+    .sort(([idA], [idB]) => ordemDaTela(idA) - ordemDaTela(idB) || nomeDe(idA).localeCompare(nomeDe(idB), 'pt-BR'));
+  telas.forEach(([, refs], posicao) => { refs.root.style.order = posicao; });
+  // Uma faixa só: as pessoas ficam depois de qualquer tela, sem precisar recontar nada.
+  tiles.forEach(refs => { refs.root.style.order = ORDEM_DAS_PESSOAS; });
+}
+
 function nomeDe(id) {
   return id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
 }
@@ -2189,16 +2222,14 @@ function garantirTileDeTela(id) {
     <div class="participant-name"></div>
     <div class="volume-row"></div>
   `;
-  // Fica logo depois do quadradinho da pessoa, para os dois andarem juntos.
-  const daPessoa = tiles.get(id)?.root;
-  if (daPessoa && daPessoa.parentNode === participantsEl) daPessoa.after(el);
-  else participantsEl.appendChild(el);
+  participantsEl.appendChild(el);
 
   const refs = {
     root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name'),
     linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null
   };
   tilesDeTela.set(id, refs);
+  reordenarQuadradinhos();
 
   el.querySelector('.avatar-wrap').addEventListener('click', () => pin(id, 'screen', true));
 
@@ -2236,6 +2267,7 @@ function removerTileDeTela(id) {
   refs.video.srcObject = null;
   refs.root.remove();
   tilesDeTela.delete(id);
+  reordenarQuadradinhos();
   if (pinned?.id === id && pinned.source === 'screen') avaliarDestaque();
 }
 

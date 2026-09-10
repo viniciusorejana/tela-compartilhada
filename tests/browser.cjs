@@ -227,6 +227,20 @@ async function esperarCodec(page, fonte, esperado) {
   console.log('PASS: multiple remote videos decode, independent zoom, responsive theater, and single-view cleanup');
   if (process.env.TEST_MULTI_ONLY === '1') { assert.deepEqual(errors, []); return; }
   console.log('PASS: late spectator receives camera + screen; names remain text');
+
+  // As telas ficam agrupadas a esquerda, na ordem em que comecaram; as pessoas vem depois.
+  // A posicao e conferida pelo x na tela, nao pela ordem no DOM: quem reordena e o CSS,
+  // justamente para nao tirar um <video> do lugar e fazer a imagem piscar.
+  const faixaDeQuadradinhos = pagina => pagina.evaluate(() =>
+    [...document.querySelectorAll('#participants .participant')]
+      .map(el => ({ nome: el.querySelector('.participant-name').textContent, tela: el.dataset.source === 'screen', x: el.getBoundingClientRect().left }))
+      .sort((a, b) => a.x - b.x));
+  const faixaDoViewer = await faixaDeQuadradinhos(viewer);
+  const primeiraPessoa = faixaDoViewer.findIndex(item => !item.tela);
+  assert.ok(faixaDoViewer.slice(0, primeiraPessoa).every(item => item.tela), 'as telas deveriam vir todas antes das pessoas');
+  assert.ok(faixaDoViewer.slice(primeiraPessoa).every(item => !item.tela), 'nenhuma tela deveria aparecer depois de uma pessoa');
+  assert.ok(primeiraPessoa >= 1, 'a tela do host deveria estar na faixa');
+  console.log('PASS: screens grouped to the left, people after them');
   // Com simulcast, o servidor de midia entrega a CADA pessoa a camada que a conexao dela
   // aguenta. Exigir 1080p decodificado de todo mundo contrariaria justamente o ganho da
   // mudanca -- e, num Chromium sem placa de video, a estimativa de banda inicial nem chega
