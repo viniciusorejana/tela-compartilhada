@@ -42,6 +42,10 @@
   // Depois dela, quem parou de compartilhar de verdade precisa ser pedido outra vez.
   const SEGUNDOS_DE_TOLERANCIA_NA_TROCA = 12;
 
+  // Por quanto tempo a saida anunciada pela sinalizacao vale contra a lista do servidor de
+  // midia. Precisa cobrir a espera dele por uma reconexao que nao vem.
+  const SEGUNDOS_DE_LUTO = 90;
+
   function estadoVazio() {
     return { camera: false, screen: false, screenAudio: false, micMuted: true };
   }
@@ -88,6 +92,11 @@
 
     let conectada = false;
     let conferencia = null;
+    // Quem a sinalizacao ja deu como fora. O servidor de midia demora bem mais para soltar
+    // alguem que fechou a aba, entao sem esta lembranca a conferencia traria a pessoa de
+    // volta cinco segundos depois de ela sair -- e a saida rapida, que e o caminho bom,
+    // deixaria de valer para nada.
+    const saidosRecentemente = new Map();
 
     function estadoDeConexao() {
       if (sala.state === 'connected') return 'connected';
@@ -289,6 +298,10 @@
     // sentidos: tira quem nao esta mais la e traz de volta quem foi removido por engano.
     function conferirLista() {
       if (sala.state !== 'connected') return;
+      const agora = Date.now();
+      for (const [id, quando] of saidosRecentemente) {
+        if (agora - quando > SEGUNDOS_DE_LUTO * 1000) saidosRecentemente.delete(id);
+      }
       for (const id of [...peers.keys()]) {
         if (sala.remoteParticipants.has(id)) continue;
         esquecerTemporizadores(peers.get(id));
@@ -296,8 +309,21 @@
         aoSair(id);
       }
       sala.remoteParticipants.forEach(participante => {
-        if (!peers.has(participante.identity)) adotarParticipante(participante);
+        if (peers.has(participante.identity) || saidosRecentemente.has(participante.identity)) return;
+        adotarParticipante(participante);
       });
+    }
+
+    // Chamado quando a sinalizacao -- que percebe uma saida em segundos -- diz que alguem
+    // foi embora. Alem de tirar da lista, anota: o servidor de midia ainda vai insistir por
+    // um bom tempo que a pessoa esta la, e a conferencia nao pode acreditar nele nisso.
+    function descartar(id) {
+      saidosRecentemente.set(id, Date.now());
+      const par = peers.get(id);
+      if (!par) return;
+      esquecerTemporizadores(par);
+      peers.delete(id);
+      aoSair(id);
     }
 
     // Ligar e desligar o recebimento da tela de alguem. Nao e um "hidden" no video: a
@@ -321,6 +347,7 @@
       get conectada() { return conectada; },
 
       assistir,
+      descartar,
 
       async conectar(url, token) {
         // Sem assinatura automatica: quem entra numa sala com cinco telas no ar nao pode

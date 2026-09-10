@@ -310,8 +310,12 @@ async function iniciarConexao() {
   // notebook, perdeu o Wi-Fi, matou o navegador -- esperando essa pessoa voltar. A conexão
   // de sinalização percebe isso em segundos, e é ela que tira o fantasma da lista.
   socket.on('peer-left', ({ identidade }) => {
-    if (!identidade || !peers.has(identidade)) return;
-    removerPar(identidade);
+    if (!identidade) return;
+    // Vai pelo transporte, e não direto no mapa: ele precisa ANOTAR a saída. A lista do
+    // servidor de mídia ainda vai insistir por um bom tempo que essa pessoa está aqui, e
+    // sem a anotação a conferência periódica a traria de volta cinco segundos depois.
+    if (transporte) transporte.descartar(identidade);
+    else if (peers.has(identidade)) removerPar(identidade);
     atualizarContador();
     avaliarDestaque();
   });
