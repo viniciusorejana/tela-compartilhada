@@ -29,6 +29,9 @@ const camDevice = document.getElementById('camDevice');
 const saidaCampo = document.getElementById('saidaCampo');
 const echoWarning = document.getElementById('echoWarning');
 const fixEchoBtn = document.getElementById('fixEchoBtn');
+const capturaAviso = document.getElementById('capturaAviso');
+const capturaAvisoTexto = document.getElementById('capturaAvisoTexto');
+const usarTelaInteiraBtn = document.getElementById('usarTelaInteiraBtn');
 const micBtn = document.getElementById('micBtn');
 const cameraBtn = document.getElementById('cameraBtn');
 const flipCameraBtn = document.getElementById('flipCameraBtn');
@@ -1304,6 +1307,24 @@ function atualizarExplicacaoDeAudio() {
     };
     echoWarningText.textContent = explicacoes[audioCapabilities.motivo] || explicacoes.remoto;
   }
+  atualizarAvisoDeCaptura();
+}
+
+// Quem compartilha uma janela paga um preco que nao aparece em lugar nenhum da interface:
+// o custo cai DENTRO do jogo, nao na transmissao, entao e facil culpar o Nexo ou a internet.
+// A tarja amarela vem do mesmo caminho de captura e nao da para desligar por aqui -- so o
+// Windows 11 tem a API que a remove (IsBorderRequired), e ainda assim mediante permissao.
+// Como nao ha o que corrigir no codigo, o que cabe e dizer o que esta acontecendo e deixar a
+// saida a um clique.
+function atualizarAvisoDeCaptura() {
+  const mostrar = ehWindows && captureMode.value === 'window';
+  capturaAviso.hidden = !mostrar;
+  if (!mostrar) return;
+  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quadros dentro do jogo: '
+    + 'o Windows precisa compor essa janela de novo só para a captura, e um jogo em tela cheia '
+    + 'perde o caminho direto até o monitor. A tarja amarela em volta vem daí também — é o aviso '
+    + 'de captura do próprio Windows, e desligá-lo só existe no Windows 11. A tela inteira lê o '
+    + 'quadro que a placa de vídeo já desenhou: mesma imagem, sem tarja e sem mexer no jogo.';
 }
 
 // Mostra o estado do agente e, quando ele nao esta rodando, oferece o download ja
@@ -1362,7 +1383,14 @@ let audioDaJanela = null;
 const aplicativoNativo = (typeof window !== 'undefined' && window.appNativo) || null;
 if (aplicativoNativo) {
   captureMode.querySelector('option[value="browser"]').remove();
-  captureMode.value = 'window';
+  // Tela inteira, e nao a janela. No Windows a captura de UMA janela passa pelo Windows
+  // Graphics Capture: o sistema tem de compor aquela janela outra vez, so para a captura, e
+  // um jogo em tela cheia perde o caminho direto ate o monitor -- o FPS que cai e o do JOGO,
+  // nao o da transmissao. A tarja amarela em volta e o aviso de captura desse mesmo caminho.
+  // A tela inteira le o quadro que a placa de video ja produziu para o monitor: nao muda
+  // como o jogo desenha, e nao tem tarja. Para um jogo em tela cheia as duas mostram
+  // exatamente a mesma imagem, entao a janela so custa -- nao entrega nada em troca.
+  captureMode.value = 'monitor';
   fixEchoBtn.hidden = true;
   document.getElementById('captureCompatibility').hidden = false;
 }
@@ -1528,6 +1556,11 @@ audioPolicy.onchange = atualizarExplicacaoDeAudio;
 
 fixEchoBtn.onclick = () => {
   captureMode.value = 'browser';
+  atualizarExplicacaoDeAudio();
+};
+
+usarTelaInteiraBtn.onclick = () => {
+  captureMode.value = 'monitor';
   atualizarExplicacaoDeAudio();
 };
 

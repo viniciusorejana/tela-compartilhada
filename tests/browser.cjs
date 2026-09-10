@@ -616,8 +616,28 @@ async function esperarCodec(page, fonte, esperado) {
   });
   await new Promise((resolve, reject) => { nativeAgent.once('open', resolve); nativeAgent.once('error', reject); });
   await nativePage.waitForFunction(() => audioCapabilities.agenteConectado);
+
+  // O aplicativo abre em "tela inteira": capturar UMA janela obriga o Windows a compor
+  // aquela janela de novo so para a captura, e quem perde quadros e o JOGO. Quem escolher a
+  // janela mesmo assim ve por que ela custa, e troca num clique.
+  const custoDaJanela = await nativePage.evaluate(() => {
+    const padrao = captureMode.value;
+    captureMode.value = 'window';
+    atualizarExplicacaoDeAudio();
+    const avisando = !capturaAviso.hidden;
+    usarTelaInteiraBtn.click();
+    return { padrao, windows: ehWindows, avisando, depoisDoBotao: captureMode.value };
+  });
+  assert.equal(custoDaJanela.padrao, 'monitor');
+  assert.equal(custoDaJanela.avisando, custoDaJanela.windows);
+  assert.equal(custoDaJanela.depoisDoBotao, 'monitor');
+  console.log('PASS: native app defaults to full screen and explains what a single window costs');
+
   const nativeCapture = await nativePage.evaluate(async () => {
     audioPolicy.value = 'auto';
+    // O audio por PID e do modo janela: aqui a escolha e explicita, nao o padrao.
+    captureMode.value = 'window';
+    atualizarExplicacaoDeAudio();
     const stream = await capturarTela();
     const result = { tracks: stream.getAudioTracks().length, pid: audioDaJanela?.pid };
     stream.getTracks().forEach(t => t.stop());

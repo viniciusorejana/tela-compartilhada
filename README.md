@@ -539,6 +539,7 @@ documentado em [`docs/turn.md`](docs/turn.md).
 - **Participante nao conecta:** confirme o codigo da sala e configure TURN se houver NAT/firewall restritivo entre os participantes.
 - **Audio sem som:** marque a opcao de audio no seletor do navegador; a disponibilidade depende da fonte, navegador e sistema operacional.
 - **Tela preta no iPhone:** use **Ativar reprodução** se aparecer. Se a imagem não chegar, use **Reproduzir vídeo** e **Ver diagnóstico** no palco, ou o botão de diagnóstico na lateral. Consulte o [roteiro de validação](docs/revisao-safari.md#validacao-em-um-iphone-real).
+- **O jogo perde FPS ao compartilhar, ou aparece uma tarja amarela:** compartilhe a **tela inteira** em vez de uma janela. O custo e a tarja vêm do caminho de captura de janela do Windows, não do Nexo; a explicação e as alternativas estão em [`docs/captura-de-tela.md`](docs/captura-de-tela.md).
 - **Atraso crescente ou muitos participantes:** ajuste resolução, FPS ou bitrate em `public/sala.js`; como a conexão é mesh (todos com todos), salas grandes pesam mais na banda de upload de cada um.
 - **Tunnel nao abre:** confirme que o Node responde em `http://localhost:3000`, que o `cloudflared` esta no `PATH` e que a janela do tunnel continua aberta.
 
