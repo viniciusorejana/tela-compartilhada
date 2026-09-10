@@ -25,18 +25,32 @@ async function waitServer() {
 
 async function join(context, name, room = 'squad-teste') {
   const page = await context.newPage();
-  page.setDefaultTimeout(15000);
   page.on('pageerror', e => { errors.push(e.message); console.error('page error:', e.message); });
   page.on('console', message => { if (message.type() === 'warning') console.log('browser warning:', message.text()); });
   await page.goto(`${origin}/${room}/sala`);
   await page.locator('#nameInput').fill(name);
   await page.locator('#nameConfirmBtn').click();
-  await page.waitForFunction(() => tiles.has('self'));
+  // Entrar na sala e uma coisa; ter transporte de midia e outra. Sem esperar aqui, o
+  // primeiro clique em camera publicaria no vazio.
+  try {
+    await page.waitForFunction(() => tiles.has('self'), null, { timeout: 40000 });
+    await page.waitForFunction(() => !transporte || transporte.sala.state === 'connected', null, { timeout: 40000 });
+  } catch (erro) {
+    // Sem isto, uma entrada que falha vira um tempo limite mudo, sem dizer onde parou.
+    console.log(`entrada de "${name}" em ${room} falhou:`, await page.evaluate(() => ({
+      status: document.getElementById('status')?.textContent,
+      temConfig: Boolean(salaConfig),
+      estadoDaSala: transporte?.sala?.state || 'sem transporte',
+      socket: Boolean(socket?.connected),
+      tem_self: tiles.has('self')
+    })).catch(() => 'página não respondeu'));
+    throw erro;
+  }
   return page;
 }
 
-async function syntheticCapture(context, streamless = false) {
-  await context.addInitScript(({ streamless }) => {
+async function syntheticCapture(context) {
+  await context.addInitScript(() => {
     if (!navigator.mediaDevices || !window.RTCPeerConnection) return;
     let sequence = 0;
     function capture(kind) {
@@ -55,8 +69,8 @@ async function syntheticCapture(context, streamless = false) {
         ctx.fillRect(35 + (++frame % 240), 130, 100, 75);
       };
       draw();
-      const timer = setInterval(draw, kind === 'camera' ? 100 : 33);
-      const stream = canvas.captureStream(kind === 'camera' ? 10 : 30);
+      const timer = setInterval(draw, kind === 'camera' ? 100 : 66);
+      const stream = canvas.captureStream(kind === 'camera' ? 10 : 15);
       stream.getVideoTracks()[0].addEventListener('ended', () => clearInterval(timer));
       return stream;
     }
@@ -69,15 +83,7 @@ async function syntheticCapture(context, streamless = false) {
       oscillator.connect(output); oscillator.start();
       return output.stream;
     } });
-    if (streamless) {
-      const Native = RTCPeerConnection;
-      window.RTCPeerConnection = class extends Native {
-        set ontrack(handler) {
-          super.ontrack = handler ? e => handler({ track: e.track, receiver: e.receiver, transceiver: e.transceiver, streams: [] }) : null;
-        }
-      };
-    }
-  }, { streamless });
+  });
 }
 
 async function share(page) {
@@ -87,14 +93,41 @@ async function share(page) {
   await page.waitForFunction(() => Boolean(screenStream));
 }
 
+// Com o servidor de midia no meio, as estatisticas vem por FAIXA -- nao ha mais uma
+// conexao por participante para consultar.
 async function waitForDecodedVideos(page) {
   await page.waitForFunction(async () => {
     const peer = [...peers.values()][0];
     if (!peer) return false;
-    const stats = await peer.pc.getStats();
-    const decoded = [...stats.values()].filter(s => s.type === 'inbound-rtp' && s.kind === 'video' && s.framesDecoded >= 3);
-    return decoded.length >= 2 && stageVideo.videoWidth > 0 && stageVideo.readyState >= 2 && !stageVideo.paused;
-  });
+    let decoded = 0;
+    for (const publication of peer.publicacoes.values()) {
+      if (publication.kind !== 'video' || !publication.track?.getRTCStatsReport) continue;
+      const stats = await publication.track.getRTCStatsReport();
+      if ([...(stats?.values() || [])].some(s => s.type === 'inbound-rtp' && s.framesDecoded >= 3)) decoded++;
+    }
+    return decoded >= 2 && stageVideo.videoWidth > 0 && stageVideo.readyState >= 2 && !stageVideo.paused;
+  }, null, { timeout: 40000 });
+}
+
+// O codec de uma fonte recebida, lido do relatorio da propria faixa.
+async function codecRecebido(page, fonte) {
+  return page.evaluate(async source => {
+    const peer = [...peers.values()][0];
+    const publication = [...peer.publicacoes.values()].find(p => RoomTransport.fonteDaPublicacao(p) === source);
+    const stats = await publication?.track?.getRTCStatsReport();
+    const inbound = [...(stats?.values() || [])].find(s => s.type === 'inbound-rtp');
+    return inbound && stats.get(inbound.codecId)?.mimeType?.toLowerCase();
+  }, fonte);
+}
+
+async function esperarCodec(page, fonte, esperado) {
+  await page.waitForFunction(async ([source, alvo]) => {
+    const peer = [...peers.values()][0];
+    const publication = [...peer.publicacoes.values()].find(p => RoomTransport.fonteDaPublicacao(p) === source);
+    const stats = await publication?.track?.getRTCStatsReport();
+    const inbound = [...(stats?.values() || [])].find(s => s.type === 'inbound-rtp');
+    return inbound && stats.get(inbound.codecId)?.mimeType?.toLowerCase() === alvo;
+  }, [fonte, esperado], { timeout: 40000 });
 }
 
 (async () => {
@@ -103,6 +136,7 @@ async function waitForDecodedVideos(page) {
     windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
   });
   server.stderr.on('data', chunk => process.stderr.write(chunk));
+  server.stdout.on('data', chunk => { const t = String(chunk); if (t.includes('[proxy]') || /erro|error/i.test(t)) process.stdout.write(t); });
   await waitServer();
   const engine = process.env.TEST_BROWSER === 'webkit' ? webkit : chromium;
   browser = await engine.launch({ headless: true, executablePath: process.env.TEST_BROWSER_EXECUTABLE || undefined, args: engine === chromium ? ['--autoplay-policy=no-user-gesture-required'] : [] });
@@ -148,14 +182,15 @@ async function waitForDecodedVideos(page) {
   await share(host);
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  await syntheticCapture(mobile, true);
-  // A delayed RTC config must not lose Socket.IO's initial connect event.
-  await mobile.route('**/api/rtc-config', async route => {
+  await syntheticCapture(mobile);
+  // Uma configuracao lenta nao pode fazer a entrada desistir: o servidor de midia leva
+  // alguns segundos para ficar pronto depois de subir.
+  await mobile.route('**/api/sala-config*', async route => {
     await new Promise(resolve => setTimeout(resolve, 500));
     await route.continue();
   });
   const viewer = await join(mobile, '<img src=x onerror="window.xss=1">');
-  await viewer.waitForFunction(() => peers.size === 1 && stageVideo.videoWidth > 0 && !stageVideo.paused);
+  await viewer.waitForFunction(() => peers.size === 1 && stageVideo.videoWidth > 0 && !stageVideo.paused, null, { timeout: 40000 });
   await waitForDecodedVideos(viewer);
   const receiving = await viewer.evaluate(() => {
     const peer = [...peers.values()][0];
@@ -163,13 +198,7 @@ async function waitForDecodedVideos(page) {
   });
   assert.deepEqual(receiving, { screen: 1, camera: 1, source: 'screen', audio: 0, xss: 0 });
   // H.264 leads by default: on an iPhone it is the only codec decoded in hardware.
-  const codecDaTela = async () => viewer.evaluate(async () => {
-    const peer = [...peers.values()][0];
-    const stats = await peer.pc.getStats();
-    const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
-    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase();
-  });
-  assert.equal(await codecDaTela(), 'video/h264');
+  assert.equal(await codecRecebido(viewer, 'screen'), 'video/h264');
   assert.equal(await host.locator('.participant-name img').count(), 0);
   // A real remote camera and screen must both keep decoding in the responsive grid.
   await viewer.evaluate(() => mostrarControlesDoPalco());
@@ -197,45 +226,49 @@ async function waitForDecodedVideos(page) {
   await viewer.setViewportSize({ width: 390, height: 844 });
   console.log('PASS: multiple remote videos decode, independent zoom, responsive theater, and single-view cleanup');
   if (process.env.TEST_MULTI_ONLY === '1') { assert.deepEqual(errors, []); return; }
-  console.log('PASS: late spectator receives camera + screen, including streamless track events; names remain text');
-  try { await viewer.waitForFunction(() => stageVideo.videoWidth === 1920 && stageVideo.videoHeight === 1080); }
-  catch (error) {
-    console.log('HD diagnostics', await host.evaluate(async () => ({ capture: screenStream.getVideoTracks()[0].getSettings(), peers: await Promise.all([...peers.values()].map(async p => ({ budget: p.videoBudget, allocation: p.videoAllocation, parameters: p.senders.screen.getParameters(), stats: [...(await p.pc.getStats()).values()].filter(s => ['outbound-rtp', 'candidate-pair'].includes(s.type)) }))) })));
-    console.log('Encoder', JSON.stringify(await host.evaluate(async () => [...(await [...peers.values()][0].pc.getStats()).values()].filter(s => ['outbound-rtp','codec'].includes(s.type)))));
-    console.log('Decoded size', await viewer.evaluate(() => [stageVideo.videoWidth, stageVideo.videoHeight]));
-    throw error;
-  }
+  console.log('PASS: late spectator receives camera + screen; names remain text');
+  // Com simulcast, o servidor de midia entrega a CADA pessoa a camada que a conexao dela
+  // aguenta. Exigir 1080p decodificado de todo mundo contrariaria justamente o ganho da
+  // mudanca -- e, num Chromium sem placa de video, a estimativa de banda inicial nem chega
+  // a subir para a camada alta. O que precisa valer e o que a mudanca promete:
+  //   a captura esta em 1080p, e ela sobe UMA vez repartida em varias camadas.
+  const captura = await host.evaluate(() => screenStream.getVideoTracks()[0].getSettings());
+  assert.equal(captura.height, 1080, `a captura deveria ser 1080p, veio ${JSON.stringify(captura)}`);
+  const camadas = await host.evaluate(async () => {
+    const stats = await publicacoesLocais.screen.track.getRTCStatsReport();
+    return [...stats.values()].filter(s => s.type === 'outbound-rtp' && s.kind === 'video')
+      .map(s => ({ rid: s.rid || 'única', altura: s.frameHeight, escala: s.scalabilityMode }));
+  });
+  assert.ok(camadas.length > 1, `simulcast deveria publicar várias camadas, veio ${JSON.stringify(camadas)}`);
+  // Uma copia so sai daqui, por mais gente que entre: e isso que tira o upload do gargalo.
+  const publicacoesDeTela = await host.evaluate(() =>
+    [...transporte.sala.localParticipant.trackPublications.values()].filter(p => p.source === 'screen_share').length);
+  assert.equal(publicacoesDeTela, 1);
+  console.log(`Camadas de simulcast publicadas: ${JSON.stringify(camadas)}`);
+
   await host.locator('#devicesBtn').click();
   await host.locator('#videoQuality').selectOption('ultra');
   await host.waitForFunction(() => perfilDeQualidade === 'ultra');
-  await host.waitForFunction(() => [...peers.values()][0].senders.screen.getParameters().encodings[0].maxFramerate === 30);
+  // A fonte deste teste e um canvas de tamanho fixo, entao applyConstraints nao muda a
+  // captura. O que da para afirmar -- e o que importa -- e que o perfil novo chegou as
+  // opcoes de publicacao. O bitrate por espectador quem decide e o servidor de midia.
+  await host.waitForFunction(() => publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate === 14_000_000, null, { timeout: 30000 });
   assert.equal(await host.locator('#shareQuality').inputValue(), 'ultra');
-  await host.locator('#uploadLimit').selectOption('20');
-  assert.equal(await host.evaluate(() => limiteDeUpload), 20_000_000);
+  await waitForDecodedVideos(viewer);
   await host.screenshot({ path: path.join(output, 'qualidade.png') });
   await host.locator('#videoQuality').selectOption('high');
 
-  // Trocar o codec no meio da transmissao so vale se houver renegociacao: setCodecPreferences
-  // nao mexe na sessao ja negociada.
+  // O servidor de midia nao transcodifica: trocar o codec exige republicar a faixa, e quem
+  // ja esta assistindo precisa passar a receber o fluxo novo.
   await host.locator('#videoCodec').selectOption('vp8');
   await host.waitForFunction(() => codecDeVideoEscolhido() === 'vp8');
   assert.equal(await host.locator('#shareCodec').inputValue(), 'vp8');
-  await viewer.waitForFunction(async () => {
-    const peer = [...peers.values()][0];
-    const stats = await peer.pc.getStats();
-    const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
-    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase() === 'video/vp8';
-  }, null, { timeout: 20000 });
+  await esperarCodec(viewer, 'screen', 'video/vp8');
   await waitForDecodedVideos(viewer);
   await host.locator('#videoCodec').selectOption('auto');
-  await viewer.waitForFunction(async () => {
-    const peer = [...peers.values()][0];
-    const stats = await peer.pc.getStats();
-    const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
-    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase() === 'video/h264';
-  }, null, { timeout: 20000 });
+  await esperarCodec(viewer, 'screen', 'video/h264');
   await waitForDecodedVideos(viewer);
-  console.log('PASS: live codec switch renegotiates in both directions and video keeps decoding');
+  console.log('PASS: live codec switch republishes and video keeps decoding');
 
   await host.keyboard.press('Escape');
   await host.mouse.move(500, 350);
@@ -252,7 +285,7 @@ async function waitForDecodedVideos(page) {
   assert.equal(await host.evaluate(() => getComputedStyle(stageControls).opacity), '1');
   await host.evaluate(() => document.exitFullscreen());
   await host.mouse.click(500, 350);
-  console.log('PASS: decoded 1080p, live profile changes, 30 fps ceiling, and idle fullscreen controls with keyboard accessibility');
+  console.log('PASS: 1080p capture goes up once as several simulcast layers, live profile changes, idle fullscreen controls');
   await viewer.screenshot({ path: path.join(output, 'sala-mobile-video.png') });
   assert.ok(await viewer.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 
@@ -293,79 +326,51 @@ async function waitForDecodedVideos(page) {
   await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0);
   console.log('PASS: replace, stop, and restart screen sharing while camera remains active');
 
-  // Force the negotiated-envelope failure that replaceTrack is allowed to return.
-  await host.evaluate(() => {
-    const sender = [...peers.values()][0].senders.screen;
-    sender.replaceTrack = () => Promise.reject(new DOMException('Needs renegotiation', 'InvalidModificationError'));
-  });
-  await host.locator('#updateScreenBtn').click();
-  await host.locator('#confirmScreenBtn').click();
-  await viewer.waitForFunction(old => [...peers.values()][0].remoteStreams.screen.getVideoTracks()[0]?.id !== old && pinned?.source === 'screen' && stageVideo.videoWidth > 0, originalTrack);
   await Promise.all([viewer.locator('#cameraBtn').click(), host.locator('#micBtn').click()]);
   await share(viewer);
-  await host.waitForFunction(() => [...peers.values()][0].remoteStreams.screen.getVideoTracks().length === 1 && pinned?.source === 'screen' && stageVideo.videoWidth > 0);
-  await viewer.waitForFunction(() => [...peers.values()][0].remoteStreams.micAudio.getAudioTracks().length === 1);
+  try {
+    await host.waitForFunction(() => [...peers.values()][0].remoteStreams.screen.getVideoTracks().length === 1 && pinned?.source === 'screen' && stageVideo.videoWidth > 0, null, { timeout: 40000 });
+  } catch (erro) {
+    console.log('estado do host:', JSON.stringify(await host.evaluate(() => ({
+      pinned, pares: [...peers.values()].map(p => ({
+        nome: p.name, estado: p.state, ordem: p.ordem,
+        fluxos: Object.fromEntries(Object.entries(p.remoteStreams).map(([k, v]) => [k, v.getTracks().length])),
+        publicacoes: [...p.publicacoes.values()].map(x => ({ fonte: x.source, inscrita: x.isSubscribed, muda: x.isMuted }))
+      })),
+      todasAsPublicacoesRemotas: [...transporte.sala.remoteParticipants.values()].flatMap(rp => [...rp.trackPublications.values()].map(x => ({ de: rp.identity, fonte: x.source, inscrita: x.isSubscribed })))
+    })), null, 1));
+    throw erro;
+  }
+  await viewer.waitForFunction(() => [...peers.values()][0].remoteStreams.micAudio.getAudioTracks().length === 1, null, { timeout: 40000 });
   await waitForDecodedVideos(host);
   await waitForDecodedVideos(viewer);
-  console.log('PASS: renegotiation after replaceTrack rejection and bidirectional simultaneous media');
+  console.log('PASS: bidirectional simultaneous media, both sharing screen at once');
 
-  // Um candidato que chega enquanto uma oferta colidida esta sendo ignorada pertence a
-  // negociacao ANTERIOR, que continua valendo. Descarta-lo prendia o ICE em "checking".
-  await viewer.evaluate(() => {
-    const peer = [...peers.values()][0];
-    window.candidatosOriginais = peer.pc.addIceCandidate.bind(peer.pc);
-    window.candidatosAplicados = 0;
-    peer.pc.addIceCandidate = candidate => { window.candidatosAplicados++; return window.candidatosOriginais(candidate); };
-    peer.ignoreOffer = true;
-  });
-  await host.evaluate(() => {
-    const alvo = [...peers.keys()][0];
-    socket.emit('candidate', alvo, { candidate: 'candidate:1 1 udp 2130706431 203.0.113.9 50000 typ host', sdpMid: '0', sdpMLineIndex: 0 });
-  });
-  await viewer.waitForFunction(() => window.candidatosAplicados > 0);
-  const candidatoAplicado = await viewer.evaluate(() => {
-    const peer = [...peers.values()][0];
-    peer.ignoreOffer = false;
-    peer.pc.addIceCandidate = window.candidatosOriginais;
-    return window.candidatosAplicados;
-  });
-  assert.equal(candidatoAplicado, 1);
+  // O som da tela nao pode viajar com DTX nem RED: os dois sao feitos para voz e cortam
+  // musica e som de jogo. O servidor de midia os liga por padrao em faixa mono.
+  // O som da tela nao pode viajar com DTX nem RED: os dois sao feitos para VOZ -- DTX corta
+  // a transmissao no silencio, RED duplica pacotes -- e estragam musica e som de jogo. O
+  // servidor de midia liga os dois por padrao em faixa mono, entao a escolha e explicita.
+  const opcoesPorFonte = await host.evaluate(() => ({
+    screenAudio: opcoesDePublicacao('screenAudio'),
+    mic: opcoesDePublicacao('mic'),
+    screen: opcoesDePublicacao('screen')
+  }));
+  assert.equal(opcoesPorFonte.screenAudio.dtx, false);
+  assert.equal(opcoesPorFonte.screenAudio.red, false);
+  assert.equal(opcoesPorFonte.screenAudio.source, 'screen_share_audio');
+  // A voz continua com o padrao: DTX economiza banda no silencio e ali isso e desejável.
+  assert.equal(opcoesPorFonte.mic.dtx, undefined);
+  assert.equal(opcoesPorFonte.screen.degradationPreference, 'maintain-resolution');
+  console.log('PASS: screen audio is published without DTX or RED, while voice keeps the defaults');
+
+  // Perder a sinalizacao do servidor de midia nao pode derrubar a sala em silencio: a
+  // conexao precisa voltar sozinha e a midia junto com ela.
+  await viewer.evaluate(() => transporte.sala.engine?.client?.close?.());
+  await viewer.waitForFunction(() => transporte.sala.state === 'connected', null, { timeout: 60000 });
+  await viewer.waitForFunction(() => [...peers.values()][0]?.remoteStreams.camera.getVideoTracks().length === 1, null, { timeout: 60000 });
   await waitForDecodedVideos(viewer);
-  console.log('PASS: ICE candidates survive an ignored colliding offer');
-
-  // Uma conexao que nunca sai de "connecting" nao gera evento nenhum: sem o vigia, a pessoa
-  // so via "Recebendo vídeo…" para sempre, sem saber que faltava TURN.
-  const vigia = await viewer.evaluate(async () => {
-    // O duble entra no mesmo Map que a sala inteira consulta: precisa da forma de um par.
-    const falso = {
-      id: 'preso', name: 'Preso', state: {}, candidatosDeRelay: 0,
-      timeoutDeTravamento: null, timeoutDeVeredito: null, reatouPorTravamento: false,
-      remoteTracks: new Map(), remoteStreamIds: {}, senders: {}, ordem: { screen: 0, camera: 0 },
-      remoteStreams: { camera: new MediaStream(), screen: new MediaStream(), micAudio: new MediaStream(), screenAudio: new MediaStream() },
-      pc: {
-        connectionState: 'connecting', iceConnectionState: 'checking', signalingState: 'stable',
-        reatou: false, restartIce() { this.reatou = true; },
-        getTransceivers: () => [], getStats: async () => new Map()
-      }
-    };
-    peers.set('preso', falso);
-    // Encurta a espera do teste sem tocar na regra: o vigia usa os mesmos temporizadores.
-    const originalSetTimeout = window.setTimeout;
-    window.setTimeout = (fn, ms) => originalSetTimeout(fn, Math.min(ms, 120));
-    vigiarConexaoTravada(falso);
-    await new Promise(resolve => originalSetTimeout(resolve, 600));
-    window.setTimeout = originalSetTimeout;
-    const resultado = { reatou: falso.pc.reatou, aviso: status.textContent, painel: !document.getElementById('diagnosticsPanel').classList.contains('hidden') };
-    pararDeVigiarTravamento(falso);
-    peers.delete('preso');
-    document.getElementById('diagnosticsPanel').classList.add('hidden');
-    return resultado;
-  });
-  assert.equal(vigia.reatou, true);
-  assert.match(vigia.aviso, /não está passando entre estas redes/);
-  assert.match(vigia.aviso, /TURN/);
-  assert.equal(vigia.painel, true);
-  console.log('PASS: a connection stuck in "connecting" restarts ICE and then names TURN as the missing piece');
+  console.log('PASS: media reconnects on its own after the signalling link drops');
 
   // Virar a camera no celular. No iOS a segunda camera nao pode abrir com a primeira viva:
   // a antiga tem de estar encerrada ANTES do getUserMedia.
@@ -388,7 +393,7 @@ async function waitForDecodedVideos(page) {
   assert.equal(virada.lado, 'environment');
   assert.equal(virada.viva, 'live');
   assert.equal(virada.trocou, true);
-  await host.waitForFunction(() => [...peers.values()][0].remoteStreams.camera.getVideoTracks().length === 1);
+  await host.waitForFunction(() => [...peers.values()][0].remoteStreams.camera.getVideoTracks().length === 1, null, { timeout: 40000 });
   await waitForDecodedVideos(host);
 
   // Se a camera pedida nao abrir, a anterior volta: ninguem fica sem imagem por ter tentado.
@@ -431,7 +436,8 @@ async function waitForDecodedVideos(page) {
   await viewer.locator('#chatSend').click();
   assert.equal(await viewer.locator('#chatInput').inputValue(), 'Mensagem preservada');
   await viewer.evaluate(() => socket.connect());
-  await viewer.waitForFunction(() => peers.size === 1 && [...peers.values()][0].pc.connectionState === 'connected' && stageVideo.videoWidth > 0);
+  // O socket cuida so do chat: uma queda dele nao pode derrubar video nem voz.
+  await viewer.waitForFunction(() => peers.size === 1 && transporte.sala.state === 'connected' && stageVideo.videoWidth > 0, null, { timeout: 40000 });
   await waitForDecodedVideos(viewer);
   await viewer.locator('#chatClose').click();
   console.log('PASS: chat delivery, offline draft preservation, and socket reconnection');
@@ -449,7 +455,28 @@ async function waitForDecodedVideos(page) {
   await viewer.locator('#sidebarToggle').click();
   await viewer.keyboard.press('Escape');
 
-  const emptyMobile = await join(mobile, 'Visitante', 'outra-sala');
+  await host.waitForFunction(() => cadeiaDeRuido?.contexto.state === 'running' && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
+  await host.evaluate(() => noiseBtn.click());
+  await host.waitForFunction(() => !cadeiaDeRuido && faixaEnviadaDoMic === micTrack);
+  await host.evaluate(() => noiseBtn.click());
+  await host.waitForFunction(() => cadeiaDeRuido && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
+  await host.evaluate(() => alternarMic());
+  assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), false);
+  await host.evaluate(() => alternarMic());
+  assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), true);
+  console.log('PASS: RNNoise AudioWorklet loads, toggles, and respects microphone mute');
+
+  // Daqui em diante o teste nao usa mais a transmissao. Encerrar as duas paginas libera a
+  // captura, o simulcast e as conexoes: mante-las vivas so por inercia deixava as etapas
+  // finais falhando de forma intermitente, por falta de recursos e nao por defeito.
+  await viewer.close();
+  await host.close();
+  await mobile.close();
+  await desktop.close();
+
+  const mobileLimpo = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await syntheticCapture(mobileLimpo);
+  const emptyMobile = await join(mobileLimpo, 'Visitante', 'outra-sala');
   await emptyMobile.screenshot({ path: path.join(output, 'sala-mobile.png') });
   assert.ok(await emptyMobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await emptyMobile.setViewportSize({ width: 320, height: 568 });
@@ -465,18 +492,10 @@ async function waitForDecodedVideos(page) {
   const privatePage = await join(privateContext, 'Privado', 'sem-storage');
   assert.equal(await privatePage.locator('.participant-name').textContent(), 'Privado (você)');
   await privateContext.close();
-  await host.waitForFunction(() => cadeiaDeRuido?.contexto.state === 'running' && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
-  await host.evaluate(() => noiseBtn.click());
-  await host.waitForFunction(() => !cadeiaDeRuido && faixaEnviadaDoMic === micTrack);
-  await host.evaluate(() => noiseBtn.click());
-  await host.waitForFunction(() => cadeiaDeRuido && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
-  await host.evaluate(() => alternarMic());
-  assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), false);
-  await host.evaluate(() => alternarMic());
-  assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), true);
-  console.log('PASS: RNNoise AudioWorklet loads, toggles, and respects microphone mute');
 
-  const solo = await join(desktop, 'Solo', 'entrada-saida');
+  const desktopLimpo = await browser.newContext({ viewport: { width: 1440, height: 940 } });
+  await syntheticCapture(desktopLimpo);
+  const solo = await join(desktopLimpo, 'Solo', 'entrada-saida');
   await solo.locator('#chatInput').fill('Histórico antigo');
   await solo.locator('#chatSend').click();
   await solo.locator('.workspace-name').click();
@@ -487,7 +506,7 @@ async function waitForDecodedVideos(page) {
   assert.equal(await solo.evaluate(() => peers.size), 0);
   assert.equal(await solo.locator('.participant').count(), 1);
   assert.equal(await solo.locator('#chatMsgs').textContent().then(text => text.includes('Histórico antigo')), false);
-  const companion = await join(mobile, 'Companhia', 'entrada-saida');
+  const companion = await join(mobileLimpo, 'Companhia', 'entrada-saida');
   await solo.waitForFunction(() => peers.size === 1);
   await solo.locator('.workspace-name').click();
   await companion.waitForFunction(() => peers.size === 0);
@@ -500,7 +519,7 @@ async function waitForDecodedVideos(page) {
   await companion.waitForFunction(() => peers.size === 0);
   await solo.close(); await companion.close();
   console.log('PASS: logo navigation, back/re-entry alone and with peers, and explicit leave');
-  const capturePage = await join(desktop, 'Captura', 'politica-captura');
+  const capturePage = await join(desktopLimpo, 'Captura', 'politica-captura');
   const capturePolicy = await capturePage.evaluate(async () => {
     audioCapabilities.agenteConectado = true;
     captureMode.value = 'window'; audioPolicy.value = 'auto';

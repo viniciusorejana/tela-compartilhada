@@ -26,13 +26,25 @@ const FAMILIAS_DE_NAVEGADOR = {
   vivaldi: 'vivaldi.exe'
 };
 
+const sfu = require('./sfu');
+
 const app = express();
 require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'));
 const server = http.createServer(app);
+// Precisa vir antes do Socket.IO: os dois escutam "upgrade" no mesmo servidor, e cada um
+// so atende o proprio caminho.
+sfu.instalarProxy(app, server);
 const io = new Server(server, {
-  cors: { origin: process.env.CORS_ORIGIN || true }
+  cors: { origin: process.env.CORS_ORIGIN || true },
+  // Por padrao o Socket.IO encerra QUALQUER upgrade que nao seja dele um segundo depois,
+  // supondo que ninguem mais o tratou. Neste servidor ha mais dois: o agente de audio e a
+  // sinalizacao do servidor de midia -- e era esse encerramento que derrubava a sala no
+  // meio da conversa. Quem nao for de ninguem e fechado logo abaixo, explicitamente.
+  destroyUpgrade: false
 });
 
+app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));
+app.get('/vendor/livekit-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/LICENSE')));
 app.get('/vendor/rnnoise-sync.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/dist/rnnoise-sync.js')));
 app.get('/vendor/rnnoise-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/LICENSE')));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -51,61 +63,41 @@ app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res) => {
   res.redirect(`/${req.params.roomCode}/sala`);
 });
 
-// Um unico STUN e um ponto unico de falha: se ele estiver bloqueado ou o DNS falhar, nenhum
-// candidato srflx e coletado e so a MESMA rede local consegue conversar -- exatamente o
-// sintoma de "funciona aqui em casa, nao funciona para quem esta fora".
-const STUN_PADRAO = [
-  'stun:stun.l.google.com:19302',
-  'stun:stun1.l.google.com:19302',
-  'stun:stun.cloudflare.com:3478'
-];
-
-function listaDoAmbiente(nome) {
-  return (process.env[nome] || '').split(',').map(valor => valor.trim()).filter(Boolean);
-}
-
-// Padrao TURN REST API (o mesmo que o coturn implementa com "use-auth-secret"): o usuario
-// carrega o instante de expiracao e a credencial e o HMAC disso com o segredo. Assim o
-// /api/rtc-config -- que e publico, porque a sala nao tem login -- nunca entrega uma senha
-// permanente do TURN a quem so abriu a URL.
-function credencialTemporariaDeTurn(segredo, segundos) {
-  const expiraEm = Math.floor(Date.now() / 1000) + segundos;
-  const username = `${expiraEm}:${crypto.randomBytes(6).toString('hex')}`;
-  return {
-    username,
-    credential: crypto.createHmac('sha1', segredo).update(username).digest('base64')
-  };
-}
-
-// TURN e necessario quando os navegadores nao conseguem abrir uma conexao direta.
-app.get('/api/rtc-config', (req, res) => {
-  const stunUrls = listaDoAmbiente('STUN_URLS');
-  const iceServers = (stunUrls.length ? stunUrls : STUN_PADRAO).map(urls => ({ urls }));
-  const turnUrls = listaDoAmbiente('TURN_URLS');
-
-  if (turnUrls.length && process.env.TURN_STATIC_AUTH_SECRET) {
-    // O prazo curto vale pela duracao da alocacao: quem ja esta na sala continua com a
-    // conexao aberta, e quem entrar depois pede uma credencial nova ao recarregar a pagina.
-    const ttl = Number(process.env.TURN_TTL) > 0 ? Number(process.env.TURN_TTL) : 2 * 60 * 60;
-    iceServers.push({ urls: turnUrls, ...credencialTemporariaDeTurn(process.env.TURN_STATIC_AUTH_SECRET, ttl) });
-    // Uma credencial temporaria nao pode ser guardada em cache por proxy nenhum.
-    res.set('Cache-Control', 'no-store');
-  } else if (turnUrls.length && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
-    // Caminho antigo, mantido para nao quebrar quem ja configurou credencial fixa.
-    iceServers.push({
-      urls: turnUrls,
-      username: process.env.TURN_USERNAME,
-      credential: process.env.TURN_CREDENTIAL
-    });
-  }
+// A pagina precisa de tres coisas para entrar na sala: o endereco do servidor de midia,
+// um token que autoriza AQUELA sala, e o endereco publico para o convite.
+//
+// O token e emitido aqui e ja carrega sala, identidade, permissoes e prazo. O navegador
+// nao escolhe nada disso, e o segredo que o assina nunca sai desta maquina.
+app.get('/api/sala-config', (req, res) => {
+  const sala = String(req.query.sala || '').toLowerCase();
+  const nome = String(req.query.nome || 'Convidado').trim().slice(0, 40) || 'Convidado';
+  if (!/^[a-z0-9_-]{4,32}$/.test(sala)) return res.status(400).json({ error: 'Codigo de sala invalido.' });
 
   let publicUrl = null;
   try {
     const configured = new URL(process.env.PUBLIC_URL);
     if (['https:', 'http:'].includes(configured.protocol)) publicUrl = configured.origin;
   } catch (_) { /* Without configuration, invite links use the browser's origin. */ }
-  res.json({ iceServers, publicUrl });
+
+  if (!sfu.estado.ativo) {
+    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl });
+  }
+
+  // Duas abas com a mesma identidade fazem o servidor de midia derrubar a primeira. O
+  // sufixo aleatorio mantem o nome visivel e ainda assim separa as sessoes.
+  const identidade = `${nome}#${crypto.randomBytes(4).toString('hex')}`;
+  // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
+  res.set('Cache-Control', 'no-store');
+  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl });
 });
+
+// O cliente acrescenta "/rtc" sozinho, entao aqui vai so a origem -- a MESMA que serviu a
+// pagina. Assim a sinalizacao herda o HTTPS do tunel, sem porta nem certificado extra.
+function enderecoDoSfu(req) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const protocolo = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || req.protocol;
+  return `${protocolo === 'https' ? 'wss' : 'ws'}://${host}`;
+}
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -203,6 +195,17 @@ server.on('upgrade', (req, socket, head) => {
     ws.tokenDoAgente = token;
     wssAgentes.emit('connection', ws, req);
   });
+});
+
+// Ultimo a ser registrado, e por isso o ultimo a rodar: fecha o que ninguem reclamou. Sem
+// isto, com destroyUpgrade desligado, um upgrade para um caminho desconhecido ficaria aberto
+// consumindo uma conexao ate o sistema operacional desistir.
+server.on('upgrade', (req, socket) => {
+  if (socket.destroyed || socket.bytesWritten > 0 || socket.writableEnded) return;
+  let caminho = '';
+  try { caminho = new URL(req.url, 'http://local').pathname; } catch (_) { /* Caminho ilegível: fecha. */ }
+  if (caminho === '/agente' || caminho === '/rtc' || caminho.startsWith('/rtc/') || caminho.startsWith('/socket.io')) return;
+  socket.end('HTTP/1.1 404 Not Found\r\n\r\n');
 });
 
 wssAgentes.on('connection', (ws) => {
@@ -650,25 +653,6 @@ io.on('connection', (socket) => {
     if (socket.data.tokenAgente) comandarAgente(socket.data.tokenAgente, { acao: 'parar' });
   });
 
-  // Repasse de mensagens WebRTC (offer/answer/candidate) entre pares da mesma sala
-  socket.on('offer', (targetId, description, mediaInfo) => {
-    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
-      socket.to(targetId).emit('offer', socket.id, description, mediaInfo || {});
-    }
-  });
-
-  socket.on('answer', (targetId, description, mediaInfo) => {
-    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
-      socket.to(targetId).emit('answer', socket.id, description, mediaInfo || {});
-    }
-  });
-
-  socket.on('candidate', (targetId, candidate) => {
-    if (socketRoomCodes.get(targetId) === roomCodeForSocket(socket)) {
-      socket.to(targetId).emit('candidate', socket.id, candidate);
-    }
-  });
-
   socket.on('disconnect', () => {
     sairDaSalaAtual();
     const token = socket.data.tokenAgente;
@@ -687,4 +671,5 @@ const publicUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
 server.listen(PORT, HOST, () => {
   console.log(`\nServidor rodando em ${publicUrl}`);
   console.log(`  -> Entrar na sala: ${publicUrl}/sala\n`);
+  sfu.iniciarSfu();
 });

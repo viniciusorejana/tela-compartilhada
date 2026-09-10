@@ -1,13 +1,24 @@
 # Nexo · Tela Compartilhada
 
-Sala de voz e vídeo em tempo real usando WebRTC e Socket.IO. Os participantes podem ligar microfone, câmera e compartilhar tela. A mídia segue diretamente entre os clientes quando possível (malha P2P); o servidor mantém sinalização e chat e pode retransmitir o PCM do agente quando a ligação local estiver indisponível. Um TURN configurado pode retransmitir mídia entre redes restritas. O projeto é voltado a grupos pequenos: o upload de cada pessoa cresce com o número de participantes.
+Sala de voz e vídeo em tempo real. Os participantes podem ligar microfone, câmera e compartilhar tela.
+
+A mídia passa por um **servidor de mídia (SFU)** que sobe junto com o Node: cada pessoa envia uma
+cópia da própria imagem, e ele entrega a cada espectador a qualidade que a conexão dele aguenta.
+Isso resolve os dois limites da malha ponto a ponto anterior — a conexão é sempre de saída para um
+endereço público, então não é mais preciso furar o NAT dos dois lados, e o upload de quem transmite
+deixou de crescer com o tamanho da sala.
+
+O custo dessa escolha é explícito: **toda a mídia passa pela conexão de quem hospeda**. Quatro
+espectadores de uma tela em 1080p continuam somando cerca de 32 Mbps de upload — a diferença é que
+agora eles saem sempre da mesma máquina, e não do participante que estiver compartilhando.
 
 A interface Nexo tem navegação lateral, presença do squad, chat com envio de imagens no celular,
 palco com recuperação de reprodução e diagnóstico de mídia. A mesma sala é usada pelo navegador
 e pelo Electron. Veja [a revisão técnica e o roteiro de teste no iPhone](docs/revisao-safari.md).
 
 Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev`. A captura de
-áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`.
+áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`, e a
+mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois.
 
 ## Requisitos
 
@@ -384,12 +395,10 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `HOST` | `0.0.0.0` | Endereco onde o servidor escuta |
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
-| `STUN_URLS` | tres servidores publicos independentes | URLs STUN separadas por virgula |
-| `TURN_URLS` | vazio | URLs TURN separadas por virgula |
-| `TURN_STATIC_AUTH_SECRET` | vazio | Segredo compartilhado com o coturn (`use-auth-secret`); gera credencial temporaria |
-| `TURN_TTL` | `7200` | Validade em segundos da credencial temporaria |
-| `TURN_USERNAME` | vazio | Usuario fixo do TURN (alternativa ao segredo) |
-| `TURN_CREDENTIAL` | vazio | Credencial fixa do TURN (alternativa ao segredo) |
+| `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
+| `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
+| `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
+| `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
 
 Exemplo:
 
@@ -479,35 +488,39 @@ Para manter o servico apos reinicializacoes, configure o `cloudflared` como serv
 
 Outra arquitetura e apontar o DNS para um servidor publico e colocar Caddy ou Nginx como proxy HTTPS na frente do Node. O proxy deve encaminhar HTTP e WebSocket para `localhost:3000`; libere apenas as portas 80/443 no firewall e mantenha o Node escutando localmente. Configure `PUBLIC_URL` e `CORS_ORIGIN` com a URL HTTPS final. Nao encaminhe a porta 3000 diretamente quando o objetivo for acesso publico seguro.
 
-## TURN para redes restritas
+## Servidor de mídia
 
-WebRTC tenta uma conexao direta. Quando os participantes estao em redes diferentes, isso exige
-furar o NAT dos dois lados; basta **um** deles ser NAT simetrico ou CGNAT -- o normal em fibra
-residencial e em rede movel -- para a midia nunca passar. O diagnostico mostra essa situacao
-como `ICE=checking`, `bytes=0` e nenhuma linha `Rota:`.
+O `npm start` baixa o servidor de mídia na primeira execução (versão e hash fixos em
+`scripts/baixar-livekit.cjs`), sobe junto com o Node e encerra junto. Não há passo manual.
 
-**O tunnel HTTPS nao substitui TURN.** Tailscale Funnel e Cloudflare Tunnel entregam a pagina
-e a sinalizacao; o video nao passa por eles.
+**A sinalização não abre porta.** O cliente conecta em `/rtc` na mesma origem que serviu a página,
+e o Node encaminha isso para o processo local — a sinalização herda o HTTPS do túnel, sem
+certificado nem domínio próprio. Só a mídia usa porta própria:
 
-O passo a passo completo de instalacao, firewall e verificacao esta em
-[`docs/turn.md`](docs/turn.md). Com um coturn no ar:
+| Porta | Protocolo | Para quê |
+| --- | --- | --- |
+| 7882-7891 | UDP | Mídia |
+| 7881 | TCP | Alternativa para redes que bloqueiam UDP |
 
-```powershell
-$env:TURN_URLS="turn:turn.seudominio.com:3478,turns:turn.seudominio.com:5349"
-$env:TURN_STATIC_AUTH_SECRET="o mesmo segredo do turnserver.conf"
-npm start
-```
+A porta 7880 fica só em `127.0.0.1` e **não** deve ser aberta no roteador.
 
-O endpoint `/api/rtc-config` entrega essa configuracao aos clientes. Como a sala nao tem login,
-esse endpoint e publico: com `TURN_STATIC_AUTH_SECRET` o que viaja e uma credencial de prazo
-curto assinada com HMAC (o padrao *TURN REST API*, que o coturn implementa com
-`use-auth-secret`), e nao a senha permanente do servidor. As variaveis `TURN_USERNAME` e
-`TURN_CREDENTIAL` continuam funcionando para quem ja as configurou, com essa ressalva.
+Se algum participante ficar sem mídia em rede corporativa ou de hotel, o passo seguinte é mover a
+mídia para UDP 443 e a alternativa para TCP 443, com `SFU_UDP_PORTS` e `SFU_TCP_PORT`: muitas dessas
+redes liberam a 443 por causa do QUIC.
 
-Para conferir que funcionou, abra **Diagnostico** na sala: `Candidatos de relay coletados aqui`
-maior que zero mostra que o coturn respondeu, e **Forcar retransmissao pelo TURN** refaz as
-conexoes usando so o relay. TURN aumenta o consumo de banda do servidor: toda a midia daquela
-conexao passa por ele.
+### O que conferir quando a mídia não passa
+
+Abra **Diagnóstico** na sala. Ele mostra o estado da conexão com o servidor de mídia, a rota
+escolhida, o codec e — quando o navegador informa — se a placa de vídeo está codificando.
+
+O servidor de mídia precisa de um endereço alcançável de fora. Sem `NEXO_IP_PUBLICO` ele descobre o
+próprio IP sozinho; com a variável definida, anuncia exatamente esse. **Atrás de CGNAT nada disso
+funciona**, porque não existe endereço público para anunciar: compare o IP WAN do seu roteador com
+o resultado de `curl -s https://api.ipify.org` antes de investigar qualquer outra coisa.
+
+O TURN embutido fica desligado de propósito: ele existe para servidores sem IP público, e a
+alternativa por TCP já cobre quem bloqueia UDP. Para o cenário sem IP público, o caminho continua
+documentado em [`docs/turn.md`](docs/turn.md).
 
 ## Seguranca e privacidade
 

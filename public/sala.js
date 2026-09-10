@@ -64,6 +64,10 @@ const cancelScreenBtn = document.getElementById('cancelScreenBtn');
 // navegador fora do Windows tem o agente. Detectar uma vez aqui evita erro espalhado.
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 const temMediaDevices = Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+// Sem WebRTC nao ha transporte de midia possivel. Alguns navegadores de nicho e algumas
+// distribuicoes de teste nao o trazem: a sala ainda serve para o chat, mas insistir em
+// conectar so faria a entrada travar esperando algo que nunca vai acontecer.
+const suportaWebRTC = Boolean(window.RTCPeerConnection && window.RTCRtpSender);
 const suportaCompartilharTela = Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 const ehWindows = /Windows/i.test(navigator.userAgent);
 const suportaTelaCheia = Boolean(
@@ -71,7 +75,11 @@ const suportaTelaCheia = Boolean(
 );
 
 let socket = null;
+// Duas identidades diferentes, de proposito: "myId" e como o servidor de midia me conhece
+// (e o que aparece no mapa de participantes); "meuSocketId" e a conexao de sinalizacao, que
+// carimba o autor de cada mensagem do chat.
 let myId = null;
+let meuSocketId = null;
 let myName = '';
 let micStream = null;
 let micTrack = null;
@@ -114,21 +122,35 @@ let arrastandoPalco = null;
 const peers = new Map(); // id -> peer object
 const tiles = new Map(); // id -> dom refs
 
-let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-// Modo de teste: descarta candidatos diretos e obriga tudo a passar pelo TURN. E a unica
-// forma de PROVAR que o relay funciona -- se a imagem aparece so com isto ligado, o que
-// falta e rota entre as redes, nao codec nem permissao.
-let forcarRelay = false;
-function configuracaoDeConexao() {
-  return { ...rtcConfig, iceTransportPolicy: forcarRelay ? 'relay' : 'all' };
+// A midia passa por um servidor de midia (SFU). O navegador pede aqui o endereco dele e um
+// token que vale so para ESTA sala, com prazo. Nada disso e escolhido do lado do cliente.
+let salaConfig = null;
+let transporte = null;
+
+// Logo depois de o servidor subir, o servidor de midia ainda esta descobrindo o proprio
+// endereco. Quem abre a pagina nesse intervalo receberia um erro e ficaria sem midia ate
+// recarregar; entao vale a pena esperar em vez de desistir na primeira resposta.
+async function buscarConfigDaSala(nome) {
+  let ultimoMotivo = 'sala-config';
+  for (let tentativa = 0; tentativa < 12; tentativa++) {
+    const controle = new AbortController();
+    const prazo = setTimeout(() => controle.abort(), 8000);
+    try {
+      const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}`, { signal: controle.signal });
+      const dados = await resposta.json().catch(() => ({}));
+      if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
+      if (resposta.ok) return dados;
+      ultimoMotivo = dados.error || 'sala-config';
+      if (dados.motivo !== 'iniciando') break;
+      status.textContent = 'O servidor de mídia está iniciando...';
+    } catch (_) {
+      ultimoMotivo = 'sem-resposta';
+    } finally { clearTimeout(prazo); }
+    if (saindoDaSala) break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(ultimoMotivo);
 }
-const configController = new AbortController();
-const configTimeout = setTimeout(() => configController.abort(), 8000);
-const rtcConfigReady = fetch('/api/rtc-config', { signal: configController.signal })
-  .then(r => { if (!r.ok) throw new Error('RTC config'); return r.json(); })
-  .then(c => { rtcConfig = { iceServers: c.iceServers }; publicInviteUrl = c.publicUrl || ''; })
-  .catch(() => { status.textContent = 'Configuração de rede indisponível. Usando conexão direta.'; })
-  .finally(() => clearTimeout(configTimeout));
 
 function corDoNome(nome) {
   let hash = 0;
@@ -160,23 +182,56 @@ nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); })
 // ---------- Conexão / sala ----------
 async function iniciarConexao() {
   status.textContent = 'Conectando ao servidor...';
-  socket = io({ autoConnect: false });
-  await rtcConfigReady;
+  try {
+    salaConfig = await buscarConfigDaSala(myName);
+  } catch (erro) {
+    status.textContent = erro.message === 'servidor-de-midia-indisponivel'
+      ? 'O servidor de mídia não está no ar. O chat funciona, mas ninguém vai ver nem ouvir ninguém.'
+      : 'Não foi possível preparar a entrada na sala. Recarregue a página.';
+    if (erro.message !== 'servidor-de-midia-indisponivel') return;
+  }
   if (saindoDaSala) return;
+  myId = salaConfig?.identidade || `local-${Math.random().toString(36).slice(2)}`;
+
+  if (salaConfig && !suportaWebRTC) {
+    salaConfig = null;
+    status.textContent = 'Este navegador não faz chamadas de vídeo. O chat funciona; para ver e ouvir a sala, use outro navegador.';
+  }
+
+  if (salaConfig) {
+    transporte = RoomTransport.criarTransporte({
+      peers,
+      proximaOrdem: () => ++sequenciaDeCompartilhamento,
+      aoEntrar: par => {
+        criarTile(par.id, par.name, par.state);
+        atualizarContador();
+        avaliarDestaque();
+      },
+      aoSair: id => {
+        removerPar(id);
+        atualizarContador();
+        avaliarDestaque();
+      },
+      aoMudarMidia: id => { ligarMidiaDoTile(id); avaliarDestaque(); },
+      aoMudarEstado: par => { atualizarTile(par.id); avaliarDestaque(); avaliarRiscoDeEco(); }
+    });
+    try {
+      await transporte.conectar(salaConfig.url, salaConfig.token);
+    } catch (erro) {
+      status.textContent = 'Não foi possível conectar ao servidor de mídia: ' + erro.message;
+    }
+    if (saindoDaSala) { await transporte.desconectar(); return; }
+  }
+
+  socket = io({ autoConnect: false });
 
   socket.on('connect', async () => {
-    // O Socket.IO reconecta sozinho depois de qualquer oscilacao de rede, e este mesmo
-    // handler roda de novo. Sem separar a primeira vez da volta, cada queda abria OUTRO
-    // microfone (o anterior seguia capturando) e duplicava o proprio quadradinho.
+    // O Socket.IO cuida do chat, do agente de audio e do historico. A midia vive na conexao
+    // com o servidor de midia, que se reconecta por conta propria -- entao uma oscilacao
+    // aqui nao derruba mais video nem voz, e nao ha malha para refazer.
     const voltando = sessaoIniciada;
-    myId = socket.id;
-    if (voltando) {
-      // O servidor ja tirou este navegador da sala e deu um id novo: as conexoes antigas
-      // apontam para alguem que, para os outros, nao existe mais. Limpa e refaz a malha.
-      Array.from(peers.keys()).forEach(removerPar);
-      atualizarContador();
-      status.textContent = 'Reconectado. Refazendo as conexões...';
-    }
+    meuSocketId = socket.id;
+    if (voltando) status.textContent = 'Reconectado ao servidor.';
     sessaoIniciada = true;
     // O microfone NAO e aberto ao entrar. Num celular, abrir o microfone aqui tira o audio
     // de quem esta falando em outro aplicativo -- a pessoa entra para assistir e fica muda
@@ -202,17 +257,13 @@ async function iniciarConexao() {
         naoLidas = 0;
         chatBadge.classList.add('hidden');
       }
-      iniciarMedicaoDeBanda();
       // O agente precisa saber o modo ANTES de comecar a capturar.
       enviarEscolhaDeAudio();
-      // Acabei de entrar: sou eu quem inicia a negociacao com quem ja estava na sala.
-      response.peers.forEach(peer => {
-        criarConexaoPar(peer.id, peer.name, peer.state, true);
-      });
-      status.textContent = 'Conectado. Use os botões abaixo para ligar câmera, tela ou microfone.';
-      // Depois de reconectar, quem ja estava na sala precisa saber o que este navegador
-      // esta transmitindo: o join-room so leva o nome.
-      enviarEstado();
+      status.textContent = salaConfig
+        ? 'Conectado. Use os botões abaixo para ligar câmera, tela ou microfone.'
+        : suportaWebRTC
+          ? 'Conectado ao chat. A mídia está indisponível: o servidor de mídia não respondeu.'
+          : 'Conectado ao chat. Este navegador não faz chamadas de vídeo.';
       atualizarContador();
       // Alguem pode ja estar compartilhando desde antes de eu entrar.
       avaliarDestaque();
@@ -249,123 +300,6 @@ async function iniciarConexao() {
     if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
   });
 
-  socket.on('peer-joined', ({ id, name, state }) => {
-    // Alguem acabou de entrar: espero a oferta dessa pessoa antes de adicionar minha midia.
-    criarConexaoPar(id, name, state, false);
-    atualizarContador();
-    reajustarTetosDeBitrate();
-    avaliarDestaque();
-  });
-
-  socket.on('peer-left', ({ id }) => {
-    removerPar(id);
-    atualizarContador();
-    reajustarTetosDeBitrate();
-    avaliarDestaque();
-  });
-
-  socket.on('media-state', ({ id, ...state }) => {
-    const peer = peers.get(id);
-    if (!peer) return;
-    const antes = peer.state || {};
-    peer.state = state;
-    organizarFaixasRemotas(peer);
-    ligarMidiaDoTile(id);
-    // Carimba o inicio de cada fonte; zera quando ela acaba, para nao "furar a fila" ao
-    // voltar depois.
-    if (state.screen && !antes.screen) peer.ordem.screen = ++sequenciaDeCompartilhamento;
-    if (!state.screen) peer.ordem.screen = 0;
-    if (state.camera && !antes.camera) peer.ordem.camera = ++sequenciaDeCompartilhamento;
-    if (!state.camera) peer.ordem.camera = 0;
-    atualizarTile(id);
-    avaliarDestaque();
-    // O risco de eco depende de quem mais esta mandando som de tela.
-    avaliarRiscoDeEco();
-  });
-
-  socket.on('offer', async (fromId, description, mediaInfo) => {
-    const peer = peers.get(fromId) || criarConexaoPar(fromId, 'Participante', {}, false);
-    return sinalizarEmSerie(peer, async () => {
-    const pc = peer.pc;
-    const offerCollision = peer.makingOffer || (pc.signalingState !== 'stable' && !peer.settingRemoteAnswer);
-    peer.ignoreOffer = !peer.polite && offerCollision;
-    if (peer.ignoreOffer) return;
-    peer.remoteStreamIds = mediaInfo || {};
-    try {
-      // Adiciona minha midia ANTES de aplicar a oferta remota: assim o navegador reaproveita
-      // meu transceiver (ainda sem mid) para a mesma faixa do offer e minha midia ja sai
-      // incluida nesta primeira resposta, sem precisar de uma renegociacao extra.
-      peer.adicionarFaixasSeNecessario();
-      if (offerCollision) {
-        await Promise.all([
-          pc.setLocalDescription({ type: 'rollback' }),
-          pc.setRemoteDescription(description)
-        ]);
-      } else {
-        await pc.setRemoteDescription(description);
-      }
-      organizarFaixasRemotas(peer);
-      ligarMidiaDoTile(fromId);
-      preferirCodecsDeVideo(pc);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', fromId, pc.localDescription, buildMediaInfo(peer));
-      await aplicarCandidatosPendentes(peer);
-    } catch (err) {
-      peer.lastSignalingError = err.name;
-      console.warn('Falha ao processar offer:', err);
-    }
-    });
-  });
-
-  socket.on('answer', async (fromId, description, mediaInfo) => {
-    const peer = peers.get(fromId);
-    if (!peer) return;
-    return sinalizarEmSerie(peer, async () => {
-    peer.remoteStreamIds = mediaInfo || {};
-    try {
-      peer.settingRemoteAnswer = true;
-      await peer.pc.setRemoteDescription(description);
-      organizarFaixasRemotas(peer);
-      ligarMidiaDoTile(fromId);
-      await aplicarCandidatosPendentes(peer);
-    } catch (err) { peer.lastSignalingError = err.name; console.warn('Falha ao aplicar answer:', err); }
-    finally { peer.settingRemoteAnswer = false; }
-    });
-  });
-
-  // Candidatos ICE podem chegar antes de setRemoteDescription terminar do nosso lado
-  // (a sinalizacao e mais rapida que a negociacao, especialmente com colisao de ofertas
-  // no mesh). Sem essa fila, addIceCandidate falha com "remote description was null" e
-  // o candidato e perdido para sempre -- foi a causa real da tela/camera ficarem pretas
-  // de forma intermitente: a conexao ICE nunca chegava a "connected".
-  //
-  // O candidato NAO pode ser descartado so porque uma oferta foi ignorada: "ignoreOffer"
-  // fica ligado desde a colisao ate a proxima oferta chegar, e nesse intervalo o candidato
-  // pertence a negociacao ANTERIOR, que continua valendo. Jogar fora esses candidatos
-  // deixava o ICE preso em "checking" para sempre. A negociacao perfeita de referencia faz
-  // o contrario: sempre aplica, e so engole o erro quando esta ignorando a oferta.
-  socket.on('candidate', async (fromId, candidate) => {
-    const peer = peers.get(fromId);
-    if (!peer) return;
-    return sinalizarEmSerie(peer, async () => {
-    if (peer.pc.remoteDescription) {
-      try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (err) { if (!peer.ignoreOffer) console.warn('Falha ao aplicar candidate:', err); }
-    } else {
-      peer.pendingCandidates.push(candidate);
-    }
-    });
-  });
-
-  async function aplicarCandidatosPendentes(peer) {
-    const pendentes = peer.pendingCandidates.splice(0);
-    for (const candidate of pendentes) {
-      try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (err) { console.warn('Falha ao aplicar candidate pendente:', err); }
-    }
-  }
-
   socket.on('audio-data', (data) => receberPcm(data));
 
   socket.on('audio-error', (message) => { status.textContent = message; });
@@ -382,16 +316,13 @@ async function iniciarConexao() {
   socket.connect();
 }
 
-function buildMediaInfo(peer) {
-  return RoomMedia.mediaInfo(peer.pc, peer.senders, { mic: micStream, camera: cameraStream, screen: screenStream }, codecDeVideo);
-}
-
 function meuEstado() {
   return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted };
 }
 
+// O estado das proprias fontes so importa para a interface local: para os outros, quem
+// anuncia camera, tela e som de tela e a lista de publicacoes no servidor de midia.
 function enviarEstado() {
-  socket?.emit('media-state', meuEstado());
   avaliarRiscoDeEco();
   document.dispatchEvent(new Event('room-update'));
 }
@@ -405,555 +336,121 @@ if (!RoomMedia.CODEC_PREFERENCES.includes(codecDeVideo)) codecDeVideo = 'auto';
 const seletoresDeCodec = [...document.querySelectorAll('[data-video-codec]')];
 function codecDeVideoEscolhido() { return codecDeVideo; }
 
-function preferirCodecsDeVideo(pc) {
-  const peer = [...peers.values()].find(item => item.pc === pc);
-  const capsDeEnvio = window.RTCRtpSender?.getCapabilities?.('video');
-  const capsDeRecepcao = window.RTCRtpReceiver?.getCapabilities?.('video');
-  if (!capsDeEnvio && !capsDeRecepcao) return;
-  pc.getTransceivers().forEach(transceiver => {
-    if (!transceiver.setCodecPreferences) return;
-    const enviando = Boolean(transceiver.sender?.track);
-    const tipo = transceiver.sender?.track?.kind || transceiver.receiver?.track?.kind;
-    if (tipo !== 'video') return;
-    // Quem so recebe deve ordenar pelo que consegue DECODIFICAR.
-    const caps = (enviando ? capsDeEnvio : capsDeRecepcao) || capsDeEnvio || capsDeRecepcao;
-    if (!caps?.codecs) return;
-    const source = Object.keys(peer?.senders || {}).find(key => peer.senders[key] === transceiver.sender);
-    const remoteSource = peer?.remoteStreamIds?.mids?.[transceiver.mid];
-    // Quem manda a imagem escolhe o codec dela. A resposta e que fecha a negociacao, entao
-    // sem respeitar a escolha do remoto o receptor reordenaria tudo de volta e o seletor de
-    // quem transmite nao teria efeito nenhum.
-    const preference = enviando ? codecDeVideo : (peer?.remoteStreamIds?.codec || codecDeVideo);
-    const ordenados = RoomMedia.videoCodecs(caps.codecs, { preference, source: source || remoteSource || null });
-    try { transceiver.setCodecPreferences(ordenados); } catch (err) { console.warn('codec prefs:', err); }
-  });
-}
-
-// setCodecPreferences so vale na PROXIMA negociacao: sem renegociar, trocar o seletor no
-// meio da transmissao nao mudaria nada e pareceria um botao quebrado.
+// O codec deixa de ser negociado por transceiver: ele e uma opcao de publicacao, aplicada
+// no momento em que a faixa sobe. Trocar durante a transmissao exige republicar a faixa --
+// o servidor de midia nao transcodifica, entao quem ja esta recebendo precisa do fluxo novo.
 function definirCodecDeVideo(escolha) {
   if (!RoomMedia.CODEC_PREFERENCES.includes(escolha) || escolha === codecDeVideo) return;
   codecDeVideo = escolha;
   try { localStorage.setItem('nexoCodec', escolha); } catch (_) { /* Vale so nesta sessão. */ }
   seletoresDeCodec.forEach(select => { select.value = escolha; });
-  paraCadaPar(renegociar);
   status.textContent = escolha === 'auto'
-    ? 'Codec automático: H.264 primeiro, com VP8, VP9 e AV1 como alternativas.'
-    : `Codec preferido: ${escolha.toUpperCase()}. Quem não suportar continua recebendo pelo melhor codec em comum.`;
+    ? 'Codec automático: H.264, o único que o iPhone decodifica por hardware.'
+    : `Codec preferido: ${escolha.toUpperCase()}. Quem não suportar recebe pelo melhor codec em comum.`;
+  republicarVideo();
 }
 
-// Profiles describe maximum capture quality. Each peer has its own congestion budget.
-const BITRATE_VIDEO_INICIAL = 1_200_000;
+// "auto" e H.264: e o unico codec decodificado por hardware no iPhone e o que tem mais
+// chance de sair pelo encoder da placa de video no Windows.
+function codecDePublicacao() {
+  return codecDeVideo === 'auto' ? 'h264' : codecDeVideo;
+}
+
+async function republicarVideo() {
+  if (!transporte?.conectada) return;
+  const camera = cameraStream?.getVideoTracks()[0] || null;
+  const tela = screenStream?.getVideoTracks()[0] || null;
+  if (camera) { await publicarFonte('camera', null); await publicarFonte('camera', camera); }
+  if (tela) { await publicarFonte('screen', null); await publicarFonte('screen', tela); }
+}
+
+// Os perfis definem a QUALIDADE DE CAPTURA e o teto de envio. Repartir banda entre
+// espectadores deixou de ser tarefa desta pagina: o servidor de midia recebe uma copia e
+// entrega a cada pessoa a camada que a conexao dela aguenta (simulcast). Por isso sairam a
+// medicao de banda por par, o orcamento, a histerese de resolucao e o limite de upload --
+// eles brigariam com o controle de congestionamento do proprio servidor.
 let perfilDeQualidade = (() => { try { return localStorage.getItem('nexoQuality') || 'high'; } catch (_) { return 'high'; } })();
 if (!RoomQuality.profiles[perfilDeQualidade]) perfilDeQualidade = 'high';
-let limiteDeUpload = 40_000_000;
-try { const saved = Number(localStorage.getItem('nexoUpload')); if ([10, 20, 40, 80].includes(saved)) limiteDeUpload = saved * 1_000_000; } catch (_) {}
-const atualizacoesDeParametros = new WeakMap();
-const resolucoesDeEnvio = new WeakMap();
 const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 
-function definirBitrate(sender, bits, fonte) {
-  const anterior = atualizacoesDeParametros.get(sender) || Promise.resolve();
-  const tarefa = anterior.catch(() => {}).then(async () => {
-    if (!sender.track || sender.track.readyState !== 'live') return;
-    const params = sender.getParameters();
-    if (!params.encodings?.length) return; // Negotiation has not created the encoding yet.
-    params.encodings[0].maxBitrate = Math.max(1, Math.round(bits));
-    params.encodings[0].maxFramerate = 30;
-    let resolution;
-    if (fonte === 'screen') {
-      const settings = sender.track.getSettings();
-      const longSide = Math.max(settings.width || 0, settings.height || 0);
-      const previous = resolucoesDeEnvio.get(sender);
-      const target = RoomQuality.resolutionLimit(bits, previous?.track === sender.track ? previous.limit : undefined);
-      resolution = { track: sender.track, limit: target };
-      params.encodings[0].scaleResolutionDownBy = Math.max(1, longSide / target);
+// ---------- Publicacao das proprias fontes ----------
+// Cada fonte sobe UMA vez para o servidor de midia, que a entrega a todo mundo. Antes era
+// uma copia por participante, e a negociacao tinha de ser refeita com cada um.
+const publicacoesLocais = { mic: null, camera: null, screen: null, screenAudio: null };
+// UMA fila para todas as fontes, nao uma por fonte. Cada publicacao ou remocao dispara uma
+// renegociacao com o servidor de midia, e duas ao mesmo tempo -- parar a tela remove video e
+// audio juntos -- faziam a negociacao estourar o tempo limite e derrubar a transmissao.
+let filaDePublicacao = Promise.resolve();
+
+const FONTE_DO_SERVIDOR = {
+  mic: 'microphone', camera: 'camera', screen: 'screen_share', screenAudio: 'screen_share_audio'
+};
+
+function opcoesDePublicacao(fonte) {
+  if (fonte === 'mic') return { source: FONTE_DO_SERVIDOR.mic };
+  if (fonte === 'screenAudio') {
+    // DTX corta a transmissao no silencio e RED duplica pacotes para voz. Os dois estragam
+    // som de jogo e musica, e o servidor de midia os liga por padrao em faixa mono.
+    return { source: FONTE_DO_SERVIDOR.screenAudio, dtx: false, red: false, audioPreset: { maxBitrate: 128_000 } };
+  }
+  const perfil = perfilAtual();
+  if (fonte === 'camera') {
+    return { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true };
+  }
+  return {
+    source: FONTE_DO_SERVIDOR.screen,
+    videoCodec: codecDePublicacao(),
+    simulcast: true,
+    // Texto de codigo compartilhado fica ilegivel quando o navegador prefere manter os
+    // quadros e derrubar a resolucao.
+    degradationPreference: 'maintain-resolution',
+    screenShareEncoding: { maxBitrate: perfil.bitrate, maxFramerate: 30 }
+  };
+}
+
+// Substitui o que "definirFaixaEmTodosOsPares" fazia na malha: agora ha um destino so.
+function publicarFonte(fonte, faixa) {
+  const tarefa = filaDePublicacao.catch(() => {}).then(async () => {
+    if (!transporte?.conectada) return;
+    const local = transporte.sala.localParticipant;
+    const anterior = publicacoesLocais[fonte];
+
+    // "false" e essencial: por padrao o servidor de midia ENCERRA a faixa ao despublicar.
+    // Quem manda no ciclo de vida das capturas e esta pagina -- sem isto, trocar o perfil
+    // de qualidade (que despublica e publica de novo) matava a tela compartilhada.
+    const despublicar = publicacao => local.unpublishTrack(publicacao.track ?? publicacao, false).catch(() => {});
+
+    if (!faixa || faixa.readyState === 'ended') {
+      if (anterior) { await despublicar(anterior); publicacoesLocais[fonte] = null; }
+      return;
     }
-    // Resolution is selected per peer above; avoid the browser retaining a tiny
-    // startup resolution after bandwidth recovers. FPS may still fall under load.
-    params.degradationPreference = fonte === 'screen' ? 'maintain-resolution' : 'maintain-framerate';
-    try { await sender.setParameters(params); if (resolution) resolucoesDeEnvio.set(sender, resolution); }
-    catch (error) { console.warn('Parâmetros de qualidade indisponíveis:', error.name); }
+    // Trocar de camera ou de tela nao precisa republicar: a faixa entra no lugar da atual,
+    // sem renegociar e sem piscar para quem esta assistindo.
+    if (anterior?.track && typeof anterior.track.replaceTrack === 'function') {
+      try { await anterior.track.replaceTrack(faixa); return; }
+      catch (_) { await despublicar(anterior); publicacoesLocais[fonte] = null; }
+    }
+    publicacoesLocais[fonte] = await local.publishTrack(faixa, opcoesDePublicacao(fonte));
+  }).catch(erro => {
+    console.warn('Falha ao publicar', fonte, erro);
+    status.textContent = `Não foi possível enviar ${fonte === 'camera' ? 'a câmera' : fonte === 'mic' ? 'o microfone' : 'a tela'}. Tente desligar e ligar essa fonte.`;
   });
-  atualizacoesDeParametros.set(sender, tarefa);
+  filaDePublicacao = tarefa;
   return tarefa;
 }
 
-function fontesDeVideoAtivas() {
-  return [...(screenStream ? ['screen'] : []), ...(cameraStream ? ['camera'] : [])];
-}
-function tetoDoPar() { return (screenStream ? perfilAtual().bitrate : 0) + (cameraStream ? 2_000_000 : 0) || perfilAtual().bitrate; }
-function tetoDeBitrateDeVideo(fonte, peer) {
-  const ativos = fontesDeVideoAtivas();
-  const pesoTotal = ativos.reduce((sum, f) => sum + (f === 'screen' ? 4 : 1), 0) || (fonte === 'screen' ? 4 : 1);
-  return Math.min(fonte === 'screen' ? perfilAtual().bitrate : 2_000_000,
-    Math.floor((peer?.videoAllocation || 2_500_000) * (fonte === 'screen' ? 4 : 1) / pesoTotal));
-}
-function reajustarTetosDeBitrate() {
-  const lista = [...peers.values()];
-  // Reserve 15% for audio, packet overhead and competing traffic. This is a user cap,
-  // not an Internet speed test. Native WebRTC congestion control remains enabled.
-  const shares = RoomQuality.allocate(lista.map(p => Math.min(p.videoBudget || 2_500_000, tetoDoPar())), limiteDeUpload * 0.85);
-  lista.forEach((peer, index) => {
-    peer.videoAllocation = shares[index];
-    for (const fonte of ['camera', 'screen']) {
-      const sender = peer.senders[fonte];
-      if (sender?.track?.readyState === 'live') definirBitrate(sender, tetoDeBitrateDeVideo(fonte, peer), fonte);
-    }
-  });
-  atualizarBotaoDeQualidade();
-}
-let temporizadorDeMedicao = null;
-let medindoBanda = false;
-async function medirBandaDeSubida() {
-  if (medindoBanda || !peers.size) return;
-  medindoBanda = true;
-  try {
-    await Promise.all([...peers.values()].map(async peer => {
-      if (peer.pc.connectionState !== 'connected') return;
-      try {
-        const stats = await peer.pc.getStats();
-        let pair, bandwidth = false, cpu = false;
-        stats.forEach(item => {
-          if (item.type === 'transport' && item.selectedCandidatePairId) pair = stats.get(item.selectedCandidatePairId);
-          if (item.type === 'outbound-rtp' && item.kind === 'video') {
-            bandwidth ||= item.qualityLimitationReason === 'bandwidth';
-            cpu ||= item.qualityLimitationReason === 'cpu';
-          }
-        });
-        if (!pair) pair = [...stats.values()].find(i => i.type === 'candidate-pair' && i.nominated && i.state === 'succeeded');
-        peer.videoBudget = RoomQuality.nextBudget(peer.videoBudget || 2_500_000,
-          { estimate: pair?.availableOutgoingBitrate || 0, bandwidth, cpu }, tetoDoPar());
-        const screenSender = peer.senders.screen;
-        const trackId = screenSender?.track?.id;
-        const video = [...stats.values()].find(i => i.type === 'outbound-rtp' && i.kind === 'video' &&
-          (stats.get(i.mediaSourceId)?.trackIdentifier === trackId || i.mid === peer.pc.getTransceivers().find(t => t.sender === screenSender)?.mid));
-        if (video) {
-          const prev = peer.lastScreenStats;
-          const elapsed = prev && video.timestamp - prev.timestamp;
-          peer.screenQuality = { width: video.frameWidth, height: video.frameHeight, fps: video.framesPerSecond,
-            bitrate: elapsed > 0 ? Math.max(0, (video.bytesSent - prev.bytes) * 8000 / elapsed) : 0,
-            reason: video.qualityLimitationReason,
-            // Unica evidencia objetiva de que a placa de video esta sendo usada.
-            codec: stats.get(video.codecId)?.mimeType || '',
-            encoder: video.encoderImplementation || '',
-            hardware: video.powerEfficientEncoder };
-          peer.lastScreenStats = { bytes: video.bytesSent, timestamp: video.timestamp };
-        }
-      } catch (_) { /* Missing stats do not interrupt media. */ }
-    }));
-    reajustarTetosDeBitrate();
-  } finally { medindoBanda = false; }
-}
-function iniciarMedicaoDeBanda() {
-  if (!temporizadorDeMedicao) temporizadorDeMedicao = setInterval(() => medirBandaDeSubida(), 2000);
-}
-
-function aplicarParametrosDeEnvio(sender, kind, peer, fonte) {
-  if (kind === 'video') {
-    definirBitrate(sender, BITRATE_VIDEO_INICIAL);
-    reajustarTetosDeBitrate();
-    return;
-  }
-  const params = sender.getParameters();
-  if (!params.encodings || !params.encodings.length) params.encodings = [{}];
-  params.encodings[0].maxBitrate = 256_000;
-  sender.setParameters(params).catch(() => {});
-}
-
-// ---------- Peer connections (mesh) ----------
-// Offer creation, remote descriptions and ICE must not interleave across awaits.
-// In particular, createOffer/createAnswer can otherwise become stale before setLocalDescription.
-function sinalizarEmSerie(peer, action) {
-  const task = (peer.signalingQueue || Promise.resolve()).then(() => {
-    if (peer.pc.signalingState !== 'closed') return action();
-  });
-  peer.signalingQueue = task.catch(error => {
-    peer.lastSignalingError = error.name;
-    console.warn('Sinalização:', error.name);
-  });
-  return peer.signalingQueue;
-}
-// So quem acabou de entrar na sala adiciona midia e inicia a oferta para quem ja estava
-// la; quem ja estava espera essa oferta chegar antes de adicionar a propria midia. Isso
-// evita que os dois lados comecem a negociar ao mesmo tempo: essa colisao de ofertas exige
-// um "rollback" no lado que cede, e em alguns casos o Chrome trava a coleta de candidatos
-// ICE depois de um rollback (o ICE nunca sai do estado "new") -- foi essa a causa real de
-// as cameras/telas dos outros participantes ficarem pretas de forma intermitente.
-function criarConexaoPar(id, name, state, ehIniciador) {
-  if (peers.has(id)) return peers.get(id);
-  const pc = new RTCPeerConnection(configuracaoDeConexao());
-  const peer = {
-    id, name: name || 'Participante',
-    pc,
-    polite: myId > id,
-    makingOffer: false,
-    ignoreOffer: false,
-    settingRemoteAnswer: false,
-    remoteTracks: new Map(),
-    trackUpdates: Promise.resolve(),
-    faixasAdicionadas: false,
-    timeoutIniciador: null,
-    senders: { mic: null, camera: null, screen: null, screenAudio: null },
-    // Voz e som de tela ficam em streams separados. Juntos num unico <audio>, duas pessoas
-    // compartilhando tela fariam o espectador ouvir as duas ao mesmo tempo.
-    remoteStreams: {
-      camera: new MediaStream(), screen: new MediaStream(),
-      micAudio: new MediaStream(), screenAudio: new MediaStream()
-    },
-    remoteStreamIds: {},
-    pendingCandidates: [],
-    // Quando cada fonte comecou, para o destaque automatico saber quem foi primeiro.
-    ordem: { screen: 0, camera: 0 },
-    // Recuperacao de queda e limpeza: tentativas de reatar a conexao e os temporizadores
-    // que precisam morrer junto com o par.
-    tentativasDeReatar: 0,
-    timeoutDeQueda: null,
-    timeoutDeSaude: null,
-    // Conexao que nunca sai de "connecting": vigia, reatamento ja tentado e quantos
-    // candidatos de relay (TURN) este lado conseguiu coletar.
-    timeoutDeTravamento: null,
-    timeoutDeVeredito: null,
-    reatouPorTravamento: false,
-    renegociacaoPendente: false,
-    candidatosDeRelay: 0,
-    temporizadores: [],
-    state: state || { camera: false, screen: false, screenAudio: false, micMuted: false }
-  };
-  peers.set(id, peer);
-  // Quem ja estava compartilhando quando entramos tambem entra na fila do destaque.
-  if (peer.state.screen) peer.ordem.screen = ++sequenciaDeCompartilhamento;
-  if (peer.state.camera) peer.ordem.camera = ++sequenciaDeCompartilhamento;
-
-  pc.onnegotiationneeded = () => sinalizarEmSerie(peer, async () => {
-    try {
-      if (pc.connectionState === 'closed') return;
-      // A fila pode atrasar esta tarefa ate depois de uma oferta remota chegar. Voltar aqui
-      // sem mais nada perdia a renegociacao em silencio, e a midia recem-adicionada nunca
-      // saia. Reagenda em vez de desistir.
-      if (pc.signalingState !== 'stable') { renegociarQuandoEstabilizar(peer); return; }
-      peer.makingOffer = true;
-      // Precisa ser chamado ANTES de gerar a oferta: e o que faltava no comportamento
-      // original e causava a tela preta ao compartilhar tela+camera (o 2o video track
-      // ficava sem prioridade de codec e o navegador remoto podia nao decodifica-lo).
-      preferirCodecsDeVideo(pc);
-      // createOffer explicito em vez de setLocalDescription() sem argumento: a forma curta
-      // so existe no Safari a partir do 15.4 e, onde nao existe, lanca -- a oferta nunca
-      // saia e o aparelho ficava na sala sem enviar nem receber midia.
-      const oferta = await pc.createOffer();
-      await pc.setLocalDescription(oferta);
-      socket.emit('offer', id, pc.localDescription, buildMediaInfo(peer));
-    } catch (err) {
-      peer.lastSignalingError = err.name;
-      console.warn('negotiationneeded:', err);
-    } finally {
-      peer.makingOffer = false;
-    }
-  });
-
-  pc.onicecandidate = (event) => {
-    if (!event.candidate) return;
-    // Guardado so para o diagnostico: sem isto nao ha como saber se o TURN sequer respondeu.
-    if (event.candidate.type === 'relay') peer.candidatosDeRelay++;
-    socket.emit('candidate', id, event.candidate);
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    if (['connected', 'completed'].includes(pc.iceConnectionState)) marcarConexaoSaudavel(peer);
-  };
-
-  pc.onconnectionstatechange = () => {
-    const estado = pc.connectionState;
-    if (estado === 'closed') { removerPar(id); return; }
-
-    if (estado === 'connected') { marcarConexaoSaudavel(peer); return; }
-
-    // Ficar em "connecting"/"checking" nao dispara nada por si so: o Safari pode demorar
-    // muito -- ou nunca -- declarar "failed", e ate la a pessoa so ve "Recebendo video..."
-    // sem explicacao nenhuma. Este vigia transforma a espera silenciosa em diagnostico.
-    if (estado === 'connecting') vigiarConexaoTravada(peer);
-
-    // "disconnected" costuma ser passageiro (troca de rede, Wi-Fi oscilando) e volta
-    // sozinho. So se demorar demais vale mexer.
-    if (estado === 'disconnected' && !peer.timeoutDeQueda) {
-      peer.timeoutDeQueda = setTimeout(() => {
-        peer.timeoutDeQueda = null;
-        if (peer.pc.connectionState === 'disconnected') reatarConexao(peer);
-      }, SEGUNDOS_ATE_REATAR * 1000);
-      return;
-    }
-
-    // "failed" antes destruia o par para sempre: uma oscilacao de rede derrubava a imagem
-    // e ela so voltava com F5, porque nada recria o par (o socket continua conectado, e
-    // ninguem "entrou" de novo). Agora tenta o caminho normal do WebRTC.
-    if (estado === 'failed') reatarConexao(peer);
-  };
-
-  pc.ontrack = (event) => {
-    // Pede o menor buffer de jitter possivel. Sem isto o Chrome guarda algumas centenas
-    // de ms "por seguranca", que somam ao atraso que o audio do sistema ja tem.
-    try { if ("playoutDelayHint" in event.receiver) event.receiver.playoutDelayHint = 0; }
-    catch (_) { /* navegador sem suporte: segue com o padrao */ }
-    const track = event.track;
-    peer.remoteTracks.set(track.id, event);
-    organizarFaixasRemotas(peer);
-    // Parar de compartilhar nem sempre encerra a faixa: com replaceTrack(null) ela apenas
-    // fica muda. Sem reagir aos tres eventos, o palco ficava com a imagem congelada ate a
-    // pessoa apertar F5.
-    track.onended = () => { peer.remoteTracks.delete(track.id); organizarFaixasRemotas(peer); ligarMidiaDoTile(id); };
-    track.onmute = () => avaliarDestaque();
-    track.onunmute = () => { ligarMidiaDoTile(id); avaliarDestaque(); };
-    ligarMidiaDoTile(id);
-  };
-
-  criarTile(id, peer.name, peer.state);
-
-  peer.adicionarFaixasSeNecessario = () => {
-    if (peer.faixasAdicionadas) return;
-    peer.faixasAdicionadas = true;
-    if (peer.timeoutIniciador) { clearTimeout(peer.timeoutIniciador); peer.timeoutIniciador = null; }
-    adicionarFaixasLocaisAoPar(peer);
-  };
-
-  if (ehIniciador) {
-    peer.adicionarFaixasSeNecessario();
-    // Also negotiate when both people join as spectators. No microphone permission
-    // is needed to establish the transport; later media uses the same connection.
-    pc.createDataChannel('presenca');
-  } else {
-    // Rede de seguranca: se quem deveria iniciar nunca mandar oferta (ex.: entrou sem
-    // nenhuma midia disponivel), iniciamos por conta propria apos alguns segundos.
-    peer.timeoutIniciador = setTimeout(peer.adicionarFaixasSeNecessario, 4000);
-  }
-  return peer;
-}
-
-function organizarFaixasRemotas(peer) {
-  const porFonte = { camera: [], screen: [], micAudio: [], screenAudio: [] };
-  peer.remoteTracks.forEach(event => {
-    if (event.track.readyState === 'ended') return;
-    const source = RoomMedia.sourceForTrack(event, peer.remoteStreamIds, peer.state);
-    const destino = source === 'mic' ? 'micAudio' : source;
-    if (destino && porFonte[destino]) porFonte[destino] = [event.track];
-  });
-  for (const [source, tracks] of Object.entries(porFonte)) {
-    const atuais = peer.remoteStreams[source].getTracks();
-    if (tracks.length !== atuais.length || tracks.some(t => !atuais.includes(t))) {
-      peer.remoteStreams[source] = new MediaStream(tracks);
-    }
-  }
-}
-
-function adicionarFaixasLocaisAoPar(peer) {
-  const pc = peer.pc;
-  // Se a faixa ja foi enviada para este par (ex.: a camera foi ligada enquanto ainda
-  // esperavamos a oferta), so troca o conteudo: chamar addTrack de novo com a mesma
-  // faixa lanca InvalidAccessError e derrubaria a negociacao inteira.
-  const enviar = (source, track, stream) => {
-    if (!track) return;
-    if (peer.senders[source]) {
-      atualizarFaixaDoPar(peer, source, track, stream);
-      return;
-    }
-    peer.senders[source] = pc.addTrack(track, stream);
-    aplicarParametrosDeEnvio(peer.senders[source], track.kind === 'video' ? 'video' : 'audio', peer, source);
-  };
-
-  // Vai a faixa filtrada quando ela existe. O stream continua sendo o micStream: e o id
-  // dele que o outro lado usa para saber que aquilo e voz, e nao som de tela.
-  enviar('mic', faixaEnviadaDoMic || micTrack, micStream);
-  if (cameraStream) enviar('camera', cameraStream.getVideoTracks()[0], cameraStream);
-  if (screenStream) {
-    enviar('screen', screenStream.getVideoTracks()[0], screenStream);
-    enviar('screenAudio', screenStream.getAudioTracks()[0], screenStream);
-  }
-}
-
-// Quantos segundos de "disconnected" ainda sao aceitaveis antes de forcar o reatamento.
-const SEGUNDOS_ATE_REATAR = 5;
-const MAXIMO_DE_TENTATIVAS = 4;
-// Tempo de conexao firme que faz uma tentativa de reatamento deixar de contar.
-const SEGUNDOS_PARA_CONSIDERAR_SAUDAVEL = 6;
-
-// Quanto tempo em "connecting" ainda parece negociacao normal, e a partir de quando e
-// preciso dizer a verdade a quem esta esperando.
-const SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO = 15;
-const SEGUNDOS_ATE_DECLARAR_ROTA_AUSENTE = 30;
-
-function marcarConexaoSaudavel(peer) {
-  peer.tentativasDeReatar = 0;
-  clearTimeout(peer.timeoutDeQueda);
-  peer.timeoutDeQueda = null;
-  clearTimeout(peer.timeoutDeSaude);
-  peer.timeoutDeSaude = null;
-  pararDeVigiarTravamento(peer);
-}
-
-function pararDeVigiarTravamento(peer) {
-  clearTimeout(peer.timeoutDeTravamento);
-  peer.timeoutDeTravamento = null;
-  clearTimeout(peer.timeoutDeVeredito);
-  peer.timeoutDeVeredito = null;
-}
-
-// Uma conexao presa em "connecting" nao gera evento nenhum: nem "failed" (que chamaria
-// reatarConexao), nem "disconnected". Sem este vigia, o relatorio mostrava ICE=checking e
-// bytes=0 indefinidamente, sem que nada na tela dissesse o motivo.
-function vigiarConexaoTravada(peer) {
-  if (peer.timeoutDeTravamento || peer.timeoutDeVeredito) return;
-
-  peer.timeoutDeTravamento = setTimeout(() => {
-    peer.timeoutDeTravamento = null;
-    if (peers.get(peer.id) !== peer || peer.pc.connectionState !== 'connecting') return;
-    // Uma tentativa de recomecar a coleta: candidatos podem ter se perdido no caminho.
-    if (!peer.reatouPorTravamento) {
-      peer.reatouPorTravamento = true;
-      status.textContent = `Ainda negociando a mídia com ${peer.name}...`;
-      try { peer.pc.restartIce(); } catch (_) { /* Sem restartIce, resta o veredito abaixo. */ }
-    }
-    peer.timeoutDeVeredito = setTimeout(() => {
-      peer.timeoutDeVeredito = null;
-      if (peers.get(peer.id) !== peer || peer.pc.connectionState !== 'connecting') return;
-      status.textContent = temTurnConfigurado()
-        ? `A mídia não está passando entre estas redes com ${peer.name}. Confira se o serviço TURN está no ar; abra Diagnóstico.`
-        : `A mídia não está passando entre estas redes com ${peer.name}. Esta conexão exige TURN: o endereço HTTPS entrega a página, não o vídeo. Abra Diagnóstico.`;
-      document.dispatchEvent(new Event('room-diagnostics-request'));
-    }, (SEGUNDOS_ATE_DECLARAR_ROTA_AUSENTE - SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO) * 1000);
-  }, SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO * 1000);
-}
-
-function temTurnConfigurado() {
-  return Boolean(rtcConfig.iceServers?.some(servidor => [servidor.urls].flat().some(url => /^turns?:/.test(url))));
-}
-
-// Trocar a politica de ICE exige conexoes novas: iceTransportPolicy so vale no construtor.
-// Reconectar o socket reaproveita o caminho de reconexao que ja existe -- ele derruba os
-// pares antigos, refaz a malha e reavisa todo mundo do estado da midia.
-function definirModoRelay(ativo) {
-  if (forcarRelay === ativo) return;
-  forcarRelay = ativo;
-  if (ativo && !temTurnConfigurado()) {
-    status.textContent = 'Nenhum servidor TURN está configurado: com este modo ligado, ninguém consegue mídia.';
-  } else {
-    status.textContent = ativo ? 'Refazendo as conexões pelo TURN...' : 'Refazendo as conexões sem forçar o TURN...';
-  }
-  if (!socket?.connected) return;
-  socket.disconnect();
-  socket.connect();
-}
-
-// Reaplica a oferta assim que a sinalizacao voltar a "stable". Uma unica marca por par:
-// varias mudancas seguidas viram uma renegociacao so.
-function renegociarQuandoEstabilizar(peer) {
-  if (peer.renegociacaoPendente) return;
-  peer.renegociacaoPendente = true;
-  const aoMudar = () => {
-    if (peer.pc.signalingState !== 'stable') return;
-    peer.pc.removeEventListener('signalingstatechange', aoMudar);
-    peer.renegociacaoPendente = false;
-    if (peers.get(peer.id) === peer && peer.pc.connectionState !== 'closed') renegociar(peer);
-  };
-  peer.pc.addEventListener('signalingstatechange', aoMudar);
-}
-
-// Gera uma oferta pela fila que ja existe. Usado pelo reagendamento acima e pela troca de
-// codec, que so passa a valer na proxima negociacao.
-function renegociar(peer) {
-  return sinalizarEmSerie(peer, async () => {
-    const pc = peer.pc;
-    if (pc.signalingState !== 'stable' || pc.connectionState === 'closed') return;
-    try {
-      peer.makingOffer = true;
-      preferirCodecsDeVideo(pc);
-      const oferta = await pc.createOffer();
-      await pc.setLocalDescription(oferta);
-      socket.emit('offer', peer.id, pc.localDescription, buildMediaInfo(peer));
-    } catch (err) {
-      peer.lastSignalingError = err.name;
-      console.warn('renegociar:', err);
-    } finally {
-      peer.makingOffer = false;
-    }
-  });
-}
-
-// Reatar e o mecanismo padrao do WebRTC: novas credenciais de ICE, os candidatos sao
-// trocados de novo e a midia volta sem refazer a sala. So desiste depois de insistir.
-function reatarConexao(peer) {
-  if (!peers.has(peer.id)) return;
-  if (peer.tentativasDeReatar >= MAXIMO_DE_TENTATIVAS) {
-    status.textContent = `Sem conexão de mídia com ${peer.name}. Abra Diagnóstico; a rede pode precisar de TURN.`;
-    return;
-  }
-  peer.tentativasDeReatar++;
-  status.textContent = `Reconectando com ${peer.name}... (tentativa ${peer.tentativasDeReatar})`;
-  try {
-    // restartIce dispara negotiationneeded, e a negociacao perfeita que ja existe cuida
-    // do caso de os dois lados tentarem ao mesmo tempo.
-    peer.pc.restartIce();
-  } catch (_) {
-    status.textContent = `Não foi possível reconectar com ${peer.name}. Abra Diagnóstico.`;
-    return;
-  }
-  // Num reatamento que da certo, o connectionState nem chega a sair de "connected" e o
-  // iceConnectionState tambem nao muda -- o Chrome so troca de par de candidatos quando o
-  // novo esta validado. Sem isto o contador nunca zerava, e quatro quedas passageiras
-  // espalhadas por uma conversa longa acabariam derrubando o par de vez, como se fossem
-  // quatro fracassos seguidos. O criterio, entao, e permanecer conectado.
-  clearTimeout(peer.timeoutDeSaude);
-  peer.timeoutDeSaude = setTimeout(() => {
-    if (peers.get(peer.id) === peer && peer.pc.connectionState === 'connected') {
-      marcarConexaoSaudavel(peer);
-      status.textContent = `Conexão com ${peer.name} restabelecida.`;
-    }
-  }, SEGUNDOS_PARA_CONSIDERAR_SAUDAVEL * 1000);
+// Nome preservado da malha: a interface inteira chama por aqui e nao precisa saber que
+// agora existe um destino so.
+function definirFaixaEmTodosOsPares(source, track) {
+  return publicarFonte(source, track);
 }
 
 function paraCadaPar(fn) { peers.forEach(fn); }
 
-function definirFaixaEmTodosOsPares(source, track, stream) {
-  return Promise.all([...peers.values()].map(peer => atualizarFaixaDoPar(peer, source, track, stream)));
-}
-
-function atualizarFaixaDoPar(peer, source, track, stream) {
-  peer.trackUpdates = peer.trackUpdates.then(async () => {
-    if (peer.pc.connectionState === 'closed') return;
-    const sender = peer.senders[source];
-    if (sender) {
-      try {
-        await sender.replaceTrack(track);
-        return;
-      } catch (error) {
-        // A different resolution/device can exceed the negotiated envelope.
-        if (error.name !== 'InvalidModificationError') throw error;
-        peer.pc.removeTrack(sender);
-        peer.senders[source] = null;
-      }
-    }
-    if (!track || track.readyState === 'ended') return;
-    peer.senders[source] = peer.pc.addTrack(track, stream);
-    aplicarParametrosDeEnvio(peer.senders[source], track.kind, peer, source);
-  }).catch(error => {
-    console.warn('Falha ao trocar faixa:', error);
-    status.textContent = `Não foi possível atualizar a mídia para ${peer.name}. Tente desligar e ligar a fonte.`;
-  });
-  return peer.trackUpdates;
-}
-
 function removerPar(id) {
-  const peer = peers.get(id);
-  if (!peer) return;
-  // Sem isto, cada pessoa que sai deixa temporizadores rodando para sempre, mexendo em
-  // uma conexao ja fechada.
-  peer.temporizadores.forEach(clearInterval);
-  peer.temporizadores.length = 0;
-  clearTimeout(peer.timeoutDeQueda);
-  clearTimeout(peer.timeoutDeSaude);
-  clearTimeout(peer.timeoutIniciador);
-  pararDeVigiarTravamento(peer);
+  const par = peers.get(id);
+  if (!par) return;
   peers.delete(id);
-  peer.pc.onconnectionstatechange = null;
-  peer.pc.close();
   pararDeAcompanhar(id);
   removerTile(id);
   if (pinned?.id === id) despinar();
@@ -1490,17 +987,54 @@ listarDispositivos();
 
 // ---------- Qualidade de transmissão ----------
 function emMegabits(bits) { return (bits / 1_000_000).toFixed(1).replace('.', ',') + ' Mbps'; }
+
+// As medicoes agora sao do ENVIO para o servidor de midia: uma copia so, em vez de uma por
+// pessoa. O que cada espectador recebe e decidido la, pela conexao dele.
+let qualidadeDoEnvio = null;
 function atualizarBotaoDeQualidade() {
-  qualidadeBtn.textContent = `${perfilAtual().label} · alvo de 30 fps · até ${emMegabits(perfilAtual().bitrate)} por pessoa`;
-  const linhas = [...peers.values()].filter(p => p.screenQuality).map(p => {
-    const q = p.screenQuality;
-    const codec = q.codec ? ` · ${q.codec.replace(/^video\//i, '')}` : '';
-    // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
-    const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
-    return `${p.name}: ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}${q.reason === 'cpu' ? ' · limite do dispositivo' : q.reason === 'bandwidth' ? ' · ajustando à conexão' : ''}`;
-  });
-  document.getElementById('qualityLive').textContent = screenStream ? linhas.join('\n') || 'Aguardando medições de envio…' : 'As medições aparecem durante a transmissão.';
+  qualidadeBtn.textContent = `${perfilAtual().label} · alvo de 30 fps · até ${emMegabits(perfilAtual().bitrate)}`;
+  const q = qualidadeDoEnvio;
+  const ao_vivo = document.getElementById('qualityLive');
+  if (!screenStream) { ao_vivo.textContent = 'As medições aparecem durante a transmissão.'; return; }
+  if (!q) { ao_vivo.textContent = 'Aguardando medições de envio…'; return; }
+  const codec = q.codec ? ` · ${q.codec.replace(/^video\//i, '')}` : '';
+  // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
+  const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
+  const limite = q.reason === 'cpu' ? ' · limite do dispositivo' : q.reason === 'bandwidth' ? ' · ajustando à conexão' : '';
+  ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}${limite}`
+    + '\nCada pessoa recebe a camada que a conexão dela aguenta.';
 }
+
+// Uma leitura periodica do envio, so para a interface. Ela nao decide mais nada: ajustar
+// resolucao e bitrate por espectador e tarefa do servidor de midia.
+let medindoEnvio = false;
+async function medirEnvio() {
+  const faixa = publicacoesLocais.screen?.track;
+  if (!faixa?.getRTCStatsReport || medindoEnvio) return;
+  medindoEnvio = true;
+  try {
+    const stats = await faixa.getRTCStatsReport();
+    if (!stats) return;
+    const video = [...stats.values()].find(i => i.type === 'outbound-rtp' && i.kind === 'video');
+    if (!video) return;
+    const anterior = qualidadeDoEnvio?.bruto;
+    const intervalo = anterior && video.timestamp - anterior.timestamp;
+    qualidadeDoEnvio = {
+      width: video.frameWidth, height: video.frameHeight, fps: video.framesPerSecond,
+      bitrate: intervalo > 0 ? Math.max(0, (video.bytesSent - anterior.bytes) * 8000 / intervalo) : 0,
+      reason: video.qualityLimitationReason,
+      codec: stats.get(video.codecId)?.mimeType || '',
+      // Unica evidencia objetiva de que a placa de video esta sendo usada.
+      encoder: video.encoderImplementation || '',
+      hardware: video.powerEfficientEncoder,
+      bruto: { bytes: video.bytesSent, timestamp: video.timestamp }
+    };
+    atualizarBotaoDeQualidade();
+  } catch (_) { /* Sem estatísticas, a medição some da tela e a transmissão segue. */ }
+  finally { medindoEnvio = false; }
+}
+setInterval(medirEnvio, 2000);
+
 const seletoresDeQualidade = [...document.querySelectorAll('[data-quality-profile]')];
 seletoresDeQualidade.forEach(select => {
   select.value = perfilDeQualidade;
@@ -1516,8 +1050,9 @@ seletoresDeQualidade.forEach(select => {
         height: { ideal: perfil.height, max: perfil.height }, frameRate: { ideal: 30, max: 30 } });
       perfilDeQualidade = novo;
       try { localStorage.setItem('nexoQuality', novo); } catch (_) {}
-      reajustarTetosDeBitrate();
-      status.textContent = `Qualidade ${perfil.label}. A resolução e o bitrate enviados se adaptam a cada conexão.`;
+      // O teto de envio entra nas opcoes de publicacao, entao a faixa precisa subir de novo.
+      if (track) await publicarFonte('screen', null).then(() => publicarFonte('screen', track));
+      status.textContent = `Qualidade ${perfil.label}. Cada pessoa recebe a camada que a conexão dela aguenta.`;
     } catch (_) {
       perfilDeQualidade = anterior;
       status.textContent = 'Esta fonte não aceitou a nova resolução. Use Atualizar tela para selecionar novamente.';
@@ -1531,14 +1066,6 @@ seletoresDeCodec.forEach(select => {
   select.value = codecDeVideo;
   select.onchange = () => definirCodecDeVideo(select.value);
 });
-
-const uploadSelect = document.getElementById('uploadLimit');
-uploadSelect.value = String(limiteDeUpload / 1_000_000);
-uploadSelect.onchange = () => {
-  limiteDeUpload = Number(uploadSelect.value) * 1_000_000;
-  try { localStorage.setItem('nexoUpload', uploadSelect.value); } catch (_) {}
-  reajustarTetosDeBitrate();
-};
 atualizarBotaoDeQualidade();
 
 // ---------- Câmera ----------
@@ -2405,6 +1932,9 @@ function encerrarMidiasDaSala() {
   screenStream?.getTracks().forEach(t => t.stop());
   desmontarFiltroDeRuido();
   Array.from(peers.keys()).forEach(removerPar);
+  // Sem isto o servidor de midia so notaria a saida pelo tempo limite, e por alguns
+  // segundos os outros continuariam vendo uma imagem congelada de quem ja foi embora.
+  transporte?.desconectar();
   limparAudioDoAplicativo().catch(() => {});
 }
 async function sairDaSala() {
@@ -3054,7 +2584,7 @@ function mostrarMensagem(msg) {
   chatMsgs.appendChild(el);
   if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
-  if (!chatVisivel() && msg.autorId !== myId) {
+  if (!chatVisivel() && msg.autorId !== meuSocketId) {
     naoLidas++;
     chatBadge.textContent = naoLidas > 99 ? '99+' : String(naoLidas);
     chatBadge.classList.remove('hidden');

@@ -1,5 +1,13 @@
 # TURN próprio com coturn
 
+> **Quando este documento vale.** A partir da migração para servidor de mídia (branch
+> `nexo-sfu`), a mídia deixou de ir ponto a ponto: ela passa por um SFU no host, e todo mundo
+> faz conexão de *saída* para ele. Com IP público no host, **TURN deixou de ser necessário** —
+> a alternativa por TCP do próprio servidor de mídia cobre quem bloqueia UDP. Este documento
+> continua valendo para dois casos: rodar a branch anterior (`codex/turn-codec-camera`, malha
+> ponto a ponto), ou hospedar o servidor de mídia numa máquina **sem** endereço público
+> alcançável. Fora disso, veja a seção "Servidor de mídia" no README.
+
 O Nexo manda a mídia direto de um participante para o outro. Quando as duas pontas estão em
 redes diferentes, isso exige furar o NAT dos dois lados. Se **um** deles for NAT simétrico ou
 CGNAT — o normal em fibra residencial e em rede móvel no Brasil — a conexão nunca fecha e o

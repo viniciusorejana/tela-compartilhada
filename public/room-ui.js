@@ -117,55 +117,77 @@
     if ($('diagnosticsPanel').classList.contains('hidden')) abrirDiagnostico();
   });
 
-  $('forceRelay').onchange = () => definirModoRelay($('forceRelay').checked);
-
   async function collectDiagnostics() {
     if (collecting) return;
     collecting = true;
     try {
-      const turn = rtcConfig.iceServers?.some(s => [s.urls].flat().some(url => /^turns?:/.test(url)));
-      const lines = ['Nexo · diagnóstico de mídia', `Navegador: ${navigator.userAgent}`, `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`, `Servidor: ${socket?.connected ? 'conectado' : 'desconectado'}`, `TURN configurado: ${turn ? 'sim' : 'não'}`, `Forçar TURN: ${$('forceRelay').checked ? 'sim' : 'não'}`, `Codec de vídeo escolhido: ${codecDeVideoEscolhido()}`, `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`, `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`];
-      let index = 0, failed = false, received = 0, relayTotal = 0;
-      lines.push('Revisão de mídia: turn-codec-camera-1');
-      for (const peer of peers.values()) {
-        relayTotal += peer.candidatosDeRelay;
-        lines.push('', `Participante ${++index}: conexão=${peer.pc.connectionState}; ICE=${peer.pc.iceConnectionState}; sinalização=${peer.pc.signalingState}`);
-        lines.push(`Fontes anunciadas: câmera=${Boolean(peer.state.camera)}, tela=${Boolean(peer.state.screen)}, áudio de tela=${Boolean(peer.state.screenAudio)}`);
-        lines.push(`Candidatos de relay coletados aqui: ${peer.candidatosDeRelay}`);
-        lines.push(`Última falha de sinalização: ${peer.lastSignalingError || 'nenhuma'}`);
-        peer.pc.getTransceivers().forEach(t => lines.push(`Transceptor MID ${t.mid ?? '?'}: direção=${t.direction}; negociada=${t.currentDirection || 'pendente'}`));
-        failed ||= ['failed', 'disconnected', 'checking'].includes(peer.pc.iceConnectionState);
+      const sala = transporte?.sala;
+      const estado = sala?.state || 'sem conexão';
+      const lines = ['Nexo · diagnóstico de mídia',
+        `Navegador: ${navigator.userAgent}`,
+        `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`,
+        `Sinalização: ${socket?.connected ? 'conectada' : 'desconectada'}`,
+        `Servidor de mídia: ${estado}`,
+        `Codec de vídeo escolhido: ${codecDeVideoEscolhido()}`,
+        `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`,
+        `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
+        'Revisão de mídia: sfu-1'];
+
+      let recebidos = 0, index = 0;
+      const conectado = estado === 'connected';
+
+      // Estatisticas vem por faixa, pela API publica do cliente: o que esta SENDO enviado
+      // daqui e o que esta chegando de cada participante.
+      const faixasLocais = Object.entries(publicacoesLocais)
+        .filter(([, publicacao]) => publicacao?.track?.getRTCStatsReport)
+        .map(([fonte, publicacao]) => [`enviando ${fonte}`, publicacao.track]);
+      const faixasRemotas = [];
+      for (const par of peers.values()) {
+        par.publicacoes.forEach(publicacao => {
+          if (publicacao.track?.getRTCStatsReport) faixasRemotas.push([`recebendo ${RoomTransport.fonteDaPublicacao(publicacao) || '?'} de ${par.name}`, publicacao.track]);
+        });
+      }
+
+      let rotaImpressa = false;
+      for (const [rotulo, faixa] of [...faixasLocais, ...faixasRemotas]) {
         let stats;
-        try { stats = await peer.pc.getStats(); } catch (_) { lines.push('Estatísticas indisponíveis.'); continue; }
+        try { stats = await faixa.getRTCStatsReport(); } catch (_) { continue; }
+        if (!stats) continue;
+        lines.push('', `${rotulo}:`);
         stats.forEach(item => {
-          if (item.type === 'transport' && item.selectedCandidatePairId) {
-            const pair = stats.get(item.selectedCandidatePairId);
-            const candidate = pair && stats.get(pair.localCandidateId);
-            lines.push(`Rota: ${candidate?.candidateType === 'relay' ? 'TURN' : 'direta'}; latência: ${pair?.currentRoundTripTime != null ? Math.round(pair.currentRoundTripTime * 1000) + ' ms' : 'não informada'}`);
+          // A rota e a mesma para todas as faixas do mesmo transporte: basta uma vez.
+          if (!rotaImpressa && item.type === 'candidate-pair' && item.state === 'succeeded' && item.nominated) {
+            const local = stats.get(item.localCandidateId);
+            lines.push(`  Rota: ${local?.candidateType || 'não informada'} por ${local?.protocol || '?'}; latência: ${item.currentRoundTripTime != null ? Math.round(item.currentRoundTripTime * 1000) + ' ms' : 'não informada'}`);
+            rotaImpressa = true;
           }
-          if (item.type === 'inbound-rtp' && (item.kind === 'video' || item.mediaType === 'video')) {
-            const codec = stats.get(item.codecId);
-            received += item.framesDecoded || 0;
-            lines.push(`Vídeo MID ${item.mid ?? '?'}: ${codec?.mimeType || 'codec não informado'}; bytes=${item.bytesReceived ?? '?'}; quadros decodificados=${item.framesDecoded ?? '?'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}`);
-            lines.push(`  Fonte=${peer.remoteStreamIds?.mids?.[item.mid] || 'consultar faixas abaixo'}; recebidos=${item.framesReceived ?? '?'}; keyframes=${item.keyFramesDecoded ?? '?'}; descartados=${item.framesDropped ?? '?'}; PLI=${item.pliCount ?? '?'}`);
-            lines.push(`  Decodificador=${item.decoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientDecoder)}`);
+          if (item.type === 'inbound-rtp' && item.kind === 'video') {
+            recebidos += item.framesDecoded || 0;
+            lines.push(`  ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; bytes=${item.bytesReceived ?? '?'}; quadros decodificados=${item.framesDecoded ?? '?'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}`);
+            lines.push(`  keyframes=${item.keyFramesDecoded ?? '?'}; descartados=${item.framesDropped ?? '?'}; PLI=${item.pliCount ?? '?'}; decodificador=${item.decoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientDecoder)}`);
           }
           // Do lado de quem envia, e aqui que se ve se a GPU esta sendo usada de verdade.
-          if (item.type === 'outbound-rtp' && (item.kind === 'video' || item.mediaType === 'video')) {
-            const codec = stats.get(item.codecId);
-            lines.push(`Envio MID ${item.mid ?? '?'}: ${codec?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}`);
-            lines.push(`  Codificador=${item.encoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientEncoder)}`);
+          if (item.type === 'outbound-rtp' && item.kind === 'video') {
+            lines.push(`  Camada ${item.rid || 'única'}: ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}`);
+            lines.push(`  codificador=${item.encoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientEncoder)}`);
           }
         });
-        peer.remoteTracks.forEach(event => lines.push(`Faixa ${event.track.kind}, MID ${event.transceiver?.mid ?? '?'}: ${RoomMedia.sourceForTrack(event, peer.remoteStreamIds, peer.state) || 'aguardando identificação'}; ${event.track.readyState}; muda=${event.track.muted}`));
       }
-      let summary = !socket?.connected ? 'O servidor está desconectado. Confira o endereço e se o servidor está ligado.'
-        : !peers.size ? 'Você está conectado à sala. O diagnóstico de mídia aparece quando outra pessoa entrar.'
-        : failed ? (turn
-          ? (relayTotal ? 'A conexão de mídia está em negociação ou falhou, mesmo com o TURN respondendo. Tente marcar "Forçar retransmissão pelo TURN" e compare.' : 'A conexão de mídia está em negociação ou falhou e o TURN não devolveu nenhum candidato: confira se o serviço está no ar e se as credenciais valem.')
-          : 'A conexão de mídia está em negociação ou falhou. Redes móveis e alguns roteadores precisam de TURN; o link HTTPS do Funnel não substitui esse serviço.')
+
+      for (const par of peers.values()) {
+        lines.push('', `Participante ${++index}: ${par.pc.connectionState}`);
+        lines.push(`Fontes anunciadas: câmera=${Boolean(par.state.camera)}, tela=${Boolean(par.state.screen)}, áudio de tela=${Boolean(par.state.screenAudio)}`);
+        par.publicacoes.forEach(publicacao => {
+          const faixa = publicacao.track?.mediaStreamTrack;
+          lines.push(`  Faixa ${publicacao.kind}: ${RoomTransport.fonteDaPublicacao(publicacao) || 'fonte desconhecida'}; ${faixa ? faixa.readyState : 'sem faixa'}; muda=${publicacao.isMuted}; inscrita=${publicacao.isSubscribed}`);
+        });
+      }
+
+      let summary = !socket?.connected ? 'O servidor está desconectado. Confira o endereço e se ele está ligado.'
+        : !conectado ? 'A sala não está conectada ao servidor de mídia. Sem ele o chat funciona, mas ninguém vê nem ouve ninguém — confira se o processo do servidor de mídia está no ar.'
+        : !peers.size ? 'Você está conectado ao servidor de mídia. O diagnóstico de recepção aparece quando outra pessoa entrar.'
         : midiasBloqueadas.size ? 'O navegador bloqueou a reprodução. Feche este painel e toque em Ativar reprodução.'
-        : received > 0 ? 'Há quadros de vídeo decodificados. Se a imagem não aparece, feche este painel e tente Reproduzir vídeo.'
+        : recebidos > 0 ? 'Há quadros de vídeo decodificados. Se a imagem não aparece, feche este painel e tente Reproduzir vídeo.'
         : 'A sala está conectada. Se alguém já transmite, aguarde os primeiros quadros e confira as faixas abaixo.';
       if (pinned?.id === 'self') summary = 'O palco mostra sua prévia local. Para conferir a recepção, abra o diagnóstico em outro participante.';
       report = lines.join('\n');
