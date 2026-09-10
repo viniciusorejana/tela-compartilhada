@@ -58,7 +58,7 @@
     $('missionTitle').textContent = total > 1 ? 'Squad reunido' : 'Monte seu squad';
     $('missionText').textContent = total > 1 ? `${total} pessoas, uma sala. ${live ? 'A transmissão já começou.' : 'Que tal compartilhar uma jogada?'}` : 'Copie o convite e chame alguém para a sala.';
     const members = joined ? [{ id: 'self', name: myName, state: meuEstado() }, ...peers.values()] : [];
-    const signature = JSON.stringify(members.map(p => [p.id, p.name, p.state]));
+    const signature = JSON.stringify(members.map(p => [p.id, p.name, p.state, Boolean(p.semConexao)]));
     if (signature !== memberSignature) {
       memberSignature = signature;
       $('memberList').replaceChildren(...members.map(person => {
@@ -73,8 +73,9 @@
         name.className = 'member-name';
         name.textContent = person.name + (person.id === 'self' ? ' (você)' : '');
         const state = document.createElement('span');
-        state.className = person.state.screen ? 'member-live' : 'member-state';
-        state.textContent = person.state.screen ? 'LIVE' : person.state.micMuted ? 'mudo' : 'voz';
+        // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
+        state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
+        state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : person.state.micMuted ? 'mudo' : 'voz';
         row.append(avatar, name, state);
         return row;
       }));

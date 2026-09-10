@@ -238,7 +238,7 @@ async function iniciarConexao() {
     // no Discord sem entender por que. Como se entra mudo de qualquer forma, o microfone so
     // e pedido no clique do botao, que e tambem quando a permissao faz sentido para quem ve.
 
-    socket.emit('join-room', roomCode, myName, (response) => {
+    socket.emit('join-room', roomCode, myName, myId, (response) => {
       if (!response?.ok) {
         status.textContent = response?.error || 'Não foi possível entrar na sala.';
         return;
@@ -298,6 +298,17 @@ async function iniciarConexao() {
       ? 'Agente de áudio conectado: você já pode compartilhar o som do seu computador.'
       : 'Agente de áudio desconectado.';
     if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
+  });
+
+  // Duas fontes independentes dizem quem está na sala, e é bom que sejam duas. O servidor de
+  // mídia é a fonte da imagem e da voz, mas guarda por muito tempo quem só sumiu -- fechou o
+  // notebook, perdeu o Wi-Fi, matou o navegador -- esperando essa pessoa voltar. A conexão
+  // de sinalização percebe isso em segundos, e é ela que tira o fantasma da lista.
+  socket.on('peer-left', ({ identidade }) => {
+    if (!identidade || !peers.has(identidade)) return;
+    removerPar(identidade);
+    atualizarContador();
+    avaliarDestaque();
   });
 
   socket.on('audio-data', (data) => receberPcm(data));
@@ -386,6 +397,40 @@ const FONTE_DO_SERVIDOR = {
   mic: 'microphone', camera: 'camera', screen: 'screen_share', screenAudio: 'screen_share_audio'
 };
 
+// Quando falta banda ou processador, alguma coisa TEM de ceder: ou a nitidez, ou a
+// fluidez. Não existe escolha certa para os dois casos -- ler código exige texto nítido,
+// jogar exige movimento -- e por isso quem compartilha decide, em vez de a página decidir
+// por todo mundo. "detail" e "maintain-resolution" derrubam os quadros para segurar a
+// resolução; "motion" e "maintain-framerate" fazem o contrário.
+const PRIORIDADES_DE_TELA = {
+  nitidez: { rotulo: 'Nitidez', dica: 'código, texto e planilhas', pista: 'detail', degradacao: 'maintain-resolution', fps: 30 },
+  equilibrio: { rotulo: 'Equilíbrio', dica: 'o padrão, serve para quase tudo', pista: null, degradacao: 'balanced', fps: 30 },
+  fluidez: { rotulo: 'Fluidez', dica: 'jogos e vídeo', pista: 'motion', degradacao: 'maintain-framerate', fps: 60 }
+};
+let prioridadeDaTela = (() => { try { return localStorage.getItem('nexoPrioridade') || 'equilibrio'; } catch (_) { return 'equilibrio'; } })();
+if (!PRIORIDADES_DE_TELA[prioridadeDaTela]) prioridadeDaTela = 'equilibrio';
+const seletoresDePrioridade = [...document.querySelectorAll('[data-screen-priority]')];
+
+async function definirPrioridadeDaTela(escolha) {
+  if (!PRIORIDADES_DE_TELA[escolha] || escolha === prioridadeDaTela) return;
+  prioridadeDaTela = escolha;
+  try { localStorage.setItem('nexoPrioridade', escolha); } catch (_) { /* Vale so nesta sessão. */ }
+  seletoresDePrioridade.forEach(select => { select.value = escolha; });
+  const prioridade = PRIORIDADES_DE_TELA[escolha];
+  const faixa = screenStream?.getVideoTracks()[0];
+  if (faixa) {
+    faixa.contentHint = prioridade.pista || '';
+    // A taxa pedida na captura é o teto do que o encoder pode enviar: sem mexer nela,
+    // escolher "fluidez" não teria de onde tirar quadros a mais.
+    try { await faixa.applyConstraints({ ...faixa.getConstraints(), frameRate: { ideal: prioridade.fps, max: prioridade.fps } }); }
+    catch (_) { /* A fonte manda na taxa; o resto da escolha continua valendo. */ }
+    await publicarFonte('screen', null);
+    await publicarFonte('screen', faixa);
+  }
+  status.textContent = `Prioridade da tela: ${prioridade.rotulo.toLowerCase()} (${prioridade.dica}).`;
+  atualizarBotaoDeQualidade();
+}
+
 function opcoesDePublicacao(fonte) {
   if (fonte === 'mic') return { source: FONTE_DO_SERVIDOR.mic };
   if (fonte === 'screenAudio') {
@@ -395,16 +440,16 @@ function opcoesDePublicacao(fonte) {
   }
   const perfil = perfilAtual();
   if (fonte === 'camera') {
-    return { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true };
+    // Camera e movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
+    return { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true, degradationPreference: 'maintain-framerate' };
   }
+  const prioridade = PRIORIDADES_DE_TELA[prioridadeDaTela];
   return {
     source: FONTE_DO_SERVIDOR.screen,
     videoCodec: codecDePublicacao(),
     simulcast: true,
-    // Texto de codigo compartilhado fica ilegivel quando o navegador prefere manter os
-    // quadros e derrubar a resolucao.
-    degradationPreference: 'maintain-resolution',
-    screenShareEncoding: { maxBitrate: perfil.bitrate, maxFramerate: 30 }
+    degradationPreference: prioridade.degradacao,
+    screenShareEncoding: { maxBitrate: perfil.bitrate, maxFramerate: prioridade.fps }
   };
 }
 
@@ -991,8 +1036,18 @@ function emMegabits(bits) { return (bits / 1_000_000).toFixed(1).replace('.', ',
 // As medicoes agora sao do ENVIO para o servidor de midia: uma copia so, em vez de uma por
 // pessoa. O que cada espectador recebe e decidido la, pela conexao dele.
 let qualidadeDoEnvio = null;
+// "Está ruim por causa da minha internet ou do meu PC?" é a primeira pergunta de quem vê a
+// imagem travando, e o navegador sabe a resposta. Ela vale mais em português do que como
+// "qualityLimitationReason: cpu" escondido num relatório.
+const MOTIVOS_DE_LIMITE = {
+  cpu: 'O processador não dá conta de codificar tudo isso. Baixe a qualidade, feche o que estiver pesado, ou escolha Fluidez.',
+  bandwidth: 'Sua conexão de subida não dá conta. Baixe a qualidade — nada aqui contorna o limite do link.',
+  other: 'O navegador está limitando o envio por outro motivo.'
+};
+
 function atualizarBotaoDeQualidade() {
-  qualidadeBtn.textContent = `${perfilAtual().label} · alvo de 30 fps · até ${emMegabits(perfilAtual().bitrate)}`;
+  const prioridade = PRIORIDADES_DE_TELA[prioridadeDaTela];
+  qualidadeBtn.textContent = `${perfilAtual().label} · ${prioridade.rotulo.toLowerCase()} · até ${prioridade.fps} fps e ${emMegabits(perfilAtual().bitrate)}`;
   const q = qualidadeDoEnvio;
   const ao_vivo = document.getElementById('qualityLive');
   if (!screenStream) { ao_vivo.textContent = 'As medições aparecem durante a transmissão.'; return; }
@@ -1000,8 +1055,9 @@ function atualizarBotaoDeQualidade() {
   const codec = q.codec ? ` · ${q.codec.replace(/^video\//i, '')}` : '';
   // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
   const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
-  const limite = q.reason === 'cpu' ? ' · limite do dispositivo' : q.reason === 'bandwidth' ? ' · ajustando à conexão' : '';
-  ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}${limite}`
+  const motivo = MOTIVOS_DE_LIMITE[q.reason];
+  ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}`
+    + (motivo ? `\n${motivo}` : '\nNada está limitando o envio: os quadros que saem são os que a fonte entrega.')
     + '\nCada pessoa recebe a camada que a conexão dela aguenta.';
 }
 
@@ -1065,6 +1121,10 @@ seletoresDeQualidade.forEach(select => {
 seletoresDeCodec.forEach(select => {
   select.value = codecDeVideo;
   select.onchange = () => definirCodecDeVideo(select.value);
+});
+seletoresDePrioridade.forEach(select => {
+  select.value = prioridadeDaTela;
+  select.onchange = () => definirPrioridadeDaTela(select.value);
 });
 atualizarBotaoDeQualidade();
 
@@ -1602,7 +1662,7 @@ async function capturarTela() {
       cursor: 'always',
       width: { ideal: perfilAtual().width, max: perfilAtual().width },
       height: { ideal: perfilAtual().height, max: perfilAtual().height },
-      frameRate: { ideal: 30, max: 30 }
+      frameRate: { ideal: PRIORIDADES_DE_TELA[prioridadeDaTela].fps, max: PRIORIDADES_DE_TELA[prioridadeDaTela].fps }
     },
     audio: audioPeloNavegador ? {
       echoCancellation: false,
@@ -1643,7 +1703,7 @@ async function capturarTela() {
   }
   // A dica segue a prioridade escolhida: uma tela nova nao pode desfazer a escolha.
   stream.getVideoTracks().forEach(track => {
-    track.contentHint = 'detail';
+    track.contentHint = PRIORIDADES_DE_TELA[prioridadeDaTela].pista || '';
   });
 
   try {

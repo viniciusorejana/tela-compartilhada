@@ -26,6 +26,10 @@
     return FONTES[publicacao?.source] || null;
   }
 
+  // Tempo que alguem pode ficar sem conexao antes de sair da lista. Curto demais tira da
+  // sala quem so passou por um tunel; longo demais deixa fantasma na conversa.
+  const SEGUNDOS_ATE_DAR_POR_AUSENTE = 25;
+
   function estadoVazio() {
     return { camera: false, screen: false, screenAudio: false, micMuted: true };
   }
@@ -49,6 +53,9 @@
       publicacoes: new Map(),
       participante,
       pc: { connectionState: 'connecting' },
+      // Marcado quando o servidor de midia da a conexao dessa pessoa como perdida.
+      semConexao: false,
+      timeoutDeAusencia: null,
       proximaOrdem: sequencia
     };
   }
@@ -113,7 +120,9 @@
     sala
       .on(LK.RoomEvent.ParticipantConnected, participante => { garantirPar(participante); sincronizarEstadoDeConexao(); })
       .on(LK.RoomEvent.ParticipantDisconnected, participante => {
-        if (!peers.has(participante.identity)) return;
+        const par = peers.get(participante.identity);
+        if (!par) return;
+        clearTimeout(par.timeoutDeAusencia);
         peers.delete(participante.identity);
         aoSair(participante.identity);
       })
@@ -144,11 +153,64 @@
         recalcularEstado(par);
         aoMudarMidia(par.id);
       })
+      // Quem fecha o notebook, perde o Wi-Fi ou mata o navegador nao consegue avisar
+      // ninguem. O servidor de midia guarda essa pessoa por um bom tempo esperando ela
+      // voltar -- prudente para uma oscilacao de rede, mas do lado de ca ela fica parada na
+      // lista, com a imagem congelada, como se ainda estivesse na conversa. Entao: assim que
+      // a conexao dela e dada como perdida, ela aparece marcada; se nao voltar, sai.
+      .on(LK.RoomEvent.ConnectionQualityChanged, (qualidade, participante) => {
+        const par = peers.get(participante?.identity);
+        if (!par) return;
+        const perdida = qualidade === LK.ConnectionQuality.Lost;
+        if (perdida === Boolean(par.semConexao)) return;
+        par.semConexao = perdida;
+        clearTimeout(par.timeoutDeAusencia);
+        par.timeoutDeAusencia = null;
+        if (perdida) {
+          par.timeoutDeAusencia = setTimeout(() => {
+            if (peers.get(par.id) !== par || !par.semConexao) return;
+            peers.delete(par.id);
+            aoSair(par.id);
+          }, SEGUNDOS_ATE_DAR_POR_AUSENTE * 1000);
+        }
+        aoMudarEstado(par);
+      })
       .on(LK.RoomEvent.ConnectionStateChanged, sincronizarEstadoDeConexao)
+      // Perder a conexao com o servidor de midia nao gera evento de saida para cada um: se
+      // a lista nao for esvaziada aqui, todo mundo continua aparecendo na sala como se
+      // estivesse la, com a imagem congelada, ate a pagina ser recarregada.
       .on(LK.RoomEvent.Disconnected, () => {
         conectada = false;
+        esvaziar();
+        sincronizarEstadoDeConexao();
+      })
+      // Numa reconexao o servidor manda o estado atual da sala. Quem saiu enquanto a
+      // conexao estava fora nao gera "participante saiu": some daqui por ausencia.
+      .on(LK.RoomEvent.Reconnected, () => {
+        for (const id of [...peers.keys()]) {
+          if (!sala.remoteParticipants.has(id)) { peers.delete(id); aoSair(id); }
+        }
+        sala.remoteParticipants.forEach(adotarParticipante);
         sincronizarEstadoDeConexao();
       });
+
+    function esvaziar() {
+      for (const id of [...peers.keys()]) {
+        clearTimeout(peers.get(id)?.timeoutDeAusencia);
+        peers.delete(id);
+        aoSair(id);
+      }
+    }
+
+    function adotarParticipante(participante) {
+      const par = garantirPar(participante);
+      participante.trackPublications.forEach(publicacao => {
+        if (!publicacao.isSubscribed) return;
+        par.publicacoes.set(publicacao.trackSid, publicacao);
+        guardarFaixa(par, publicacao, publicacao.track);
+      });
+      recalcularEstado(par);
+    }
 
     return {
       sala,
@@ -158,20 +220,13 @@
         await sala.connect(url, token);
         conectada = true;
         // Quem ja estava na sala antes desta conexao nao gera evento de entrada.
-        sala.remoteParticipants.forEach(participante => {
-          const par = garantirPar(participante);
-          participante.trackPublications.forEach(publicacao => {
-            if (!publicacao.isSubscribed) return;
-            par.publicacoes.set(publicacao.trackSid, publicacao);
-            guardarFaixa(par, publicacao, publicacao.track);
-          });
-          recalcularEstado(par);
-        });
+        sala.remoteParticipants.forEach(adotarParticipante);
         sincronizarEstadoDeConexao();
       },
 
       async desconectar() {
         conectada = false;
+        esvaziar();
         try { await sala.disconnect(); } catch (_) { /* Sair nunca deve travar a navegação. */ }
       },
 

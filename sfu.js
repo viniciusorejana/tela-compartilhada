@@ -9,9 +9,11 @@
 // A sinalizacao NAO abre porta: ela entra pelo mesmo HTTPS que serve a pagina e e
 // encaminhada aqui para o processo local. So a midia (UDP) usa porta propria.
 const crypto = require('node:crypto');
+const dgram = require('node:dgram');
 const fs = require('node:fs');
 const net = require('node:net');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { caminhoDoBinario, VERSAO } = require('./scripts/baixar-livekit.cjs');
@@ -23,7 +25,87 @@ const ARQUIVO_DE_CONFIG = path.join(PASTA, 'livekit.yaml');
 const PORTA_LOCAL = Number(process.env.SFU_PORT) || 7880;
 const PORTA_TCP = Number(process.env.SFU_TCP_PORT) || 7881;
 const PORTAS_UDP = process.env.SFU_UDP_PORTS || '7882-7891';
+
+// Faixas de túnel, VPN ou rede de emergência: nenhuma delas leva mídia de fora até aqui, e
+// todas contam como "mais um endereço em que tentar abrir a porta".
+const FAIXAS_QUE_NAO_SERVEM = [
+  [/^127\./, 'loopback'],
+  [/^169\.254\./, 'sem DHCP'],
+  [/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, 'CGNAT ou Tailscale'],
+  [/^26\./, 'Radmin VPN'],
+  [/^25\./, 'Hamachi']
+];
+
+// Descobre os endereços IPv4 reais desta máquina e restringe o servidor de mídia a eles.
+//
+// Sem isso ele tenta abrir a porta em TODOS os endereços que encontrar -- e um PC comum tem
+// muito mais do que parece: Tailscale, VPNs, e sobretudo os vários IPv6 temporários que o
+// Windows cria por privacidade na mesma placa. Dois deles na mesma porta e o "bind" falha,
+// o que encerra o processo INTEIRO e deixa a sala sem vídeo nem voz.
+function enderecosParaEscutar() {
+  const escolhidos = [];
+  for (const [nome, enderecos] of Object.entries(os.networkInterfaces())) {
+    for (const endereco of enderecos || []) {
+      if (endereco.family !== 'IPv4' || endereco.internal) continue;
+      const motivo = FAIXAS_QUE_NAO_SERVEM.find(([padrao]) => padrao.test(endereco.address));
+      if (motivo) continue;
+      escolhidos.push({ ip: endereco.address, interface: nome });
+    }
+  }
+  return escolhidos;
+}
 const VALIDADE_DO_TOKEN = 6 * 60 * 60;
+const SERVIDORES_STUN = [['stun.l.google.com', 19302], ['stun.cloudflare.com', 3478], ['stun1.l.google.com', 19302]];
+
+// Pergunta a um servidor STUN qual endereço o mundo vê, por uma porta qualquer do sistema.
+//
+// O servidor de mídia sabe fazer isso sozinho, mas usa a MESMA porta da mídia -- e então não
+// consegue mais abri-la para valer: "bind: only one usage of each socket address", e o
+// processo encerra. Descobrindo aqui e entregando o endereço pronto, ele nunca precisa
+// tentar. Só o endereço público volta desta conversa; nada é enviado além do pedido padrão.
+function descobrirIpPublico(servidor, porta) {
+  return new Promise(resolve => {
+    const socket = dgram.createSocket('udp4');
+    const transacao = crypto.randomBytes(12);
+    const pedido = Buffer.concat([
+      Buffer.from([0x00, 0x01, 0x00, 0x00]),          // Binding Request, sem atributos
+      Buffer.from([0x21, 0x12, 0xa4, 0x42]),          // magic cookie
+      transacao
+    ]);
+    const desistir = () => { try { socket.close(); } catch (_) {} resolve(null); };
+    const prazo = setTimeout(desistir, 2500);
+    socket.on('error', () => { clearTimeout(prazo); desistir(); });
+    socket.on('message', mensagem => {
+      clearTimeout(prazo);
+      try {
+        if (mensagem.readUInt16BE(0) !== 0x0101 || !mensagem.subarray(8, 20).equals(transacao)) return desistir();
+        let posicao = 20;
+        while (posicao + 4 <= mensagem.length) {
+          const tipo = mensagem.readUInt16BE(posicao);
+          const tamanho = mensagem.readUInt16BE(posicao + 2);
+          const valor = mensagem.subarray(posicao + 4, posicao + 4 + tamanho);
+          // 0x0020 = XOR-MAPPED-ADDRESS; família 0x01 = IPv4.
+          if (tipo === 0x0020 && valor[1] === 0x01) {
+            const bytes = [...valor.subarray(4, 8)].map((b, i) => b ^ pedido[4 + i]);
+            try { socket.close(); } catch (_) {}
+            return resolve(bytes.join('.'));
+          }
+          posicao += 4 + tamanho + ((4 - (tamanho % 4)) % 4);  // atributos vêm alinhados em 4
+        }
+      } catch (_) { /* Resposta ilegível: tenta o próximo servidor. */ }
+      desistir();
+    });
+    socket.send(pedido, porta, servidor, erro => { if (erro) { clearTimeout(prazo); desistir(); } });
+  });
+}
+
+async function ipPublicoDescoberto() {
+  for (const [servidor, porta] of SERVIDORES_STUN) {
+    const ip = await descobrirIpPublico(servidor, porta);
+    if (ip) return ip;
+  }
+  return null;
+}
 
 // Estado observavel: a sala precisa poder DIZER que a midia esta fora do ar, em vez de
 // mostrar uma tela preta sem explicacao.
@@ -31,6 +113,13 @@ const estado = { ativo: false, motivo: 'nao iniciado', versao: VERSAO };
 let processo = null;
 let chaves = null;
 let encerrando = false;
+// Reinicio supervisionado. Um processo que morre nao pode deixar a sala muda ate alguem
+// reiniciar o Node na mao -- ninguem esta olhando o terminal no meio de uma conversa.
+let tentativasSeguidas = 0;
+let horaDoUltimoInicio = 0;
+let timerDeReinicio = null;
+const MAXIMO_DE_REINICIOS = 8;
+const SEGUNDOS_PARA_CONSIDERAR_ESTAVEL = 60;
 
 function lerOuCriarChaves() {
   if (chaves) return chaves;
@@ -49,9 +138,10 @@ function lerOuCriarChaves() {
 
 // O YAML e gerado a cada inicializacao a partir do ambiente. Um arquivo editado a mao
 // viraria uma configuracao fantasma: valeria o que esta no disco, nao o que foi pedido.
-function escreverConfig() {
+async function escreverConfig() {
   const { apiKey, apiSecret } = lerOuCriarChaves();
-  const ipPublico = (process.env.NEXO_IP_PUBLICO || '').trim();
+  // Configurado tem precedência; senão perguntamos por STUN, uma vez, antes de subir.
+  const ipPublico = (process.env.NEXO_IP_PUBLICO || '').trim() || (await ipPublicoDescoberto()) || '';
   const linhas = [
     `port: ${PORTA_LOCAL}`,
     // O 7880 so escuta em localhost: quem chega de fora passa obrigatoriamente pelo proxy
@@ -68,14 +158,23 @@ function escreverConfig() {
     // roteador de casa; ligado, a negociacao falharia para quem vem de fora.
     '  use_ice_lite: false'
   ];
+
+  // Uma lista fechada de endereços é mais segura que uma lista de exclusões: o que aparecer
+  // depois (uma VPN que alguém instalar amanhã) fica de fora sozinho.
+  const escutar = process.env.SFU_IPS
+    ? process.env.SFU_IPS.split(',').map(v => v.trim()).filter(Boolean)
+    : enderecosParaEscutar().map(item => item.ip);
+  if (escutar.length) {
+    linhas.push('  ips:', '    includes:', ...escutar.map(ip => `      - ${ip}/32`));
+  }
+  // O endereço anunciado vem SEMPRE pronto daqui -- configurado ou descoberto acima. Deixar
+  // que ele descubra sozinho (use_external_ip) é o que fazia o processo encerrar: a
+  // descoberta ocupa a porta da mídia e depois a abertura de verdade falha.
   if (ipPublico) {
-    // IP fixo e conhecido: anunciar direto e mais previsivel que descobrir por STUN a cada
-    // inicializacao. use_external_ip tem precedencia, entao precisa ficar desligado.
     linhas.push('  use_external_ip: false', `  node_ip: ${ipPublico}`);
   } else {
-    // Sem configuracao, descobre sozinho. Muito roteador domestico nao devolve o proprio
-    // IP publico para dentro (sem NAT loopback), e ai a auto-verificacao falharia.
-    linhas.push('  use_external_ip: true', '  skip_external_ip_validation: true');
+    // Sem endereço público nenhum, resta a rede local: a sala funciona entre quem está aqui.
+    linhas.push('  use_external_ip: false');
   }
   // O TURN embutido existe para servidor SEM IP publico. Este tem, e o fallback de TCP
   // acima ja cobre quem bloqueia UDP.
@@ -85,7 +184,7 @@ function escreverConfig() {
   return { ipPublico };
 }
 
-function iniciarSfu() {
+async function iniciarSfu() {
   const binario = caminhoDoBinario();
   if (!fs.existsSync(binario)) {
     estado.motivo = 'binario-ausente';
@@ -95,7 +194,9 @@ function iniciarSfu() {
     return estado;
   }
 
-  const { ipPublico } = escreverConfig();
+  const { ipPublico } = await escreverConfig();
+  if (encerrando) return estado;
+  horaDoUltimoInicio = Date.now();
   processo = spawn(binario, ['--config', ARQUIVO_DE_CONFIG], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   // "iniciado" nao e o mesmo que "pronto": ele ainda descobre o proprio IP por STUN, o que
   // leva alguns segundos. Anunciar antes disso faz quem abre a sala nesse intervalo receber
@@ -120,17 +221,39 @@ function iniciarSfu() {
     processo = null;
     estado.ativo = false;
     estado.motivo = 'encerrado';
-    if (!encerrando) console.error(`\nO servidor de mídia encerrou (código ${codigo}). A sala continua, mas sem vídeo nem voz.\n`);
+    if (encerrando) return;
+    console.error(`\nO servidor de mídia encerrou (código ${codigo}).`);
+    reiniciarDepoisDeCair();
   });
   processo.on('error', erro => {
     processo = null;
     estado.ativo = false;
     estado.motivo = 'falha-ao-iniciar';
     console.error('Não foi possível iniciar o servidor de mídia:', erro.message);
+    if (!encerrando) reiniciarDepoisDeCair();
   });
 
+  const escutando = enderecosParaEscutar().map(item => `${item.ip} (${item.interface})`).join(', ') || 'nenhuma placa de rede utilizável';
   console.log(`Servidor de mídia ${VERSAO}: UDP ${PORTAS_UDP}, TCP ${PORTA_TCP}${ipPublico ? `, anunciando ${ipPublico}` : ', descobrindo o IP público'}`);
+  console.log(`  escutando em: ${escutando}`);
   return estado;
+}
+
+// Uma queda logo depois de subir e sintoma de configuracao, e insistir depressa so enche o
+// log. Uma queda depois de horas no ar e outra coisa -- ai vale voltar rapido.
+function reiniciarDepoisDeCair() {
+  if (encerrando || timerDeReinicio) return;
+  if (Date.now() - horaDoUltimoInicio > SEGUNDOS_PARA_CONSIDERAR_ESTAVEL * 1000) tentativasSeguidas = 0;
+  if (tentativasSeguidas >= MAXIMO_DE_REINICIOS) {
+    estado.motivo = 'nao-sobe';
+    console.error(`Ele não sobe depois de ${MAXIMO_DE_REINICIOS} tentativas. A sala segue com chat; vídeo e voz voltam quando o motivo acima for resolvido e o servidor reiniciado.\n`);
+    return;
+  }
+  const espera = Math.min(30, 2 ** tentativasSeguidas);
+  tentativasSeguidas++;
+  console.error(`Subindo de novo em ${espera}s (tentativa ${tentativasSeguidas}).\n`);
+  timerDeReinicio = setTimeout(() => { timerDeReinicio = null; if (!encerrando) iniciarSfu(); }, espera * 1000);
+  timerDeReinicio.unref?.();
 }
 
 function responde() {
@@ -165,6 +288,8 @@ async function aguardarProntidao() {
 // falharia sem dizer por que.
 function encerrarSfu() {
   encerrando = true;
+  clearTimeout(timerDeReinicio);
+  timerDeReinicio = null;
   if (!processo) return;
   processo.kill();
   processo = null;

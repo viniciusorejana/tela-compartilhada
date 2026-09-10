@@ -112,3 +112,87 @@ Uma limitação do ambiente de teste, registrada porque muda o que dá para afir
 sem placa de vídeo, a estimativa de banda inicial não sobe até a camada alta do simulcast. Por
 isso o teste afirma que a captura é 1080p e que ela sobe em várias camadas, e **não** que o
 espectador decodifica 1080p — exigir isso contrariaria justamente o comportamento desejado.
+
+---
+
+# Correções: fantasmas na sala e FPS da tela
+
+## O servidor de mídia estava morrendo
+
+O sintoma relatado — "quem fecha a aba continua na sala, e o FPS caiu" — tinha uma causa
+comum por baixo: **o processo do servidor de mídia encerrava sozinho**, e o Node não o
+recolocava no ar.
+
+```
+[mídia] listen udp 192.168.100.107:7882: bind: Only one usage of each socket address...
+O servidor de mídia encerrou (código 0).
+```
+
+Duas coisas produziam isso, e as duas foram corrigidas.
+
+**Endereços demais.** Um PC comum tem muito mais endereços do que parece: Tailscale, Radmin,
+Teredo e — o pior — vários IPv6 temporários que o Windows cria por privacidade na mesma
+placa. O servidor tentava abrir a porta de mídia em cada um; dois deles na mesma porta e o
+`bind` falhava, encerrando o processo inteiro. Agora o Node descobre os endereços IPv4 reais
+(`os.networkInterfaces()`, descartando faixas de túnel e VPN) e entrega uma lista fechada.
+Uma VPN instalada amanhã fica de fora sozinha.
+
+**A descoberta de IP ocupava a porta da mídia.** Com `use_external_ip`, o servidor pergunta
+o próprio endereço a um STUN *pela mesma porta* que usaria para a mídia — e depois não
+consegue mais abri-la. O Node passou a fazer essa pergunta antes, por uma porta qualquer
+(um Binding Request de 20 bytes, sem dependência), e entrega o endereço pronto.
+
+**E se cair mesmo assim**, agora volta: reinício supervisionado com espera crescente, até
+oito tentativas, com o contador zerando depois de um minuto no ar. Uma queda deixava a sala
+muda até alguém reiniciar o Node na mão — e ninguém está olhando o terminal no meio de uma
+conversa.
+
+## Quem sai sem avisar
+
+Fechar a aba já avisava; perder a rede, não. O servidor de mídia guarda essa pessoa por muito
+tempo esperando ela voltar — prudente para uma oscilação, ruim para a lista da sala, onde ela
+ficava parada com a imagem congelada.
+
+A correção usa **duas fontes independentes**, que é o certo aqui: a conexão de sinalização
+percebe a queda em segundos e diz quem saiu (a identidade da mídia agora viaja junto do
+evento de saída), enquanto o servidor de mídia continua sendo a fonte da imagem e da voz.
+O heartbeat do Socket.IO foi apertado de 45 s para cerca de 25 s — apertar mais tiraria da
+sala quem só passou por um túnel.
+
+| Situação | Antes | Depois |
+| --- | --- | --- |
+| Fecha a aba | 3 s | **imediato** |
+| Perde a rede, o notebook fecha | nunca saía | **~23 s** |
+
+Enquanto isso, quem perdeu a conexão aparece marcado como "sem conexão" em vez de sumir de
+repente ou fingir que está lá. Se a conexão com o servidor de mídia cair inteira, a lista é
+esvaziada — antes todo mundo continuava aparecendo, congelado.
+
+## O FPS da tela
+
+A causa era uma escolha minha, feita sem perguntar: a tela ia com `contentHint = 'detail'` e
+`degradationPreference = 'maintain-resolution'`. Os dois dizem a mesma coisa ao codificador
+— *quando faltar recurso, derrube os quadros e segure a resolução*. Ótimo para ler código,
+péssimo para tudo que se move, e era o padrão para todo mundo.
+
+Medido com três navegadores reais contra um servidor real, mesma máquina:
+
+| Cenário | Antes | Depois |
+| --- | --- | --- |
+| Um compartilhando | 15 fps a 1920×1080 | **30 fps** a 1280×720 |
+| Três compartilhando | 9 fps a 1920×1080 | **30 fps** a 640×360 |
+
+O padrão passou a ser **Equilíbrio**, e a escolha ficou com quem compartilha: **Nitidez**
+(código, texto, planilhas), **Equilíbrio** ou **Fluidez** (jogos e vídeo, até 60 fps). A
+câmera passou a priorizar fluidez sempre — ver a pessoa aos solavancos incomoda mais que
+perder nitidez.
+
+Ressalva sobre a medição: a fonte do teste é um canvas sintético, que também tem seu próprio
+teto de quadros. A comparação entre antes e depois é válida porque só a configuração mudou;
+os números absolutos não representam uma tela real.
+
+**"É a minha internet ou o meu PC?"** é a primeira pergunta de quem vê a imagem travando, e
+o navegador sabe responder. Esse dado deixou de ficar escondido num relatório e agora aparece
+em Dispositivos, em português: se o processador não dá conta, se a conexão de subida não dá
+conta, ou se nada está limitando — caso em que os quadros que saem são simplesmente os que a
+fonte entrega.

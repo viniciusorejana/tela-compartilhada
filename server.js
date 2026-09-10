@@ -40,7 +40,13 @@ const io = new Server(server, {
   // supondo que ninguem mais o tratou. Neste servidor ha mais dois: o agente de audio e a
   // sinalizacao do servidor de midia -- e era esse encerramento que derrubava a sala no
   // meio da conversa. Quem nao for de ninguem e fechado logo abaixo, explicitamente.
-  destroyUpgrade: false
+  destroyUpgrade: false,
+  // Quem some sem avisar -- fechou o notebook, perdeu o Wi-Fi -- só é notado quando o
+  // heartbeat falha. Com o padrão (25s + 20s) a pessoa ficava quase um minuto parada na
+  // lista da sala. Apertar demais tiraria da sala quem passou por um túnel, então o alvo
+  // é: notar em cerca de 25 segundos.
+  pingInterval: 10000,
+  pingTimeout: 15000
 });
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));
@@ -420,7 +426,10 @@ io.on('connection', (socket) => {
       // Sala vazia: o historico do chat some junto, nada fica guardado em disco.
       if (!membros.size) { roomMembers.delete(roomCode); historicoPorSala.delete(roomCode); }
     }
-    socket.to(roomName(roomCode)).emit('peer-left', { id: socket.id });
+    // A identidade da midia vai junto: e por ela que a sala reconhece quem saiu. O socket
+    // percebe a saida em segundos; o servidor de midia guarda a pessoa por muito mais
+    // tempo, esperando ela voltar, e ate la ela ficaria parada na lista.
+    socket.to(roomName(roomCode)).emit('peer-left', { id: socket.id, identidade: socket.data.identidadeDeMidia || null });
     pararCapturaAudio(socket.id);
     socketRoomCodes.delete(socket.id);
   }
@@ -432,8 +441,9 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ ok: true });
   });
 
-  socket.on('join-room', (requestedCode, displayName, callback) => {
+  socket.on('join-room', (requestedCode, displayName, identidadeDeMidia, callback) => {
     const roomCode = String(requestedCode || 'principal').toLowerCase();
+    socket.data.identidadeDeMidia = typeof identidadeDeMidia === 'string' ? identidadeDeMidia.slice(0, 80) : null;
     if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
       if (typeof callback === 'function') callback({ ok: false, error: 'Codigo de sala invalido.' });
       return;

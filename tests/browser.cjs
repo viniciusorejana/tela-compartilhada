@@ -361,7 +361,27 @@ async function esperarCodec(page, fonte, esperado) {
   assert.equal(opcoesPorFonte.screenAudio.source, 'screen_share_audio');
   // A voz continua com o padrao: DTX economiza banda no silencio e ali isso e desejável.
   assert.equal(opcoesPorFonte.mic.dtx, undefined);
-  assert.equal(opcoesPorFonte.screen.degradationPreference, 'maintain-resolution');
+  // Quando falta banda ou processador, alguma coisa cede. O padrão equilibra; as outras
+  // opções existem porque ler código e jogar pedem coisas opostas -- e a escolha precisa
+  // chegar de verdade às opções de publicação, senão o seletor é enfeite.
+  assert.equal(opcoesPorFonte.screen.degradationPreference, 'balanced');
+  const porPrioridade = await host.evaluate(async () => {
+    const saida = {};
+    for (const escolha of ['nitidez', 'fluidez', 'equilibrio']) {
+      await definirPrioridadeDaTela(escolha);
+      const o = opcoesDePublicacao('screen');
+      saida[escolha] = { degradacao: o.degradationPreference, fps: o.screenShareEncoding.maxFramerate, pista: screenStream.getVideoTracks()[0].contentHint };
+    }
+    return saida;
+  });
+  assert.equal(porPrioridade.nitidez.degradacao, 'maintain-resolution');
+  assert.equal(porPrioridade.nitidez.pista, 'detail');
+  assert.equal(porPrioridade.fluidez.degradacao, 'maintain-framerate');
+  assert.equal(porPrioridade.fluidez.pista, 'motion');
+  assert.equal(porPrioridade.fluidez.fps, 60);
+  assert.equal(porPrioridade.equilibrio.degradacao, 'balanced');
+  // A câmera é movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
+  assert.equal(await host.evaluate(() => opcoesDePublicacao('camera').degradationPreference), 'maintain-framerate');
   console.log('PASS: screen audio is published without DTX or RED, while voice keeps the defaults');
 
   // Perder a sinalizacao do servidor de midia nao pode derrubar a sala em silencio: a
