@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('appNativo', {
   // ele exclua da captura tudo o que este aplicativo toca -- a voz e as telas dos outros.
   pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
   iniciarAgente: (url) => ipcRenderer.invoke('agente:iniciar', url),
+  prepararCaptura: tipo => ipcRenderer.invoke('captura:preparar', tipo),
+  capturaSelecionada: () => ipcRenderer.invoke('captura:selecionada'),
   // A tela de endereco tambem passa por aqui: a janela roda isolada do Node, e uma pagina
   // local nao e excecao a isso.
   definirEndereco: (endereco) => ipcRenderer.invoke('endereco:definir', endereco),

@@ -2,53 +2,55 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Sala compartilhada</title>
+<title>Nexo · Aplicativo</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
-    background: #06080a radial-gradient(circle at 50% 30%, #131922 0%, #06080a 70%);
-    color: #e7edf3; font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #161720 radial-gradient(ellipse at 50% 30%, #38304e66, transparent 65%);
+    color: #eeeaf6; font: 14px/1.6 "Segoe UI", system-ui, sans-serif;
   }
   .cartao {
-    width: 100%; max-width: 460px; background: #0f151b; border: 1px solid #1e2833;
-    border-radius: 14px; padding: 26px;
+    width: 100%; max-width: 460px; background: #24222f; border: 1px solid #b8a3d525;
+    border-radius: 22px; padding: 34px;
   }
-  h1 { font-size: 19px; margin: 0 0 6px; }
-  p { color: #93a3b3; font-size: 13px; margin: 0 0 18px; }
+  h1 { font-size: 27px; letter-spacing: -.04em; margin: 15px 0 9px; }
+  p { color: #b1a3bf; font-size: 13px; margin: 0 0 24px; }
+  .marca { color: #c3b1ed; font-size: 11px; font-weight: 750; letter-spacing: .13em; }
   label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
   input {
-    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #263341;
-    background: #070b0f; color: inherit; font: inherit;
+    width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #b8a3d52a;
+    background: #181721; color: inherit; font: inherit;
   }
-  input:focus { outline: 2px solid #2f81f7; outline-offset: 1px; }
+  input:focus { outline: 2px solid #b5a0ef; outline-offset: 1px; }
   button {
     width: 100%; margin-top: 14px; padding: 11px; border: 0; border-radius: 8px;
-    background: #2f81f7; color: #fff; font: 600 14px system-ui; cursor: pointer;
+    background: #ad98ee; color: #231a33; font: 600 14px system-ui; cursor: pointer;
   }
-  button:hover { background: #4b93f8; }
+  button:hover { background: #c0adfa; }
   .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
   .falha {
     background: #3a1410; border: 1px solid #7c2d20; color: #ffb4a4;
     border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 16px;
   }
   .falha[hidden] { display: none; }
-  .dica { margin-top: 18px; padding-top: 16px; border-top: 1px solid #1e2833; font-size: 12px; color: #93a3b3; }
-  code { background: #070b0f; padding: 2px 6px; border-radius: 5px; font-size: 11px; }
+  .dica { margin-top: 18px; padding-top: 16px; border-top: 1px solid #b8a3d516; font-size: 12px; color: #a99ab6; }
+  code { background: #181721; padding: 2px 6px; border-radius: 5px; font-size: 11px; }
 </style>
 </head>
 <body>
   <div class="cartao">
-    <h1>Endereço da sala</h1>
-    <p>O endereço do servidor que hospeda a sala. Fica guardado — só é perguntado uma vez.</p>
+    <span class="marca">NEXO / DESKTOP</span>
+    <h1>Seu squad, em uma janela.</h1>
+    <p>Conecte ao servidor da sua galera. Vamos guardar o endereço para o próximo encontro.</p>
 
     <div class="falha" id="falha" hidden></div>
 
     <label for="endereco">Endereço</label>
-    <input id="endereco" type="text" placeholder="http://192.168.0.10:3000" autofocus>
-    <button id="entrar" type="button">Abrir</button>
-    <div class="erro" id="erro"></div>
+    <input id="endereco" type="text" placeholder="https://seu-servidor.ts.net" autofocus>
+    <button id="entrar" type="button">Conectar ao Nexo →</button>
+    <div class="erro" id="erro" role="alert"></div>
 
     <div class="dica">
       No computador que roda o servidor, use <code>http://localhost:3000</code>.

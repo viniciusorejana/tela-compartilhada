@@ -1,52 +1,55 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Salas de transmissão</title>
-<style>
-  :root { --bg: #101418; --panel: #181e24; --line: #303a44; --text: #edf2f5; --muted: #94a2ad; --accent: #69a9ff; }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg); color: var(--text); font-family: "Aptos", "Segoe UI", sans-serif; }
-  main { width: min(100%, 560px); }
-  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-  h1 { margin: 10px 0; font-size: clamp(30px, 6vw, 46px); line-height: 1.05; }
-  p { color: var(--muted); line-height: 1.5; }
-  section { margin-top: 28px; padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-  label { display: block; margin-bottom: 8px; color: #cbd4db; font-size: 13px; font-weight: 700; }
-  input { width: 100%; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: #202830; color: var(--text); font: inherit; text-transform: lowercase; }
-  .actions { display: flex; gap: 10px; margin-top: 14px; }
-  button { flex: 1; padding: 12px 16px; border: 0; border-radius: 7px; background: #4389e8; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-  button.secondary { background: transparent; border: 1px solid var(--line); color: var(--text); }
-  button:hover { filter: brightness(1.1); }
-  @media (max-width: 520px) { .actions { flex-direction: column; } }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#161720">
+  <title>Nexo · Seu squad, mais perto</title>
+  <meta name="description" content="Um espaço para conversar, compartilhar a tela e estar junto. Entre no Nexo pelo navegador ou pelo aplicativo.">
+  <link rel="icon" href="/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/home.css">
 </head>
 <body>
-<main>
-  <div class="eyebrow">Sala com voz, câmera e tela</div>
-  <h1>Crie ou entre em uma sala</h1>
-  <p>Todo mundo na sala pode conversar por microfone e compartilhar câmera ou tela quando quiser, como em um servidor de voz.</p>
-  <section>
-    <label for="roomCode">Código da sala</label>
-    <input id="roomCode" maxlength="32" placeholder="ex.: reuniao-123" autocomplete="off">
-    <div class="actions">
-      <button id="createBtn">Criar sala</button>
-      <button id="joinBtn" class="secondary">Entrar na sala</button>
-    </div>
-  </section>
-</main>
-<script>
-const roomCode = document.getElementById('roomCode');
-const normalize = value => value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-function openRoom(code) {
-  const normalized = normalize(code);
-  if (normalized.length < 4) { roomCode.focus(); return; }
-  window.location.href = `/${encodeURIComponent(normalized)}/sala`;
-}
-document.getElementById('createBtn').onclick = () => openRoom(`sala-${Math.random().toString(36).slice(2, 8)}`);
-document.getElementById('joinBtn').onclick = () => openRoom(roomCode.value);
-roomCode.addEventListener('keydown', event => { if (event.key === 'Enter') openRoom(roomCode.value); });
-</script>
+  <header class="home-nav"><a class="brand" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="38" height="38" alt=""><strong>NEXO<span> / </span></strong><small>seu espaço de conexão</small></a><span class="nav-note"><i></i> VOZ · CÂMERA · TELA</span></header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span>✦</span> FEITO PARA ESTAR JUNTO</div>
+        <h1>Seu squad.<br>Seu espaço.<br><em>Seu momento.</em></h1>
+        <p>A jogada perfeita. O filme de sempre. A conversa que vai longe. Compartilhe tudo isso em um só lugar.</p>
+        <div class="hero-note"><span class="note-line"></span> Um link é tudo que separa vocês.</div>
+        <div class="hero-sticker" aria-hidden="true">LET'S<br><b>HANG OUT</b><span>✳</span></div>
+      </div>
+      <div class="entry-area">
+        <div class="entry-orbit" aria-hidden="true"></div><span class="entry-spark" aria-hidden="true">✦</span>
+        <section class="entry-card" aria-labelledby="entryTitle">
+          <div class="card-heading"><div class="door-icon" aria-hidden="true">↗</div><span>SEU PONTO DE ENCONTRO</span></div>
+          <h2 id="entryTitle">Bora para a sala?</h2>
+          <p>Junte-se à galera ou crie um espaço só de vocês.</p>
+          <form id="roomForm" novalidate>
+            <label for="roomCode">Código da sala</label>
+            <div class="code-field"><span aria-hidden="true">#</span><input id="roomCode" name="room" type="text" maxlength="32" placeholder="ex.: squad-da-noite" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="roomHint roomError"></div>
+            <small id="roomHint">De 4 a 32 letras, números, hífen ou sublinhado.</small>
+            <p id="roomError" class="error" role="alert" hidden></p>
+            <button id="joinBtn" type="submit">Entrar na sala <span aria-hidden="true">→</span></button>
+            <div class="divider"><span></span> OU COMECE UMA NOVA <span></span></div>
+            <button id="createBtn" type="button" class="secondary"><span aria-hidden="true">＋</span> Criar minha sala</button>
+          </form>
+          <div class="entry-foot"><span aria-hidden="true">◌</span> Sem cadastro. Entre e fique à vontade.</div>
+        </section>
+        <div class="card-caption"><span>◈</span> Microfone e câmera só ligam quando você quiser.</div>
+      </div>
+    </section>
+    <section class="desktop-download" aria-labelledby="desktopTitle">
+      <img src="/mark.svg" alt="" width="48" height="48">
+      <div class="download-copy"><span class="eyebrow">LEVE O SQUAD PARA O DESKTOP</span><h2 id="desktopTitle">Nexo para Windows</h2><p>Aplicativo portátil, com o agente de áudio incluído. Baixe e execute, sem instalar.</p><small>Ao abrir, informe o mesmo endereço deste site para encontrar suas salas.</small></div>
+      <div class="download-action"><a id="desktopDownload" class="download-button" href="/downloads/SalaCompartilhada.exe" download="SalaCompartilhada.exe"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>Baixar para Windows <span>.exe</span></a><small id="desktopBuild" role="status">Windows x64 · verificando build…</small><noscript><small>O download depende da disponibilidade da build neste servidor.</small></noscript></div>
+    </section>
+    <section class="features" aria-label="O que você pode fazer"><article><span class="feature-icon voice" aria-hidden="true">◖))</span><div><h3>Na mesma sintonia</h3><p>Voz e câmera para deixar a distância do lado de fora.</p></div></article><article><span class="feature-icon screen" aria-hidden="true">▣</span><div><h3>Sua tela vira o encontro</h3><p>Compartilhe a partida, a ideia ou só o que está rolando.</p></div></article><article><span class="feature-icon link" aria-hidden="true">↗</span><div><h3>Um convite. Várias formas.</h3><p>No navegador, no celular ou no app para Windows.</p></div></article></section>
+    <div id="recentRooms" class="recent" hidden><span>SUAS ÚLTIMAS SALAS</span><div id="recentLinks"></div></div>
+  </main>
+  <footer><span>NEXO <i> / </i> Conexões que viram histórias.</span><span>Feito para pequenos squads <b>✦</b></span></footer>
+  <script src="/home.js"></script>
+  <script src="/download.js"></script>
 </body>
 </html>

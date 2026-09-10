@@ -17,7 +17,9 @@
 const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
+const { promisify } = require('util');
+const executar = promisify(execFile);
 
 const ARQUIVO_DE_CONFIG = () => path.join(app.getPath('userData'), 'config.json');
 
@@ -63,6 +65,7 @@ function criarJanela() {
     backgroundColor: '#06080a',
     autoHideMenuBar: true,
     title: 'Sala compartilhada',
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // A sala é conteúdo REMOTO: fica isolada do Node, como qualquer página.
@@ -156,14 +159,48 @@ function escolherFonte(fontes) {
   });
 }
 
+let capturaPendente = null;
+let ultimaCaptura = null;
+let selecionandoCaptura = false;
+function remetenteDaSala(evento) {
+  return janela && evento.sender === janela.webContents && evento.senderFrame === janela.webContents.mainFrame
+    && /^https?:/.test(evento.senderFrame.url);
+}
+ipcMain.handle('captura:preparar', (evento, tipo) => {
+  if (!remetenteDaSala(evento) || selecionandoCaptura || !['monitor', 'window'].includes(tipo)) return false;
+  capturaPendente = { tipo, frame: evento.senderFrame, criada: Date.now() };
+  ultimaCaptura = null;
+  return true;
+});
+ipcMain.handle('captura:selecionada', evento => remetenteDaSala(evento) ? ultimaCaptura : null);
+
+async function processoDaFonte(fonte) {
+  const hwnd = /^window:(\d+):/.exec(fonte.id)?.[1];
+  const caminho = caminhoDoAgente();
+  if (!hwnd || !caminho) return 0;
+  try {
+    const { stdout } = await executar(caminho, ['--janela', hwnd], { windowsHide: true, timeout: 4000, maxBuffer: 4096 });
+    const pid = JSON.parse(stdout).pid;
+    // Sharing this application's audio would feed the room back into itself.
+    return Number.isInteger(pid) && pid > 0 && pid !== process.pid ? pid : 0;
+  } catch (_) { return 0; }
+}
+
 function instalarSeletorDeTela() {
   session.defaultSession.setDisplayMediaRequestHandler(async (pedido, responder) => {
+    const pedidoPreparado = capturaPendente;
+    capturaPendente = null;
+    if (selecionandoCaptura || !pedidoPreparado || pedido.frame !== pedidoPreparado.frame
+      || Date.now() - pedidoPreparado.criada > 60000) { responder(undefined); return; }
+    selecionandoCaptura = true;
     try {
       const fontes = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
+        types: [pedidoPreparado.tipo === 'window' ? 'window' : 'screen'],
         thumbnailSize: { width: 320, height: 180 }
       });
       const escolhida = await escolherFonte(fontes);
+      if (escolhida) ultimaCaptura = { tipo: pedidoPreparado.tipo, nome: escolhida.name,
+        pid: pedidoPreparado.tipo === 'window' ? await processoDaFonte(escolhida) : 0 };
       // Sem áudio de propósito. O Electron sabe capturar o som do sistema aqui
       // ('audio: loopback'), mas seria TODO o som, sem forma de tirar este aplicativo de
       // dentro -- ou seja, exatamente o eco que o aplicativo existe para evitar. Quem
@@ -172,6 +209,8 @@ function instalarSeletorDeTela() {
     } catch (erro) {
       console.error('Falha ao listar as telas:', erro.message);
       responder(undefined);
+    } finally {
+      selecionandoCaptura = false;
     }
   }, { useSystemPicker: false });
 }

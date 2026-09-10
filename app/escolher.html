@@ -7,22 +7,22 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 18px; background: #0b0e11; color: #e7edf3;
+    margin: 0; padding: 28px; background: #191923; color: #eeeaf6;
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  h1 { font-size: 16px; margin: 0 0 4px; }
-  p { color: #93a3b3; font-size: 12px; margin: 0 0 16px; }
+  h1 { font-size: 25px; letter-spacing: -.04em; margin: 0 0 6px; }
+  p { color: #b2a3bf; font-size: 12px; margin: 0 0 22px; }
   .grupo-titulo {
     font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: #7e8c9a; margin: 18px 0 8px;
   }
   .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
   .fonte {
-    background: #0f151b; border: 2px solid transparent; border-radius: 10px; padding: 8px;
+    background: #282433; border: 2px solid transparent; border-radius: 12px; padding: 9px;
     cursor: pointer; text-align: left; color: inherit; font: inherit; overflow: hidden;
   }
-  .fonte:hover { background: #141c24; border-color: #2f81f7; }
-  .fonte:focus-visible { outline: 2px solid #2f81f7; outline-offset: 2px; }
+  .fonte:hover { background: #343042; border-color: #aa95ee; }
+  .fonte:focus-visible { outline: 2px solid #c3afff; outline-offset: 2px; }
   .fonte img {
     width: 100%; aspect-ratio: 16 / 9; object-fit: contain;
     background: #06080a; border-radius: 6px; display: block;
@@ -36,7 +36,7 @@
 </head>
 <body>
   <h1>O que você quer compartilhar?</h1>
-  <p>O som não vem daqui: quem cuida dele é o agente, com a escolha feita na sala.</p>
+  <p>Escolha uma das fontes abaixo. Ao compartilhar uma janela com áudio, o som do programa é selecionado automaticamente. Esc cancela.</p>
   <div id="conteudo"><p class="vazio">Procurando telas e janelas...</p></div>
 
 <script>

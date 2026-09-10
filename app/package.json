@@ -17,7 +17,8 @@
       "endereco.html",
       "escolher.html",
       "package.json",
-      "lancar.js"
+      "lancar.js",
+      "icon.ico"
     ],
     "extraResources": [
       {
@@ -26,6 +27,7 @@
       }
     ],
     "win": {
+      "icon": "icon.ico",
       "target": [
         "portable"
       ]

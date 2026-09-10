@@ -1,0 +1,41 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const express = require('express');
+
+test('portable download reports availability, streams exact bytes/ranges and picks up a replacement build', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexo-download-'));
+  const file = path.join(dir, 'portable.exe');
+  const app = express();
+  require('../desktop-download')(app, file);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(async () => {
+    await new Promise(resolve => server.close(resolve));
+    await fs.unlink(file).catch(() => {});
+    await fs.rmdir(dir);
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  assert.deepEqual(await (await fetch(origin + '/api/desktop-app')).json(), { available: false });
+  assert.equal((await fetch(origin + '/downloads/SalaCompartilhada.exe')).status, 503);
+  const bytes = Buffer.from('MZ-portable-test-fixture');
+  await fs.writeFile(file, bytes);
+  const metadata = await fetch(origin + '/api/desktop-app');
+  assert.equal(metadata.headers.get('cache-control'), 'no-store');
+  const info = await metadata.json();
+  assert.equal(info.size, bytes.length);
+  assert.equal(info.available, true);
+  assert.ok(Number.isFinite(Date.parse(info.builtAt)));
+  const response = await fetch(origin + info.url);
+  assert.match(response.headers.get('content-disposition'), /attachment; filename="SalaCompartilhada.exe"/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  const range = await fetch(origin + info.url, { headers: { Range: 'bytes=0-1' } });
+  assert.equal(range.status, 206);
+  assert.equal(await range.text(), 'MZ');
+  await fs.writeFile(file, 'MZ-new-build');
+  assert.equal((await (await fetch(origin + '/api/desktop-app')).json()).size, 12);
+  assert.equal(await (await fetch(origin + info.url)).text(), 'MZ-new-build');
+});

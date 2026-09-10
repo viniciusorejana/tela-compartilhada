@@ -4,12 +4,27 @@
   "description": "Servidor de compartilhamento de tela ao vivo (com audio) via WebRTC",
   "main": "server.js",
   "scripts": {
+    "dev": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node tests/browser.cjs",
+    "test:electron": "node tests/electron.cjs",
+    "test:download": "node tests/download-browser.cjs",
+    "build:icon": "node scripts/build-icon.cjs",
     "build:helper": "powershell -ExecutionPolicy Bypass -File .\\build-helper.ps1",
     "start": "npm run build:helper && node server.js"
   },
   "dependencies": {
+    "@jitsi/rnnoise-wasm": "0.2.1",
     "express": "^4.19.2",
     "socket.io": "^4.7.5",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "overrides": {
+    "express": {
+      "qs": "^6.16.0"
+    }
   }
 }

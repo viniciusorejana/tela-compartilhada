@@ -18,6 +18,7 @@
 #include <tlhelp32.h>
 #include <mfapi.h>
 #include "../audio-helper/Aplicativos.h"
+#include "WindowProcess.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -396,8 +397,9 @@ static void IniciarCaptura(const std::string& familia)
     bool incluir = false;
     std::wstring alvo;
 
-    if (modo == "excluir-pid")
+    if (modo == "excluir-pid" || modo == "incluir-pid")
     {
+        incluir = modo == "incluir-pid";
         pid = pidDoAplicativo;
         if (!pid)
         {
@@ -753,6 +755,14 @@ static void EsperarInterrompivel(int segundos)
 
 int wmain(int argc, wchar_t* argv[])
 {
+    // Read-only query used by the Electron picker. Does not connect or capture audio.
+    if (argc == 3 && wcscmp(argv[1], L"--janela") == 0) {
+        wchar_t* fim = nullptr;
+        const auto handle = _wcstoui64(argv[2], &fim, 10);
+        const DWORD pid = handle && fim && !*fim ? RaizDaJanela(reinterpret_cast<HWND>(handle)) : 0;
+        std::cout << "{\"pid\":" << pid << "}";
+        return pid ? 0 : 2;
+    }
     SetConsoleTitleW(L"Agente de audio - Sala compartilhada");
     // Sem buffer: o status precisa aparecer na hora, inclusive quando a saida e
     // redirecionada para um arquivo em vez de ir para a janela do console.
@@ -869,7 +879,7 @@ int wmain(int argc, wchar_t* argv[])
                 {
                     std::lock_guard<std::mutex> trava(g_mutexDaEscolha);
                     const std::string modo = ValorDeTexto(mensagem, "modo");
-                    g_modoDeAudio = (modo == "incluir" || modo == "excluir-pid") ? modo : "excluir";
+                    g_modoDeAudio = (modo == "incluir" || modo == "excluir-pid" || modo == "incluir-pid") ? modo : "excluir";
                     g_executavelEscolhido = ParaWide(ValorDeTexto(mensagem, "executavel"));
                     // O PID vem como TEXTO de proposito: o leitor de JSON daqui so sabe ler
                     // valor entre aspas, e diante de um numero cru ele pularia para a chave

@@ -1,6 +1,13 @@
-# Tela Compartilhada
+# Nexo · Tela Compartilhada
 
-Sala de voz e video em tempo real (estilo Discord) usando WebRTC e Socket.IO: todos os participantes de uma sala conversam por microfone e podem ligar camera e/ou compartilhar a tela quando quiserem. O servidor apenas faz a sinalizacao (mesh P2P); video e audio sao enviados diretamente entre os navegadores, sem passar pelo servidor. Recomendado para salas de ate 4-5 pessoas, ja que cada participante mantem uma conexao direta com cada outro (upload cresce com o numero de pessoas).
+Sala de voz e vídeo em tempo real usando WebRTC e Socket.IO. Os participantes podem ligar microfone, câmera e compartilhar tela. A mídia segue diretamente entre os clientes quando possível (malha P2P); o servidor mantém sinalização e chat e pode retransmitir o PCM do agente quando a ligação local estiver indisponível. Um TURN configurado pode retransmitir mídia entre redes restritas. O projeto é voltado a grupos pequenos: o upload de cada pessoa cresce com o número de participantes.
+
+A interface Nexo tem navegação lateral, presença do squad, chat com envio de imagens no celular,
+palco com recuperação de reprodução e diagnóstico de mídia. A mesma sala é usada pelo navegador
+e pelo Electron. Veja [a revisão técnica e o roteiro de teste no iPhone](docs/revisao-safari.md).
+
+Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev`. A captura de
+áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`.
 
 ## Requisitos
 
@@ -22,7 +29,7 @@ Set-Location tela-compartilhada
 npm install
 ```
 
-O `npm install` instala Express e Socket.IO. Nao e preciso instalar dependencias manualmente dentro de `native/`; os arquivos do helper e do WIL ja estao no repositorio.
+O `npm install` instala as dependências do servidor e o modelo RNNoise usado pelo cliente. Não é preciso instalar dependências manualmente dentro de `native/`; os arquivos do helper e do WIL já estão no repositório.
 
 ## Rodar no proprio computador
 
@@ -39,15 +46,15 @@ Acesse no computador que executa o servidor:
 - Inicio: http://localhost:3000/
 - Sala: http://localhost:3000/sala
 
-Para testar em outro dispositivo da mesma rede, descubra o IPv4 do computador servidor com `ipconfig` e use, por exemplo, `http://192.168.0.10:3000/sala`. Libere o Node.js no Firewall do Windows quando solicitado. Todos os participantes devem conseguir acessar a porta TCP 3000.
+Para uma conferência da interface na mesma rede, o IP local do servidor permite abrir a página. Porém, HTTP por IP não é um contexto seguro e pode bloquear câmera/microfone e outras APIs de mídia. Para conversar e compartilhar, use o endereço HTTPS do Funnel descrito abaixo, inclusive no iPhone.
 
 ## Como usar
 
 1. Abra a pagina inicial, digite um codigo de sala (4 a 32 caracteres, letras minusculas, numeros, `_` ou `-`) e clique em **Criar sala** ou **Entrar na sala**. Isso leva para `/{codigo}/sala`.
-2. Na primeira vez, escolha um nome de exibicao. O microfone e ligado automaticamente (com a opcao de silenciar a qualquer momento).
-3. Use a barra inferior para ligar/desligar a camera, compartilhar a tela ou testar o audio. Ao compartilhar tela, um painel deixa escolher o tipo de captura (aba/janela/tela inteira) e se o audio vai junto. Nao existe lista de aplicativos para escolher: a origem do audio e decidida automaticamente pelo que voce esta compartilhando (veja abaixo).
+2. Escolha um nome de exibição. Você entra com microfone e câmera desligados; as permissões só são pedidas quando você ativa cada recurso.
+3. Use a barra inferior para ligar microfone, câmera ou compartilhar a tela. Em **Dispositivos** ficam o teste de áudio, a prioridade de vídeo e o RNNoise. No Electron, compartilhar uma janela seleciona automaticamente o áudio do programa. Para transmitir uma única aba com áudio, use Chrome/Edge. Ao compartilhar o monitor inteiro, permanecem as opções de inclusão/exclusão de programas.
 4. Cada participante controla localmente o volume e o mudo de cada outro participante (sem afetar o que os demais ouvem). Clique na camera ou na tela de alguem para destacar no palco.
-5. Compartilhe o link da sala (botao **Copiar link**) para outras pessoas entrarem. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando e redirecionam para a sala.
+5. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS do Funnel para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
 
 Cada participante conecta diretamente com cada outro (mesh P2P) -- funciona bem em salas pequenas (ate 4-5 pessoas); o servidor nao retransmite midia, so a sinalizacao.
 
@@ -334,8 +341,10 @@ cloudflared tunnel --url http://localhost:3000
 
 ### 3. Voce entra na sala
 
-Abra **`http://localhost:3000`** no seu proprio PC (nao pela URL do tunel). Crie a sala e copie
-o link do botao *Copiar link* -- ele ja vem com o endereco publico para enviar aos amigos.
+Antes de iniciar o servidor, defina `$env:PUBLIC_URL="https://sua-maquina.sua-tailnet.ts.net"`
+com o endereço real informado pelo Funnel. Abra **`http://localhost:3000`** no seu próprio PC.
+Crie a sala e use **Convidar amigos**: com `PUBLIC_URL` configurado, o convite terá o endereço público.
+O aplicativo não descobre o endereço do Funnel automaticamente.
 
 Usar `localhost` e o que libera a captura nativa de audio para voce sem precisar do agente. Se
 voce entrar pela URL do tunel, o recurso fica desativado de proposito (senao voce enviaria o
@@ -373,7 +382,7 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | --- | --- | --- |
 | `PORT` | `3000` | Porta HTTP do servidor |
 | `HOST` | `0.0.0.0` | Endereco onde o servidor escuta |
-| `PUBLIC_URL` | `http://localhost:PORT` | URL exibida nos logs |
+| `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
 | `TURN_URLS` | vazio | URLs TURN separadas por virgula |
 | `TURN_USERNAME` | vazio | Usuario do TURN |
@@ -389,7 +398,7 @@ $env:CORS_ORIGIN="https://stream.exemplo.com"
 npm start
 ```
 
-`PUBLIC_URL` nao publica o servidor nem configura DNS; ele apenas altera os enderecos mostrados nos logs.
+`PUBLIC_URL` não publica o servidor nem configura DNS. Ele define o endereço de convite e os logs.
 
 ## Publicar com Cloudflare Tunnel
 
@@ -496,7 +505,8 @@ O endpoint `/api/rtc-config` entrega essa configuracao aos clientes. TURN aument
 - **Captura bloqueada:** abra a pagina por `https://` ou por `localhost`; um IP publico em HTTP nao e contexto seguro.
 - **Participante nao conecta:** confirme o codigo da sala e configure TURN se houver NAT/firewall restritivo entre os participantes.
 - **Audio sem som:** marque a opcao de audio no seletor do navegador; a disponibilidade depende da fonte, navegador e sistema operacional.
-- **Atraso crescente ou muitos participantes:** reduza resolucao, FPS ou bitrate em `public/sala.html`; como a conexao e mesh (todos com todos), salas grandes pesam mais na banda de upload de cada um.
+- **Tela preta no iPhone:** use **Ativar reprodução** se aparecer. Se a imagem não chegar, use **Reproduzir vídeo** e **Ver diagnóstico** no palco, ou o botão de diagnóstico na lateral. Consulte o [roteiro de validação](docs/revisao-safari.md#validacao-em-um-iphone-real).
+- **Atraso crescente ou muitos participantes:** ajuste resolução, FPS ou bitrate em `public/sala.js`; como a conexão é mesh (todos com todos), salas grandes pesam mais na banda de upload de cada um.
 - **Tunnel nao abre:** confirme que o Node responde em `http://localhost:3000`, que o `cloudflared` esta no `PATH` e que a janela do tunnel continua aberta.
 
 ## Estrutura
@@ -516,6 +526,111 @@ tela-compartilhada/
 │   ├── endereco.html               # onde fica o servidor (perguntado uma vez)
 │   └── escolher.html               # seletor de tela/janela com miniaturas
 └── public/
-    ├── index.html                  # criar/entrar em uma sala
-    └── sala.html                   # sala de voz/video (mesh WebRTC)
+    ├── index.html, home.css, home.js # criar/entrar e salas recentes
+    ├── sala.html, sala.css          # interface da sala
+    ├── sala.js                     # captura, sinalização, chat e reprodução
+    ├── media-utils.js              # identidade das faixas, codecs e streams de vídeo
+    └── room-ui.js                  # presença, acessibilidade e diagnóstico
 ```
+
+## Testes de regressão
+
+Node.js 20 ou superior para as ferramentas de desenvolvimento (Node.js 24 usado na revisão).
+
+```powershell
+npm install
+npx playwright install chromium webkit
+npm test
+npm run test:browser
+$env:TEST_BROWSER="webkit"
+npm run test:browser
+Remove-Item Env:TEST_BROWSER
+```
+
+Os testes iniciam um servidor isolado em `127.0.0.1:3217` (Chromium) ou `:3218` (WebKit).
+Usam câmera/tela sintéticas e comunicação WebRTC real; não capturam o desktop ou microfone
+de quem executa. As imagens de revisão ficam em `test-results/`, ignorado pelo Git.
+
+O WebKit de teste para Windows não implementa WebRTC: nesse ambiente os testes verificam
+interface, chat e navegação e informam explicitamente a limitação. A validação final do Safari
+exige um iPhone/iPad real. Não confundir emulação de viewport com teste do Safari.
+
+
+## RNNoise e compartilhamento por janela
+
+O microfone usa RNNoise local, gratuito e sem cota, com alternativa para o filtro do
+navegador em **Dispositivos**. O processamento não depende do servidor e não altera o som
+das telas. Há um pequeno atraso de buffer/modelo; veja as medições e limitações na revisão.
+As licenças do RNNoise e de sua distribuição WASM ficam em `public/licenses/RNNoise.txt` e
+no pacote `@jitsi/rnnoise-wasm/LICENSE`.
+
+No Electron, **Janela ou aplicativo** mostra apenas janelas e seleciona o áudio do processo
+correspondente automaticamente. **Tela inteira** mostra apenas monitores. Não é possível
+enumerar abas de outro navegador pelo Electron: para compartilhar uma única aba e seu som,
+abra a sala no Chrome/Edge. Janelas/abas do mesmo processo podem ter áudio conjunto.
+
+Atualize o servidor e o aplicativo juntos. Feche a versão antiga antes de executar
+`app/dist/SalaCompartilhada.exe`. Para reconstruir:
+
+```powershell
+npm run build:helper
+npm --prefix app ci
+npm --prefix app run empacotar
+```
+
+`npm run test:electron` verifica o preload e o seletor em um perfil temporário, sem capturar
+seus dispositivos. Exige as dependências de `app` e o agente compilado; usa a porta 3219.
+O ícone Windows é derivado de `public/mark.svg`; `npm run build:icon` o regenera usando o
+Chromium do Playwright quando a marca for alterada.
+
+
+## Perfis de qualidade (30 fps)
+
+Em **Compartilhar tela** ou **Dispositivos**, escolha 720p (até 4 Mbps), 1080p (até
+8 Mbps, padrão) ou 1440p (até 14 Mbps). Esses são tetos por destinatário, não consumo
+constante nem garantia de resolução/fps. Uma fonte menor não ganha detalhes por escolher
+um perfil maior. O perfil pode mudar durante a transmissão; se a fonte recusar as novas
+restrições, a interface orienta usar **Atualizar tela**.
+
+O limite total de upload, em Dispositivos, oferece 10/20/40/80 Mbps; o padrão é 40 Mbps,
+com 15% reservado para áudio e tráfego adicional. Escolha um valor abaixo da sua subida
+real disponível. Na malha P2P, três espectadores em 1080p podem consumir até 24 Mbps de
+vídeo, além de câmera/voz e overhead. Não se trata de uma medição automática do seu plano.
+
+Cada conexão tem seu próprio orçamento e resolução. Uma conexão fraca não reduz o
+orçamento das demais por si só; o limite total do remetente continua compartilhado.
+O controle do WebRTC continua ativo. A resolução baixa quando necessário e pode voltar
+a subir; margens entre as mudanças evitam alternância por pequenas oscilações. O alvo é
+30 fps, sem oferecer 60 fps, mas rede e CPU podem reduzir o valor real. Em Dispositivos,
+as estatísticas mostram resolução, fps e bitrate efetivamente enviados a cada pessoa.
+Não há buffer adicional para melhorar a imagem: em vez de acumular atraso, reduz-se a
+qualidade. Não é possível garantir imagem sem perda e atraso zero em qualquer internet.
+
+Controles de zoom/tela cheia desaparecem após 2,5 segundos sem interação, inclusive
+quando o mouse fica parado sobre um botão que foi clicado. Mouse/toque os revela novamente;
+o foco por teclado mantém os controles acessíveis enquanto você os utiliza.
+
+
+## Download público do aplicativo portátil
+
+A página inicial contém **Baixar para Windows (.exe)**, com o tamanho e a data do arquivo
+atualmente disponível. O endereço direto é `/downloads/SalaCompartilhada.exe`, no mesmo
+domínio do site, inclusive pelo Tailscale Funnel. O servidor entrega somente
+`app/dist/SalaCompartilhada.exe`; a pasta `app/dist` não fica exposta para navegação.
+
+Gere a próxima build com `npm --prefix app run empacotar`. O nome fixo do artefato já está
+configurado no Electron Builder: depois de concluída a geração, o botão entrega essa
+versão sem mudar o link ou reiniciar o servidor. O agente de áudio vai dentro do portátil.
+O download não altera o executável nem insere configurações nele. Na primeira abertura,
+a pessoa informa o endereço do site no aplicativo.
+
+Se o arquivo não existir, o botão fica indisponível e o acesso pelo navegador continua
+normal. A consulta de disponibilidade e o download usam `Cache-Control: no-store` para
+não preservar uma build antiga. O arquivo é transmitido por streaming, com suporte a Range.
+A metadata (`/api/desktop-app`) informa tamanho e data do arquivo, não a versão dos arquivos
+web que o aplicativo carrega. Uma instalação clonada do Git precisa gerar/copiar o portátil,
+pois `app/dist` permanece ignorado pelo Git.
+
+Após adicionar estas rotas pela primeira vez, reinicie o servidor Node. Para validar:
+`npm test` e `npm run test:download`. O teste de navegador usa um arquivo fictício pequeno;
+não baixa nem executa o aplicativo real.

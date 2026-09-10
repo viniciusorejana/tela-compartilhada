@@ -1,4 +1,7 @@
 node_modules
+test-results/
+playwright-report/
+app/dist/
 native/audio-helper/x64/
 native/audio-helper/Applicat.*/
 native/audio-agent/x64/

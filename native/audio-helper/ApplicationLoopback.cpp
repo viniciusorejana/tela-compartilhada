@@ -60,10 +60,11 @@ int wmain(int argc, wchar_t* argv[])
     // programas de fora (a voz num aplicativo e o cliente noutro) tem de dizer o que ENTRA.
     if (argc >= 3 && (wcscmp(argv[1], L"--excluir") == 0
                       || wcscmp(argv[1], L"--incluir") == 0
-                      || wcscmp(argv[1], L"--excluir-pid") == 0))
+                      || wcscmp(argv[1], L"--excluir-pid") == 0
+                      || wcscmp(argv[1], L"--incluir-pid") == 0))
     {
-        const bool porPid = wcscmp(argv[1], L"--excluir-pid") == 0;
-        const bool incluir = wcscmp(argv[1], L"--incluir") == 0;
+        const bool porPid = wcscmp(argv[1], L"--excluir-pid") == 0 || wcscmp(argv[1], L"--incluir-pid") == 0;
+        const bool incluir = wcscmp(argv[1], L"--incluir") == 0 || wcscmp(argv[1], L"--incluir-pid") == 0;
 
         DWORD raiz = 0;
         if (porPid)

@@ -26,11 +26,14 @@ const FAMILIAS_DE_NAVEGADOR = {
 };
 
 const app = express();
+require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.CORS_ORIGIN || true }
 });
 
+app.get('/vendor/rnnoise-sync.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/dist/rnnoise-sync.js')));
+app.get('/vendor/rnnoise-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/LICENSE')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/sala', (req, res) => {
@@ -60,7 +63,12 @@ app.get('/api/rtc-config', (req, res) => {
     });
   }
 
-  res.json({ iceServers });
+  let publicUrl = null;
+  try {
+    const configured = new URL(process.env.PUBLIC_URL);
+    if (['https:', 'http:'].includes(configured.protocol)) publicUrl = configured.origin;
+  } catch (_) { /* Without configuration, invite links use the browser's origin. */ }
+  res.json({ iceServers, publicUrl });
 });
 
 app.get('/', (req, res) => {
@@ -189,7 +197,8 @@ wssAgentes.on('connection', (ws) => {
         const destino = navegadoresPorToken.get(token);
         if (destino) io.to(destino).emit('agente-aplicativos', {
           lista: mensagem.lista.slice(0, 40),
-          atual: String(mensagem.atual || '').slice(0, 120)
+          atual: String(mensagem.atual || '').slice(0, 120),
+          modo: ['incluir', 'excluir', 'excluir-pid', 'incluir-pid'].includes(mensagem.modo) ? mensagem.modo : undefined
         });
       }
       if (mensagem.evento === 'porta-local' && Number.isInteger(mensagem.porta) && mensagem.porta > 0 && mensagem.porta < 65536) {
@@ -222,7 +231,7 @@ const EXECUTAVEL_VALIDO = /^[A-Za-z0-9._+-]{1,60}\.exe$/;
 //   excluir      todo o som, menos um programa (vazio = o navegador dela)
 //   incluir      SOMENTE o som de um programa
 //   excluir-pid  todo o som, menos a arvore de um PID -- o modo do aplicativo proprio
-const MODOS_DE_AUDIO = ['excluir', 'incluir', 'excluir-pid'];
+const MODOS_DE_AUDIO = ['excluir', 'incluir', 'excluir-pid', 'incluir-pid'];
 
 function escolhaLimpa(bruta) {
   const dados = bruta && typeof bruta === 'object' ? bruta : {};
@@ -231,9 +240,9 @@ function escolhaLimpa(bruta) {
   const pid = Number(dados.pid);
   if (executavel && !EXECUTAVEL_VALIDO.test(executavel)) return null;
   // PID vem de um processo que existe de verdade: inteiro positivo e dentro da faixa.
-  if (modo === 'excluir-pid' && (!Number.isInteger(pid) || pid <= 0 || pid > 0xFFFFFFFF)) return null;
+  if (['excluir-pid', 'incluir-pid'].includes(modo) && (!Number.isInteger(pid) || pid <= 0 || pid > 0xFFFFFFFF)) return null;
   if (modo === 'incluir' && !executavel) return null;
-  return { modo, executavel, pid: modo === 'excluir-pid' ? pid : 0 };
+  return { modo, executavel, pid: ['excluir-pid', 'incluir-pid'].includes(modo) ? pid : 0 };
 }
 
 // Pergunta ao helper quais programas tem audio nesta maquina. E o mesmo codigo que o
@@ -263,7 +272,7 @@ function comandarAgente(token, comando) {
   return true;
 }
 
-const estadoPadrao = () => ({ camera: false, screen: false, screenAudio: false, micMuted: false });
+const estadoPadrao = () => ({ camera: false, screen: false, screenAudio: false, micMuted: true });
 
 function roomCodeForSocket(socket) {
   return socketRoomCodes.get(socket.id) || null;
@@ -377,6 +386,13 @@ io.on('connection', (socket) => {
     socketRoomCodes.delete(socket.id);
   }
 
+  socket.on('leave-room', callback => {
+    sairDaSalaAtual();
+    const token = socket.data.tokenAgente;
+    if (token && navegadoresPorToken.get(token) === socket.id) comandarAgente(token, { acao: 'parar' });
+    if (typeof callback === 'function') callback({ ok: true });
+  });
+
   socket.on('join-room', (requestedCode, displayName, callback) => {
     const roomCode = String(requestedCode || 'principal').toLowerCase();
     if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
@@ -487,8 +503,8 @@ io.on('connection', (socket) => {
     let argumentos;
     let alvo;
 
-    if (escolha.modo === 'excluir-pid') {
-      argumentos = ['--excluir-pid', String(escolha.pid)];
+    if (['excluir-pid', 'incluir-pid'].includes(escolha.modo)) {
+      argumentos = ['--' + escolha.modo, String(escolha.pid)];
       alvo = `pid ${escolha.pid}`;
     } else {
       // No modo "incluir" nao existe padrao: incluir o navegador por engano mandaria para a

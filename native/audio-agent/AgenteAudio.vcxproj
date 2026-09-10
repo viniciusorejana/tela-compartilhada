@@ -63,6 +63,7 @@
     <ClCompile Include="..\audio-helper\Aplicativos.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="WindowProcess.h" />
     <ClInclude Include="..\audio-helper\Common.h" />
     <ClInclude Include="..\audio-helper\LoopbackCapture.h" />
     <ClInclude Include="..\audio-helper\Aplicativos.h" />
