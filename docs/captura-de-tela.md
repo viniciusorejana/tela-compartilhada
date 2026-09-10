@@ -133,3 +133,25 @@ mostrar um nome de biblioteca e deixar a conclusão por conta de quem lê.
 Vale lembrar que **assistir sob demanda** também ajuda aqui: enquanto ninguém pede sua tela,
 o servidor de mídia desliga as camadas e o codificador fica ocioso. O custo de transmitir
 passou a existir só quando alguém está de fato assistindo.
+
+## O que ainda alcança a placa: WebCodecs
+
+O WebRTC não alcança a NVENC nesta máquina, mas o **WebCodecs** alcança. Medido no mesmo
+Chrome, mesmo perfil limpo:
+
+| Codec | `VideoEncoder` com `prefer-hardware` |
+| --- | --- |
+| H.264 high, 1080p | aceito — 249 quadros/s |
+| VP9, 1080p | **recusado** |
+| AV1, 1080p | **recusado** |
+
+A recusa é a prova. Se `prefer-hardware` estivesse apenas caindo para software em silêncio,
+os três seriam aceitos. VP9 e AV1 serem recusados enquanto H.264 passa é exatamente o
+perfil de uma NVENC de geração Ampere: ela codifica H.264 e HEVC, e não codifica VP9 nem
+AV1. O Chrome está consultando a placa.
+
+Ou seja: a capacidade existe e é alcançável de dentro do navegador — só não pela porta que
+o `RTCPeerConnection` usa.
+
+**A decodificação já está resolvida:** `decodingInfo` do WebRTC responde `powerEfficient:
+true` para H.264, VP9 e AV1. Quem assiste já usa a placa. O problema é só de quem envia.
