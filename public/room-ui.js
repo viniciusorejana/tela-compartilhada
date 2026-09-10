@@ -107,6 +107,31 @@
   // powerEfficient* nao existe em todo navegador; "não informado" e honesto, "não" nao seria.
   const describeEfficiency = valor => valor === undefined ? 'não informado' : valor ? 'sim (hardware provável)' : 'não (software provável)';
 
+  // "codificador=OpenH264" nao diz nada a quem le, e a conclusao errada e facil: culpar o
+  // Nexo, o codec escolhido ou a internet. Esta pergunta e feita ANTES de qualquer conexao,
+  // sem simulcast e sem dica de conteudo -- ou seja, no caso mais simples possivel. Se nem
+  // ela encontra a placa de video, nao existe ajuste nesta pagina que a faca aparecer: o
+  // problema esta no navegador, no driver ou na maquina.
+  const CODECS_PARA_SONDAR = {
+    'H.264': 'video/H264;profile-level-id=42e01f',
+    VP8: 'video/VP8', VP9: 'video/VP9', AV1: 'video/AV1'
+  };
+
+  async function codificadoresPorHardware() {
+    if (!navigator.mediaCapabilities?.encodingInfo) return null;
+    const comHardware = [];
+    for (const [nome, contentType] of Object.entries(CODECS_PARA_SONDAR)) {
+      try {
+        const r = await navigator.mediaCapabilities.encodingInfo({
+          type: 'webrtc',
+          video: { contentType, width: 1920, height: 1080, bitrate: 8_000_000, framerate: 30 }
+        });
+        if (r.supported && r.powerEfficient) comHardware.push(nome);
+      } catch (_) { /* Navegador sem suporte a esta consulta: some da lista, sem chute. */ }
+    }
+    return comHardware;
+  }
+
   function abrirDiagnostico() {
     $('diagnosticsPanel').classList.remove('hidden');
     collectDiagnostics();
@@ -133,6 +158,19 @@
         `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`,
         `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
         'Revisão de mídia: sfu-1'];
+
+      const comHardware = await codificadoresPorHardware();
+      if (comHardware === null) {
+        lines.push('Codificação por hardware: este navegador não sabe informar.');
+      } else if (comHardware.length) {
+        lines.push(`Codificação por hardware disponível para: ${comHardware.join(', ')}.`);
+      } else {
+        lines.push('Codificação por hardware: NENHUM codec. Quem codifica é o processador,'
+          + ' e isso pesa no computador de quem transmite — inclusive nos jogos. Não é'
+          + ' ajustável por aqui: confira "Video Encode" em chrome://gpu, o driver de vídeo'
+          + ' e adaptadores de vídeo virtuais (Parsec, monitores USB) que possam estar no'
+          + ' caminho.');
+      }
 
       let recebidos = 0, index = 0;
       const conectado = estado === 'connected';

@@ -61,3 +61,60 @@ compartilhe **aquele monitor**.
    mais chance de usar a placa.
 
 [border]: https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.graphicscapturesession.isborderrequired
+
+---
+
+# A outra metade do custo: quem codifica
+
+Capturar é só o começo. Depois de capturado, cada quadro precisa ser **comprimido**, e isso
+pode acontecer em dois lugares muito diferentes:
+
+- **Na placa de vídeo** (NVENC, Quick Sync, AMF). Custo quase nulo para o resto da máquina.
+- **No processador** (OpenH264, libvpx). Custo alto, e ele disputa exatamente o mesmo
+  recurso que o jogo.
+
+Se o Diagnóstico mostra `codificador=OpenH264` ou `libvpx`, é o processador que está
+comprimindo — e essa é uma segunda fonte de queda de FPS, **independente** do caminho de
+captura.
+
+## O que foi medido nesta máquina
+
+Numa RTX 3060 Ti com driver 32.0.16.1088, Windows 10 22H2:
+
+| Pergunta | Resposta |
+| --- | --- |
+| `chrome://gpu` → Video Encode | **Hardware accelerated** |
+| Capacidades listadas | `Encode h264 baseline/main/high`, até 1920x1080@121fps e 3840x2160@30fps |
+| `mediaCapabilities.decodingInfo` (WebRTC, H.264 1080p) | `powerEfficient: true` — a placa **decodifica** |
+| `mediaCapabilities.encodingInfo` (WebRTC, H.264 1080p) | `powerEfficient: false` |
+| Idem para VP8, VP9, AV1, em 720p/1080p/1440p | `false` em todos |
+
+Ou seja: a placa **tem** o codificador, o Chrome **lista** o codificador, o caminho de
+decodificação **usa** a placa — e mesmo assim o WebRTC não oferece codificação por hardware
+para nenhum codec.
+
+Repare que a consulta acima é a mais simples possível: um codec e uma resolução, sem
+simulcast e sem dica de conteúdo. Como ela já responde "não", **a escolha de simulcast, de
+codec ou de prioridade feita no Nexo não é a causa** — não há ajuste nesta página que faça o
+codificador da placa aparecer.
+
+## Suspeitas, na ordem em que vale investigar
+
+1. **Adaptadores de vídeo virtuais.** Esta máquina tem "Parsec Virtual Display Adapter" e
+   "USB Mobile Monitor Virtual Display". Adaptadores desse tipo não têm codificador, e
+   costumam confundir a escolha de adaptador na hora de inicializar o codificador. Testar:
+   desativar no Gerenciador de Dispositivos, reiniciar o Chrome, reabrir o Diagnóstico.
+2. **Workaround aplicado pelo próprio Chrome.** O `chrome://gpu` desta máquina lista
+   `disable_d3d12_video_encoder` — "Disable D3D12 video encoder on Windows versions older
+   11 24H2". É um caminho de codificação desligado por versão de sistema.
+3. **Driver de vídeo.** Vale testar uma versão diferente antes de concluir qualquer coisa.
+
+## O que o Nexo faz a respeito
+
+Nada disso é ajustável pela página, então o que cabe é **dizer**: o Diagnóstico agora
+responde, em português, se existe codificação por hardware para algum codec — em vez de
+mostrar um nome de biblioteca e deixar a conclusão por conta de quem lê.
+
+Vale lembrar que **assistir sob demanda** também ajuda aqui: enquanto ninguém pede sua tela,
+o servidor de mídia desliga as camadas e o codificador fica ocioso. O custo de transmitir
+passou a existir só quando alguém está de fato assistindo.

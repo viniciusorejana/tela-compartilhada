@@ -500,9 +500,15 @@ function definirFaixaEmTodosOsPares(source, track) {
 
 function paraCadaPar(fn) { peers.forEach(fn); }
 
+// Limpa TUDO que pertence a essa pessoa, esteja ela ainda no mapa ou nao.
+//
+// A guarda que existia aqui ("se nao esta em peers, nao faca nada") era a origem dos
+// fantasmas: o servidor de midia avisa que alguem saiu apagando a pessoa do mapa PRIMEIRO e
+// so entao chamando esta funcao -- que entao achava o mapa limpo e ia embora sem tirar o
+// quadradinho. O aviso do socket, que chama daqui com a pessoa ainda no mapa, funcionava; o
+// do servidor de midia, nao. Por isso o fantasma aparecia justamente quando o socket
+// demorava ou se perdia, que e o que mais acontece em celular e em sala cheia.
 function removerPar(id) {
-  const par = peers.get(id);
-  if (!par) return;
   peers.delete(id);
   pararDeAcompanhar(id);
   removerTile(id);
@@ -1551,6 +1557,35 @@ function acompanharAplicativos(ligar) {
   timerDeAplicativos = setInterval(pedirAplicativos, 3000);
 }
 
+// ---------- Abas dos painéis ----------
+// Estas telas cresceram até virar rolagem: o que fazia diferença ficava abaixo da dobra, e
+// a pessoa tinha de descer procurando. Separar por assunto não esconde nada -- todos os
+// controles continuam ali, e cada aba cabe inteira na tela, inclusive no celular.
+function montarAbas(caixa) {
+  const abas = [...caixa.querySelectorAll('[role="tab"]')];
+  const mostrar = escolhida => {
+    abas.forEach(aba => {
+      const ativa = aba === escolhida;
+      aba.setAttribute('aria-selected', String(ativa));
+      aba.tabIndex = ativa ? 0 : -1;
+      document.getElementById(aba.getAttribute('aria-controls')).hidden = !ativa;
+    });
+  };
+  abas.forEach((aba, indice) => {
+    aba.addEventListener('click', () => mostrar(aba));
+    // Seta para o lado percorre as abas, como manda o padrão de navegação por teclado.
+    aba.addEventListener('keydown', evento => {
+      const passo = evento.key === 'ArrowRight' ? 1 : evento.key === 'ArrowLeft' ? -1 : 0;
+      if (!passo) return;
+      evento.preventDefault();
+      const alvo = abas[(indice + passo + abas.length) % abas.length];
+      mostrar(alvo);
+      alvo.focus();
+    });
+  });
+}
+document.querySelectorAll('[data-abas]').forEach(montarAbas);
+
 captureMode.onchange = atualizarExplicacaoDeAudio;
 audioPolicy.onchange = atualizarExplicacaoDeAudio;
 
@@ -2184,7 +2219,10 @@ function ligarMidiaDoTile(id) {
   const peer = peers.get(id);
   if (!refs || !peer) return;
   ligarFluxo(refs.camVideo, peer.remoteStreams.camera);
-  if (peer.remoteStreams.screen.getTracks().length) atualizarTileDeTela(id);
+  // Sempre, e nao so quando a faixa chegou: o quadradinho da tela agora existe desde o
+  // anuncio, com o convite para assistir. Esperar a faixa deixaria a tela invisivel para
+  // sempre, porque a faixa so desce depois que alguem pede.
+  atualizarTileDeTela(id);
   if (peer.remoteStreams.micAudio.getTracks().length) {
     if (refs.peerAudio.srcObject !== peer.remoteStreams.micAudio) refs.peerAudio.srcObject = peer.remoteStreams.micAudio;
     acompanharVoz(id, peer.remoteStreams.micAudio);
@@ -2251,6 +2289,11 @@ function garantirTileDeTela(id) {
     <div class="avatar-wrap">
       <video class="cam-video active" autoplay playsinline muted></video>
       <span class="screen-badge">Tela</span>
+      <div class="convite-de-tela" hidden>
+        <span class="convite-texto">Transmitindo</span>
+        <button class="assistir-btn" type="button">Assistir</button>
+      </div>
+      <button class="parar-de-assistir" type="button" hidden title="Parar de assistir esta tela">Parar</button>
     </div>
     <div class="participant-name"></div>
     <div class="volume-row"></div>
@@ -2259,12 +2302,28 @@ function garantirTileDeTela(id) {
 
   const refs = {
     root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name'),
-    linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null
+    linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null,
+    convite: el.querySelector('.convite-de-tela'), assistirBtn: el.querySelector('.assistir-btn'),
+    pararBtn: el.querySelector('.parar-de-assistir')
   };
   tilesDeTela.set(id, refs);
   reordenarQuadradinhos();
 
-  el.querySelector('.avatar-wrap').addEventListener('click', () => pin(id, 'screen', true));
+  // A propria tela nao se assiste: ela ja esta aqui. Os controles nem chegam a existir --
+  // deixa-los escondidos poria dois "Assistir" na pagina, e o de baixo nunca seria clicavel.
+  if (id === 'self') {
+    refs.convite.remove(); refs.pararBtn.remove();
+    refs.convite = null; refs.assistirBtn = null; refs.pararBtn = null;
+  }
+
+  // Um clique no quadradinho de quem nao esta sendo assistido quer dizer "quero ver": pedir
+  // a imagem e destacar sao a mesma intencao, e cobrar dois cliques por ela so irrita.
+  el.querySelector('.avatar-wrap').addEventListener('click', () => {
+    if (!assistindoTela(id)) { assistirTela(id, true); return; }
+    pin(id, 'screen', true);
+  });
+  refs.assistirBtn?.addEventListener('click', evento => { evento.stopPropagation(); assistirTela(id, true); });
+  refs.pararBtn?.addEventListener('click', evento => { evento.stopPropagation(); assistirTela(id, false); });
 
   // A propria tela nao toca neste computador (seria o som saindo e voltando), entao os
   // controles so fazem sentido para quem esta assistindo.
@@ -2304,15 +2363,39 @@ function removerTileDeTela(id) {
   if (pinned?.id === id && pinned.source === 'screen') avaliarDestaque();
 }
 
+// Pedir (ou largar) a tela de alguem. Nao e mostrar/esconder um video: o pedido vai ate o
+// servidor de midia, que so entao comeca -- ou para de -- mandar os quadros. Por isso
+// entrar numa sala com cinco telas no ar nao custa mais nada ate voce escolher uma.
+function assistirTela(id, ligar) {
+  if (id === 'self' || !peers.has(id)) return;
+  transporte?.assistir(id, ligar);
+  atualizarTileDeTela(id);
+  if (ligar) { pin(id, 'screen', true); status.textContent = `Assistindo a tela de ${nomeDe(id)}.`; }
+  else {
+    // Sair de uma tela nao pode deixar o palco vazio se ha outra coisa para ver.
+    if (pinned?.id === id && pinned.source === 'screen') { destaqueManual = false; despinar(); }
+    status.textContent = `Você parou de assistir a tela de ${nomeDe(id)}.`;
+  }
+  avaliarDestaque();
+  atualizarAudioDeTela();
+}
+
 function atualizarTileDeTela(id) {
   const estado = id === 'self' ? meuEstado() : (peers.get(id)?.state || {});
   if (!estado.screen) { removerTileDeTela(id); return; }
 
   const refs = garantirTileDeTela(id);
   refs.nome.textContent = `${nomeDe(id)} — Tela`;
+  const assistindo = assistindoTela(id);
   const stream = id === 'self' ? screenStream : peers.get(id)?.remoteStreams.screen;
-  ligarFluxo(refs.video, stream);
-  garantirReproducao(refs.video);
+  ligarFluxo(refs.video, assistindo ? stream : null);
+  if (assistindo) garantirReproducao(refs.video);
+  // Quem nao esta assistindo ve que a tela existe -- e so isso. A imagem nem desce do
+  // servidor de midia, entao nao ha video para esconder: ha um convite no lugar dele.
+  if (refs.convite) refs.convite.hidden = assistindo;
+  if (refs.pararBtn) refs.pararBtn.hidden = !assistindo;
+  refs.video.classList.toggle('active', assistindo);
+  refs.root.classList.toggle('nao-assistida', !assistindo);
   refs.root.classList.toggle('pinned', pinned?.id === id && pinned.source === 'screen');
 
   // Da para compartilhar a tela sem som nenhum. Nesse caso os controles ficam apagados, em
@@ -2361,6 +2444,12 @@ let destaqueManual = false;
 
 // Fonte anunciada pelo estado, mesmo que o video ainda nao tenha chegado: e o que permite
 // destacar na hora e esperar a imagem, em vez de largar o palco vazio.
+// Como no Discord: a tela de alguem so entra no palco depois que voce pede para assistir.
+// A propria tela e sempre "assistida" -- ela ja esta aqui, nao ha nada para baixar.
+function assistindoTela(id) {
+  return id === 'self' || Boolean(peers.get(id)?.assistindo);
+}
+
 function fonteAnunciada(id, source) {
   if (id === 'self') {
     const stream = source === 'screen' ? screenStream : cameraStream;
@@ -2368,13 +2457,13 @@ function fonteAnunciada(id, source) {
   }
   const peer = peers.get(id);
   if (!peer) return false;
-  return Boolean(source === 'screen' ? peer.state?.screen : peer.state?.camera);
+  return Boolean(source === 'screen' ? peer.state?.screen && peer.assistindo : peer.state?.camera);
 }
 
 function candidatosDeDestaque() {
   const lista = [];
   peers.forEach((peer, id) => {
-    if (peer.state?.screen) lista.push({ id, source: 'screen', prioridade: 0, ordem: peer.ordem.screen });
+    if (peer.state?.screen && peer.assistindo) lista.push({ id, source: 'screen', prioridade: 0, ordem: peer.ordem.screen });
     if (peer.state?.camera) lista.push({ id, source: 'camera', prioridade: 1, ordem: peer.ordem.camera });
   });
   // A propria imagem entra por ultimo, so como preenchimento quando estou sozinho.
@@ -2466,7 +2555,15 @@ function despinar() {
   pinned = null;
   destaqueManual = false;
   stageVideo.srcObject = null;
+  // Palco vazio numa sala onde alguem ESTA transmitindo daria a impressao de defeito. Como
+  // a tela agora so desce a pedido, o vazio precisa dizer que existe algo para pedir.
+  const transmitindo = [...peers.values()].filter(par => par.state?.screen && !par.assistindo);
   stageEmpty.innerHTML = TEXTO_PALCO_VAZIO;
+  if (transmitindo.length) {
+    stageEmpty.textContent = transmitindo.length === 1
+      ? `${transmitindo[0].name} está compartilhando a tela. Clique em "Assistir" no quadradinho para ver.`
+      : `${transmitindo.length} pessoas estão compartilhando a tela. Clique em "Assistir" no quadradinho de quem você quer ver.`;
+  }
   stage.classList.remove('is-waiting');
   document.getElementById('playbackRecovery').hidden = true;
   clearTimeout(esperaDoVideo);

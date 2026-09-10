@@ -190,7 +190,12 @@ async function esperarCodec(page, fonte, esperado) {
     await route.continue();
   });
   const viewer = await join(mobile, '<img src=x onerror="window.xss=1">');
+  // A camera chega sozinha e vai ao palco; a tela espera ser pedida. Ate aqui o palco
+  // mostra a camera, e nao a tela -- e e assim que tem de ser.
   await viewer.waitForFunction(() => peers.size === 1 && stageVideo.videoWidth > 0 && !stageVideo.paused, null, { timeout: 40000 });
+  assert.equal(await viewer.evaluate(() => pinned.source), 'camera');
+  await viewer.locator('.assistir-btn').click();
+  await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0 && !stageVideo.paused, null, { timeout: 40000 });
   await waitForDecodedVideos(viewer);
   const receiving = await viewer.evaluate(() => {
     const peer = [...peers.values()][0];
@@ -261,6 +266,8 @@ async function esperarCodec(page, fonte, esperado) {
   console.log(`Camadas de simulcast publicadas: ${JSON.stringify(camadas)}`);
 
   await host.locator('#devicesBtn').click();
+  // Qualidade e codec moraram numa lista unica e rolante ate virarem aba propria.
+  await host.locator('#abaQualidade').click();
   await host.locator('#videoQuality').selectOption('ultra');
   await host.waitForFunction(() => perfilDeQualidade === 'ultra');
   // A fonte deste teste e um canvas de tamanho fixo, entao applyConstraints nao muda a
@@ -342,6 +349,9 @@ async function esperarCodec(page, fonte, esperado) {
 
   await Promise.all([viewer.locator('#cameraBtn').click(), host.locator('#micBtn').click()]);
   await share(viewer);
+  // A tela de quem chegou nao se impoe a ninguem: o host so recebe depois de pedir.
+  await host.waitForFunction(() => [...peers.values()][0]?.state.screen, null, { timeout: 40000 });
+  await host.locator('.assistir-btn').click();
   try {
     await host.waitForFunction(() => [...peers.values()][0].remoteStreams.screen.getVideoTracks().length === 1 && pinned?.source === 'screen' && stageVideo.videoWidth > 0, null, { timeout: 40000 });
   } catch (erro) {
@@ -678,6 +688,55 @@ async function esperarCodec(page, fonte, esperado) {
   assert.equal(await fallbackPage.locator('#noiseBtn').textContent(), 'Filtro do navegador');
   await fallbackContext.close();
   console.log('PASS: failure to load RNNoise preserves live microphone with browser filtering');
+
+  // Tela de outra pessoa so desce depois de pedir, como no Discord. O que se mede aqui e o
+  // que custa: quantas FAIXAS chegaram -- nao se um video esta visivel.
+  const palcoContext = await browser.newContext();
+  await syntheticCapture(palcoContext);
+  const quemMostra = await join(palcoContext, 'Mostra', 'assistir-sob-demanda');
+  const quemAssiste = await join(palcoContext, 'Assiste', 'assistir-sob-demanda');
+  await quemAssiste.waitForFunction(() => peers.size === 1);
+  await quemMostra.locator('#screenBtn').click();
+  await quemMostra.locator('#audioPolicy').selectOption('none');
+  await quemMostra.locator('#confirmScreenBtn').click();
+  await quemMostra.waitForFunction(() => Boolean(screenStream) && publicacoesLocais.screen);
+  await quemAssiste.waitForFunction(() => [...peers.values()][0]?.state.screen, null, { timeout: 20000 });
+  const semPedir = await quemAssiste.evaluate(() => {
+    const par = [...peers.values()][0];
+    return { anunciada: par.state.screen, assistindo: par.assistindo,
+      faixas: par.remoteStreams.screen.getTracks().length,
+      convidando: !document.querySelector('.convite-de-tela')?.hidden,
+      palco: pinned?.source || null };
+  });
+  assert.deepEqual(semPedir, { anunciada: true, assistindo: false, faixas: 0, convidando: true, palco: null });
+  await quemAssiste.locator('.assistir-btn').click();
+  await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.screen.getTracks().length === 1, null, { timeout: 20000 });
+  assert.equal(await quemAssiste.evaluate(() => pinned?.source), 'screen');
+  await quemAssiste.locator('.parar-de-assistir').click();
+  await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.screen.getTracks().length === 0, null, { timeout: 20000 });
+  // Parar de assistir nao pode fazer a tela sumir da sala: ela continua no ar para os outros.
+  assert.deepEqual(await quemAssiste.evaluate(() => {
+    const par = [...peers.values()][0];
+    return { anunciada: par.state.screen, assistindo: par.assistindo, quadradinhos: tilesDeTela.size };
+  }), { anunciada: true, assistindo: false, quadradinhos: 1 });
+  // A camera nunca precisou ser pedida, e nao passa a precisar.
+  await quemMostra.locator('#cameraBtn').click();
+  await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.camera.getTracks().length > 0, null, { timeout: 20000 });
+  console.log('PASS: a remote screen only streams after you ask, and stops when you stop watching');
+
+  // O fantasma: quando a saida vem do servidor de midia, a pessoa ja saiu do mapa ANTES de a
+  // limpeza rodar. Se a limpeza depender de encontra-la la, o quadradinho fica orfao para
+  // sempre -- que era o defeito relatado em sala cheia e em celular.
+  const orfao = await quemAssiste.evaluate(() => {
+    const id = [...peers.keys()][0];
+    peers.delete(id);
+    removerPar(id);
+    return { restou: tiles.has(id), telaRestou: tilesDeTela.has(id) };
+  });
+  assert.deepEqual(orfao, { restou: false, telaRestou: false });
+  await palcoContext.close();
+  console.log('PASS: leaving cleans the tile even when the peer is already out of the map');
+
   assert.deepEqual(errors, []);
   console.log(`PASS: responsive layout, dialogs, diagnostics. Engine: ${process.env.TEST_BROWSER || 'chromium'}`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

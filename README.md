@@ -16,6 +16,12 @@ A interface Nexo tem navegação lateral, presença do squad, chat com envio de 
 palco com recuperação de reprodução e diagnóstico de mídia. A mesma sala é usada pelo navegador
 e pelo Electron. Veja [a revisão técnica e o roteiro de teste no iPhone](docs/revisao-safari.md).
 
+**Telas são assistidas a pedido**, como no Discord: quando alguém compartilha, todo mundo vê que a
+transmissão existe, mas a imagem só desce do servidor para quem clicar em **Assistir** — e para de
+descer ao clicar em **Parar**. Numa sala com várias telas no ar isso muda o custo de quem só quer
+conversar, e reduz o de quem transmite: sem ninguém assistindo, o servidor desliga as camadas e o
+codificador fica ocioso. Câmera e voz continuam chegando sozinhas.
+
 Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev`. A captura de
 áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`, e a
 mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois.

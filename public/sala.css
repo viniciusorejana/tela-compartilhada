@@ -135,6 +135,16 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .avatar-fallback { position:absolute; width:36px; height:36px; border-radius:13px; display:grid; place-items:center; color:#22202e; font-size:12px; font-weight:750; box-shadow:0 0 0 5px #ffffff05; }
 .mic-icon { position:absolute; left:5px; bottom:3px; font-size:10px; }
 .screen-badge { position:absolute; right:5px; top:5px; font-size:8px; font-weight:800; background:#dd7899; color:#1b1620; padding:2px 5px; border-radius:4px; }
+/* Tela anunciada mas nao pedida: nada esta descendo do servidor de midia. O convite ocupa
+   o lugar da imagem em vez de cobri-la -- nao ha imagem por baixo. */
+.convite-de-tela { position:absolute; inset:0; z-index:1; display:grid; place-content:center; justify-items:center; gap:7px; text-align:center; padding:6px; }
+.convite-texto { font-size:9px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:#8e88a3; }
+.assistir-btn { font-size:10px; font-weight:700; padding:5px 12px; border-radius:7px; background:#5d51b8; color:#f1eefc; }
+.assistir-btn:hover { background:#6d60cf; }
+.participant.nao-assistida .avatar-wrap { background:repeating-linear-gradient(135deg,#20202c,#20202c 7px,#242433 7px,#242433 14px); }
+.parar-de-assistir { position:absolute; right:5px; bottom:5px; z-index:3; font-size:9px; font-weight:700; padding:3px 8px; border-radius:6px; background:#00000094; color:#e6e2f3; opacity:0; transition:opacity .12s; }
+.participant:hover .parar-de-assistir, .parar-de-assistir:focus-visible { opacity:1; }
+@media(max-width:760px) { .parar-de-assistir { opacity:1; } }
 .participant-name { font-size:10px; font-weight:600; margin:6px 2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .volume-row { display:flex; align-items:center; gap:4px; min-height:20px; margin-top:2px; }
 .volume-slider { flex:1; min-width:0; height:3px; accent-color:#b0a0ed; cursor:pointer; }
@@ -200,6 +210,18 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .modal-actions,.device-tools { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
 .modal-actions button { flex:1; }
 .device-tools button { font-size:11px; }
+/* Abas dos painéis de configuração. A fita fica colada no topo enquanto o conteúdo rola:
+   numa aba longa (o áudio com o agente aberto) a pessoa não perde a referência de onde
+   está nem precisa voltar ao topo para trocar de assunto. */
+.abas-fita { position:sticky; top:-26px; z-index:2; display:flex; gap:4px; margin:0 0 18px; padding:4px; border-radius:11px; background:#1b1b26; box-shadow:inset 0 0 0 1px #ffffff0a; }
+.aba { flex:1; font-size:12px; font-weight:650; padding:8px 10px; border-radius:8px; background:transparent; color:#a49bb8; white-space:nowrap; }
+.aba:hover { color:#e7e3f2; background:#ffffff09; }
+.aba[aria-selected="true"] { background:#5d51b8; color:#f3f0fd; }
+.aba-painel { animation:aba-entra .14s ease-out; }
+.aba-painel > .field:last-child, .aba-painel > small:last-child { margin-bottom:0; }
+@keyframes aba-entra { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion:reduce) { .aba-painel { animation:none; } }
+
 .field { margin-bottom:16px; }
 .field label { display:block; font-size:11px; font-weight:600; color:#bcb2cf; margin-bottom:7px; }
 /* Rótulo de caixa de seleção: o texto acompanha a caixa e o alvo de toque cobre os dois. */

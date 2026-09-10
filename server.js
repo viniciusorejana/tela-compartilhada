@@ -443,14 +443,17 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', (requestedCode, displayName, identidadeDeMidia, callback) => {
     const roomCode = String(requestedCode || 'principal').toLowerCase();
-    socket.data.identidadeDeMidia = typeof identidadeDeMidia === 'string' ? identidadeDeMidia.slice(0, 80) : null;
     if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
       if (typeof callback === 'function') callback({ ok: false, error: 'Codigo de sala invalido.' });
       return;
     }
     const name = String(displayName || 'Convidado').trim().slice(0, 40) || 'Convidado';
 
+    // A saida da sala anterior tem de ser anunciada com a identidade ANTIGA. Gravar a nova
+    // antes faria o aviso de "fulano saiu" carregar o nome de quem acabou de chegar: os
+    // outros tirariam da lista a pessoa errada e deixariam a que saiu parada la.
     sairDaSalaAtual();
+    socket.data.identidadeDeMidia = typeof identidadeDeMidia === 'string' ? identidadeDeMidia.slice(0, 80) : null;
 
     socket.join(roomName(roomCode));
     socketRoomCodes.set(socket.id, roomCode);
