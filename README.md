@@ -384,9 +384,12 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `HOST` | `0.0.0.0` | Endereco onde o servidor escuta |
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
+| `STUN_URLS` | tres servidores publicos independentes | URLs STUN separadas por virgula |
 | `TURN_URLS` | vazio | URLs TURN separadas por virgula |
-| `TURN_USERNAME` | vazio | Usuario do TURN |
-| `TURN_CREDENTIAL` | vazio | Credencial do TURN |
+| `TURN_STATIC_AUTH_SECRET` | vazio | Segredo compartilhado com o coturn (`use-auth-secret`); gera credencial temporaria |
+| `TURN_TTL` | `7200` | Validade em segundos da credencial temporaria |
+| `TURN_USERNAME` | vazio | Usuario fixo do TURN (alternativa ao segredo) |
+| `TURN_CREDENTIAL` | vazio | Credencial fixa do TURN (alternativa ao segredo) |
 
 Exemplo:
 
@@ -478,16 +481,33 @@ Outra arquitetura e apontar o DNS para um servidor publico e colocar Caddy ou Ng
 
 ## TURN para redes restritas
 
-WebRTC tenta uma conexao direta. Se os participantes estiverem em redes diferentes e a conexao nao for estabelecida, configure um servidor TURN, como Coturn:
+WebRTC tenta uma conexao direta. Quando os participantes estao em redes diferentes, isso exige
+furar o NAT dos dois lados; basta **um** deles ser NAT simetrico ou CGNAT -- o normal em fibra
+residencial e em rede movel -- para a midia nunca passar. O diagnostico mostra essa situacao
+como `ICE=checking`, `bytes=0` e nenhuma linha `Rota:`.
+
+**O tunnel HTTPS nao substitui TURN.** Tailscale Funnel e Cloudflare Tunnel entregam a pagina
+e a sinalizacao; o video nao passa por eles.
+
+O passo a passo completo de instalacao, firewall e verificacao esta em
+[`docs/turn.md`](docs/turn.md). Com um coturn no ar:
 
 ```powershell
 $env:TURN_URLS="turn:turn.seudominio.com:3478,turns:turn.seudominio.com:5349"
-$env:TURN_USERNAME="usuario"
-$env:TURN_CREDENTIAL="credencial"
+$env:TURN_STATIC_AUTH_SECRET="o mesmo segredo do turnserver.conf"
 npm start
 ```
 
-O endpoint `/api/rtc-config` entrega essa configuracao aos clientes. TURN aumenta o consumo de banda no servidor e deve usar credenciais fortes e rotacionadas. O tunnel HTTPS nao substitui TURN: eles resolvem problemas diferentes.
+O endpoint `/api/rtc-config` entrega essa configuracao aos clientes. Como a sala nao tem login,
+esse endpoint e publico: com `TURN_STATIC_AUTH_SECRET` o que viaja e uma credencial de prazo
+curto assinada com HMAC (o padrao *TURN REST API*, que o coturn implementa com
+`use-auth-secret`), e nao a senha permanente do servidor. As variaveis `TURN_USERNAME` e
+`TURN_CREDENTIAL` continuam funcionando para quem ja as configurou, com essa ressalva.
+
+Para conferir que funcionou, abra **Diagnostico** na sala: `Candidatos de relay coletados aqui`
+maior que zero mostra que o coturn respondeu, e **Forcar retransmissao pelo TURN** refaz as
+conexoes usando so o relay. TURN aumenta o consumo de banda do servidor: toda a midia daquela
+conexao passa por ele.
 
 ## Seguranca e privacidade
 

@@ -147,6 +147,8 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 #micBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='2' width='6' height='12' rx='3'/%3E%3Cpath d='M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8'/%3E%3C/svg%3E"); }
 #cameraBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='5' width='14' height='14' rx='3'/%3E%3Cpath d='m16 10 6-4v12l-6-4z'/%3E%3C/svg%3E"); }
 #screenBtn,#updateScreenBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cpath d='M8 21h8M12 17v4M12 13V7m-3 3 3-3 3 3'/%3E%3C/svg%3E"); }
+/* Câmera com o arco de girar: legível mesmo nos 19px da barra de controles. */
+#flipCameraBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 19V9a2 2 0 0 1 2-2h2.5L9 5h6l1.5 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'/%3E%3Cpath d='M8.5 13.5A3.5 3.5 0 0 1 15 12M15.5 15.5A3.5 3.5 0 0 1 9 17'/%3E%3Cpath d='M15.4 9.2v2.9h-2.9M8.6 19.8v-2.9h2.9'/%3E%3C/svg%3E"); }
 #devicesBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 20v-9a8 8 0 0 1 16 0v9M4 14h3v7H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Zm16 0h-3v7h3a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2Z'/%3E%3C/svg%3E"); }
 #leaveBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M2 12q10-10 20 0v5h-5v-5a13 13 0 0 0-10 0v5H2z'/%3E%3C/svg%3E"); margin-left:10px; }
 #micBtn[aria-pressed="true"],#cameraBtn[aria-pressed="true"],#screenBtn[aria-pressed="true"] { color:#dbd4ff; background:#8170d840; }
@@ -200,6 +202,9 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .device-tools button { font-size:11px; }
 .field { margin-bottom:16px; }
 .field label { display:block; font-size:11px; font-weight:600; color:#bcb2cf; margin-bottom:7px; }
+/* Rótulo de caixa de seleção: o texto acompanha a caixa e o alvo de toque cobre os dois. */
+.field label.check-linha { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); cursor:pointer; min-height:32px; }
+.check-linha input[type="checkbox"] { width:18px; height:18px; margin:0; flex:none; accent-color:var(--accent); }
 .field small,#devicesDica { display:block; font-size:11px; color:#a99fba; margin-top:7px; line-height:1.6; }
 #devicesDica:empty { display:none; }
 #echoHint { display:block; color:#a99fba; font-size:11px; line-height:1.7; }
@@ -255,9 +260,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
   .control-bar { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); gap:6px; }
   .control-btn { height:54px; min-width:48px; padding:6px; font-size:8px; flex:1; max-width:88px; }
   #leaveBtn { margin-left:3px; }
-  #screenBtn,#updateScreenBtn { font-size:0; gap:5px; }
+  /* O rótulo completo ("Câmera traseira") não cabe: o título e o aria-label o mantêm. */
+  #screenBtn,#updateScreenBtn,#flipCameraBtn { font-size:0; gap:5px; }
   #screenBtn::after { content:'Tela'; font-size:8px; }
   #updateScreenBtn::after { content:'Trocar'; font-size:8px; }
+  #flipCameraBtn::after { content:'Virar'; font-size:8px; }
   .chat { width:100%; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
   #chatInput,select,input[type="text"] { font-size:16px; }
   .chat-head { font-size:14px; }

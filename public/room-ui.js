@@ -24,10 +24,7 @@
     if (action === 'chat') { closeSidebar(); abrirChat(); }
     if (action === 'room') { closeSidebar(); fecharChat(); }
     if (action === 'devices') devicesBtn.click();
-    if (action === 'diagnostics') {
-      $('diagnosticsPanel').classList.remove('hidden');
-      collectDiagnostics();
-    }
+    if (action === 'diagnostics') abrirDiagnostico();
     const close = event.target.closest('[data-close]')?.dataset.close;
     if (close) $(close)?.classList.add('hidden');
     if (appRoot.classList.contains('sidebar-open') && !event.target.closest('#roomSidebar, #sidebarToggle')) closeSidebar();
@@ -106,17 +103,35 @@
     }
   });
 
+  // powerEfficient* nao existe em todo navegador; "não informado" e honesto, "não" nao seria.
+  const describeEfficiency = valor => valor === undefined ? 'não informado' : valor ? 'sim (hardware provável)' : 'não (software provável)';
+
+  function abrirDiagnostico() {
+    $('diagnosticsPanel').classList.remove('hidden');
+    collectDiagnostics();
+  }
+
+  // O vigia de conexao travada (sala.js) pede o painel quando conclui que a midia nao esta
+  // passando: e nesse momento que o relatorio tem valor, nao dez minutos depois.
+  document.addEventListener('room-diagnostics-request', () => {
+    if ($('diagnosticsPanel').classList.contains('hidden')) abrirDiagnostico();
+  });
+
+  $('forceRelay').onchange = () => definirModoRelay($('forceRelay').checked);
+
   async function collectDiagnostics() {
     if (collecting) return;
     collecting = true;
     try {
       const turn = rtcConfig.iceServers?.some(s => [s.urls].flat().some(url => /^turns?:/.test(url)));
-      const lines = ['Nexo · diagnóstico de mídia', `Navegador: ${navigator.userAgent}`, `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`, `Servidor: ${socket?.connected ? 'conectado' : 'desconectado'}`, `TURN configurado: ${turn ? 'sim' : 'não'}`, `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`, `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`];
-      let index = 0, failed = false, received = 0;
-      lines.push('Revisão de mídia: screen-vp8-serial-1');
+      const lines = ['Nexo · diagnóstico de mídia', `Navegador: ${navigator.userAgent}`, `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`, `Servidor: ${socket?.connected ? 'conectado' : 'desconectado'}`, `TURN configurado: ${turn ? 'sim' : 'não'}`, `Forçar TURN: ${$('forceRelay').checked ? 'sim' : 'não'}`, `Codec de vídeo escolhido: ${codecDeVideoEscolhido()}`, `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`, `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`];
+      let index = 0, failed = false, received = 0, relayTotal = 0;
+      lines.push('Revisão de mídia: turn-codec-camera-1');
       for (const peer of peers.values()) {
+        relayTotal += peer.candidatosDeRelay;
         lines.push('', `Participante ${++index}: conexão=${peer.pc.connectionState}; ICE=${peer.pc.iceConnectionState}; sinalização=${peer.pc.signalingState}`);
         lines.push(`Fontes anunciadas: câmera=${Boolean(peer.state.camera)}, tela=${Boolean(peer.state.screen)}, áudio de tela=${Boolean(peer.state.screenAudio)}`);
+        lines.push(`Candidatos de relay coletados aqui: ${peer.candidatosDeRelay}`);
         lines.push(`Última falha de sinalização: ${peer.lastSignalingError || 'nenhuma'}`);
         peer.pc.getTransceivers().forEach(t => lines.push(`Transceptor MID ${t.mid ?? '?'}: direção=${t.direction}; negociada=${t.currentDirection || 'pendente'}`));
         failed ||= ['failed', 'disconnected', 'checking'].includes(peer.pc.iceConnectionState);
@@ -133,13 +148,22 @@
             received += item.framesDecoded || 0;
             lines.push(`Vídeo MID ${item.mid ?? '?'}: ${codec?.mimeType || 'codec não informado'}; bytes=${item.bytesReceived ?? '?'}; quadros decodificados=${item.framesDecoded ?? '?'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}`);
             lines.push(`  Fonte=${peer.remoteStreamIds?.mids?.[item.mid] || 'consultar faixas abaixo'}; recebidos=${item.framesReceived ?? '?'}; keyframes=${item.keyFramesDecoded ?? '?'}; descartados=${item.framesDropped ?? '?'}; PLI=${item.pliCount ?? '?'}`);
+            lines.push(`  Decodificador=${item.decoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientDecoder)}`);
+          }
+          // Do lado de quem envia, e aqui que se ve se a GPU esta sendo usada de verdade.
+          if (item.type === 'outbound-rtp' && (item.kind === 'video' || item.mediaType === 'video')) {
+            const codec = stats.get(item.codecId);
+            lines.push(`Envio MID ${item.mid ?? '?'}: ${codec?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}`);
+            lines.push(`  Codificador=${item.encoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientEncoder)}`);
           }
         });
         peer.remoteTracks.forEach(event => lines.push(`Faixa ${event.track.kind}, MID ${event.transceiver?.mid ?? '?'}: ${RoomMedia.sourceForTrack(event, peer.remoteStreamIds, peer.state) || 'aguardando identificação'}; ${event.track.readyState}; muda=${event.track.muted}`));
       }
       let summary = !socket?.connected ? 'O servidor está desconectado. Confira o endereço e se o servidor está ligado.'
         : !peers.size ? 'Você está conectado à sala. O diagnóstico de mídia aparece quando outra pessoa entrar.'
-        : failed ? (turn ? 'A conexão de mídia está em negociação ou falhou. Confira o serviço TURN e tente outra rede.' : 'A conexão de mídia está em negociação ou falhou. Redes móveis e alguns roteadores precisam de TURN; o link HTTPS do Funnel não substitui esse serviço.')
+        : failed ? (turn
+          ? (relayTotal ? 'A conexão de mídia está em negociação ou falhou, mesmo com o TURN respondendo. Tente marcar "Forçar retransmissão pelo TURN" e compare.' : 'A conexão de mídia está em negociação ou falhou e o TURN não devolveu nenhum candidato: confira se o serviço está no ar e se as credenciais valem.')
+          : 'A conexão de mídia está em negociação ou falhou. Redes móveis e alguns roteadores precisam de TURN; o link HTTPS do Funnel não substitui esse serviço.')
         : midiasBloqueadas.size ? 'O navegador bloqueou a reprodução. Feche este painel e toque em Ativar reprodução.'
         : received > 0 ? 'Há quadros de vídeo decodificados. Se a imagem não aparece, feche este painel e tente Reproduzir vídeo.'
         : 'A sala está conectada. Se alguém já transmite, aguarde os primeiros quadros e confira as faixas abaixo.';

@@ -162,13 +162,14 @@ async function waitForDecodedVideos(page) {
     return { screen: peer.remoteStreams.screen.getVideoTracks().length, camera: peer.remoteStreams.camera.getVideoTracks().length, source: pinned.source, audio: stageVideo.srcObject.getAudioTracks().length, xss: window.xss || 0 };
   });
   assert.deepEqual(receiving, { screen: 1, camera: 1, source: 'screen', audio: 0, xss: 0 });
-  const screenCodec = await viewer.evaluate(async () => {
+  // H.264 leads by default: on an iPhone it is the only codec decoded in hardware.
+  const codecDaTela = async () => viewer.evaluate(async () => {
     const peer = [...peers.values()][0];
     const stats = await peer.pc.getStats();
     const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
-    return stats.get(inbound?.codecId)?.mimeType;
+    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase();
   });
-  assert.equal(screenCodec?.toLowerCase(), 'video/vp8');
+  assert.equal(await codecDaTela(), 'video/h264');
   assert.equal(await host.locator('.participant-name img').count(), 0);
   // A real remote camera and screen must both keep decoding in the responsive grid.
   await viewer.evaluate(() => mostrarControlesDoPalco());
@@ -213,6 +214,29 @@ async function waitForDecodedVideos(page) {
   assert.equal(await host.evaluate(() => limiteDeUpload), 20_000_000);
   await host.screenshot({ path: path.join(output, 'qualidade.png') });
   await host.locator('#videoQuality').selectOption('high');
+
+  // Trocar o codec no meio da transmissao so vale se houver renegociacao: setCodecPreferences
+  // nao mexe na sessao ja negociada.
+  await host.locator('#videoCodec').selectOption('vp8');
+  await host.waitForFunction(() => codecDeVideoEscolhido() === 'vp8');
+  assert.equal(await host.locator('#shareCodec').inputValue(), 'vp8');
+  await viewer.waitForFunction(async () => {
+    const peer = [...peers.values()][0];
+    const stats = await peer.pc.getStats();
+    const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
+    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase() === 'video/vp8';
+  }, null, { timeout: 20000 });
+  await waitForDecodedVideos(viewer);
+  await host.locator('#videoCodec').selectOption('auto');
+  await viewer.waitForFunction(async () => {
+    const peer = [...peers.values()][0];
+    const stats = await peer.pc.getStats();
+    const inbound = [...stats.values()].find(s => s.type === 'inbound-rtp' && peer.remoteStreamIds.mids[s.mid] === 'screen');
+    return stats.get(inbound?.codecId)?.mimeType?.toLowerCase() === 'video/h264';
+  }, null, { timeout: 20000 });
+  await waitForDecodedVideos(viewer);
+  console.log('PASS: live codec switch renegotiates in both directions and video keeps decoding');
+
   await host.keyboard.press('Escape');
   await host.mouse.move(500, 350);
   await host.locator('#fullscreenBtn').click();
@@ -284,6 +308,109 @@ async function waitForDecodedVideos(page) {
   await waitForDecodedVideos(host);
   await waitForDecodedVideos(viewer);
   console.log('PASS: renegotiation after replaceTrack rejection and bidirectional simultaneous media');
+
+  // Um candidato que chega enquanto uma oferta colidida esta sendo ignorada pertence a
+  // negociacao ANTERIOR, que continua valendo. Descarta-lo prendia o ICE em "checking".
+  await viewer.evaluate(() => {
+    const peer = [...peers.values()][0];
+    window.candidatosOriginais = peer.pc.addIceCandidate.bind(peer.pc);
+    window.candidatosAplicados = 0;
+    peer.pc.addIceCandidate = candidate => { window.candidatosAplicados++; return window.candidatosOriginais(candidate); };
+    peer.ignoreOffer = true;
+  });
+  await host.evaluate(() => {
+    const alvo = [...peers.keys()][0];
+    socket.emit('candidate', alvo, { candidate: 'candidate:1 1 udp 2130706431 203.0.113.9 50000 typ host', sdpMid: '0', sdpMLineIndex: 0 });
+  });
+  await viewer.waitForFunction(() => window.candidatosAplicados > 0);
+  const candidatoAplicado = await viewer.evaluate(() => {
+    const peer = [...peers.values()][0];
+    peer.ignoreOffer = false;
+    peer.pc.addIceCandidate = window.candidatosOriginais;
+    return window.candidatosAplicados;
+  });
+  assert.equal(candidatoAplicado, 1);
+  await waitForDecodedVideos(viewer);
+  console.log('PASS: ICE candidates survive an ignored colliding offer');
+
+  // Uma conexao que nunca sai de "connecting" nao gera evento nenhum: sem o vigia, a pessoa
+  // so via "Recebendo vídeo…" para sempre, sem saber que faltava TURN.
+  const vigia = await viewer.evaluate(async () => {
+    // O duble entra no mesmo Map que a sala inteira consulta: precisa da forma de um par.
+    const falso = {
+      id: 'preso', name: 'Preso', state: {}, candidatosDeRelay: 0,
+      timeoutDeTravamento: null, timeoutDeVeredito: null, reatouPorTravamento: false,
+      remoteTracks: new Map(), remoteStreamIds: {}, senders: {}, ordem: { screen: 0, camera: 0 },
+      remoteStreams: { camera: new MediaStream(), screen: new MediaStream(), micAudio: new MediaStream(), screenAudio: new MediaStream() },
+      pc: {
+        connectionState: 'connecting', iceConnectionState: 'checking', signalingState: 'stable',
+        reatou: false, restartIce() { this.reatou = true; },
+        getTransceivers: () => [], getStats: async () => new Map()
+      }
+    };
+    peers.set('preso', falso);
+    // Encurta a espera do teste sem tocar na regra: o vigia usa os mesmos temporizadores.
+    const originalSetTimeout = window.setTimeout;
+    window.setTimeout = (fn, ms) => originalSetTimeout(fn, Math.min(ms, 120));
+    vigiarConexaoTravada(falso);
+    await new Promise(resolve => originalSetTimeout(resolve, 600));
+    window.setTimeout = originalSetTimeout;
+    const resultado = { reatou: falso.pc.reatou, aviso: status.textContent, painel: !document.getElementById('diagnosticsPanel').classList.contains('hidden') };
+    pararDeVigiarTravamento(falso);
+    peers.delete('preso');
+    document.getElementById('diagnosticsPanel').classList.add('hidden');
+    return resultado;
+  });
+  assert.equal(vigia.reatou, true);
+  assert.match(vigia.aviso, /não está passando entre estas redes/);
+  assert.match(vigia.aviso, /TURN/);
+  assert.equal(vigia.painel, true);
+  console.log('PASS: a connection stuck in "connecting" restarts ICE and then names TURN as the missing piece');
+
+  // Virar a camera no celular. No iOS a segunda camera nao pode abrir com a primeira viva:
+  // a antiga tem de estar encerrada ANTES do getUserMedia.
+  const virada = await viewer.evaluate(async () => {
+    const anterior = cameraStream.getVideoTracks()[0];
+    const capturaOriginal = navigator.mediaDevices.getUserMedia;
+    const registro = [];
+    const espionar = value => Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value });
+    espionar(async constraints => {
+      registro.push({ lado: constraints.video?.facingMode || null, anteriorEncerrada: anterior.readyState === 'ended' });
+      return capturaOriginal.call(navigator.mediaDevices, constraints);
+    });
+    // applyConstraints não vira a câmera sintética do teste: força o segundo caminho.
+    anterior.applyConstraints = () => Promise.reject(new DOMException('sem suporte', 'OverconstrainedError'));
+    await virarCamera();
+    espionar(capturaOriginal);
+    return { registro, lado: ladoDaCamera, viva: cameraStream.getVideoTracks()[0].readyState, trocou: cameraStream.getVideoTracks()[0] !== anterior };
+  });
+  assert.deepEqual(virada.registro, [{ lado: 'environment', anteriorEncerrada: true }]);
+  assert.equal(virada.lado, 'environment');
+  assert.equal(virada.viva, 'live');
+  assert.equal(virada.trocou, true);
+  await host.waitForFunction(() => [...peers.values()][0].remoteStreams.camera.getVideoTracks().length === 1);
+  await waitForDecodedVideos(host);
+
+  // Se a camera pedida nao abrir, a anterior volta: ninguem fica sem imagem por ter tentado.
+  const recuperada = await viewer.evaluate(async () => {
+    const capturaOriginal = navigator.mediaDevices.getUserMedia;
+    const espionar = value => Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value });
+    let tentativas = 0;
+    espionar(async constraints => {
+      if (++tentativas === 1) throw new DOMException('ocupada', 'NotReadableError');
+      return capturaOriginal.call(navigator.mediaDevices, constraints);
+    });
+    cameraStream.getVideoTracks()[0].applyConstraints = () => Promise.reject(new DOMException('sem suporte', 'OverconstrainedError'));
+    await virarCamera();
+    espionar(capturaOriginal);
+    return { lado: ladoDaCamera, viva: cameraStream?.getVideoTracks()[0]?.readyState, aviso: status.textContent, tentativas };
+  });
+  assert.equal(recuperada.tentativas, 2);
+  assert.equal(recuperada.lado, 'environment');
+  assert.equal(recuperada.viva, 'live');
+  assert.match(recuperada.aviso, /anterior foi mantida/);
+  await waitForDecodedVideos(host);
+  console.log('PASS: flipping the camera stops the old track first and restores it when the other side fails');
 
   const token = await host.evaluate(() => tokenDoAgente);
   const agent = new WebSocket(`${origin.replace('http:', 'ws:')}/agente?token=${token}`);

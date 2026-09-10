@@ -31,6 +31,7 @@ const echoWarning = document.getElementById('echoWarning');
 const fixEchoBtn = document.getElementById('fixEchoBtn');
 const micBtn = document.getElementById('micBtn');
 const cameraBtn = document.getElementById('cameraBtn');
+const flipCameraBtn = document.getElementById('flipCameraBtn');
 const screenBtn = document.getElementById('screenBtn');
 const updateScreenBtn = document.getElementById('updateScreenBtn');
 const testAudioBtn = document.getElementById('testAudioBtn');
@@ -114,6 +115,13 @@ const peers = new Map(); // id -> peer object
 const tiles = new Map(); // id -> dom refs
 
 let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+// Modo de teste: descarta candidatos diretos e obriga tudo a passar pelo TURN. E a unica
+// forma de PROVAR que o relay funciona -- se a imagem aparece so com isto ligado, o que
+// falta e rota entre as redes, nao codec nem permissao.
+let forcarRelay = false;
+function configuracaoDeConexao() {
+  return { ...rtcConfig, iceTransportPolicy: forcarRelay ? 'relay' : 'all' };
+}
 const configController = new AbortController();
 const configTimeout = setTimeout(() => configController.abort(), 8000);
 const rtcConfigReady = fetch('/api/rtc-config', { signal: configController.signal })
@@ -298,7 +306,7 @@ async function iniciarConexao() {
       }
       organizarFaixasRemotas(peer);
       ligarMidiaDoTile(fromId);
-      preferirCodecsDeVideo(pc, ['video/H264', 'video/VP8', 'video/VP9']);
+      preferirCodecsDeVideo(pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer', fromId, pc.localDescription, buildMediaInfo(peer));
@@ -331,14 +339,19 @@ async function iniciarConexao() {
   // no mesh). Sem essa fila, addIceCandidate falha com "remote description was null" e
   // o candidato e perdido para sempre -- foi a causa real da tela/camera ficarem pretas
   // de forma intermitente: a conexao ICE nunca chegava a "connected".
+  //
+  // O candidato NAO pode ser descartado so porque uma oferta foi ignorada: "ignoreOffer"
+  // fica ligado desde a colisao ate a proxima oferta chegar, e nesse intervalo o candidato
+  // pertence a negociacao ANTERIOR, que continua valendo. Jogar fora esses candidatos
+  // deixava o ICE preso em "checking" para sempre. A negociacao perfeita de referencia faz
+  // o contrario: sempre aplica, e so engole o erro quando esta ignorando a oferta.
   socket.on('candidate', async (fromId, candidate) => {
     const peer = peers.get(fromId);
     if (!peer) return;
     return sinalizarEmSerie(peer, async () => {
-    if (peer.ignoreOffer) return;
     if (peer.pc.remoteDescription) {
       try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (err) { console.warn('Falha ao aplicar candidate:', err); }
+      catch (err) { if (!peer.ignoreOffer) console.warn('Falha ao aplicar candidate:', err); }
     } else {
       peer.pendingCandidates.push(candidate);
     }
@@ -370,7 +383,7 @@ async function iniciarConexao() {
 }
 
 function buildMediaInfo(peer) {
-  return RoomMedia.mediaInfo(peer.pc, peer.senders, { mic: micStream, camera: cameraStream, screen: screenStream });
+  return RoomMedia.mediaInfo(peer.pc, peer.senders, { mic: micStream, camera: cameraStream, screen: screenStream }, codecDeVideo);
 }
 
 function meuEstado() {
@@ -383,7 +396,15 @@ function enviarEstado() {
   document.dispatchEvent(new Event('room-update'));
 }
 
-// Screen content uses VP8; cameras keep H.264 baseline. Keep all codec fallbacks.
+// Escolha de codec de video. "auto" prioriza H.264 baseline: no iPhone e o unico decodificado
+// por hardware, e no Windows e o que tem mais chance de sair pelo encoder da GPU. As demais
+// opcoes existem para comparar em campo; nenhuma delas REMOVE codec da lista, entao quem nao
+// suporta a escolha cai no melhor comum em vez de ficar sem imagem.
+let codecDeVideo = (() => { try { return localStorage.getItem('nexoCodec') || 'auto'; } catch (_) { return 'auto'; } })();
+if (!RoomMedia.CODEC_PREFERENCES.includes(codecDeVideo)) codecDeVideo = 'auto';
+const seletoresDeCodec = [...document.querySelectorAll('[data-video-codec]')];
+function codecDeVideoEscolhido() { return codecDeVideo; }
+
 function preferirCodecsDeVideo(pc) {
   const peer = [...peers.values()].find(item => item.pc === pc);
   const capsDeEnvio = window.RTCRtpSender?.getCapabilities?.('video');
@@ -399,9 +420,26 @@ function preferirCodecsDeVideo(pc) {
     if (!caps?.codecs) return;
     const source = Object.keys(peer?.senders || {}).find(key => peer.senders[key] === transceiver.sender);
     const remoteSource = peer?.remoteStreamIds?.mids?.[transceiver.mid];
-    const ordenados = RoomMedia.videoCodecs(caps.codecs, source === 'screen' || remoteSource === 'screen');
+    // Quem manda a imagem escolhe o codec dela. A resposta e que fecha a negociacao, entao
+    // sem respeitar a escolha do remoto o receptor reordenaria tudo de volta e o seletor de
+    // quem transmite nao teria efeito nenhum.
+    const preference = enviando ? codecDeVideo : (peer?.remoteStreamIds?.codec || codecDeVideo);
+    const ordenados = RoomMedia.videoCodecs(caps.codecs, { preference, source: source || remoteSource || null });
     try { transceiver.setCodecPreferences(ordenados); } catch (err) { console.warn('codec prefs:', err); }
   });
+}
+
+// setCodecPreferences so vale na PROXIMA negociacao: sem renegociar, trocar o seletor no
+// meio da transmissao nao mudaria nada e pareceria um botao quebrado.
+function definirCodecDeVideo(escolha) {
+  if (!RoomMedia.CODEC_PREFERENCES.includes(escolha) || escolha === codecDeVideo) return;
+  codecDeVideo = escolha;
+  try { localStorage.setItem('nexoCodec', escolha); } catch (_) { /* Vale so nesta sessão. */ }
+  seletoresDeCodec.forEach(select => { select.value = escolha; });
+  paraCadaPar(renegociar);
+  status.textContent = escolha === 'auto'
+    ? 'Codec automático: H.264 primeiro, com VP8, VP9 e AV1 como alternativas.'
+    : `Codec preferido: ${escolha.toUpperCase()}. Quem não suportar continua recebendo pelo melhor codec em comum.`;
 }
 
 // Profiles describe maximum capture quality. Each peer has its own congestion budget.
@@ -495,7 +533,11 @@ async function medirBandaDeSubida() {
           const elapsed = prev && video.timestamp - prev.timestamp;
           peer.screenQuality = { width: video.frameWidth, height: video.frameHeight, fps: video.framesPerSecond,
             bitrate: elapsed > 0 ? Math.max(0, (video.bytesSent - prev.bytes) * 8000 / elapsed) : 0,
-            reason: video.qualityLimitationReason };
+            reason: video.qualityLimitationReason,
+            // Unica evidencia objetiva de que a placa de video esta sendo usada.
+            codec: stats.get(video.codecId)?.mimeType || '',
+            encoder: video.encoderImplementation || '',
+            hardware: video.powerEfficientEncoder };
           peer.lastScreenStats = { bytes: video.bytesSent, timestamp: video.timestamp };
         }
       } catch (_) { /* Missing stats do not interrupt media. */ }
@@ -540,7 +582,7 @@ function sinalizarEmSerie(peer, action) {
 // as cameras/telas dos outros participantes ficarem pretas de forma intermitente.
 function criarConexaoPar(id, name, state, ehIniciador) {
   if (peers.has(id)) return peers.get(id);
-  const pc = new RTCPeerConnection(rtcConfig);
+  const pc = new RTCPeerConnection(configuracaoDeConexao());
   const peer = {
     id, name: name || 'Participante',
     pc,
@@ -568,6 +610,13 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     tentativasDeReatar: 0,
     timeoutDeQueda: null,
     timeoutDeSaude: null,
+    // Conexao que nunca sai de "connecting": vigia, reatamento ja tentado e quantos
+    // candidatos de relay (TURN) este lado conseguiu coletar.
+    timeoutDeTravamento: null,
+    timeoutDeVeredito: null,
+    reatouPorTravamento: false,
+    renegociacaoPendente: false,
+    candidatosDeRelay: 0,
     temporizadores: [],
     state: state || { camera: false, screen: false, screenAudio: false, micMuted: false }
   };
@@ -578,12 +627,16 @@ function criarConexaoPar(id, name, state, ehIniciador) {
 
   pc.onnegotiationneeded = () => sinalizarEmSerie(peer, async () => {
     try {
-      if (pc.signalingState !== 'stable' || pc.connectionState === 'closed') return;
+      if (pc.connectionState === 'closed') return;
+      // A fila pode atrasar esta tarefa ate depois de uma oferta remota chegar. Voltar aqui
+      // sem mais nada perdia a renegociacao em silencio, e a midia recem-adicionada nunca
+      // saia. Reagenda em vez de desistir.
+      if (pc.signalingState !== 'stable') { renegociarQuandoEstabilizar(peer); return; }
       peer.makingOffer = true;
       // Precisa ser chamado ANTES de gerar a oferta: e o que faltava no comportamento
       // original e causava a tela preta ao compartilhar tela+camera (o 2o video track
       // ficava sem prioridade de codec e o navegador remoto podia nao decodifica-lo).
-      preferirCodecsDeVideo(pc, ['video/H264', 'video/VP8', 'video/VP9']);
+      preferirCodecsDeVideo(pc);
       // createOffer explicito em vez de setLocalDescription() sem argumento: a forma curta
       // so existe no Safari a partir do 15.4 e, onde nao existe, lanca -- a oferta nunca
       // saia e o aparelho ficava na sala sem enviar nem receber midia.
@@ -599,7 +652,10 @@ function criarConexaoPar(id, name, state, ehIniciador) {
   });
 
   pc.onicecandidate = (event) => {
-    if (event.candidate) socket.emit('candidate', id, event.candidate);
+    if (!event.candidate) return;
+    // Guardado so para o diagnostico: sem isto nao ha como saber se o TURN sequer respondeu.
+    if (event.candidate.type === 'relay') peer.candidatosDeRelay++;
+    socket.emit('candidate', id, event.candidate);
   };
 
   pc.oniceconnectionstatechange = () => {
@@ -611,6 +667,11 @@ function criarConexaoPar(id, name, state, ehIniciador) {
     if (estado === 'closed') { removerPar(id); return; }
 
     if (estado === 'connected') { marcarConexaoSaudavel(peer); return; }
+
+    // Ficar em "connecting"/"checking" nao dispara nada por si so: o Safari pode demorar
+    // muito -- ou nunca -- declarar "failed", e ate la a pessoa so ve "Recebendo video..."
+    // sem explicacao nenhuma. Este vigia transforma a espera silenciosa em diagnostico.
+    if (estado === 'connecting') vigiarConexaoTravada(peer);
 
     // "disconnected" costuma ser passageiro (troca de rede, Wi-Fi oscilando) e volta
     // sozinho. So se demorar demais vale mexer.
@@ -714,12 +775,106 @@ const MAXIMO_DE_TENTATIVAS = 4;
 // Tempo de conexao firme que faz uma tentativa de reatamento deixar de contar.
 const SEGUNDOS_PARA_CONSIDERAR_SAUDAVEL = 6;
 
+// Quanto tempo em "connecting" ainda parece negociacao normal, e a partir de quando e
+// preciso dizer a verdade a quem esta esperando.
+const SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO = 15;
+const SEGUNDOS_ATE_DECLARAR_ROTA_AUSENTE = 30;
+
 function marcarConexaoSaudavel(peer) {
   peer.tentativasDeReatar = 0;
   clearTimeout(peer.timeoutDeQueda);
   peer.timeoutDeQueda = null;
   clearTimeout(peer.timeoutDeSaude);
   peer.timeoutDeSaude = null;
+  pararDeVigiarTravamento(peer);
+}
+
+function pararDeVigiarTravamento(peer) {
+  clearTimeout(peer.timeoutDeTravamento);
+  peer.timeoutDeTravamento = null;
+  clearTimeout(peer.timeoutDeVeredito);
+  peer.timeoutDeVeredito = null;
+}
+
+// Uma conexao presa em "connecting" nao gera evento nenhum: nem "failed" (que chamaria
+// reatarConexao), nem "disconnected". Sem este vigia, o relatorio mostrava ICE=checking e
+// bytes=0 indefinidamente, sem que nada na tela dissesse o motivo.
+function vigiarConexaoTravada(peer) {
+  if (peer.timeoutDeTravamento || peer.timeoutDeVeredito) return;
+
+  peer.timeoutDeTravamento = setTimeout(() => {
+    peer.timeoutDeTravamento = null;
+    if (peers.get(peer.id) !== peer || peer.pc.connectionState !== 'connecting') return;
+    // Uma tentativa de recomecar a coleta: candidatos podem ter se perdido no caminho.
+    if (!peer.reatouPorTravamento) {
+      peer.reatouPorTravamento = true;
+      status.textContent = `Ainda negociando a mídia com ${peer.name}...`;
+      try { peer.pc.restartIce(); } catch (_) { /* Sem restartIce, resta o veredito abaixo. */ }
+    }
+    peer.timeoutDeVeredito = setTimeout(() => {
+      peer.timeoutDeVeredito = null;
+      if (peers.get(peer.id) !== peer || peer.pc.connectionState !== 'connecting') return;
+      status.textContent = temTurnConfigurado()
+        ? `A mídia não está passando entre estas redes com ${peer.name}. Confira se o serviço TURN está no ar; abra Diagnóstico.`
+        : `A mídia não está passando entre estas redes com ${peer.name}. Esta conexão exige TURN: o endereço HTTPS entrega a página, não o vídeo. Abra Diagnóstico.`;
+      document.dispatchEvent(new Event('room-diagnostics-request'));
+    }, (SEGUNDOS_ATE_DECLARAR_ROTA_AUSENTE - SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO) * 1000);
+  }, SEGUNDOS_ATE_SUSPEITAR_DE_TRAVAMENTO * 1000);
+}
+
+function temTurnConfigurado() {
+  return Boolean(rtcConfig.iceServers?.some(servidor => [servidor.urls].flat().some(url => /^turns?:/.test(url))));
+}
+
+// Trocar a politica de ICE exige conexoes novas: iceTransportPolicy so vale no construtor.
+// Reconectar o socket reaproveita o caminho de reconexao que ja existe -- ele derruba os
+// pares antigos, refaz a malha e reavisa todo mundo do estado da midia.
+function definirModoRelay(ativo) {
+  if (forcarRelay === ativo) return;
+  forcarRelay = ativo;
+  if (ativo && !temTurnConfigurado()) {
+    status.textContent = 'Nenhum servidor TURN está configurado: com este modo ligado, ninguém consegue mídia.';
+  } else {
+    status.textContent = ativo ? 'Refazendo as conexões pelo TURN...' : 'Refazendo as conexões sem forçar o TURN...';
+  }
+  if (!socket?.connected) return;
+  socket.disconnect();
+  socket.connect();
+}
+
+// Reaplica a oferta assim que a sinalizacao voltar a "stable". Uma unica marca por par:
+// varias mudancas seguidas viram uma renegociacao so.
+function renegociarQuandoEstabilizar(peer) {
+  if (peer.renegociacaoPendente) return;
+  peer.renegociacaoPendente = true;
+  const aoMudar = () => {
+    if (peer.pc.signalingState !== 'stable') return;
+    peer.pc.removeEventListener('signalingstatechange', aoMudar);
+    peer.renegociacaoPendente = false;
+    if (peers.get(peer.id) === peer && peer.pc.connectionState !== 'closed') renegociar(peer);
+  };
+  peer.pc.addEventListener('signalingstatechange', aoMudar);
+}
+
+// Gera uma oferta pela fila que ja existe. Usado pelo reagendamento acima e pela troca de
+// codec, que so passa a valer na proxima negociacao.
+function renegociar(peer) {
+  return sinalizarEmSerie(peer, async () => {
+    const pc = peer.pc;
+    if (pc.signalingState !== 'stable' || pc.connectionState === 'closed') return;
+    try {
+      peer.makingOffer = true;
+      preferirCodecsDeVideo(pc);
+      const oferta = await pc.createOffer();
+      await pc.setLocalDescription(oferta);
+      socket.emit('offer', peer.id, pc.localDescription, buildMediaInfo(peer));
+    } catch (err) {
+      peer.lastSignalingError = err.name;
+      console.warn('renegociar:', err);
+    } finally {
+      peer.makingOffer = false;
+    }
+  });
 }
 
 // Reatar e o mecanismo padrao do WebRTC: novas credenciais de ICE, os candidatos sao
@@ -795,6 +950,7 @@ function removerPar(id) {
   clearTimeout(peer.timeoutDeQueda);
   clearTimeout(peer.timeoutDeSaude);
   clearTimeout(peer.timeoutIniciador);
+  pararDeVigiarTravamento(peer);
   peers.delete(id);
   peer.pc.onconnectionstatechange = null;
   peer.pc.close();
@@ -809,32 +965,158 @@ function removerPar(id) {
 // e o resultado e uma imagem quase quadrada, mais estreita do que a camera enxerga.
 // Pedindo 1280x720 como "ideal", o navegador escolhe o modo nativo mais proximo: 16:9 em
 // quem tem 16:9, 4:3 em quem so tem 4:3. Nada e forcado, entao ninguem e recortado.
-async function abrirCamera() {
-  const escolhida = dispositivoEscolhido('camera');
+// No celular o que importa e o LADO da camera, nao o deviceId: no iOS a lista vem sem nome
+// ate haver permissao, e um id guardado de outra sessao pode nem existir mais.
+const suportaLadoDaCamera = Boolean(navigator.mediaDevices?.getSupportedConstraints?.().facingMode);
+const LADO_PADRAO = 'user';
+// "ladoPreferido" so existe depois que a pessoa vira a camera. Sem isso, uma webcam de mesa
+// receberia um facingMode que ninguem pediu; o comportamento de quem nunca virou fica igual.
+let ladoPreferido = (() => {
+  try { const salvo = localStorage.getItem('nexoLadoCamera'); return salvo === 'user' || salvo === 'environment' ? salvo : ''; }
+  catch (_) { return ''; }
+})();
+// Lado da imagem que esta no ar agora, para o botao saber para onde virar.
+let ladoDaCamera = ladoPreferido || LADO_PADRAO;
+
+async function abrirCamera(lado) {
+  const escolhida = lado ? '' : dispositivoEscolhido('camera');
+  const alvo = lado || (escolhida ? '' : ladoPreferido);
+  const medida = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
   try {
     return await navigator.mediaDevices.getUserMedia({
       video: {
         // "exact" porque "ideal" e apenas uma sugestao: o navegador entregaria a camera
         // padrao sem avisar, e a escolha da pessoa sumiria em silencio.
         ...(escolhida ? { deviceId: { exact: escolhida } } : {}),
-        width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }
+        // O lado, ao contrario, vai como preferencia: um notebook so tem a frontal, e
+        // exigir "environment" ali significaria ficar sem camera nenhuma.
+        ...(alvo ? { facingMode: alvo } : {}),
+        ...medida
       },
       audio: false
     });
   } catch (err) {
+    // Quem pediu um LADO especifico quer aquele lado. Cair aqui na "qualquer camera" fazia
+    // virar a camera abrir de novo a mesma e ainda anunciar que tinha virado.
+    if (lado) throw err;
     // Dispositivo escolhido sumiu (desconectado, trocado de porta): melhor a camera padrao
     // do que camera nenhuma -- mas a preferencia fica guardada para quando ele voltar.
     if (escolhida && err && err.name !== 'NotAllowedError') {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-        audio: false
-      });
+      return await navigator.mediaDevices.getUserMedia({ video: { ...medida }, audio: false });
     }
     // Permissao negada e um nao definitivo; o resto pode ser so a camera nao aceitar essa
     // combinacao, e ai uma camera em 4:3 e melhor que camera nenhuma.
     if (err && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')) throw err;
     return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   }
+}
+
+function ladoAtualDaCamera() {
+  const medida = cameraStream?.getVideoTracks()[0]?.getSettings?.().facingMode;
+  return medida === 'environment' || medida === 'user' ? medida : ladoDaCamera;
+}
+
+// "escolhido" separa o que a pessoa pediu (virar a câmera) do que apenas foi medido ao ligar
+// a câmera. Só o pedido vira preferência guardada.
+function guardarLadoDaCamera(lado, escolhido) {
+  ladoDaCamera = lado;
+  if (!escolhido) return;
+  ladoPreferido = lado;
+  try { localStorage.setItem('nexoLadoCamera', lado); } catch (_) { /* Vale so nesta sessão. */ }
+}
+
+// Virar a camera no celular. Dois caminhos, nesta ordem:
+//   1. applyConstraints na faixa que ja existe. No Safari isso troca a camera SEM
+//      renegociar, sem replaceTrack e sem disparar onended -- de longe o mais suave.
+//   2. Reabrir. Aqui a ordem importa: no iOS, abrir a segunda camera com a primeira ainda
+//      viva congela a primeira, entao a antiga e parada ANTES do getUserMedia. Se a nova
+//      falhar, a anterior e reaberta para nao deixar a pessoa sem imagem.
+let virandoCamera = false;
+async function virarCamera() {
+  if (!cameraStream || virandoCamera) return;
+  const faixa = cameraStream.getVideoTracks()[0];
+  if (!faixa) return;
+  const alvo = ladoAtualDaCamera() === 'environment' ? 'user' : 'environment';
+  virandoCamera = true;
+  flipCameraBtn.disabled = true;
+  try {
+    try {
+      await faixa.applyConstraints({ ...faixa.getConstraints(), facingMode: { exact: alvo } });
+      atualizarTile('self');
+      atualizarPalco();
+      anunciarLado(faixa, alvo);
+      return;
+    } catch (erroDeAjuste) {
+      if (!['OverconstrainedError', 'NotSupportedError', 'TypeError', 'InvalidStateError'].includes(erroDeAjuste?.name)) throw erroDeAjuste;
+    }
+
+    const anterior = ladoAtualDaCamera();
+    cameraStream.getTracks().forEach(t => t.stop());
+    let novo;
+    try {
+      novo = await abrirCamera(alvo);
+    } catch (erroAoAbrir) {
+      try { novo = await abrirCamera(anterior); }
+      catch (_) {
+        cameraStream = null;
+        definirFaixaEmTodosOsPares('camera', null, null);
+        cameraBtn.textContent = 'Ligar câmera';
+        cameraBtn.setAttribute('aria-pressed', 'false');
+        atualizarTile('self');
+        avaliarDestaque();
+        enviarEstado();
+        status.textContent = 'Não foi possível virar a câmera: ' + erroAoAbrir.message;
+        return;
+      }
+      cameraStream = novo;
+      aplicarNovaCamera(novo);
+      status.textContent = 'Esta câmera não está disponível agora; a anterior foi mantida.';
+      return;
+    }
+    cameraStream = novo;
+    aplicarNovaCamera(novo);
+    anunciarLado(novo.getVideoTracks()[0], alvo);
+  } catch (err) {
+    status.textContent = 'Não foi possível virar a câmera: ' + err.message;
+  } finally {
+    virandoCamera = false;
+    flipCameraBtn.disabled = false;
+    atualizarBotaoDeVirarCamera();
+    listarDispositivos();
+  }
+}
+
+// Nem toda camera informa o lado (webcam de mesa, canvas de teste). Quando informa, e ela
+// quem tem razao: dizer "câmera traseira" com a frontal ligada seria mentir para quem ve.
+function anunciarLado(faixa, alvo) {
+  const medido = faixa?.getSettings?.().facingMode;
+  const efetivo = medido === 'user' || medido === 'environment' ? medido : alvo;
+  guardarLadoDaCamera(efetivo, true);
+  status.textContent = efetivo !== alvo
+    ? 'Este aparelho não trocou de câmera; a imagem continua na mesma.'
+    : efetivo === 'environment' ? 'Câmera traseira.' : 'Câmera frontal.';
+}
+
+function aplicarNovaCamera(stream) {
+  const faixa = stream.getVideoTracks()[0];
+  definirFaixaEmTodosOsPares('camera', faixa, stream);
+  faixa.onended = alternarCamera;
+  atualizarTile('self');
+  atualizarPalco();
+}
+
+// O botao so faz sentido onde ha mais de uma camera para alternar.
+let temMaisDeUmaCamera = false;
+function atualizarBotaoDeVirarCamera() {
+  const mostrar = Boolean(cameraStream) && suportaLadoDaCamera && temMaisDeUmaCamera;
+  flipCameraBtn.hidden = !mostrar;
+  if (!mostrar) return;
+  const traseira = ladoAtualDaCamera() === 'environment';
+  const rotulo = traseira ? 'Câmera frontal' : 'Câmera traseira';
+  flipCameraBtn.textContent = rotulo;
+  // No celular o rótulo é encurtado pelo CSS; o nome inteiro fica aqui, para o leitor de tela.
+  flipCameraBtn.setAttribute('aria-label', rotulo);
+  flipCameraBtn.title = traseira ? 'Voltar para a câmera frontal' : 'Usar a câmera traseira';
 }
 
 async function abrirMicrofone(forcarDispositivo) {
@@ -1107,6 +1389,9 @@ async function listarDispositivos() {
   const saidas = lista.filter(d => d.kind === 'audiooutput');
   const cameras = lista.filter(d => d.kind === 'videoinput');
 
+  temMaisDeUmaCamera = cameras.length > 1;
+  atualizarBotaoDeVirarCamera();
+
   preencher(micDevice, entradas, dispositivoEscolhido('microfone'), 'Padrão do sistema');
   preencher(camDevice, cameras, dispositivoEscolhido('camera'), 'Padrão do sistema');
   if (podeEscolherSaida) preencher(outDevice, saidas, dispositivoEscolhido('saida'), 'Padrão do sistema');
@@ -1148,22 +1433,40 @@ async function trocarMicrofone(id) {
 }
 
 async function trocarCamera(id) {
+  const preferenciaAnterior = dispositivoEscolhido('camera');
   guardarDispositivo('camera', id);
   if (!cameraStream) return;
 
-  const anterior = cameraStream;
-  let novo;
+  // A anterior e encerrada ANTES de abrir a nova: no iOS, duas cameras vivas ao mesmo tempo
+  // congelam a primeira, e no Windows algumas webcams recusam a segunda abertura.
+  cameraStream.getTracks().forEach(t => t.stop());
+  let novo, revertida = false;
   try { novo = await abrirCamera(); }
-  catch (err) { status.textContent = 'Não foi possível abrir essa câmera: ' + err.message; return; }
+  catch (err) {
+    // A antiga ja foi encerrada: sem voltar a preferencia e reabrir, a pessoa ficaria sem
+    // imagem por ter apenas ESCOLHIDO uma camera na lista.
+    revertida = true;
+    guardarDispositivo('camera', preferenciaAnterior);
+    camDevice.value = preferenciaAnterior || '';
+    try { novo = await abrirCamera(); }
+    catch (_) {
+      cameraStream = null;
+      definirFaixaEmTodosOsPares('camera', null, null);
+      cameraBtn.textContent = 'Ligar câmera';
+      cameraBtn.setAttribute('aria-pressed', 'false');
+      atualizarTile('self');
+      atualizarBotaoDeVirarCamera();
+      avaliarDestaque();
+      enviarEstado();
+      status.textContent = 'Não foi possível abrir essa câmera: ' + err.message;
+      return;
+    }
+  }
 
   cameraStream = novo;
-  const faixa = novo.getVideoTracks()[0];
-  definirFaixaEmTodosOsPares('camera', faixa, novo);
-  faixa.onended = alternarCamera;
-  anterior.getTracks().forEach(t => t.stop());
-  atualizarTile('self');
-  atualizarPalco();
-  status.textContent = 'Câmera trocada.';
+  aplicarNovaCamera(novo);
+  atualizarBotaoDeVirarCamera();
+  status.textContent = revertida ? 'Essa câmera não abriu; a anterior foi mantida.' : 'Câmera trocada.';
   listarDispositivos();
 }
 
@@ -1191,7 +1494,10 @@ function atualizarBotaoDeQualidade() {
   qualidadeBtn.textContent = `${perfilAtual().label} · alvo de 30 fps · até ${emMegabits(perfilAtual().bitrate)} por pessoa`;
   const linhas = [...peers.values()].filter(p => p.screenQuality).map(p => {
     const q = p.screenQuality;
-    return `${p.name}: ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${q.reason === 'cpu' ? ' · limite do dispositivo' : q.reason === 'bandwidth' ? ' · ajustando à conexão' : ''}`;
+    const codec = q.codec ? ` · ${q.codec.replace(/^video\//i, '')}` : '';
+    // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
+    const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
+    return `${p.name}: ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}${q.reason === 'cpu' ? ' · limite do dispositivo' : q.reason === 'bandwidth' ? ' · ajustando à conexão' : ''}`;
   });
   document.getElementById('qualityLive').textContent = screenStream ? linhas.join('\n') || 'Aguardando medições de envio…' : 'As medições aparecem durante a transmissão.';
 }
@@ -1221,6 +1527,11 @@ seletoresDeQualidade.forEach(select => {
     }
   };
 });
+seletoresDeCodec.forEach(select => {
+  select.value = codecDeVideo;
+  select.onchange = () => definirCodecDeVideo(select.value);
+});
+
 const uploadSelect = document.getElementById('uploadLimit');
 uploadSelect.value = String(limiteDeUpload / 1_000_000);
 uploadSelect.onchange = () => {
@@ -1251,11 +1562,13 @@ async function alternarCamera() {
     cameraBtn.textContent = 'Desligar câmera';
     cameraBtn.setAttribute('aria-pressed', 'true');
     const medida = track.getSettings?.() || {};
+    if (medida.facingMode === 'user' || medida.facingMode === 'environment') guardarLadoDaCamera(medida.facingMode);
     if (medida.width && medida.height) {
       status.textContent = `Câmera ligada em ${medida.width}x${medida.height}.`;
     }
     listarDispositivos();
   }
+  atualizarBotaoDeVirarCamera();
   atualizarTile('self');
   // Precisa passar pelo avaliador, e nao so desfazer o destaque: ligar a propria camera
   // estando sozinho tem de acender o palco na hora, sem depender de outro evento chegar.
@@ -1263,6 +1576,7 @@ async function alternarCamera() {
   enviarEstado();
 }
 cameraBtn.onclick = alternarCamera;
+flipCameraBtn.onclick = virarCamera;
 
 // ---------- Tela ----------
 function abrirPainelDeTela(modo) {

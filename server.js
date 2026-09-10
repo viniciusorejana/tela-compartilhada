@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { execFile, spawn } = require('child_process');
 
@@ -50,12 +51,47 @@ app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res) => {
   res.redirect(`/${req.params.roomCode}/sala`);
 });
 
+// Um unico STUN e um ponto unico de falha: se ele estiver bloqueado ou o DNS falhar, nenhum
+// candidato srflx e coletado e so a MESMA rede local consegue conversar -- exatamente o
+// sintoma de "funciona aqui em casa, nao funciona para quem esta fora".
+const STUN_PADRAO = [
+  'stun:stun.l.google.com:19302',
+  'stun:stun1.l.google.com:19302',
+  'stun:stun.cloudflare.com:3478'
+];
+
+function listaDoAmbiente(nome) {
+  return (process.env[nome] || '').split(',').map(valor => valor.trim()).filter(Boolean);
+}
+
+// Padrao TURN REST API (o mesmo que o coturn implementa com "use-auth-secret"): o usuario
+// carrega o instante de expiracao e a credencial e o HMAC disso com o segredo. Assim o
+// /api/rtc-config -- que e publico, porque a sala nao tem login -- nunca entrega uma senha
+// permanente do TURN a quem so abriu a URL.
+function credencialTemporariaDeTurn(segredo, segundos) {
+  const expiraEm = Math.floor(Date.now() / 1000) + segundos;
+  const username = `${expiraEm}:${crypto.randomBytes(6).toString('hex')}`;
+  return {
+    username,
+    credential: crypto.createHmac('sha1', segredo).update(username).digest('base64')
+  };
+}
+
 // TURN e necessario quando os navegadores nao conseguem abrir uma conexao direta.
 app.get('/api/rtc-config', (req, res) => {
-  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-  const turnUrls = (process.env.TURN_URLS || '').split(',').map(url => url.trim()).filter(Boolean);
+  const stunUrls = listaDoAmbiente('STUN_URLS');
+  const iceServers = (stunUrls.length ? stunUrls : STUN_PADRAO).map(urls => ({ urls }));
+  const turnUrls = listaDoAmbiente('TURN_URLS');
 
-  if (turnUrls.length && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+  if (turnUrls.length && process.env.TURN_STATIC_AUTH_SECRET) {
+    // O prazo curto vale pela duracao da alocacao: quem ja esta na sala continua com a
+    // conexao aberta, e quem entrar depois pede uma credencial nova ao recarregar a pagina.
+    const ttl = Number(process.env.TURN_TTL) > 0 ? Number(process.env.TURN_TTL) : 2 * 60 * 60;
+    iceServers.push({ urls: turnUrls, ...credencialTemporariaDeTurn(process.env.TURN_STATIC_AUTH_SECRET, ttl) });
+    // Uma credencial temporaria nao pode ser guardada em cache por proxy nenhum.
+    res.set('Cache-Control', 'no-store');
+  } else if (turnUrls.length && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    // Caminho antigo, mantido para nao quebrar quem ja configurou credencial fixa.
     iceServers.push({
       urls: turnUrls,
       username: process.env.TURN_USERNAME,

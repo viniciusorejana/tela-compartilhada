@@ -216,3 +216,101 @@ O relato de campo continua sendo ausência da tela compartilhada no Safari do iP
 - O diagnóstico identifica a revisão `screen-vp8-serial-1`, a última categoria de erro de sinalização, direções dos transceptores e contadores de recepção/decodificação por MID, sem incluir SDP, IPs ou credenciais.
 
 Para validar: recarregar o emissor (inclusive Electron) e o Safari, entrar novamente na sala e reiniciar a transmissão. Não requer empacotar outro executável. Se persistir, copiar o diagnóstico do iPhone enquanto a tela está anunciada e sem imagem. A validação automatizada de mídia usa Chromium real; WebKit no Windows só valida interface, pois essa distribuição não disponibiliza WebRTC. A mudança de codec é uma medida de compatibilidade, não uma confirmação de que H.264 causou o problema nesse aparelho.
+
+# Atualização: rota entre redes, codec e câmera do celular (9 de setembro de 2026)
+
+Branch: `codex/turn-codec-camera`. Revisão de mídia: `turn-codec-camera-1`.
+
+## O que o diagnóstico do Safari mostrou
+
+Pela primeira vez houve um relatório colhido durante a falha. Ele é conclusivo sobre **onde** o
+fluxo morre, e descarta codec como causa:
+
+- `signalingState=stable`, transceptores com `currentDirection=recvonly` negociada, faixas
+  `screen` e `screenAudio` `live` e identificadas por MID. **A sinalização funcionou.**
+- `bytes=0`, `keyframes=0`, `PLI=0` nas duas conexões. Não é "chegou e não decodificou"
+  (`bytes>0` com `framesDecoded=0`), que seria a assinatura de um codec incompatível.
+  **Nenhum pacote de mídia chegou.**
+- Nenhuma linha `Rota:`. O relatório só a imprime quando existe par de candidatos selecionado.
+  **Nenhum caminho foi escolhido**, e `ICE=checking` nas duas conexões confirma.
+- Primeira linha do relatório: `TURN configurado: não`.
+
+Sem relay, a mídia depende de furar o NAT dos dois lados. Basta **um** ser NAT simétrico ou
+CGNAT — o normal em fibra residencial e em rede móvel no Brasil — para todos os *connectivity
+checks* falharem. Na rede do host funciona porque os candidatos *host* da LAN se alcançam.
+O Tailscale Funnel entrega a página e a sinalização; ele não carrega a mídia.
+
+O relatório veio de um simulador de iPhone hospedado em datacenter, ambiente naturalmente
+restritivo para UDP. Ele prova que o Safari negocia corretamente e que o transporte não fecha;
+não prova que o iPhone real falha pelo mesmo motivo. O modo "forçar TURN" abaixo fecha essa
+lacuna. **Uma pergunta ainda encurtaria o diagnóstico: nesses iPhones, o áudio de voz dos
+outros é ouvido?** Se for, o ICE conecta e a hipótese de NAT cai.
+
+## Conectividade
+
+| Defeito ou lacuna | Correção |
+| --- | --- |
+| Candidato ICE recebido enquanto `ignoreOffer` estava ligado era descartado. Ele pertence à negociação anterior, que continua valendo — e isso prende o ICE em `checking`. | Sempre aplica o candidato; o erro só é silenciado enquanto a oferta está sendo ignorada, como na negociação perfeita de referência. |
+| Conexão presa em `connecting` não dispara evento nenhum: nem `failed`, nem `disconnected`. Nada explicava a espera. | Vigia por par: 15 s tenta `restartIce()`, 30 s nomeia a falta de TURN e abre o diagnóstico. |
+| Um único STUN é ponto único de falha: bloqueado, só a mesma LAN funciona. | Três servidores independentes por padrão, configuráveis por `STUN_URLS`. |
+| `/api/rtc-config` é público e entregava usuário e senha fixos do TURN a quem abrisse a URL. | Credencial de prazo curto assinada com HMAC (`TURN_STATIC_AUTH_SECRET`), o padrão *TURN REST API* que o coturn implementa com `use-auth-secret`. Credencial fixa continua aceita. |
+| Não havia como saber se o TURN respondeu, nem como provar que ele resolve. | O relatório conta os candidatos de relay coletados, e **Forçar retransmissão pelo TURN** refaz as conexões usando só o relay. |
+| `onnegotiationneeded` desistia em silêncio quando a fila o atrasava para além de `stable`. | Reagenda para a volta a `stable`. Endurecimento: o navegador costuma redisparar sozinho. |
+
+Instalação, firewall e verificação do coturn em [`docs/turn.md`](turn.md). **Ele só funciona com
+endereço público alcançável**: atrás de CGNAT nenhum túnel HTTPS substitui isso, e o documento
+começa pelo teste que decide.
+
+## Codec
+
+Não existe API no WebRTC do navegador para escolher o encoder de hardware.
+`setCodecPreferences` escolhe o **codec**; usar NVENC, Quick Sync ou AMF é decisão do Chromium
+a partir do codec, da resolução e dos drivers. **A placa de vídeo não corrige `bytes=0`.**
+
+O que a escolha muda: H.264 é o único codec decodificado por hardware no iPhone
+(VideoToolbox) e o que mais chega ao encoder da GPU no Windows; VP8 é software nos dois lados.
+A prioridade VP8 para tela introduzida em `screen-vp8-serial-1` era, portanto, a pior das duas
+opções para um receptor iPhone, no fluxo mais pesado da sala. O padrão automático voltou a
+H.264 baseline / packetization-mode 1.
+
+Um seletor **Automático / H.264 / VP8 / VP9 / AV1** aparece em Dispositivos e no painel de
+compartilhamento. Ele **só reordena**: nenhum codec sai da lista, então quem não suporta a
+escolha recebe pelo melhor codec em comum em vez de ficar sem imagem. Como é a resposta que
+fecha a negociação, a escolha de quem transmite viaja junto do `mediaInfo` — sem isso o
+receptor reordenaria tudo de volta e o seletor não teria efeito. Trocar durante a transmissão
+renegocia.
+
+O diagnóstico passou a mostrar `encoderImplementation` / `powerEfficientEncoder` de quem envia
+e `decoderImplementation` / `powerEfficientDecoder` de quem recebe. É a única evidência
+objetiva de que a GPU está sendo usada; onde o navegador não informa, o relatório diz
+"não informado" em vez de afirmar.
+
+## Câmera do celular
+
+Botão **Virar câmera** na barra de controles, visível quando há mais de uma câmera e o
+navegador aceita `facingMode`. A troca tenta primeiro `applyConstraints` na faixa existente —
+no Safari isso vira a câmera sem renegociar, sem `replaceTrack` e sem `onended`. Se não der,
+reabre: **a faixa antiga é encerrada antes** do `getUserMedia`, porque no iOS abrir a segunda
+câmera com a primeira viva congela a primeira. Falhando a nova, a anterior é reaberta.
+
+Dois defeitos apareceram durante o teste e foram corrigidos: `trocarCamera()` abria a nova
+antes de parar a antiga — a mesma ordem que quebra no iPhone —, e `abrirCamera()` caía num
+fallback de "qualquer câmera" que fazia virar a câmera reabrir a mesma e ainda anunciar que
+tinha virado. O lado anunciado agora vem do que a faixa realmente entrega, quando o navegador
+informa. A preferência de lado só é guardada quando a pessoa vira a câmera: quem nunca virou
+mantém o comportamento anterior, e webcams de mesa não recebem um `facingMode` que ninguém
+pediu.
+
+## Validação
+
+`npm test` (24 casos), `npm run test:browser` (Chromium real), `TEST_BROWSER=webkit` (só
+interface: essa distribuição não tem WebRTC), `npm run test:electron`, `npm run test:download`,
+`npm audit` sem vulnerabilidades. Casos novos: candidato ICE sobrevivendo a uma oferta ignorada;
+vigia de conexão travada; troca de codec ao vivo verificada pelo `getStats` do receptor nos dois
+sentidos; virada de câmera parando a faixa antiga primeiro e recuperando quando a outra falha;
+`/api/rtc-config` com HMAC conferido contra o cálculo do coturn e sem o segredo na resposta.
+
+**O que nada disso testa:** um iPhone real, redes móveis, um coturn no ar. O teste que decide
+continua sendo o do aparelho: entrar pela rede que falhava, abrir Diagnóstico e comparar
+`bytes` e `quadros decodificados` com o relatório desta página. Sem TURN configurado, o sintoma
+nesses iPhones continua — a diferença é que agora a sala diz isso em vez de esperar calada.

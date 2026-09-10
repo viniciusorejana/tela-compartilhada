@@ -100,6 +100,7 @@
     <span class="call-indicator"><i></i><span>NA SALA</span></span>
     <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Ativar o microfone">Ativar mic</button>
     <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
+    <button id="flipCameraBtn" class="control-btn secondary" type="button" hidden title="Usar a câmera traseira">Câmera traseira</button>
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
     <button id="devicesBtn" class="control-btn secondary" type="button" title="Escolher microfone, fone e câmera">Dispositivos</button>
@@ -138,6 +139,7 @@
     </div>
 
     <div class="field"><label for="videoQuality">Qualidade da transmissão · 30 fps</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small id="qualidadeBtn"></small></div>
+    <div class="field"><label for="videoCodec">Codec de vídeo</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">O navegador escolhe sozinho se usa a placa de vídeo; aqui você escolhe o codec. H.264 é o único decodificado por hardware no iPhone. Quem não suportar a escolha recebe pelo melhor codec em comum.</small></div>
     <div class="field"><label for="uploadLimit">Limite total de upload</label><select id="uploadLimit"><option value="10">10 Mbps</option><option value="20">20 Mbps</option><option value="40">40 Mbps</option><option value="80">80 Mbps</option></select><small>Escolha um valor abaixo do seu upload disponível. Cada pessoa recebe uma cópia; reservamos 15% para áudio e tráfego adicional.</small></div>
     <p class="modal-sub">Ajuste automático por pessoa, priorizando fluidez. Redes lentas podem reduzir resolução e fps; qualidade máxima depende da fonte e do dispositivo.</p>
     <small id="qualityLive" style="white-space:pre-line" aria-live="off"></small>
@@ -172,6 +174,7 @@
       </select>
     </div>
     <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small>Adaptada para cada participante. Você pode mudar durante a transmissão em Dispositivos.</small></div>
+    <div class="field"><label for="shareCodec">Codec de vídeo</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>H.264 costuma usar a placa de vídeo para codificar e é o único que o iPhone decodifica por hardware. Veja o codificador em uso no Diagnóstico.</small></div>
     <small id="echoHint"></small>
     <div id="echoWarning" class="echo-warning" hidden>
       <small id="echoWarningText"></small>
@@ -204,7 +207,7 @@
 </div>
 
 <div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Chame seu squad</h2><p class="modal-sub">Copie este link e envie para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
-<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><span class="eyebrow">SAÚDE DA SALA</span><h2 id="diagnosticsTitle">Como está sua conexão?</h2><p class="modal-sub">Confira se a sala conectou e se o vídeo está chegando.</p><div id="diagnosticsSummary" role="status"></div><pre id="diagnosticsReport"></pre><small class="modal-sub">O relatório não inclui IPs, credenciais, mensagens ou o endereço privado da sala.</small><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><span class="eyebrow">SAÚDE DA SALA</span><h2 id="diagnosticsTitle">Como está sua conexão?</h2><p class="modal-sub">Confira se a sala conectou e se o vídeo está chegando.</p><div id="diagnosticsSummary" role="status"></div><pre id="diagnosticsReport"></pre><div class="field"><label class="check-linha" for="forceRelay"><input type="checkbox" id="forceRelay"><span>Forçar retransmissão pelo TURN</span></label><small id="forceRelayDica">Refaz as conexões usando só o servidor TURN. Se a imagem aparecer assim e não aparecer sem, o problema é a rede entre vocês, não o vídeo.</small></div><small class="modal-sub">O relatório não inclui IPs, credenciais, mensagens ou o endereço privado da sala.</small><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/media-utils.js"></script>
 <script src="/quality-utils.js"></script>
