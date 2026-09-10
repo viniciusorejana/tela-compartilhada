@@ -402,13 +402,16 @@ const FONTE_DO_SERVIDOR = {
 // jogar exige movimento -- e por isso quem compartilha decide, em vez de a página decidir
 // por todo mundo. "detail" e "maintain-resolution" derrubam os quadros para segurar a
 // resolução; "motion" e "maintain-framerate" fazem o contrário.
+// "maintain-framerate" e o unico que entrega quadros constantes: quando o custo aperta, ele
+// baixa a resolucao e a devolve quando sobra folga. "balanced" cede dos dois lados, e o que
+// se ve e a imagem ficando nitida e travando logo em seguida -- que era o padrao anterior.
 const PRIORIDADES_DE_TELA = {
-  nitidez: { rotulo: 'Nitidez', dica: 'código, texto e planilhas', pista: 'detail', degradacao: 'maintain-resolution', fps: 30 },
-  equilibrio: { rotulo: 'Equilíbrio', dica: 'o padrão, serve para quase tudo', pista: null, degradacao: 'balanced', fps: 30 },
-  fluidez: { rotulo: 'Fluidez', dica: 'jogos e vídeo', pista: 'motion', degradacao: 'maintain-framerate', fps: 60 }
+  automatico: { rotulo: 'Automático', dica: 'quadros constantes, na melhor resolução que couber', pista: null, degradacao: 'maintain-framerate', fps: 30 },
+  nitidez: { rotulo: 'Nitidez', dica: 'código e texto parados; os quadros cedem primeiro', pista: 'detail', degradacao: 'maintain-resolution', fps: 30 },
+  fluidez: { rotulo: 'Fluidez máxima', dica: 'jogos e vídeo, até 60 quadros', pista: 'motion', degradacao: 'maintain-framerate', fps: 60 }
 };
-let prioridadeDaTela = (() => { try { return localStorage.getItem('nexoPrioridade') || 'equilibrio'; } catch (_) { return 'equilibrio'; } })();
-if (!PRIORIDADES_DE_TELA[prioridadeDaTela]) prioridadeDaTela = 'equilibrio';
+let prioridadeDaTela = (() => { try { return localStorage.getItem('nexoPrioridade') || 'automatico'; } catch (_) { return 'automatico'; } })();
+if (!PRIORIDADES_DE_TELA[prioridadeDaTela]) prioridadeDaTela = 'automatico';
 const seletoresDePrioridade = [...document.querySelectorAll('[data-screen-priority]')];
 
 async function definirPrioridadeDaTela(escolha) {
@@ -1056,7 +1059,11 @@ function atualizarBotaoDeQualidade() {
   // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
   const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
   const motivo = MOTIVOS_DE_LIMITE[q.reason];
+  const camadas = q.camadas?.length > 1
+    ? `\nCamadas: ${q.camadas.map(c => `${c.altura || '?'}p a ${c.fps} fps`).join(' · ')}`
+    : '';
   ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}`
+    + camadas
     + (motivo ? `\n${motivo}` : '\nNada está limitando o envio: os quadros que saem são os que a fonte entrega.')
     + '\nCada pessoa recebe a camada que a conexão dela aguenta.';
 }
@@ -1071,7 +1078,13 @@ async function medirEnvio() {
   try {
     const stats = await faixa.getRTCStatsReport();
     if (!stats) return;
-    const video = [...stats.values()].find(i => i.type === 'outbound-rtp' && i.kind === 'video');
+    // Sua tela sobe repartida em camadas, e cada uma tem os proprios quadros. Olhar so a
+    // maior esconde justamente o que se ve na tela: uma camada travando enquanto a outra
+    // vai bem. Por isso as duas aparecem.
+    const camadas = [...stats.values()]
+      .filter(i => i.type === 'outbound-rtp' && i.kind === 'video')
+      .sort((a, b) => (b.frameHeight || 0) - (a.frameHeight || 0));
+    const video = camadas[0];
     if (!video) return;
     const anterior = qualidadeDoEnvio?.bruto;
     const intervalo = anterior && video.timestamp - anterior.timestamp;
@@ -1083,6 +1096,7 @@ async function medirEnvio() {
       // Unica evidencia objetiva de que a placa de video esta sendo usada.
       encoder: video.encoderImplementation || '',
       hardware: video.powerEfficientEncoder,
+      camadas: camadas.map(c => ({ altura: c.frameHeight, fps: Math.round(c.framesPerSecond || 0) })),
       bruto: { bytes: video.bytesSent, timestamp: video.timestamp }
     };
     atualizarBotaoDeQualidade();

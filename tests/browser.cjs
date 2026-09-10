@@ -364,10 +364,10 @@ async function esperarCodec(page, fonte, esperado) {
   // Quando falta banda ou processador, alguma coisa cede. O padrão equilibra; as outras
   // opções existem porque ler código e jogar pedem coisas opostas -- e a escolha precisa
   // chegar de verdade às opções de publicação, senão o seletor é enfeite.
-  assert.equal(opcoesPorFonte.screen.degradationPreference, 'balanced');
+  assert.equal(opcoesPorFonte.screen.degradationPreference, 'maintain-framerate');
   const porPrioridade = await host.evaluate(async () => {
     const saida = {};
-    for (const escolha of ['nitidez', 'fluidez', 'equilibrio']) {
+    for (const escolha of ['nitidez', 'fluidez', 'automatico']) {
       await definirPrioridadeDaTela(escolha);
       const o = opcoesDePublicacao('screen');
       saida[escolha] = { degradacao: o.degradationPreference, fps: o.screenShareEncoding.maxFramerate, pista: screenStream.getVideoTracks()[0].contentHint };
@@ -379,7 +379,10 @@ async function esperarCodec(page, fonte, esperado) {
   assert.equal(porPrioridade.fluidez.degradacao, 'maintain-framerate');
   assert.equal(porPrioridade.fluidez.pista, 'motion');
   assert.equal(porPrioridade.fluidez.fps, 60);
-  assert.equal(porPrioridade.equilibrio.degradacao, 'balanced');
+  // O padrão segura os quadros e deixa a resolução ceder: é o que evita a imagem ficar
+  // nítida e travar logo depois.
+  assert.equal(porPrioridade.automatico.degradacao, 'maintain-framerate');
+  assert.equal(porPrioridade.automatico.fps, 30);
   // A câmera é movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
   assert.equal(await host.evaluate(() => opcoesDePublicacao('camera').degradationPreference), 'maintain-framerate');
   console.log('PASS: screen audio is published without DTX or RED, while voice keeps the defaults');
