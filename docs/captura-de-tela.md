@@ -98,16 +98,31 @@ simulcast e sem dica de conteúdo. Como ela já responde "não", **a escolha de 
 codec ou de prioridade feita no Nexo não é a causa** — não há ajuste nesta página que faça o
 codificador da placa aparecer.
 
-## Suspeitas, na ordem em que vale investigar
+## Hipóteses testadas — e descartadas
 
-1. **Adaptadores de vídeo virtuais.** Esta máquina tem "Parsec Virtual Display Adapter" e
-   "USB Mobile Monitor Virtual Display". Adaptadores desse tipo não têm codificador, e
-   costumam confundir a escolha de adaptador na hora de inicializar o codificador. Testar:
-   desativar no Gerenciador de Dispositivos, reiniciar o Chrome, reabrir o Diagnóstico.
-2. **Workaround aplicado pelo próprio Chrome.** O `chrome://gpu` desta máquina lista
-   `disable_d3d12_video_encoder` — "Disable D3D12 video encoder on Windows versions older
-   11 24H2". É um caminho de codificação desligado por versão de sistema.
-3. **Driver de vídeo.** Vale testar uma versão diferente antes de concluir qualquer coisa.
+Chrome 153, Windows 10 build 19045, RTX 3060 Ti. Cada linha foi medida, não deduzida.
+
+| Hipótese | Como foi testada | Resultado |
+| --- | --- | --- |
+| Adaptadores de vídeo virtuais (Parsec, USB Mobile Monitor) atrapalham a escolha de adaptador | Desativados no Gerenciador de Dispositivos | **Sem efeito** |
+| Driver de vídeo desatualizado | Atualizado de 32.0.16.1088 para 32.0.16.1692 | **Sem efeito** |
+| Bloqueio da lista de GPU do Chrome | `--ignore-gpu-blocklist` | **Sem efeito** |
+| Workaround `disable_d3d12_video_encoder` (por versão de Windows) | `#enable-d3d12-video-encoder = Enabled` **mais** `--disable-gpu-driver-bug-workarounds`, com o `chrome://gpu` confirmando o workaround como *não aplicado* | **Sem efeito** |
+| Existe um interruptor de codificação por hardware para WebRTC | `#webrtc-hw-encoding` | Só ChromeOS e Android: o próprio Chrome responde "não está disponível na sua plataforma" |
+
+Em todas as combinações, `encodingInfo` continuou respondendo `powerEfficient: false` para
+H.264, VP8, VP9 e AV1, em 720p, 1080p e 1440p — enquanto `decodingInfo`, na mesma execução,
+respondia `true`. A API funciona; a resposta é que não há codificador por hardware para
+oferecer ao WebRTC.
+
+**A conclusão prática:** não existe ajuste alcançável — nem pela página, nem pela linha de
+comando do Chromium, nem por driver ou hardware virtual — que faça o WebRTC desta máquina
+usar a NVENC. Um aplicativo Electron pode passar chaves ao Chromium (é o que o Discord faz),
+mas uma chave só derruba um bloqueio; aqui não há bloqueio nesse nível para derrubar.
+
+O que sobra como diferença não testada em relação a outros programas que codificam por
+hardware nesta mesma máquina (OBS, o próprio Discord) é que eles **não usam o codificador do
+navegador**: chamam a NVENC direto, por fora do WebRTC.
 
 ## O que o Nexo faz a respeito
 
