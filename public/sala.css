@@ -22,15 +22,22 @@ input::placeholder,textarea::placeholder { color:#89899f; }
 .app { display:grid; width:100%; height:100vh; height:100dvh; grid-template-columns:224px minmax(0,1fr) 292px; grid-template-rows:64px minmax(0,1fr) var(--barra); grid-template-areas:"sidebar topo chat" "sidebar palco chat" "sidebar barra chat"; }
 .app.sem-chat { grid-template-columns:224px minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; }
 .app.sem-chat .chat { display:none; }
-.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:column; background:#1b1c27; border-right:1px solid var(--line); }
+.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:column; background:#1b1c27; border-right:1px solid var(--line); position:relative; }
 .workspace-name { height:64px; flex:none; padding:0 20px; display:flex; align-items:center; gap:9px; border-bottom:1px solid var(--line); }
 .workspace-name strong { font-size:17px; letter-spacing:.08em; }
 .workspace-name strong span { color:#6a667f; font-weight:400; margin-left:5px; }
 .workspace-name>span { color:#89899f; font-size:11px; }
 .sidebar-content { padding:20px 12px; overflow-y:auto; flex:1; }
-.space-cover { position:relative; overflow:hidden; border:1px solid #aaa0fb18; background:linear-gradient(120deg,#3a324e,#28273f); padding:16px 13px; border-radius:11px; margin:0 2px 25px; }
-.space-cover .eyebrow { font-size:8px; letter-spacing:.1em; color:#c3b8df; }
-.space-cover strong { display:block; position:relative; font-size:17px; line-height:1.3; margin-top:7px; z-index:1; letter-spacing:-.03em; }
+/* Um cartão só, no lugar dos três blocos que antes diziam a mesma coisa (frase de efeito,
+   botão de convite solto e um "monte seu squad" no rodapé). O gradiente continua; o que
+   mudou é que agora ele conta o estado real da sessão. */
+.space-cover { position:relative; overflow:hidden; border:1px solid #aaa0fb18; background:linear-gradient(120deg,#3a324e,#28273f); padding:14px 13px; border-radius:11px; margin:0 2px 22px; }
+.space-cover .eyebrow { position:relative; z-index:1; font-size:8px; letter-spacing:.1em; color:#c3b8df; }
+.space-cover strong { display:block; position:relative; font-size:15px; line-height:1.3; margin-top:6px; z-index:1; letter-spacing:-.03em; }
+.space-cover small { display:block; position:relative; z-index:1; margin-top:3px; font-size:10px; color:#b6acd4; }
+.cover-invite { position:relative; z-index:1; width:100%; margin-top:12px; padding:8px; font-size:11px; background:#ffffff12; color:#e5deff; }
+.cover-invite:hover:not(:disabled) { background:#ffffff1f; }
+.cover-invite span { margin-right:4px; }
 .cover-orbit { position:absolute; right:-8px; bottom:-27px; font-size:113px; color:#afa1f528; line-height:1; transform:rotate(-15deg); }
 .section-caption { display:flex; justify-content:space-between; color:#8e8da5; font-size:9px; font-weight:750; letter-spacing:.1em; padding:0 9px; margin-bottom:10px; }
 .channel { display:flex; width:100%; gap:10px; padding:10px; align-items:center; background:transparent; color:#a5a4b9; text-align:left; font-size:12px; margin-bottom:4px; }
@@ -50,12 +57,10 @@ input::placeholder,textarea::placeholder { color:#89899f; }
 .member-state { color:#90899f; font-size:10px; }
 .member.falando .member-avatar { box-shadow:0 0 0 2px var(--online); }
 .member-live { font-size:8px; font-weight:800; color:#ffa6bd; background:#f16f9820; padding:2px 4px; border-radius:4px; }
-.sidebar-invite { width:100%; font-size:11px; margin-top:9px; border:1px dashed #ffffff17; color:#9995b7; background:transparent; }
-.sidebar-invite:hover:not(:disabled) { background:#ffffff06; }
-.squad-mission { display:flex; gap:9px; padding:14px 10px; margin:25px 0 0; border-top:1px solid var(--line); }
-.mission-icon { color:#d5c886; font-size:24px; }
-.squad-mission strong { display:block; font-size:11px; font-weight:600; color:#d6cda8; }
-.squad-mission small { display:block; color:#9290a6; font-size:10px; line-height:1.7; margin-top:4px; }
+/* Selo próprio, ao lado do LIVE: os dois estados são independentes e cabem juntos. */
+.member-mudo { flex:none; position:relative; width:13px; height:13px; color:#ec949f; }
+.member-mudo::before { content:''; position:absolute; inset:0; background:currentColor; mask:var(--mic-off) center/contain no-repeat; -webkit-mask:var(--mic-off) center/contain no-repeat; --mic-off:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18'/%3E%3C/svg%3E"); }
+.member-state:empty { display:none; }
 .connection-box { display:flex; flex:none; align-items:center; gap:8px; padding:12px 15px; border-top:1px solid var(--line); background:#171820; }
 .connection-dot { height:7px; width:7px; background:#9189a5; border-radius:50%; }
 .connection-box.connected .connection-dot { background:var(--online); box-shadow:0 0 10px #90dfb340; }
@@ -76,23 +81,30 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .topbar-actions button { font-size:11px; padding:8px 12px; }
 #copyLinkBtn { color:#d9d1ff; background:#8272df20; }
 #copyLinkBtn::before { content:'＋'; margin-right:6px; }
+/* Com "Link copiado!" o "＋" viraria uma cruz no meio da confirmação. */
+#copyLinkBtn.copiado { color:#a9e4c2; background:#6fca9a1f; }
+#copyLinkBtn.copiado::before { content:'✓'; }
 #sidebarToggle { display:none; }
-.palco-area { grid-area:palco; min-height:0; min-width:0; display:grid; grid-template-rows:auto minmax(100px,1fr) auto auto auto; gap:14px; padding:23px 24px 0; }
-.session-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; padding-bottom:3px; }
-.session-heading .eyebrow { font-size:9px; letter-spacing:.14em; color:#9690b1; }
-.session-heading h2 { font-size:clamp(18px,1.75vw,25px); margin:6px 0 0; font-weight:650; letter-spacing:-.045em; }
-.session-heading h2>span { color:#b2a3ff; }
-.session-badge { flex:none; font-size:8px; font-weight:750; letter-spacing:.09em; background:#9f96be0d; border:1px solid #a59bbe18; border-radius:6px; padding:6px 8px; color:#b0a8c4; }
+/* O cabeçalho que ficava aqui ("O melhor é estar junto") custava ~75px de altura do palco
+   em toda sessão para repetir uma frase que ninguém lê duas vezes. O único dado dele, o
+   selo de telas ao vivo, subiu para a barra do topo, ao lado do nome da sala. */
+.palco-area { grid-area:palco; min-height:0; min-width:0; display:grid; grid-template-rows:minmax(100px,1fr) auto auto auto; gap:14px; padding:20px 24px 0; }
+.session-badge { flex:none; font-size:8px; font-weight:750; letter-spacing:.09em; background:#9f96be0d; border:1px solid #a59bbe18; border-radius:6px; padding:5px 7px; color:#b0a8c4; white-space:nowrap; }
 .session-badge.live { color:#f8a2bd; background:#dc759015; border-color:#dc759025; }
-.stage { grid-row:2; position:relative; min-height:0; border-radius:var(--raio); overflow:hidden; background:#12131c; border:1px solid #ffffff0e; container-type:size; }
+.stage { grid-row:1; position:relative; min-height:0; border-radius:var(--raio); overflow:hidden; background:#12131c; border:1px solid #ffffff0e; container-type:size; }
 .stage:fullscreen { border:0; border-radius:0; background:#050507; }
 #stageVideo { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; transform-origin:center; }
 .stage-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; gap:0; background:radial-gradient(ellipse at 50% 32%,#8870db0a,transparent 70%); color:var(--muted); font-size:13px; }
-.stage-empty h3 { color:#e4e0f2; font-size:clamp(20px,2.1vw,29px); line-height:1.2; letter-spacing:-.04em; font-weight:650; margin:11px 0 9px; }
-.stage-empty p { font-size:11px; line-height:1.8; margin:0 0 21px; color:#9490ab; }
-.stage-empty>small { color:#91869f; font-size:9px; margin-top:12px; }
-.stage-empty>button { font-size:11px; padding:11px 19px; background:#a093f1; color:#211b3a; }
-.stage-empty .eyebrow { font-size:8px; color:#a79ac5; letter-spacing:.14em; }
+.stage-empty h3 { color:#e4e0f2; font-size:clamp(19px,1.9vw,26px); line-height:1.2; letter-spacing:-.04em; font-weight:650; margin:4px 0 8px; max-width:26ch; }
+.stage-empty p { font-size:11px; line-height:1.7; margin:0 0 18px; color:#9490ab; max-width:40ch; }
+.stage-empty-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+.stage-empty-actions button { font-size:11px; padding:11px 19px; background:#a093f1; color:#211b3a; }
+.stage-empty-actions button.secondary { background:#ffffff10; color:#ded7f5; }
+.stage-empty-actions button.secondary:hover { background:#ffffff1c; }
+/* Recado de passagem ("conectando…", "recebendo vídeo…"): sem ilustração e sem botão, para
+   não parecer que a transmissão terminou quando ela só está chegando. */
+.stage.so-mensagem .stage-art { display:none; }
+.stage.so-mensagem .stage-empty h3 { font-size:15px; font-weight:600; color:#b6b0ca; letter-spacing:0; }
 .stage-art { position:relative; width:216px; height:149px; margin-bottom:14px; flex:none; }
 .orbit { position:absolute; border:1px solid #a999db15; border-radius:50%; width:185px; height:110px; left:15px; top:14px; transform:rotate(-25deg); }
 .orbit-two { width:225px; height:130px; left:-4px; top:4px; transform:rotate(25deg); border-style:dashed; }
@@ -114,11 +126,20 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .stage-controls { right:13px; display:flex; align-items:center; gap:1px; padding:3px; }
 .stage-controls button { color:var(--text); background:transparent; padding:5px 9px; }
 #zoomLevelLabel { min-width:32px; font-size:10px; text-align:center; color:var(--muted); }
+/* O som de quem está no palco se ajusta aqui mesmo. A divisória só existe quando o controle
+   existe: [hidden] some da tela, mas continua casando o seletor irmão. */
+.stage-volume { width:106px; margin:0 3px 0 1px; gap:2px; }
+.stage-volume .volume-slider { height:4px; }
+.stage-controls .mute-peer-btn { padding:5px 7px; color:#cdc6e2; }
+.stage-volume:not([hidden]) + button { margin-left:3px; padding-left:11px; border-left:1px solid #ffffff14; border-radius:0; }
+/* Palco estreito (grade em duas colunas, celular deitado): fica o mudo, que é o controle
+   que resolve rápido; o nível continua no quadradinho. */
+@container (max-width:560px) { .stage-volume { width:auto; } .stage-volume .volume-slider { display:none; } }
 .stage.ocioso .stage-label,.stage.ocioso .stage-controls { opacity:0; transform:translateY(6px); pointer-events:none; }
 .stage.ocioso.controles-teclado .stage-controls:focus-within { opacity:1; transform:none; pointer-events:auto; }
 .stage.ocioso:fullscreen,.stage.ocioso:-webkit-full-screen { cursor:none; }
-.aviso-eco { grid-row:3; }
-.participants-section { grid-row:4; min-width:0; }
+.aviso-eco { grid-row:2; }
+.participants-section { grid-row:3; min-width:0; }
 .participants-heading { display:flex; align-items:center; justify-content:space-between; margin:0 0 10px; gap:8px; }
 .participants-heading strong { font-size:11px; font-weight:600; }
 .participants-heading strong span { margin-left:5px; color:#a899de; font-size:10px; }
@@ -127,6 +148,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .participant { position:relative; flex:none; width:148px; border:1px solid #ffffff0c; border-radius:11px; background:#252532; padding:6px; transition:border .16s; }
 .participant:hover { border-color:#b3a1f445; }
 .participant.pinned { border-color:#a191e8; background:#2d293f; }
+/* Conexao perdida: a pessoa ainda esta na sala, esperando voltar -- ela so sai da lista se
+   nao voltar. Apagar o quadradinho diz isso sem gastar espaco, e e o unico lugar onde o
+   aviso aparece no modo teatro, onde a lista lateral nao existe. */
+.participant.sem-conexao { opacity:.45; border-color:#ffffff10; }
+.participant.sem-conexao::after { content:'sem conexão'; position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); font-size:9px; letter-spacing:.03em; white-space:nowrap; color:#e8e4f5; background:#161620d9; padding:3px 7px; border-radius:6px; pointer-events:none; }
 .avatar-wrap { position:relative; aspect-ratio:16 / 9; border-radius:7px; overflow:hidden; display:grid; place-items:center; background:radial-gradient(ellipse at 30% 30%,#4b426039,transparent),#1d1d29; cursor:pointer; }
 .avatar-wrap::after { content:''; position:absolute; inset:0; border-radius:7px; box-shadow:inset 0 0 0 2px transparent; pointer-events:none; z-index:2; transition:box-shadow .12s; }
 .participant.falando .avatar-wrap::after { box-shadow:inset 0 0 0 2px var(--online); }
@@ -135,9 +161,36 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .avatar-fallback { position:absolute; width:36px; height:36px; border-radius:13px; display:grid; place-items:center; color:#22202e; font-size:12px; font-weight:750; box-shadow:0 0 0 5px #ffffff05; }
 .mic-icon { position:absolute; left:5px; bottom:3px; font-size:10px; }
 .screen-badge { position:absolute; right:5px; top:5px; font-size:8px; font-weight:800; background:#dd7899; color:#1b1620; padding:2px 5px; border-radius:4px; }
+/* So esconde a PREVIA local: a faixa continua saindo normal para os outros participantes.
+
+   Este botão era um retângulo transparente que só existia enquanto o mouse passasse por
+   cima — quem nunca esbarrasse nele jamais saberia que ele existe, e no toque não havia
+   "passar por cima" nenhum. Agora ele é uma pílula legível, com o verbo escrito, e só
+   aparece quando há imagem por baixo para ocultar (quem decide isso é o pintarBotaoDeOcultar). */
+.hide-self-btn { position:absolute; right:5px; bottom:4px; z-index:3; display:inline-flex; align-items:center; gap:4px; padding:3px 7px 3px 5px; border-radius:7px; background:#0b0a11c4; box-shadow:inset 0 0 0 1px #ffffff1f; color:#ddd7ef; font-size:9px; font-weight:700; line-height:1; cursor:pointer; opacity:.82; transition:opacity .12s,background .12s; }
+.participant:hover .hide-self-btn, .hide-self-btn:focus-visible { opacity:1; background:#151321e8; }
+.hide-self-btn::before { content:''; flex:none; display:block; width:12px; height:12px; background:currentColor; mask:var(--eye-icon) center/contain no-repeat; -webkit-mask:var(--eye-icon) center/contain no-repeat; --eye-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+.hide-self-btn[aria-pressed="true"] { opacity:1; background:#dd7899; box-shadow:none; color:#1b1620; }
+.hide-self-btn[aria-pressed="true"]::before { --eye-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.6 6.2A9.9 9.9 0 0 1 12 6c7 0 11 6 11 6a17 17 0 0 1-3.2 3.7M6.4 7.9A17 17 0 0 0 1 12s4 6 11 6a10 10 0 0 0 4.3-.9M2 2l20 20'/%3E%3C/svg%3E"); }
+/* Um aviso de duas linhas dentro de um quadradinho de 148px virava um bloco de texto sem
+   folga nenhuma. O essencial fica visível; o resto vive no título do botão ao lado. */
+.oculto-overlay { position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:3px; padding:10px; background:#14131cf2; }
+.oculto-overlay strong { font-size:10px; font-weight:700; color:#c3bcda; }
+.oculto-overlay small { font-size:9px; line-height:1.4; color:#8d87a4; }
+/* Num quadradinho de 134×75 a segunda linha só brigaria por espaço com o botão que desfaz
+   a ação. Ela continua no palco, onde há folga, e no título do próprio botão. */
+.participant .oculto-overlay { padding-bottom:26px; }
+.participant .oculto-overlay small { display:none; }
+#stageOcultoOverlay { gap:7px; background:#12111af2; }
+#stageOcultoOverlay strong { font-size:17px; letter-spacing:-.02em; color:#ddd6ef; }
+#stageOcultoOverlay small { font-size:11px; color:#9a94b0; }
+#stageMostrarBtn { margin-top:6px; font-size:11px; padding:9px 16px; background:#ffffff12; color:#ded7f5; }
+#stageMostrarBtn:hover { background:#ffffff1f; }
 /* Tela anunciada mas nao pedida: nada esta descendo do servidor de midia. O convite ocupa
    o lugar da imagem em vez de cobri-la -- nao ha imagem por baixo. */
-.convite-de-tela { position:absolute; inset:0; z-index:1; display:grid; place-content:center; justify-items:center; gap:7px; text-align:center; padding:6px; }
+/* O padding de cima reserva a faixa do selo "Tela": sem ele o rótulo centralizado passava
+   por baixo dele e terminava cortado. */
+.convite-de-tela { position:absolute; inset:0; z-index:1; display:grid; place-content:center; justify-items:center; gap:7px; text-align:center; padding:22px 6px 6px; }
 .convite-texto { font-size:9px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:#8e88a3; }
 .assistir-btn { font-size:10px; font-weight:700; padding:5px 12px; border-radius:7px; background:#5d51b8; color:#f1eefc; }
 .assistir-btn:hover { background:#6d60cf; }
@@ -148,9 +201,13 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .participant-name { font-size:10px; font-weight:600; margin:6px 2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .volume-row { display:flex; align-items:center; gap:4px; min-height:20px; margin-top:2px; }
 .volume-slider { flex:1; min-width:0; height:3px; accent-color:#b0a0ed; cursor:pointer; }
+.volume-slider:disabled { cursor:not-allowed; accent-color:#55536a; }
 .mute-peer-btn { background:transparent; padding:2px 4px; font-size:11px; }
+/* Sem áudio nenhum para ajustar, a linha inteira se apaga junta — antes só os controles
+   ficavam cinzas e o trilho continuava aceso, como se ainda houvesse o que arrastar. */
+.volume-row:has(.volume-slider:disabled) { opacity:.4; }
 .peer-audio,.screen-audio { display:none; }
-.status-line { grid-row:5; color:#9b95ac; font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
+.status-line { grid-row:4; color:#9b95ac; font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
 .control-bar { grid-area:barra; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--line); background:#191923; padding:12px 16px; }
 .control-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:5px; font-size:9px; min-width:67px; height:55px; border-radius:10px; padding:8px 11px; white-space:nowrap; }
 .control-btn::before { content:''; display:block; width:19px; height:19px; background:currentColor; mask:var(--control-icon) center/contain no-repeat; -webkit-mask:var(--control-icon) center/contain no-repeat; }
@@ -163,6 +220,15 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 #leaveBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M2 12q10-10 20 0v5h-5v-5a13 13 0 0 0-10 0v5H2z'/%3E%3C/svg%3E"); margin-left:10px; }
 #micBtn[aria-pressed="true"],#cameraBtn[aria-pressed="true"],#screenBtn[aria-pressed="true"] { color:#dbd4ff; background:#8170d840; }
 #micBtn[aria-pressed="false"] { background:#ef7c8e16; color:#f19ba8; }
+/* O rótulo virou o nome fixo da coisa ("Microfone", "Câmera"), então quem conta o estado
+   agora é o ícone: desligado, ele aparece cortado. */
+#micBtn.desligado { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18'/%3E%3C/svg%3E"); }
+#cameraBtn.desligado { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M9.5 5H13a3 3 0 0 1 3 3v1.5m0 4V16a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 2.2-2.9M16 10l6-4v12l-3.5-2.3M2 2l20 20'/%3E%3C/svg%3E"); }
+#screenBtn.desligado { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 3H20a2 2 0 0 1 2 2v10a2 2 0 0 1-.6 1.4M17.5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 .6-1.4M8 21h8M12 17v4M2 2l20 20'/%3E%3C/svg%3E"); }
+/* Enquanto o navegador decide a permissão do microfone o botão fica em espera — antes ele
+   trocava o rótulo por "Abrindo..." e a barra inteira pulava de largura. */
+#micBtn.ocupado::before { animation:pulsa 1s ease-in-out infinite; }
+@keyframes pulsa { 50% { opacity:.35; } }
 .call-indicator { display:none; align-items:center; gap:7px; color:#97a598; font-size:8px; letter-spacing:.08em; margin-right:auto; }
 .call-indicator i { width:5px; height:5px; background:var(--online); border-radius:50%; }
 #enableSoundBtn { position:fixed; left:50%; top:73px; transform:translateX(-50%); z-index:65; box-shadow:0 8px 35px #0008; white-space:nowrap; }
@@ -222,12 +288,31 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 @keyframes aba-entra { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion:reduce) { .aba-painel { animation:none; } }
 
+/* Ajuste que quase ninguém precisa mexer (codec, relatório bruto) fica dobrado: some da
+   primeira leitura sem sumir do produto. */
+.avancado { margin-bottom:16px; border:1px solid #ffffff0d; border-radius:10px; background:#ffffff05; }
+.avancado > summary { padding:10px 13px; font-size:11px; font-weight:600; color:#b0a7c4; cursor:pointer; list-style:none; display:flex; align-items:center; gap:7px; border-radius:10px; }
+.avancado > summary::-webkit-details-marker { display:none; }
+.avancado > summary::before { content:'▸'; font-size:9px; color:#8d86a5; transition:transform .15s; }
+.avancado[open] > summary { color:#ded7ef; border-bottom:1px solid #ffffff0d; border-radius:10px 10px 0 0; }
+.avancado[open] > summary::before { transform:rotate(90deg); }
+.avancado > summary:hover { background:#ffffff07; }
+.avancado > *:not(summary) { margin:13px; }
+.avancado .field:last-child { margin-bottom:13px; }
+.medicao { display:block; margin-top:12px; padding:10px 12px; border-radius:9px; background:#b4a1dd09; border:1px solid #b4a1dd1c; font:11px/1.7 ui-monospace,Consolas,monospace; color:#b7aecb; }
 .field { margin-bottom:16px; }
 .field label { display:block; font-size:11px; font-weight:600; color:#bcb2cf; margin-bottom:7px; }
 /* Rótulo de caixa de seleção: o texto acompanha a caixa e o alvo de toque cobre os dois. */
 .field label.check-linha { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); cursor:pointer; min-height:32px; }
 .check-linha input[type="checkbox"] { width:18px; height:18px; margin:0; flex:none; accent-color:var(--accent); }
 .field small,#devicesDica { display:block; font-size:11px; color:#a99fba; margin-top:7px; line-height:1.6; }
+/* "Está funcionando?" é a pergunta que traz alguém a este painel, e ela não se responde
+   com uma lista de nomes de aparelho. O medidor e a prévia respondem na hora. */
+.medidor { height:6px; margin-top:9px; border-radius:3px; background:#ffffff0d; overflow:hidden; }
+.medidor > span { display:block; height:100%; width:0; border-radius:3px; background:linear-gradient(90deg,#7fd6a6,#cbd77f 70%,#e8a06e); transition:width .07s linear; }
+/* Espelhada, como qualquer prévia de câmera: quem se vê aqui está se conferindo, e um
+   espelho que inverte os lados confunde mais do que ajuda. */
+.cam-preview { display:block; width:100%; max-height:148px; aspect-ratio:16 / 9; margin-top:9px; border-radius:10px; background:#12131c; object-fit:cover; transform:scaleX(-1); }
 #devicesDica:empty { display:none; }
 #echoHint { display:block; color:#a99fba; font-size:11px; line-height:1.7; }
 .echo-warning,.aviso-eco { background:#3d3024; border:1px solid #b692532e; border-radius:10px; padding:10px 13px; color:#e7c5a2; font-size:11px; line-height:1.6; }
@@ -236,7 +321,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .agente-status { display:flex; align-items:center; gap:7px; color:#ded3eb; font-size:12px; margin-bottom:5px; }
 .agente-bolinha { width:7px; height:7px; border-radius:50%; background:#84798e; }
 .agente-bolinha.ligado { background:var(--online); }
-.agente-download { display:inline-block; background:var(--accent); color:white; padding:8px 12px; border-radius:7px; margin-top:10px; text-decoration:none; font-size:11px; }
+/* O texto era <small>, que é inline: o botão de download entrava na mesma linha e caía por
+   cima da última frase. Os dois viram blocos, e o link ganha a linha que é dele. */
+.agente-box > small { display:block; }
+.agente-download { display:inline-block; background:var(--accent); color:white; padding:8px 12px; border-radius:7px; margin-top:11px; text-decoration:none; font-size:11px; }
+.agente-download:hover { background:var(--accent-hi); }
 .campo-excluir { margin-top:15px; }
 .campo-excluir select+label { margin-top:15px; }
 .diagnostics-card { width:min(100%,560px); }
@@ -249,7 +338,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .lightbox-barra button { background:var(--bg-3); }
 .lightbox-legenda { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:var(--muted); font-size:11px; }
 @media(min-width:1600px) { .call-indicator { display:flex; } .control-bar { padding-right:100px; } .app { grid-template-columns:240px minmax(0,1fr) 320px; } .app.sem-chat { grid-template-columns:240px minmax(0,1fr); } }
-@media(max-width:1250px) { .app { grid-template-columns:200px minmax(0,1fr) 266px; } .app.sem-chat { grid-template-columns:200px minmax(0,1fr); } #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:20px 18px 0; } .participants-heading>span,.session-badge { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
+@media(max-width:1250px) { .app { grid-template-columns:200px minmax(0,1fr) 266px; } .app.sem-chat { grid-template-columns:200px minmax(0,1fr); } #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
 @media(max-width:1100px) { .app,.app.sem-chat { grid-template-columns:210px minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,360px); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
 @media(max-width:760px) {
   :root { --barra:81px; }
@@ -265,16 +354,13 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
   .topbar-actions { gap:3px; }
   .topbar-actions button { font-size:10px; padding:8px; }
   #copyLinkBtn::before { display:none; }
-  .palco-area { padding:15px 12px 0; gap:12px; }
-  .session-heading h2 { font-size:21px; }
-  .session-heading .eyebrow { font-size:8px; }
+  .palco-area { padding:13px 12px 0; gap:11px; }
+  .session-badge { display:none; }
   .stage { border-radius:13px; }
   .stage-empty { padding:16px; }
-  .stage-empty h3 { font-size:25px; }
+  .stage-empty h3 { font-size:22px; }
   .stage-empty p { font-size:10px; margin-bottom:16px; }
-  .stage-empty p br { display:none; }
   .stage-art { transform:scale(.8); height:129px; margin-top:-5px; }
-  .stage-empty>small { font-size:8px; }
   .participant { width:120px; }
   .participants { gap:8px; }
   .participants-heading { margin-bottom:7px; }
@@ -282,11 +368,6 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
   .control-bar { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); gap:6px; }
   .control-btn { height:54px; min-width:48px; padding:6px; font-size:8px; flex:1; max-width:88px; }
   #leaveBtn { margin-left:3px; }
-  /* O rótulo completo ("Câmera traseira") não cabe: o título e o aria-label o mantêm. */
-  #screenBtn,#updateScreenBtn,#flipCameraBtn { font-size:0; gap:5px; }
-  #screenBtn::after { content:'Tela'; font-size:8px; }
-  #updateScreenBtn::after { content:'Trocar'; font-size:8px; }
-  #flipCameraBtn::after { content:'Virar'; font-size:8px; }
   .chat { width:100%; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
   #chatInput,select,input[type="text"] { font-size:16px; }
   .chat-head { font-size:14px; }
@@ -297,12 +378,12 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
   .playback-recovery button { font-size:10px; padding:9px; }
   .stage-label { max-width:48%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 }
-@media(max-height:800px) { .stage-art { height:106px; transform:scale(.7); margin-top:-13px; margin-bottom:3px; } .stage-empty h3 { font-size:23px; } .stage-empty p { margin-bottom:14px; } }
-@media(max-height:690px) { .stage-art { display:none; } .stage-empty>small { display:none; } .stage-empty h3 { font-size:21px; } .stage-empty p { font-size:10px; } .session-heading { display:none; } .palco-area { grid-template-rows:0 minmax(100px,1fr) auto auto auto; padding-top:0; } }
-@media(max-height:480px) { .participants-section { display:none; } .stage-empty p,.stage-empty .eyebrow { display:none; } .stage-empty h3 br { display:none; } .stage-empty h3 { font-size:19px; margin-bottom:15px; } }
+@media(max-height:800px) { .stage-art { height:106px; transform:scale(.7); margin-top:-13px; margin-bottom:3px; } .stage-empty h3 { font-size:22px; } .stage-empty p { margin-bottom:14px; } }
+@media(max-height:690px) { .stage-art { display:none; } .stage-empty h3 { font-size:20px; } .stage-empty p { font-size:10px; margin-bottom:14px; } .palco-area { padding-top:12px; } }
+@media(max-height:480px) { .participants-section { display:none; } .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
-@container(max-height:360px) { .stage-art,.stage-empty>small { display:none; } .stage-empty h3 { font-size:23px; } .stage-empty p { margin-bottom:14px; } }
-@container(max-height:240px) { .stage-empty p,.stage-empty>.eyebrow { display:none; } .stage-empty h3 { font-size:19px; margin-bottom:16px; } }
+@container(max-height:360px) { .stage-art { display:none; } .stage-empty h3 { font-size:21px; } .stage-empty p { margin-bottom:14px; } }
+@container(max-height:240px) { .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
 @media(max-width:760px) { .mute-peer-btn { min-width:32px; min-height:32px; } #chatSend,#attachImageBtn { min-width:36px; min-height:42px; } }
 
 .workspace-name { text-decoration:none; color:inherit; gap:9px; }
@@ -317,11 +398,21 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .mic-icon.muted::after,.mute-peer-btn[aria-pressed="true"]::after { content:''; position:absolute; width:21px; height:2px; background:currentColor; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-45deg); box-shadow:0 1px #20212c; }
 .mute-peer-btn { display:inline-flex; align-items:center; justify-content:center; }
 .app.teatro,.app.teatro.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-areas:"topo" "palco" "barra"; }
-.app.teatro .room-sidebar,.app.teatro .chat,.app.teatro .session-heading,.app.teatro .participants-section,.app.teatro #sidebarToggle { display:none!important; }
-.app.teatro .palco-area { grid-template-rows:minmax(0,1fr) auto auto; padding:8px 8px 0; gap:6px; }
+.app.teatro .room-sidebar,.app.teatro .chat,.app.teatro #sidebarToggle { display:none!important; }
+.app.teatro .palco-area { grid-template-rows:minmax(0,1fr) auto auto auto; padding:8px 8px 0; gap:6px; }
 .app.teatro .stage { grid-row:1; border-radius:10px; }
 .app.teatro .aviso-eco { grid-row:2; }
-.app.teatro .status-line { grid-row:3; margin:0 8px 6px; }
+/* O teatro tira as bordas da sala, nao a sala. Antes ele escondia tambem a faixa de
+   quadradinhos, e quem focava numa tela perdia de vista todas as outras -- inclusive quem
+   acabara de comecar a compartilhar. A faixa fica, menor: o palco continua sendo quase
+   tudo, e ainda da para ver e trocar. Para imersao total existe a tela cheia, que e o
+   proximo botao da barra. */
+.app.teatro .participants-section { grid-row:3; }
+.app.teatro .participants-heading { display:none; }
+.app.teatro .participants { gap:7px; padding:0 1px 3px; }
+.app.teatro .participant { width:118px; padding:4px; border-radius:9px; }
+.app.teatro .participant .participant-name { font-size:9px; margin-top:3px; }
+.app.teatro .status-line { grid-row:4; margin:0 8px 6px; }
 .app.teatro #chatToggle { display:inline-flex; }
 #theaterBtn svg { display:block; }
 #theaterBtn[aria-pressed="true"] { color:var(--accent-hi); background:#a092ff20; }
@@ -334,16 +425,68 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .multi-card { position:relative; min-width:0; min-height:0; overflow:hidden; background:#0c0d14; border:1px solid #ffffff16; border-radius:12px; }
 .multi-card.selected { border-color:var(--accent); box-shadow:inset 0 0 0 1px #a092ff40; }
 .multi-card video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; transform-origin:center; }
-.multi-caption { position:absolute; inset:auto 0 0; padding:20px 10px 9px; background:linear-gradient(transparent,#10101aef); transition:opacity .2s; }
-.multi-caption > span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; font-size:12px; font-weight:600; }
-.multi-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
-.multi-actions button { padding:5px 7px; min-height:30px; border:1px solid #ffffff18; border-radius:6px; background:#262332; color:#eee8ff; font-size:10px; }
-.multi-actions button:hover { background:#453c61; }
+.multi-caption { position:absolute; inset:auto 0 0; padding:22px 10px 9px; background:linear-gradient(transparent,#10101af5); transition:opacity .2s; }
+.multi-nome { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:7px; font-size:12px; font-weight:600; }
+.multi-barra { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
+/* A grade mostra várias telas ao mesmo tempo e cada uma tem o próprio som: sem volume aqui,
+   equilibrar duas transmissões exigia fechar a grade e caçar o quadradinho lá embaixo. */
+.multi-volume { flex:1 1 96px; min-width:84px; max-width:170px; margin-top:0; }
+.multi-volume .volume-slider { height:4px; }
+.multi-volume .mute-peer-btn { color:#d6cfe9; padding:4px; }
+.multi-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-left:auto; }
+.multi-actions button { padding:5px 8px; min-height:28px; border:1px solid #ffffff18; border-radius:6px; background:#262332; color:#eee8ff; font-size:10px; font-weight:600; }
+.multi-actions button:hover:not(:disabled) { background:#453c61; }
+.multi-actions .multi-zoom { padding:5px 6px; min-width:26px; background:#ffffff0a; }
+.multi-actions .multi-nivel { min-width:38px; font-size:9px; color:#b3acc9; }
+.multi-actions .multi-ampliar { background:#5d51b8; border-color:transparent; }
+.multi-actions .multi-ampliar:hover:not(:disabled) { background:#6d60cf; }
+.multi-actions .multi-ocultar[aria-pressed="true"] { background:#dd7899; border-color:transparent; color:#1b1620; }
 .multi-card:not(.playback-stalled) .multi-retry { display:none; }
-.multi-actions button[aria-pressed="true"] { color:#d8ceff; background:#57468a; }
 .multi-wait { position:absolute; inset:30% 10px auto; text-align:center; font-size:12px; color:var(--muted); pointer-events:none; }
+/* Os controles somem com o palco ocioso, mas não debaixo do próprio cursor: quem parou o
+   mouse sobre um card está justamente mirando um botão dele. */
 .stage.ocioso .multi-caption { opacity:0; pointer-events:none; }
-.stage.ocioso.controles-teclado .multi-caption:focus-within { opacity:1; pointer-events:auto; }
+.stage.ocioso .multi-card:hover .multi-caption,
+.stage.ocioso .multi-caption:focus-within { opacity:1; pointer-events:auto; }
 #multiViewBtn svg { display:block; }
 #multiViewBtn[aria-pressed="true"] { color:var(--accent-hi); background:#a092ff20; }
 @media (max-width:600px) { .multi-stage { padding:6px 6px 52px; gap:8px; } .multi-actions button { min-height:36px; } }
+
+/* ---------- Barra da esquerda recolhivel ---------- */
+/* A barra vale por si -- lista, convite, perfil -- mas nem sempre. Quem esta assistindo uma
+   tela quer o palco maior sem entrar no teatro, que apaga o chat junto. Recolher e uma
+   terceira posicao entre "tudo" e "so o palco", e a escolha fica gravada.
+
+   Quem recolhe e o MESMO botao do topo que abre a gaveta no celular. Houve aqui um botao
+   proprio, dentro da barra, e ele era uma armadilha: 26 pixels de alvo por cima do cabecalho
+   -- que e um link para sair da sala. Errar o clique por pouco tirava a pessoa da conversa,
+   e errar por pouco e o caso comum. Um controle so, longe da area perigosa, resolve sem
+   exigir pontaria.
+
+   So do 701px para cima: abaixo disso a barra ja e uma gaveta sobreposta, e recolher uma
+   gaveta nao quer dizer nada. */
+@media(min-width:701px) {
+  .app { transition:grid-template-columns .18s ease; }
+  #sidebarToggle { display:inline-flex; align-items:center; }
+  .app.barra-recolhida { grid-template-columns:0 minmax(0,1fr) 292px; }
+  .app.barra-recolhida.sem-chat { grid-template-columns:0 minmax(0,1fr); }
+  /* A coluna vai a zero, entao o conteudo precisa ser cortado -- sem isto ele vaza por cima
+     do palco durante a transicao. */
+  .app.barra-recolhida .room-sidebar { overflow:hidden; border-right:0; }
+  .app.barra-recolhida .room-sidebar > * { visibility:hidden; }
+}
+@media(min-width:701px) and (max-width:1100px) {
+  .app.barra-recolhida,.app.barra-recolhida.sem-chat { grid-template-columns:0 minmax(0,1fr); }
+}
+@media(min-width:1600px) {
+  .app.barra-recolhida { grid-template-columns:0 minmax(0,1fr) 320px; }
+  .app.barra-recolhida.sem-chat { grid-template-columns:0 minmax(0,1fr); }
+}
+/* O teatro declara UMA coluna e areas de uma coluna so. O recolhimento NAO pode reescrever
+   as colunas por cima disso: com tres colunas e areas de uma, as areas deixam de caber e a
+   sala inteira se espreme na primeira faixa -- que mede zero, porque e justamente a da barra
+   recolhida. Era isso que quebrava a tela ao entrar no teatro com a barra fechada.
+
+   Tres classes vencem as duas do recolhimento, e fora de media query para valer em todas as
+   larguras -- media query nao muda especificidade, so o alcance. */
+.app.teatro.barra-recolhida,.app.teatro.barra-recolhida.sem-chat { grid-template-columns:minmax(0,1fr); }

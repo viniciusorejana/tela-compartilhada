@@ -4,6 +4,8 @@
   const cards = new Map();
   let active = false;
 
+  const chave = item => JSON.stringify([item.id, item.source]);
+
   function layout() {
     const count = cards.size;
     const width = grid.clientWidth;
@@ -23,18 +25,42 @@
   }
 
   function create(item) {
+    const ehPropria = item.id === 'self';
+    const ehTela = item.source === 'screen';
     const root = document.createElement('section');
     root.className = 'multi-card';
-    root.innerHTML = '<video autoplay muted playsinline></video><p class="multi-wait" role="status">Conectando ao vídeo…</p><div class="multi-caption"><span></span><div class="multi-actions"></div></div>';
+    // A grade e a mesma coisa que os quadradinhos de baixo, so que grande: quem ajusta o
+    // volume de uma tela ali tem de encontrar o mesmo ajuste aqui, e nao um card onde o som
+    // simplesmente nao se controla.
+    root.innerHTML = `
+      <video autoplay muted playsinline></video>
+      <p class="multi-wait" role="status">Conectando ao vídeo…</p>
+      <div class="multi-caption">
+        <span class="multi-nome"></span>
+        <div class="multi-barra">
+          ${ehPropria ? '' : `<div class="volume-row multi-volume">${LINHA_DE_VOLUME(ehTela ? 'tela' : 'voz')}</div>`}
+          <div class="multi-actions"></div>
+        </div>
+      </div>`;
     const video = root.querySelector('video');
-    const label = root.querySelector('.multi-caption > span');
+    const label = root.querySelector('.multi-nome');
     const waiting = root.querySelector('.multi-wait');
     const actions = root.querySelector('.multi-actions');
-    const button = (text, title, action) => {
+    const slider = root.querySelector('.volume-slider');
+    const muteBtn = root.querySelector('.mute-peer-btn');
+    const button = (text, title, action, className) => {
       const el = document.createElement('button');
       el.type = 'button'; el.textContent = text; el.title = title; el.setAttribute('aria-label', title);
+      if (className) el.className = className;
       el.onclick = action; actions.appendChild(el); return el;
     };
+
+    if (slider) {
+      const mexer = mudanca => ehTela ? definirAudioDaTela(item.id, mudanca) : definirAudioDaVoz(item.id, mudanca);
+      slider.addEventListener('input', () => mexer({ nivel: slider.value / 100 }));
+      muteBtn.addEventListener('click', () => mexer({ alternarMudo: true }));
+    }
+
     let zoom = 1, x = 0, y = 0, drag = null;
     const transform = () => {
       const scale = Math.min(root.clientWidth / (video.videoWidth || 16), root.clientHeight / (video.videoHeight || 9));
@@ -56,15 +82,26 @@
       if (zoom === 1) x = y = 0;
       minus.disabled = zoom <= 1; plus.disabled = zoom >= 3;
       reset.textContent = `${Math.round(zoom * 100)}%`;
+      reset.disabled = zoom === 1;
       transform();
     };
-    const minus = button('−', 'Diminuir zoom deste vídeo', () => setZoom(zoom - .25));
-    const reset = button('100%', 'Restaurar zoom deste vídeo', () => setZoom(1));
-    const plus = button('+', 'Aumentar zoom deste vídeo', () => setZoom(zoom + .25));
+    const minus = button('−', 'Diminuir zoom deste vídeo', () => setZoom(zoom - .25), 'multi-zoom');
+    const reset = button('100%', 'Restaurar zoom deste vídeo', () => setZoom(1), 'multi-zoom multi-nivel');
+    const plus = button('+', 'Aumentar zoom deste vídeo', () => setZoom(zoom + .25), 'multi-zoom');
     minus.disabled = true;
-    const listen = item.source === 'screen' && item.id !== 'self'
-      ? button('Ouvir', 'Ouvir o áudio desta tela', () => { pin(item.id, item.source, true); render(); }) : null;
-    button('Ampliar', 'Ver somente este vídeo', () => { setActive(false); pin(item.id, item.source, true); });
+    reset.disabled = true;
+    // So a propria camera/tela ganha este botao: ocultar a de outro participante nao faz
+    // sentido, o quadradinho dele nao e uma previa que se controla daqui. Um clique tira
+    // este item da lista no proximo render() -- o card some da grade, nao so o video.
+    if (ehPropria) {
+      button('Ocultar', `Ocultar sua ${ehTela ? 'tela' : 'câmera'} só para você — a sala continua recebendo`,
+        () => alternarOcultarPropria(item.source), 'multi-ocultar');
+    }
+    // Largar uma tela aqui dentro: sem isto a unica saida era fechar a grade e procurar o
+    // quadradinho certo la embaixo.
+    const parar = ehTela && !ehPropria
+      ? button('Parar', 'Parar de assistir esta tela', () => assistirTela(item.id, false)) : null;
+    button('Ampliar', 'Ver somente este vídeo', () => { setActive(false); pin(item.id, item.source, true); }, 'multi-ampliar');
     video.addEventListener('wheel', event => {
       if (event.ctrlKey || !video.videoWidth || !event.deltaY) return;
       event.preventDefault();
@@ -89,12 +126,24 @@
     video.addEventListener('resize', transform);
     button('Reproduzir', 'Retomar a reprodução deste vídeo', () => garantirReproducao(video)).className = 'multi-retry';
     grid.appendChild(root);
-    return { root, video, label, listen, transform };
+    return { root, video, label, slider, muteBtn, parar, source: item.source, transform };
+  }
+
+  // O volume mora num lugar so (sala.js); daqui o card apenas recebe o aviso de que ele
+  // mudou -- inclusive quando quem mexeu foi o quadradinho la de baixo.
+  function sincronizarAudio(id) {
+    for (const [key, card] of cards) {
+      if (!card.slider || JSON.parse(key)[0] !== id) continue;
+      pintarControleDeVolume(card.slider, card.muteBtn, card.source === 'screen' ? audioDaTela(id) : audioDaVoz(id));
+    }
   }
 
   function render() {
-    const items = active ? candidatosDeDestaque() : [];
-    const wanted = new Set(items.map(item => JSON.stringify([item.id, item.source])));
+    // Camera/tela propria ocultada nao entra na grade: o card some de vez, em vez de ficar
+    // ali tampado -- assim o espaco dele volta para os outros participantes.
+    const items = (active ? candidatosDeDestaque() : [])
+      .filter(item => !(item.id === 'self' && (item.source === 'screen' ? ocultarPropriaTela : ocultarPropriaCamera)));
+    const wanted = new Set(items.map(chave));
     for (const [key, card] of cards) {
       if (wanted.has(key)) continue;
       card.video.pause(); card.video.srcObject = null;
@@ -108,21 +157,15 @@
     toggle.title = active ? 'Voltar ao destaque único' : 'Ver telas e câmeras em grade';
     toggle.setAttribute('aria-label', toggle.title);
     for (const item of items) {
-      const key = JSON.stringify([item.id, item.source]);
+      const key = chave(item);
       if (!cards.has(key)) cards.set(key, create(item));
       const card = cards.get(key);
       const name = `${nomeDe(item.id)} — ${item.source === 'screen' ? 'Tela' : 'Câmera'}`;
       card.label.textContent = name; card.root.setAttribute('aria-label', name);
       const stream = item.id === 'self' ? (item.source === 'screen' ? screenStream : cameraStream) : peers.get(item.id)?.remoteStreams[item.source];
       if (ligarFluxo(card.video, stream) || card.video.paused) garantirReproducao(card.video);
-      const selected = pinned?.id === item.id && pinned.source === item.source;
-      card.root.classList.toggle('selected', selected);
-      if (card.listen) {
-        const peer = peers.get(item.id);
-        card.listen.disabled = !peer?.state.screenAudio;
-        card.listen.setAttribute('aria-pressed', String(selected));
-        card.listen.textContent = card.listen.disabled ? 'Sem áudio' : selected ? 'Áudio selecionado' : 'Ouvir';
-      }
+      card.root.classList.toggle('selected', pinned?.id === item.id && pinned.source === item.source);
+      if (card.slider) sincronizarAudio(item.id);
     }
     if (visible) stageControls.classList.remove('hidden');
     requestAnimationFrame(layout);
@@ -134,5 +177,5 @@
   }
   toggle.onclick = () => setActive(!active);
   new ResizeObserver(layout).observe(grid);
-  window.RoomMulti = { render, get active() { return active; } };
+  window.RoomMulti = { render, sincronizarAudio, get active() { return active; } };
 })();

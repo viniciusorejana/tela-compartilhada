@@ -259,6 +259,22 @@ async function esperarCodec(page, fonte, esperado) {
       .map(s => ({ rid: s.rid || 'única', altura: s.frameHeight, escala: s.scalabilityMode }));
   });
   assert.ok(camadas.length > 1, `simulcast deveria publicar várias camadas, veio ${JSON.stringify(camadas)}`);
+  // O que se confere aqui NAO e quantas camadas estao enviando agora -- isso depende da
+  // banda estimada, e num Chromium sem placa de video ela nem sobe. E a ESCADA declarada,
+  // que e o que o servidor tem disponivel para oferecer a cada espectador.
+  //
+  // O degrau de baixo e o que importa: deixada por conta da lib, a escada nasce com dois
+  // degraus e o menor custa um quarto da captura -- 2 Mbps numa captura de 8. Quem assiste
+  // de uma rede ruim nao alcanca nem esse, o servidor empurra assim mesmo, e o canal afoga
+  // junto com a sinalizacao que o mantem na sala. A pessoa nao fica com video ruim: ela cai.
+  const escada = await host.evaluate(() =>
+    (publicacoesLocais.screen.track.sender.getParameters().encodings || [])
+      .map(e => ({ rid: e.rid || 'única', teto: e.maxBitrate, reducao: e.scaleResolutionDownBy })));
+  assert.equal(escada.length, 3, `a tela deveria subir em três degraus, veio ${JSON.stringify(escada)}`);
+  const degrauDeBaixo = Math.min(...escada.map(e => e.teto).filter(Boolean));
+  assert.ok(degrauDeBaixo <= 400_000,
+    `o degrau mais baixo precisa caber numa rede ruim, veio ${degrauDeBaixo} bps em ${JSON.stringify(escada)}`);
+  console.log(`Escada de simulcast declarada: ${JSON.stringify(escada)}`);
   // Uma copia so sai daqui, por mais gente que entre: e isso que tira o upload do gargalo.
   const publicacoesDeTela = await host.evaluate(() =>
     [...transporte.sala.localParticipant.trackPublications.values()].filter(p => p.source === 'screen_share').length);
@@ -281,6 +297,9 @@ async function esperarCodec(page, fonte, esperado) {
 
   // O servidor de midia nao transcodifica: trocar o codec exige republicar a faixa, e quem
   // ja esta assistindo precisa passar a receber o fluxo novo.
+  // O codec agora mora num <details> recolhido -- e um ajuste de quem sabe o que procura,
+  // e nao mais a terceira pergunta feita a quem so queria compartilhar a tela.
+  await host.locator('#painelQualidade .avancado > summary').click();
   await host.locator('#videoCodec').selectOption('vp8');
   await host.waitForFunction(() => codecDeVideoEscolhido() === 'vp8');
   assert.equal(await host.locator('#shareCodec').inputValue(), 'vp8');
@@ -507,11 +526,32 @@ async function esperarCodec(page, fonte, esperado) {
   await host.waitForFunction(() => !cadeiaDeRuido && faixaEnviadaDoMic === micTrack);
   await host.evaluate(() => noiseBtn.click());
   await host.waitForFunction(() => cadeiaDeRuido && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
+  // O mudo tem de ATRAVESSAR a sala. "enabled = false" cala o som, mas e uma decisao que
+  // morre neste navegador: quem conta a mudanca para os outros e o mute() da publicacao.
+  // Sem ele o som sumia e o icone do outro lado continuava aceso -- pior que nao ter
+  // indicador, porque a pessoa aparece disponivel enquanto ninguem a ouve. Verificar so o
+  // lado local (era o que este teste fazia) nunca pegaria isso.
+  const vistoPeloOutro = quantos => viewer.waitForFunction(
+    alvo => [...peers.values()].find(p => p.name === 'Molejo')?.state.micMuted === alvo,
+    quantos, { timeout: 20000 });
+
   await host.evaluate(() => alternarMic());
   assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), false);
+  await vistoPeloOutro(true);
+  // A republicacao da faixa (trocar o filtro de ruido) nao pode desfazer o anuncio: a faixa
+  // nova nasce anunciada como ativa, com a pessoa ainda muda.
+  await host.evaluate(() => noiseBtn.click());
+  await host.waitForFunction(() => !cadeiaDeRuido && faixaEnviadaDoMic === micTrack);
+  await vistoPeloOutro(true);
+
+  // O desmute e o caminho onde o aviso do servidor de midia chega tarde (ou nao chega): a
+  // publicacao do outro lado ja diz "nao muda" e o estado derivado continuava dizendo
+  // "muda". Quem fecha essa janela e a conferencia periodica, que recalcula o estado de
+  // quem ja esta na lista em vez de so conferir quem entrou e quem saiu.
   await host.evaluate(() => alternarMic());
   assert.equal(await host.evaluate(() => faixaEnviadaDoMic.enabled), true);
-  console.log('PASS: RNNoise AudioWorklet loads, toggles, and respects microphone mute');
+  await vistoPeloOutro(false);
+  console.log('PASS: RNNoise AudioWorklet loads, toggles, and mic mute reaches the other side');
 
   // Daqui em diante o teste nao usa mais a transmissao. Encerrar as duas paginas libera a
   // captura, o simulcast e as conexoes: mante-las vivas so por inercia deixava as etapas

@@ -24,7 +24,14 @@ const ARQUIVO_DE_CONFIG = path.join(PASTA, 'livekit.yaml');
 
 const PORTA_LOCAL = Number(process.env.SFU_PORT) || 7880;
 const PORTA_TCP = Number(process.env.SFU_TCP_PORT) || 7881;
-const PORTAS_UDP = process.env.SFU_UDP_PORTS || '7882-7891';
+// UMA porta de midia, nao uma faixa. Com uma faixa, o servidor de midia abre uma porta por
+// conexao: dez regras para acertar no roteador em vez de uma, dez associacoes de NAT para o
+// roteador domestico manter vivas, e dez chances de uma delas expirar no meio da conversa --
+// que aparece como "a imagem de fulano parou" sem nada no log dizendo por que. Com uma so,
+// todo o trafego e multiplexado nela: uma regra, uma associacao, um ponto de falha.
+//
+// A faixa continua disponivel por variavel de ambiente para quem precisar dela.
+const PORTAS_UDP = process.env.SFU_UDP_PORTS || '7882';
 
 // Faixas de túnel, VPN ou rede de emergência: nenhuma delas leva mídia de fora até aqui, e
 // todas contam como "mais um endereço em que tentar abrir a porta".

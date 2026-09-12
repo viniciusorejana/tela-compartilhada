@@ -42,11 +42,15 @@ const io = new Server(server, {
   // meio da conversa. Quem nao for de ninguem e fechado logo abaixo, explicitamente.
   destroyUpgrade: false,
   // Quem some sem avisar -- fechou o notebook, perdeu o Wi-Fi -- só é notado quando o
-  // heartbeat falha. Com o padrão (25s + 20s) a pessoa ficava quase um minuto parada na
-  // lista da sala. Apertar demais tiraria da sala quem passou por um túnel, então o alvo
-  // é: notar em cerca de 25 segundos.
+  // heartbeat falha. O aperto aqui já foi de 15s, mirando notar em 25: curto demais para
+  // uma aba em segundo plano num celular, que perde batimento por throttling sem ter
+  // saído de lugar nenhum. Cada falso positivo desses anunciava a saída de alguém que
+  // estava ali, e com isso a sala "desconectava" quem só tinha ficado quieto.
+  //
+  // Quem decide quem está na sala é o servidor de mídia, conferido a cada cinco segundos;
+  // este heartbeat é só um atalho para o caso comum. Atalho pode ser mais paciente.
   pingInterval: 10000,
-  pingTimeout: 15000
+  pingTimeout: 25000
 });
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));
@@ -91,7 +95,20 @@ app.get('/api/sala-config', (req, res) => {
 
   // Duas abas com a mesma identidade fazem o servidor de midia derrubar a primeira. O
   // sufixo aleatorio mantem o nome visivel e ainda assim separa as sessoes.
-  const identidade = `${nome}#${crypto.randomBytes(4).toString('hex')}`;
+  //
+  // A pagina pode pedir o sufixo de volta, e e o que ela faz ao reconectar. Voltar com a
+  // MESMA identidade e o que permite ao servidor de midia entender que e a mesma pessoa:
+  // ele solta a sessao velha e adota a nova. Sorteando um sufixo novo a cada queda, quem
+  // volta de uma oscilacao de rede vira um segundo participante, e o primeiro fica
+  // apodrecendo na lista de todo mundo ate o tempo de espera dele estourar -- com a
+  // imagem congelada, ocupando lugar, e sem que ninguem consiga tirar.
+  //
+  // Aceitar um sufixo de fora nao abre nada que ja nao estivesse aberto: o NOME sempre veio
+  // de fora, e o token continua sendo assinado aqui, com sala e permissoes que a pagina nao
+  // escolhe. So o formato passa -- oito digitos hexadecimais.
+  const sessaoPedida = String(req.query.sessao || '');
+  const sufixo = /^[a-f0-9]{8}$/.test(sessaoPedida) ? sessaoPedida : crypto.randomBytes(4).toString('hex');
+  const identidade = `${nome}#${sufixo}`;
   // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
   res.set('Cache-Control', 'no-store');
   res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl });
@@ -465,7 +482,12 @@ io.on('connection', (socket) => {
       // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda.
       callback({ ok: true, roomCode, selfId: socket.id, peers, historico: historicoPorSala.get(roomCode) || [] });
     }
-    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao() });
+    // A identidade da midia vai junto, e pelo mesmo motivo que ela vai no "peer-left":
+    // quem recebe precisa poder ligar este aviso a pessoa certa na lista da midia. Sem
+    // ela, uma oscilacao de socket -- em que a pessoa NAO saiu e a midia dela nunca caiu --
+    // dispara o "peer-left", tira a pessoa da lista de todo mundo, e nada a traz de volta
+    // ate o luto vencer, porque a sessao de midia continua sendo a mesma.
+    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null });
     console.log(`${socket.id} (${name}) entrou na sala ${roomCode}`);
   });
 

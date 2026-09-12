@@ -212,7 +212,7 @@ function instalarSeletorDeTela() {
     } finally {
       selecionandoCaptura = false;
     }
-  }, { useSystemPicker: false });
+  }, { useSystemPicker: true });
 }
 
 // ---------------------------------------------------------------- agente de áudio

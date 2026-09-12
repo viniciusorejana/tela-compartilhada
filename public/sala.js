@@ -1,6 +1,9 @@
 const pathParts = window.location.pathname.split('/').filter(Boolean);
 const roomCode = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : 'principal';
 document.getElementById('roomTitle').textContent = roomCode;
+// Quem chega por um link colado em algum lugar merece ver em que sala esta entrando ANTES
+// de digitar o nome -- ate porque um link errado so se descobre depois, ja la dentro.
+document.getElementById('gateTitle').textContent = roomCode;
 document.title = `${roomCode} · Nexo`;
 
 const nameGate = document.getElementById('nameGate');
@@ -11,12 +14,16 @@ const participantCount = document.getElementById('participantCount');
 const participantsEl = document.getElementById('participants');
 const stage = document.getElementById('stage');
 const stageVideo = document.getElementById('stageVideo');
+const stageOcultoOverlay = document.getElementById('stageOcultoOverlay');
 const stageEmpty = document.getElementById('stageEmpty');
 const stageLabel = document.getElementById('stageLabel');
 const stageControls = document.getElementById('stageControls');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomLevelLabel = document.getElementById('zoomLevelLabel');
+const stageVolume = document.getElementById('stageVolume');
+const stageSlider = document.getElementById('stageSlider');
+const stageMute = document.getElementById('stageMute');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const qualidadeBtn = document.getElementById('qualidadeBtn');
 const devicesBtn = document.getElementById('devicesBtn');
@@ -26,6 +33,10 @@ const devicesDica = document.getElementById('devicesDica');
 const micDevice = document.getElementById('micDevice');
 const outDevice = document.getElementById('outDevice');
 const camDevice = document.getElementById('camDevice');
+const micNivel = document.getElementById('micNivel');
+const micDica = document.getElementById('micDica');
+const camPreview = document.getElementById('camPreview');
+const camDica = document.getElementById('camDica');
 const saidaCampo = document.getElementById('saidaCampo');
 const echoWarning = document.getElementById('echoWarning');
 const fixEchoBtn = document.getElementById('fixEchoBtn');
@@ -78,6 +89,25 @@ const suportaTelaCheia = Boolean(
 );
 
 let socket = null;
+// O sufixo que separa ESTA aba das outras dentro do servidor de midia. Sorteado uma vez
+// por carregamento da pagina e repetido em cada pedido de credencial -- inclusive nos
+// pedidos que uma reconexao faz.
+//
+// Voltar com a MESMA identidade e o que permite ao servidor de midia entender que quem
+// chegou e quem caiu: ele solta a sessao morta e adota a nova. Sorteando um sufixo a cada
+// volta, quem se reconecta vira um segundo participante, e o primeiro fica apodrecendo na
+// lista de todo mundo -- com a imagem congelada, ocupando lugar -- ate o tempo de espera
+// do servidor vencer.
+const sessaoDeMidia = (() => {
+  try {
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (_) {
+    // Sem crypto forte o sufixo ainda precisa existir: ele separa abas, nao protege nada.
+    return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
+  }
+})();
 // Duas identidades diferentes, de proposito: "myId" e como o servidor de midia me conhece
 // (e o que aparece no mapa de participantes); "meuSocketId" e a conexao de sinalizacao, que
 // carimba o autor de cada mensagem do chat.
@@ -139,7 +169,7 @@ async function buscarConfigDaSala(nome) {
     const controle = new AbortController();
     const prazo = setTimeout(() => controle.abort(), 8000);
     try {
-      const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}`, { signal: controle.signal });
+      const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}&sessao=${sessaoDeMidia}`, { signal: controle.signal });
       const dados = await resposta.json().catch(() => ({}));
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
@@ -198,27 +228,52 @@ async function iniciarConexao() {
 
   if (salaConfig && !suportaWebRTC) {
     salaConfig = null;
-    status.textContent = 'Este navegador não faz chamadas de vídeo. O chat funciona; para ver e ouvir a sala, use outro navegador.';
+    status.textContent = 'Este navegador não faz chamadas de vídeo. O chat funciona, mas para ver e ouvir a sala é preciso outro navegador.';
   }
 
   if (salaConfig) {
     transporte = RoomTransport.criarTransporte({
       peers,
       proximaOrdem: () => ++sequenciaDeCompartilhamento,
-      aoEntrar: par => {
+      aoEntrar: (par, info) => {
         criarTile(par.id, par.name, par.state);
         atualizarContador();
         avaliarDestaque();
+        // Vale dizer que a retomada foi automática: sem isso parece que a sala decidiu
+        // sozinha voltar a pagar por uma imagem que ninguém pediu agora.
+        if (info?.retomando) status.textContent = `${par.name} voltou — a tela que você estava assistindo volta junto.`;
       },
-      aoSair: id => {
+      aoSair: (id, info) => {
         removerPar(id);
         atualizarContador();
         avaliarDestaque();
+        // Sumir sem explicação é o que faz a sala achar que o problema é dela. Dizer que a
+        // pessoa caiu, e que a volta se resolve sozinha, evita meia dúzia de "cadê o
+        // fulano?" no chat.
+        if (info?.caiu) status.textContent = `${info.nome} perdeu a conexão. Se voltar logo, a sala se recompõe sozinha.`;
       },
       aoMudarMidia: id => { ligarMidiaDoTile(id); avaliarDestaque(); },
       // A ordem em que a tela de alguém entrou só é conhecida aqui -- o quadradinho dela
       // já foi criado quando a faixa chegou, antes de o estado ser recalculado.
-      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); }
+      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); },
+
+      // Credencial NOVA a cada volta. A antiga tem prazo, e uma queda longa a deixa
+      // vencida: reaproveita-la faria a reconexao falhar justamente nos casos em que ela
+      // mais importa. O sufixo da sessao vai junto, entao a identidade nao muda.
+      pedirCredencial: async () => {
+        salaConfig = await buscarConfigDaSala(myName);
+        myId = salaConfig?.identidade || myId;
+        return salaConfig;
+      },
+      aoReconectar: republicarTudo,
+      aoMudarConexao: (estado, mensagem) => {
+        if (mensagem) status.textContent = mensagem;
+        else if (estado === 'failed') status.textContent = 'A mídia caiu e não foi possível voltar. O chat continua.';
+        atualizarContador();
+      },
+      // Quem transmite tambem precisa ceder quando a rede aperta: o controle de
+      // congestionamento do servidor age sobre o que SAI dele, nao sobre o que entra.
+      aoMudarQualidade: ajustarEnvioPelaQualidade
     });
     try {
       await transporte.conectar(salaConfig.url, salaConfig.token);
@@ -249,6 +304,10 @@ async function iniciarConexao() {
         return;
       }
       criarTileLocal();
+      // Entrar na sala já liga a proteção contra throttling. Antes ela só aparecia no
+      // primeiro clique no microfone ou na câmera -- quem entrava para assistir ficava sem
+      // nenhuma, e era candidato a cair por ociosidade sem nunca ter feito nada.
+      atualizarModoSegundoPlano();
       try {
         const recent = JSON.parse(localStorage.getItem('nexoRecentRooms') || '[]');
         localStorage.setItem('nexoRecentRooms', JSON.stringify([roomCode, ...(Array.isArray(recent) ? recent.filter(code => code !== roomCode) : [])].slice(0, 4)));
@@ -320,6 +379,18 @@ async function iniciarConexao() {
     avaliarDestaque();
   });
 
+  // O contraponto do aviso acima, e ele existe por um motivo concreto: a sinalização cai
+  // sozinha. Um socket que apenas oscilou dispara o "peer-left" para todo mundo -- mas a
+  // pessoa não saiu de lugar nenhum, e a mídia dela nunca chegou a cair. Sem este aviso, a
+  // anotação de saída a manteria fora da lista de todos por um minuto e meio, porque a
+  // sessão de mídia continua sendo a mesma e a anotação só sabe distinguir sessões.
+  socket.on('peer-joined', ({ identidade }) => {
+    if (!identidade || !transporte) return;
+    transporte.readmitir(identidade);
+    atualizarContador();
+    avaliarDestaque();
+  });
+
   socket.on('audio-data', (data) => receberPcm(data));
 
   socket.on('audio-error', (message) => { status.textContent = message; });
@@ -328,9 +399,11 @@ async function iniciarConexao() {
 
   socket.on('disconnect', () => {
     status.textContent = 'Desconectado do servidor. Tentando reconectar...';
+    registrarDiagnostico('socket.disconnect');
   });
   socket.on('connect_error', () => {
     status.textContent = 'Não foi possível alcançar o servidor. Tentando novamente...';
+    registrarDiagnostico('socket.connect_error');
   });
   // Register listeners before connecting: a fast socket used to beat the RTC fetch.
   socket.connect();
@@ -461,8 +534,22 @@ function opcoesDePublicacao(fonte) {
     videoCodec: codecDePublicacao(),
     simulcast: true,
     degradationPreference: prioridade.degradacao,
+    // Sem esta linha o cliente monta a escada sozinho -- e monta de dois degraus, o de
+    // baixo custando um quarto da captura. Quem assiste de uma rede ruim nao alcanca nem
+    // esse, e o servidor acaba empurrando mais do que o canal aguenta ate derrubar a
+    // pessoa. Os motivos estao por extenso em quality-utils.js.
+    screenShareSimulcastLayers: camadasDaTela(perfil, prioridade),
     screenShareEncoding: { maxBitrate: perfil.bitrate, maxFramerate: prioridade.fps }
   };
+}
+
+// A escada declarada no perfil vira presets do cliente. O degrau de baixo carrega a taxa de
+// quadros dele, baixa de proposito: numa conexao apertada, texto legivel a 15 quadros vale
+// mais do que borrao a 30. Nenhum degrau pede mais quadros do que a prioridade escolhida ja
+// permite -- "nitidez" a 30 nao deve virar 60 por causa da escada.
+function camadasDaTela(perfil, prioridade) {
+  return (perfil.camadas || []).map(([largura, altura, bitrate, fps]) =>
+    new LivekitClient.VideoPreset(largura, altura, bitrate, Math.min(fps, prioridade.fps)));
 }
 
 // Substitui o que "definirFaixaEmTodosOsPares" fazia na malha: agora ha um destino so.
@@ -499,7 +586,111 @@ function publicarFonte(fonte, faixa) {
 // Nome preservado da malha: a interface inteira chama por aqui e nao precisa saber que
 // agora existe um destino so.
 function definirFaixaEmTodosOsPares(source, track) {
-  return publicarFonte(source, track);
+  const publicacao = publicarFonte(source, track);
+  // Faixa de microfone recem-publicada nasce ANUNCIADA como ativa, mesmo que a pessoa
+  // esteja muda: o anuncio precisa ser refeito por cima dela.
+  return source === 'mic' ? publicacao.then(anunciarMudoDoMic) : publicacao;
+}
+
+// `faixa.enabled = false` cala o som de verdade, mas e uma decisao que morre neste
+// navegador: o servidor de midia continua anunciando a publicacao como ativa e, do outro
+// lado, o icone fica ligado enquanto ninguem ouve nada. Quem conta o mudo para a sala e o
+// mute() da publicacao, que viaja pela sinalizacao -- inclusive para quem entrar depois.
+//
+// Vai pela mesma fila das publicacoes porque a ordem importa: anunciar o mudo de uma faixa
+// que ainda esta subindo nao chega a lugar nenhum.
+function anunciarMudoDoMic() {
+  const tarefa = filaDePublicacao.catch(() => {}).then(async () => {
+    const faixa = publicacoesLocais.mic?.track;
+    if (typeof faixa?.mute !== 'function') return;
+    // micMuted e lido aqui, e nao no agendamento: entre um e outro a pessoa pode ter
+    // clicado no botao de novo, e quem vale e o ultimo clique.
+    if (faixa.isMuted === micMuted) return;
+    await (micMuted ? faixa.mute() : faixa.unmute());
+  }).catch(() => { /* sala caiu no meio; o proximo anuncio corrige */ });
+  filaDePublicacao = tarefa;
+  return tarefa;
+}
+
+// ---------- Voltar ao ar depois de uma queda ----------
+
+// Uma sessao nova no servidor de midia comeca sem faixa nenhuma, e os objetos de publicacao
+// da sessao anterior apontam para um transporte que nao existe mais. Reaproveita-los faria
+// `publicarFonte` tentar trocar a faixa de uma publicacao morta -- sem erro visivel e sem
+// nada subindo, que e a pior forma de falhar. Por isso a lista e zerada ANTES de republicar.
+//
+// As capturas em si sobrevivem a queda porque a sala pede que o servidor de midia nao as
+// encerre (stopLocalTrackOnUnpublish, em room-transport.js). Sem isso a tela nao voltaria:
+// pedi-la de novo exige um gesto da pessoa, e ninguem clica em "compartilhar tela" no meio
+// de uma oscilacao de rede que nem percebeu.
+async function republicarTudo() {
+  Object.keys(publicacoesLocais).forEach(fonte => { publicacoesLocais[fonte] = null; });
+  tetoDeEnvioAplicado = 1;
+
+  const viva = faixa => Boolean(faixa) && faixa.readyState === 'live';
+  if (viva(faixaEnviadaDoMic)) {
+    await publicarFonte('mic', faixaEnviadaDoMic);
+    await anunciarMudoDoMic();
+  }
+  const camera = cameraStream?.getVideoTracks()[0];
+  if (viva(camera)) await publicarFonte('camera', camera);
+  const tela = screenStream?.getVideoTracks()[0];
+  if (viva(tela)) await publicarFonte('screen', tela);
+  const somDaTela = viva(appAudioTrack) ? appAudioTrack : screenStream?.getAudioTracks()[0];
+  if (viva(somDaTela)) await publicarFonte('screenAudio', somDaTela);
+
+  // A qualidade so gera aviso quando MUDA. Quem volta com a rede ainda ruim nao receberia
+  // aviso nenhum, e subiria no teto cheio -- direto para a queda seguinte.
+  await ajustarEnvioPelaQualidade(transporte?.qualidade);
+}
+
+// ---------- Ceder banda quando a rede aperta, do lado de quem ENVIA ----------
+
+// O controle de congestionamento do servidor de midia cuida do que SAI dele para cada
+// espectador. O que ENTRA -- a copia que esta pagina envia -- e responsabilidade daqui: se
+// a conexao de quem transmite aperta, o servidor so ve a midia chegando picada, e nao ha
+// como consertar o que nao chegou.
+//
+// O ajuste vai direto nos parametros do remetente, sem republicar. Republicar renegocia, e
+// renegociar numa conexao que ja esta ruim e exatamente o que nao se deve fazer: e a
+// diferenca entre "a imagem piorou um pouco" e "a sala caiu". Só maxBitrate e tocado --
+// os outros campos ficam como estao, porque um deles e o "active" com que o servidor
+// desliga as camadas que ninguem esta consumindo.
+const TETOS_POR_QUALIDADE = { poor: 0.25, lost: 0.25, good: 0.6, excellent: 1 };
+let tetoDeEnvioAplicado = 1;
+// Os tetos de origem de cada camada, guardados na primeira vez que mexemos no remetente.
+// Sem eles, aplicar 60% duas vezes daria 36%: o fator tem de incidir sempre sobre o valor
+// original, nunca sobre o que ja foi reduzido.
+const tetosOriginais = new WeakMap();
+
+async function ajustarEnvioPelaQualidade(qualidade) {
+  const fator = TETOS_POR_QUALIDADE[qualidade];
+  if (!fator || fator === tetoDeEnvioAplicado) return;
+  const aplicado = [];
+  for (const fonte of ['screen', 'camera']) {
+    const remetente = publicacoesLocais[fonte]?.track?.sender;
+    if (typeof remetente?.getParameters !== 'function') continue;
+    try {
+      const parametros = remetente.getParameters();
+      if (!parametros.encodings?.length) continue;
+      let originais = tetosOriginais.get(remetente);
+      if (!originais) {
+        originais = parametros.encodings.map(encoding => encoding.maxBitrate || 0);
+        tetosOriginais.set(remetente, originais);
+      }
+      parametros.encodings.forEach((encoding, indice) => {
+        const base = originais[indice];
+        // Nunca abaixo do degrau mais baixo util: cortar alem disso nao economiza nada que
+        // importe e so transforma a imagem em pasta.
+        if (base) encoding.maxBitrate = Math.max(120_000, Math.round(base * fator));
+      });
+      await remetente.setParameters(parametros);
+      aplicado.push(fonte);
+    } catch (_) { /* O proximo aviso de qualidade tenta de novo. */ }
+  }
+  if (!aplicado.length) return;
+  tetoDeEnvioAplicado = fator;
+  registrarDiagnostico('midia.tetoDeEnvio', `${Math.round(fator * 100)}% em ${aplicado.join(' e ')}`);
 }
 
 function paraCadaPar(fn) { peers.forEach(fn); }
@@ -620,8 +811,7 @@ async function virarCamera() {
       catch (_) {
         cameraStream = null;
         definirFaixaEmTodosOsPares('camera', null, null);
-        cameraBtn.textContent = 'Ligar câmera';
-        cameraBtn.setAttribute('aria-pressed', 'false');
+        pintarBotaoDaCamera(false);
         atualizarTile('self');
         avaliarDestaque();
         enviarEstado();
@@ -672,11 +862,10 @@ function atualizarBotaoDeVirarCamera() {
   flipCameraBtn.hidden = !mostrar;
   if (!mostrar) return;
   const traseira = ladoAtualDaCamera() === 'environment';
-  const rotulo = traseira ? 'Câmera frontal' : 'Câmera traseira';
-  flipCameraBtn.textContent = rotulo;
-  // No celular o rótulo é encurtado pelo CSS; o nome inteiro fica aqui, para o leitor de tela.
-  flipCameraBtn.setAttribute('aria-label', rotulo);
+  // O rótulo é sempre "Virar" — o nome inteiro fica no título e no leitor de tela, que é
+  // onde ele cabe sem alargar o botão a cada troca de lado.
   flipCameraBtn.title = traseira ? 'Voltar para a câmera frontal' : 'Usar a câmera traseira';
+  flipCameraBtn.setAttribute('aria-label', flipCameraBtn.title);
 }
 
 async function abrirMicrofone(forcarDispositivo) {
@@ -732,7 +921,7 @@ async function montarFiltroDeRuido() {
       erroDoFiltro = true;
       desmontarFiltroDeRuido();
       escolherFaixaDoMic();
-      status.textContent = 'Redução inteligente indisponível. A voz continua com o filtro do navegador.';
+      status.textContent = 'Redução de ruído indisponível aqui. A voz continua com o filtro do navegador.';
     };
     contexto.addEventListener('statechange', escolherFaixaDoMic);
     escolherFaixaDoMic();
@@ -781,12 +970,14 @@ function escolherFaixaDoMic() {
 
 function atualizarBotaoDeRuido() {
   const ativo = Boolean(filtroDeRuidoLigado && cadeiaDeRuido?.contexto.state === 'running' && faixaEnviadaDoMic === cadeiaDeRuido.faixa);
-  noiseBtn.textContent = ativo ? 'RNNoise ativo' : carregandoFiltro ? 'Preparando RNNoise…' : 'Filtro do navegador';
+  // "RNNoise" é o nome da biblioteca, não do que ela faz: o rótulo diz o resultado, e o
+  // nome fica no título para quem for procurar.
+  noiseBtn.textContent = ativo ? 'Ruído reduzido' : carregandoFiltro ? 'Preparando…' : 'Filtro do navegador';
   noiseBtn.setAttribute('aria-pressed', String(filtroDeRuidoLigado));
   noiseBtn.classList.toggle('secondary', !ativo);
-  noiseBtn.title = ativo ? 'Redução inteligente local, sem limite de uso. Clique para usar só o filtro do navegador.'
-    : erroDoFiltro ? 'RNNoise indisponível neste dispositivo. O filtro do navegador continua funcionando.'
-    : 'Clique para alternar a redução inteligente de ruído.';
+  noiseBtn.title = ativo ? 'RNNoise limpando sua voz neste computador. Clique para usar só o filtro do navegador.'
+    : erroDoFiltro ? 'RNNoise indisponível neste aparelho. O filtro do navegador continua valendo.'
+    : 'Clique para ligar a redução de ruído do Nexo.';
 }
 
 function liberarContextoDeAudio() {
@@ -805,17 +996,39 @@ noiseBtn.onclick = () => {
   liberarContextoDeAudio();
   escolherFaixaDoMic();
   status.textContent = filtroDeRuidoLigado
-    ? 'Redução inteligente solicitada. O botão indica quando RNNoise estiver ativo.'
-    : 'Usando a redução de ruído padrão do navegador.';
+    ? 'Redução de ruído ligada. O botão avisa quando ela estiver valendo.'
+    : 'Redução de ruído desligada. Vale a do próprio navegador.';
 };
 
 // ---------- Mic ----------
+// O rotulo dos botoes da barra e o NOME da coisa, sempre o mesmo; quem conta o estado e o
+// icone (riscado quando desligado) e a cor. Antes cada botao contava uma historia diferente
+// -- o microfone dizia como estava ("Mic mudo"), a camera dizia o que faria ("Ligar
+// camera") -- e o texto ainda mudava de largura a cada clique, empurrando a barra inteira.
 function atualizarBotaoDoMic() {
   const semMicrofone = !micTrack;
-  micBtn.textContent = semMicrofone ? 'Ativar mic' : (micMuted ? 'Mic mudo' : 'Mic ligado');
-  micBtn.setAttribute('aria-pressed', String(!semMicrofone && !micMuted));
-  micBtn.classList.toggle('secondary', semMicrofone || micMuted);
-  micBtn.title = semMicrofone ? 'Ativar o microfone' : 'Microfone';
+  const desligado = semMicrofone || micMuted;
+  micBtn.setAttribute('aria-pressed', String(!desligado));
+  micBtn.classList.toggle('secondary', desligado);
+  micBtn.classList.toggle('desligado', desligado);
+  micBtn.title = semMicrofone ? 'Ativar o microfone' : micMuted ? 'Tirar o microfone do mudo' : 'Deixar o microfone mudo';
+  micBtn.setAttribute('aria-label', micBtn.title);
+  atualizarEspelhoDosAparelhos();
+}
+
+function pintarBotaoDaCamera(ligada) {
+  cameraBtn.setAttribute('aria-pressed', String(ligada));
+  cameraBtn.classList.toggle('desligado', !ligada);
+  cameraBtn.title = ligada ? 'Desligar a câmera' : 'Ligar a câmera';
+  cameraBtn.setAttribute('aria-label', cameraBtn.title);
+  atualizarEspelhoDosAparelhos();
+}
+
+function pintarBotaoDaTela(compartilhando) {
+  screenBtn.setAttribute('aria-pressed', String(compartilhando));
+  screenBtn.classList.toggle('desligado', !compartilhando);
+  screenBtn.title = compartilhando ? 'Parar de compartilhar a tela' : 'Compartilhar sua tela';
+  screenBtn.setAttribute('aria-label', screenBtn.title);
 }
 
 let abrindoMicrofone = false;
@@ -824,15 +1037,16 @@ let abrindoMicrofone = false;
 async function ativarMicrofone() {
   if (abrindoMicrofone) return;
   if (!temMediaDevices) {
-    status.textContent = 'Este navegador não libera microfone nesta página. É preciso abrir por HTTPS (ou localhost).';
+    status.textContent = 'Este navegador só libera o microfone por HTTPS (ou localhost).';
     return;
   }
   abrindoMicrofone = true;
   micBtn.disabled = true;
-  micBtn.textContent = 'Abrindo...';
+  micBtn.classList.add('ocupado');
   try {
     micStream = await abrirMicrofone();
     micTrack = micStream.getAudioTracks()[0];
+    instrumentarFaixaDoMic(micTrack);
     faixaEnviadaDoMic = micTrack;
     micMuted = false;
     micTrack.enabled = true;
@@ -855,9 +1069,11 @@ async function ativarMicrofone() {
   } finally {
     abrindoMicrofone = false;
     micBtn.disabled = false;
+    micBtn.classList.remove('ocupado');
     atualizarBotaoDoMic();
     atualizarTile('self');
     enviarEstado();
+    atualizarModoSegundoPlano();
   }
 }
 
@@ -869,9 +1085,13 @@ function alternarMic() {
   // filtro ligado.
   if (faixaEnviadaDoMic && faixaEnviadaDoMic !== micTrack) faixaEnviadaDoMic.enabled = !micMuted;
   escolherFaixaDoMic();
+  // A faixa publicada pode ser a mesma de antes (nada a republicar): o anúncio do mudo sai
+  // daqui de qualquer jeito.
+  anunciarMudoDoMic();
   atualizarBotaoDoMic();
   atualizarTile('self');
   enviarEstado();
+  atualizarModoSegundoPlano();
 }
 micBtn.onclick = alternarMic;
 
@@ -961,7 +1181,7 @@ async function listarDispositivos() {
   // "Dispositivo 1, Dispositivo 2" e deixar a pessoa adivinhar.
   const semNomes = [...entradas, ...cameras].some(d => !d.label);
   devicesDica.textContent = semNomes
-    ? 'Os nomes dos dispositivos só aparecem depois que você ativa o microfone ou a câmera pelo menos uma vez.'
+    ? 'Os nomes aparecem depois que você ativa o microfone ou a câmera uma vez.'
     : (podeEscolherSaida ? '' : 'Este navegador não deixa escolher a saída de áudio; quem decide é o sistema.');
 }
 
@@ -977,6 +1197,7 @@ async function trocarMicrofone(id) {
 
   micStream = novo;
   micTrack = novo.getAudioTracks()[0];
+  instrumentarFaixaDoMic(micTrack);
   micTrack.enabled = !micMuted;
 
   // O filtro e o medidor de voz vivem presos ao stream antigo: os dois são refeitos.
@@ -1012,8 +1233,7 @@ async function trocarCamera(id) {
     catch (_) {
       cameraStream = null;
       definirFaixaEmTodosOsPares('camera', null, null);
-      cameraBtn.textContent = 'Ligar câmera';
-      cameraBtn.setAttribute('aria-pressed', 'false');
+      pintarBotaoDaCamera(false);
       atualizarTile('self');
       atualizarBotaoDeVirarCamera();
       avaliarDestaque();
@@ -1043,6 +1263,10 @@ devicesClose.onclick = () => devicesPanel.classList.add('hidden');
 devicesPanel.addEventListener('click', (e) => {
   if (e.target === devicesPanel) devicesPanel.classList.add('hidden');
 });
+// O painel fecha por quatro caminhos (botão, clique no fundo, Esc, e o foco do room-ui):
+// observar a classe pega todos de uma vez, em vez de lembrar de chamar em cada um.
+new MutationObserver(() => atualizarEspelhoDosAparelhos())
+  .observe(devicesPanel, { attributes: true, attributeFilter: ['class'] });
 
 // Fone conectado ou removido no meio da conversa: a lista se atualiza sozinha.
 navigator.mediaDevices?.addEventListener?.('devicechange', listarDispositivos);
@@ -1058,7 +1282,7 @@ let qualidadeDoEnvio = null;
 // imagem travando, e o navegador sabe a resposta. Ela vale mais em português do que como
 // "qualityLimitationReason: cpu" escondido num relatório.
 const MOTIVOS_DE_LIMITE = {
-  cpu: 'O processador não dá conta de codificar tudo isso. Baixe a qualidade, feche o que estiver pesado, ou escolha Fluidez.',
+  cpu: 'O processador não dá conta desta qualidade. Baixe um nível, feche o que estiver pesado ou escolha Fluidez.',
   bandwidth: 'Sua conexão de subida não dá conta. Baixe a qualidade — nada aqui contorna o limite do link.',
   other: 'O navegador está limitando o envio por outro motivo.'
 };
@@ -1079,8 +1303,9 @@ function atualizarBotaoDeQualidade() {
     : '';
   ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}`
     + camadas
-    + (motivo ? `\n${motivo}` : '\nNada está limitando o envio: os quadros que saem são os que a fonte entrega.')
-    + '\nCada pessoa recebe a camada que a conexão dela aguenta.';
+    // A frase sobre a camada de cada espectador já está no parágrafo logo acima do painel;
+    // repeti-la aqui só empurrava as medições para baixo.
+    + (motivo ? `\n${motivo}` : '\nNada está limitando o envio.');
 }
 
 // Uma leitura periodica do envio, so para a interface. Ela nao decide mais nada: ajustar
@@ -1163,8 +1388,7 @@ async function alternarCamera() {
     cameraStream.getTracks().forEach(t => t.stop());
     cameraStream = null;
     definirFaixaEmTodosOsPares('camera', null, null);
-    cameraBtn.textContent = 'Ligar câmera';
-    cameraBtn.setAttribute('aria-pressed', 'false');
+    pintarBotaoDaCamera(false);
   } else {
     try {
       cameraStream = await abrirCamera();
@@ -1175,8 +1399,7 @@ async function alternarCamera() {
     const track = cameraStream.getVideoTracks()[0];
     definirFaixaEmTodosOsPares('camera', track, cameraStream);
     track.onended = alternarCamera;
-    cameraBtn.textContent = 'Desligar câmera';
-    cameraBtn.setAttribute('aria-pressed', 'true');
+    pintarBotaoDaCamera(true);
     const medida = track.getSettings?.() || {};
     if (medida.facingMode === 'user' || medida.facingMode === 'environment') guardarLadoDaCamera(medida.facingMode);
     if (medida.width && medida.height) {
@@ -1190,6 +1413,7 @@ async function alternarCamera() {
   // estando sozinho tem de acender o palco na hora, sem depender de outro evento chegar.
   avaliarDestaque();
   enviarEstado();
+  atualizarModoSegundoPlano();
 }
 cameraBtn.onclick = alternarCamera;
 flipCameraBtn.onclick = virarCamera;
@@ -1197,7 +1421,7 @@ flipCameraBtn.onclick = virarCamera;
 // ---------- Tela ----------
 function abrirPainelDeTela(modo) {
   settingsMode = modo;
-  settingsTitle.textContent = modo === 'update' ? 'Atualizar tela compartilhada' : 'Configurar compartilhamento de tela';
+  settingsTitle.textContent = modo === 'update' ? 'Trocar o que está na tela' : 'Compartilhar tela';
   confirmScreenBtn.textContent = modo === 'update' ? 'Atualizar' : 'Compartilhar';
   settingsPanel.classList.remove('hidden');
   acompanharAplicativos(true);
@@ -1286,17 +1510,17 @@ function atualizarExplicacaoDeAudio() {
   const plano = planoDeAudio();
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
-    aba: 'O áudio da aba escolhida será transmitido. Marque "Compartilhar áudio da guia" na janela do navegador. Como é o áudio só daquela aba, não existe risco de eco.',
-    'janela-navegador': 'Escolha uma janela. Somente o áudio dessa janela será solicitado, quando o navegador oferecer essa opção. Caso contrário, será transmitida sem áudio. Nunca incluímos o áudio do sistema nesse modo.',
+    aba: 'Marque "Compartilhar áudio da guia" na janela do navegador. Como vai só o som daquela aba, não há risco de eco.',
+    'janela-navegador': 'Vai só o som da janela escolhida, quando o navegador oferece essa opção — nunca o som do resto do sistema. Se não oferecer, a tela vai sem áudio.',
     agente: textoDaCaptura('agente'),
     helper: textoDaCaptura('helper'),
-    'navegador-sistema': 'O áudio do SEU computador será capturado pelo navegador. Marque "Compartilhar áudio do sistema" na janela que abrir — sem isso o Chrome não envia áudio nenhum.'
+    'navegador-sistema': 'Marque "Compartilhar áudio do sistema" na janela que abrir. Sem isso o navegador não envia som nenhum.'
   };
   echoHint.textContent = textos[plano];
   if (captureMode.value === 'window' && aplicativoNativo && audioPolicy.value !== 'none') {
-    echoHint.textContent = 'O áudio do programa será escolhido automaticamente junto com a janela. Outras janelas ou abas que pertencem ao mesmo processo também podem ser ouvidas. O áudio desta aplicação fica fora.';
+    echoHint.textContent = 'O som do programa vai junto com a janela, automaticamente. Outras janelas do mesmo programa podem ser ouvidas também.';
   }
-  if (aplicativoNativo && plano === 'nenhum' && audioPolicy.value !== 'none') echoHint.textContent = 'Agente de áudio indisponível. A imagem será compartilhada sem som; reinicie o aplicativo atualizado para usar o áudio automático.';
+  if (aplicativoNativo && plano === 'nenhum' && audioPolicy.value !== 'none') echoHint.textContent = 'Sem o agente de áudio a tela vai sem som. Reinicie o aplicativo para tentar de novo.';
   atualizarCaixaDoAgente(plano);
 
   // A escolha do programa vale nos dois caminhos de captura nativa: pelo agente (no PC de
@@ -1311,9 +1535,9 @@ function atualizarExplicacaoDeAudio() {
   echoWarning.hidden = !riscoDeEco;
   if (riscoDeEco) {
     const explicacoes = {
-      'helper-ausente': 'O helper nativo não está compilado neste computador, então não dá para remover o áudio desta chamada da captura: a voz dos outros participantes pode voltar como eco. Rode "npm start" (que compila o helper) ou compartilhe uma aba.',
-      'atras-de-proxy': 'Esta sala foi aberta por um endereço público/túnel, então a captura nativa fica desativada — ela roda na máquina do servidor e enviaria o áudio do computador do host, não o seu. Seu áudio do sistema será capturado pelo navegador; a voz dos outros participantes pode voltar como eco. Se você É quem hospeda, abra a sala por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador para liberar a captura nativa.',
-      remoto: 'Você não está no computador que executa o servidor, então a captura nativa não vale aqui (ela pegaria o áudio do host). O navegador vai capturar o áudio do SEU computador normalmente, mas a voz dos outros participantes pode voltar como eco.'
+      'helper-ausente': 'Sem o helper nativo não dá para tirar esta chamada da captura, e a voz dos outros pode voltar como eco. Rode "npm start" para compilá-lo, ou compartilhe uma aba.',
+      'atras-de-proxy': 'Por um endereço público a captura nativa fica desativada: ela rodaria na máquina do servidor e enviaria o áudio de lá. O navegador captura o som daqui, mas a voz dos outros pode voltar como eco. Se você hospeda a sala, abra-a por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador.',
+      remoto: 'A captura nativa só vale no computador que executa o servidor. O navegador captura o som daqui normalmente, mas a voz dos outros pode voltar como eco.'
     };
     echoWarningText.textContent = explicacoes[audioCapabilities.motivo] || explicacoes.remoto;
   }
@@ -1330,11 +1554,10 @@ function atualizarAvisoDeCaptura() {
   const mostrar = ehWindows && captureMode.value === 'window';
   capturaAviso.hidden = !mostrar;
   if (!mostrar) return;
-  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quadros dentro do jogo: '
-    + 'o Windows precisa compor essa janela de novo só para a captura, e um jogo em tela cheia '
-    + 'perde o caminho direto até o monitor. A tarja amarela em volta vem daí também — é o aviso '
-    + 'de captura do próprio Windows, e desligá-lo só existe no Windows 11. A tela inteira lê o '
-    + 'quadro que a placa de vídeo já desenhou: mesma imagem, sem tarja e sem mexer no jogo.';
+  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quadros dentro do jogo — o '
+    + 'Windows precisa desenhá-la de novo só para a captura — e é daí que vem a tarja amarela em '
+    + 'volta. A tela inteira lê o quadro que a placa de vídeo já fez: mesma imagem, sem tarja e '
+    + 'sem tirar quadros do jogo.';
 }
 
 // Mostra o estado do agente e, quando ele nao esta rodando, oferece o download ja
@@ -1355,14 +1578,14 @@ function atualizarCaixaDoAgente(plano) {
     ? (excluindoOutro
       ? 'O som do seu computador vai junto com a tela, sem o programa escolhido abaixo.'
       : 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.')
-    : 'Baixe e execute o agente neste computador para transmitir o som do SEU sistema sem eco. É um único arquivo, sem instalação: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus bloquear ou apagar o arquivo, é alarme falso: escolha "Manter" na lista de downloads do navegador.';
+    : 'Um arquivo só, sem instalar: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus reclamar, é alarme falso — escolha "Manter" nos downloads do navegador.';
   // Dentro do aplicativo o agente vem junto: oferecer o download seria mandar a pessoa
   // resolver a mao um problema que o proprio aplicativo ja resolve.
   agenteDownload.hidden = conectado || Boolean(aplicativoNativo);
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
   if (!conectado && aplicativoNativo) {
-    agenteTexto.textContent = 'O aplicativo está subindo o agente de áudio. Se esta mensagem '
-      + 'não sair em alguns segundos, o AgenteAudio.exe não foi encontrado ao lado do aplicativo.';
+    agenteTexto.textContent = 'Subindo o agente de áudio. Se esta mensagem não sair em alguns '
+      + 'segundos, o AgenteAudio.exe não está ao lado do aplicativo.';
   }
 }
 
@@ -1450,11 +1673,11 @@ function desenharAplicativos() {
   excluirApp.hidden = !precisaEscolher;
   excluirAppRotulo.hidden = !precisaEscolher;
   excluirAppRotulo.textContent = modoDeAudio === 'incluir'
-    ? 'Programa cujo som SERÁ transmitido'
-    : 'Programa que NÃO será transmitido';
+    ? 'Programa que entra'
+    : 'Programa que fica de fora';
   if (!precisaEscolher) {
-    excluirAppDica.textContent = 'O som deste aplicativo fica fora da captura, então a voz e as '
-      + 'telas dos outros não voltam como eco. Todo o resto do computador vai junto — inclusive o navegador.';
+    excluirAppDica.textContent = 'O som deste aplicativo fica fora, então a sala não volta como eco. '
+      + 'Todo o resto do computador vai junto.';
     return;
   }
 
@@ -1811,7 +2034,7 @@ async function capturarTela() {
           });
           if (confirmado) await iniciarAudioDoSistema(stream, 'agente');
           else { audioDaJanela = null; stream.nexoAudioAviso = 'Janela compartilhada sem som: atualize o agente de áudio para esta versão.'; }
-        } else stream.nexoAudioAviso = 'Janela compartilhada sem som: não foi possível identificar o processo de áudio, ou a janela pertence a esta aplicação.';
+        } else stream.nexoAudioAviso = 'Janela compartilhada sem som: o programa dono dela não foi identificado.';
       } else {
         enviarEscolhaDeAudio();
         await iniciarAudioDoSistema(stream, plano === 'agente' ? 'agente' : 'local');
@@ -1838,12 +2061,12 @@ confirmScreenBtn.onclick = async () => {
     if (!telaAntiga) ordemDaMinhaTela = ++sequenciaDeCompartilhamento;
 
     definirFaixaEmTodosOsPares('screen', screenStream.getVideoTracks()[0], screenStream);
+    atualizarModoSegundoPlano();
     definirFaixaEmTodosOsPares('screenAudio', screenStream.getAudioTracks()[0] || null, screenStream);
 
     if (telaAntiga) telaAntiga.getTracks().forEach(t => t.stop());
     fecharPainelDeTela();
-    screenBtn.textContent = 'Parar tela';
-    screenBtn.setAttribute('aria-pressed', 'true');
+    pintarBotaoDaTela(true);
     updateScreenBtn.hidden = false;
     atualizarTile('self');
     avaliarDestaque();
@@ -1855,8 +2078,8 @@ confirmScreenBtn.onclick = async () => {
     else if (plano === 'nenhum') status.textContent = 'Compartilhando tela (sem áudio).';
     else if (!temAudio) {
       status.textContent = (plano === 'agente' || plano === 'helper')
-        ? 'Compartilhando tela, mas a captura nativa de áudio não iniciou. Veja o aviso acima.'
-        : 'Compartilhando sem áudio: o navegador não ofereceu som para essa fonte ou a opção não foi marcada. Para som de uma aba, escolha "Aba do navegador" e marque compartilhar áudio.';
+        ? 'Compartilhando a tela, mas sem som: a captura de áudio não iniciou.'
+        : 'Compartilhando a tela sem som. Para levar o áudio junto, compartilhe uma aba e marque a caixa de áudio do navegador.';
     }
     else if (audioDaJanela) status.textContent = `Compartilhando janela + áudio do programa ${audioDaJanela.nome}.`;
     else if (plano === 'agente') status.textContent = 'Compartilhando tela + áudio conforme a seleção do sistema.';
@@ -1880,9 +2103,9 @@ function pararTela() {
   ordemDaMinhaTela = 0;
   limparAudioDoAplicativo();
   definirFaixaEmTodosOsPares('screen', null, null);
+  atualizarModoSegundoPlano();
   definirFaixaEmTodosOsPares('screenAudio', null, null);
-  screenBtn.textContent = 'Compartilhar tela';
-  screenBtn.setAttribute('aria-pressed', 'false');
+  pintarBotaoDaTela(false);
   updateScreenBtn.hidden = true;
   atualizarTile('self');
   if (pinned?.id === 'self' && pinned.source === 'screen') { pinned = null; destaqueManual = false; }
@@ -1897,12 +2120,12 @@ function pararTela() {
 if (!suportaCompartilharTela) {
   screenBtn.disabled = true;
   screenBtn.title = 'Este navegador não permite compartilhar tela (comum em celulares).';
-  screenBtn.textContent = 'Tela indisponível';
+  screenBtn.classList.add('desligado');
 }
 
 screenBtn.onclick = () => {
   if (!suportaCompartilharTela) {
-    status.textContent = 'Compartilhar tela não é possível neste navegador. Use um computador para isso.';
+    status.textContent = 'Este navegador não compartilha tela. Use um computador para transmitir a sua.';
     return;
   }
   if (screenStream) pararTela();
@@ -2076,6 +2299,158 @@ mostrarControlesDoPalco();
 document.addEventListener('fullscreenchange', mostrarControlesDoPalco);
 document.addEventListener('webkitfullscreenchange', mostrarControlesDoPalco);
 
+// ---------- Segundo plano no celular ----------
+// Celular suspende getUserMedia quando o navegador sai de primeiro plano -- isso e o
+// sistema operacional protegendo camera e microfone, nao da para contornar via JS. O que
+// da para fazer e convencer o navegador de que esta aba "toca midia", que e o unico caso
+// em que Android (Chrome) deixa de congelar a aba agressivamente: um <audio> realmente
+// tocando, mais uma Media Session registrada. Video de camera mesmo assim para quando a
+// tela bloqueia ou o app troca -- so o audio tem chance real de sobreviver, e so no
+// Android; no iPhone (Safari) o sistema e bem mais restritivo e pode cortar de qualquer
+// jeito. Nada aqui e garantia, e sim a melhor tentativa que o navegador permite.
+let elementoDeFundo = null;
+let contextoDeFundo = null;
+let travaDeTela = null;
+
+// Diagnostico temporario: "para depois de alguns segundos" pode ser (a) o Android revogando
+// o hardware do microfone quando o Chrome perde o foco -- sem solucao via JS --, (b) o
+// AudioContext do truque de audio sendo suspenso pelo navegador, ou (c) a propria conexao
+// com o servidor de midia caindo. Cada causa pede um remedio diferente (ou nenhum), entao
+// fica registrado em vez de adivinhado. Remover depois de descobrir a causa real.
+const DIAGNOSTICO_CHAVE = 'sala.diagnosticoSegundoPlano';
+const inicioDoDiagnostico = Date.now();
+function registrarDiagnostico(evento, detalhe = '') {
+  const linha = `+${((Date.now() - inicioDoDiagnostico) / 1000).toFixed(1)}s ${evento}${detalhe ? ' ' + detalhe : ''}`;
+  console.info('[bg]', linha);
+  try {
+    const lista = JSON.parse(localStorage.getItem(DIAGNOSTICO_CHAVE) || '[]');
+    lista.push(linha);
+    while (lista.length > 300) lista.shift();
+    localStorage.setItem(DIAGNOSTICO_CHAVE, JSON.stringify(lista));
+  } catch (_) {}
+}
+window.verDiagnosticoSegundoPlano = () => {
+  try { return JSON.parse(localStorage.getItem(DIAGNOSTICO_CHAVE) || '[]').join('\n'); }
+  catch (_) { return ''; }
+};
+window.limparDiagnosticoSegundoPlano = () => { try { localStorage.removeItem(DIAGNOSTICO_CHAVE); } catch (_) {} };
+
+// O áudio de fundo não existe para alguém ouvir: ele existe para o navegador NÃO tratar
+// esta aba como ociosa. Aba sem áudio tocando é candidata a throttling agressivo -- os
+// temporizadores caem para um por minuto, e com eles vão os batimentos que mantêm a
+// sinalização viva. Aparece como "fulano caiu sozinho", e cai justamente quem está quieto.
+//
+// A pergunta aqui era "está produzindo alguma coisa?", e a resposta virava NÃO no instante
+// em que a pessoa mutava o microfone -- exatamente o momento em que ela mais precisa da
+// proteção, porque acabou de ficar quieta. Quem só assistia nunca teve proteção nenhuma, e
+// compartilhar tela não contava. A pergunta certa é "está na sala?".
+//
+// Custa um oscilador silencioso. Perder a chamada custa a conversa.
+function precisaDeSegundoPlano() {
+  return Boolean(transporte?.conectada || socket?.connected || micStream || cameraStream || screenStream);
+}
+
+// A trava de tela é outra conversa: ela mantém o MONITOR aceso, e isso tem custo real de
+// bateria. Vale enquanto há algo que a pessoa esteja produzindo ou olhando -- inclusive a
+// tela de outro, que é o caso clássico de o monitor apagar no meio da apresentação.
+function precisaDeTravaDeTela() {
+  if ((micStream && !micMuted) || cameraStream || screenStream) return true;
+  for (const par of peers.values()) if (par.assistindo) return true;
+  return false;
+}
+
+function garantirAudioDeFundo() {
+  if (elementoDeFundo || !AudioContextClass) return;
+  try {
+    // Referencia propria porque o close() do pararAudioDeFundo dispara "statechange" DEPOIS
+    // de a variavel ja ter virado null: lendo a global, o ouvinte estourava um TypeError
+    // bem no caminho de saida da sala.
+    const contexto = contextoDeFundo = new AudioContextClass();
+    const destino = contexto.createMediaStreamDestination();
+    const fonte = contexto.createConstantSource();
+    const ganho = contexto.createGain();
+    // Nao e zero de proposito: alguns navegadores detectam silencio absoluto e aplicam o
+    // mesmo throttling de uma aba sem audio nenhum. Neste volume nao da para ouvir.
+    ganho.gain.value = 0.0001;
+    fonte.connect(ganho).connect(destino);
+    fonte.start();
+    contexto.resume().catch(() => {});
+    contexto.addEventListener('statechange', () => registrarDiagnostico('audioDeFundo.contexto', contexto.state));
+    elementoDeFundo = new Audio();
+    elementoDeFundo.srcObject = destino.stream;
+    elementoDeFundo.volume = 0.01;
+    elementoDeFundo.addEventListener('pause', () => registrarDiagnostico('audioDeFundo.pausou'));
+    elementoDeFundo.addEventListener('ended', () => registrarDiagnostico('audioDeFundo.terminou'));
+    elementoDeFundo.addEventListener('error', () => registrarDiagnostico('audioDeFundo.erro'));
+    elementoDeFundo.play().then(() => registrarDiagnostico('audioDeFundo.tocando'))
+      .catch(err => registrarDiagnostico('audioDeFundo.playFalhou', err.name));
+  } catch (err) { registrarDiagnostico('audioDeFundo.excecao', err.message); }
+}
+
+function pararAudioDeFundo() {
+  elementoDeFundo?.pause();
+  elementoDeFundo = null;
+  contextoDeFundo?.close().catch(() => {});
+  contextoDeFundo = null;
+}
+
+function atualizarMediaSession(ativo) {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    if (ativo) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: `Sala ${roomCode}`, artist: 'Nexo' });
+      navigator.mediaSession.playbackState = 'playing';
+      // Handlers vazios: sem eles alguns sistemas mostram os controles de midia
+      // desabilitados, e o botao de "pausar" de um fone bluetooth poderia parar a aba.
+      ['play', 'pause', 'stop'].forEach(acao => {
+        try { navigator.mediaSession.setActionHandler(acao, () => {}); } catch (_) {}
+      });
+    } else {
+      navigator.mediaSession.playbackState = 'none';
+      navigator.mediaSession.metadata = null;
+    }
+  } catch (_) { /* Media Session nao suportada ou instavel neste navegador */ }
+}
+
+async function pedirTravaDeTela() {
+  if (travaDeTela || !('wakeLock' in navigator) || document.hidden) return;
+  try {
+    travaDeTela = await navigator.wakeLock.request('screen');
+    registrarDiagnostico('wakeLock.concedida');
+    travaDeTela.addEventListener('release', () => { travaDeTela = null; registrarDiagnostico('wakeLock.liberada'); });
+  } catch (err) { registrarDiagnostico('wakeLock.negada', err.message); }
+}
+
+function instrumentarFaixaDoMic(faixa) {
+  if (!faixa) return;
+  faixa.onmute = () => registrarDiagnostico('micTrack.mute');
+  faixa.onunmute = () => registrarDiagnostico('micTrack.unmute');
+  faixa.onended = () => registrarDiagnostico('micTrack.ended');
+}
+document.addEventListener('visibilitychange', () => registrarDiagnostico('visibilitychange', document.visibilityState));
+// O LiveKit se desconecta sozinho em "pagehide"/"beforeunload" (por causa da opcao
+// disconnectOnPageLeave) e tambem em "freeze" (a Page Lifecycle API do Chrome, sempre, mesmo
+// com a opcao desligada). Qualquer um destes tres pode ser quem esta matando a chamada ao
+// trocar de app, entao ficam registrados na ordem em que o navegador realmente os dispara.
+['pagehide', 'freeze', 'beforeunload', 'resume'].forEach(nomeDoEvento => {
+  window.addEventListener(nomeDoEvento, event => registrarDiagnostico('window.' + nomeDoEvento, 'persisted' in event ? `persisted=${event.persisted}` : ''));
+});
+
+function liberarTravaDeTela() {
+  travaDeTela?.release().catch(() => {});
+  travaDeTela = null;
+}
+
+function atualizarModoSegundoPlano() {
+  const ativo = precisaDeSegundoPlano();
+  atualizarMediaSession(ativo);
+  if (ativo) garantirAudioDeFundo(); else pararAudioDeFundo();
+  // Separado do de cima de propósito: manter a aba viva e manter o monitor aceso são
+  // decisões diferentes, com custos diferentes, e amarrá-las foi o que fez o silêncio de
+  // alguém virar desconexão.
+  if (precisaDeTravaDeTela()) pedirTravaDeTela(); else liberarTravaDeTela();
+}
+
 // ---------- Sair ----------
 let saindoDaSala = false;
 function encerrarMidiasDaSala() {
@@ -2083,6 +2458,9 @@ function encerrarMidiasDaSala() {
   cameraStream?.getTracks().forEach(t => t.stop());
   screenStream?.getTracks().forEach(t => t.stop());
   desmontarFiltroDeRuido();
+  pararAudioDeFundo();
+  liberarTravaDeTela();
+  atualizarMediaSession(false);
   Array.from(peers.keys()).forEach(removerPar);
   // Sem isto o servidor de midia so notaria a saida pelo tempo limite, e por alguns
   // segundos os outros continuariam vendo uma imagem congelada de quem ja foi embora.
@@ -2107,12 +2485,21 @@ document.querySelectorAll('a[href="/"]').forEach(link => link.addEventListener('
 }));
 
 // ---------- Link ----------
+// O rotulo volta ao que ESTAVA, e nao a um texto fixo: antes o botao nascia "Convidar
+// amigos", virava "Link copiado!" e terminava "Copiar link" para o resto da sessao.
+const ROTULO_DO_CONVITE = copyLinkBtn.textContent;
+let voltaDoConvite = null;
 copyLinkBtn.onclick = async () => {
   const link = RoomMedia.inviteUrl(window.location.href, publicInviteUrl, roomCode);
   try {
     await navigator.clipboard.writeText(link);
     copyLinkBtn.textContent = 'Link copiado!';
-    setTimeout(() => { copyLinkBtn.textContent = 'Copiar link'; }, 1800);
+    copyLinkBtn.classList.add('copiado');
+    clearTimeout(voltaDoConvite);
+    voltaDoConvite = setTimeout(() => {
+      copyLinkBtn.textContent = ROTULO_DO_CONVITE;
+      copyLinkBtn.classList.remove('copiado');
+    }, 1800);
   } catch (_) {
     document.getElementById('inviteLink').value = link;
     document.getElementById('invitePanel').classList.remove('hidden');
@@ -2121,6 +2508,38 @@ copyLinkBtn.onclick = async () => {
 };
 
 // ---------- Tiles (UI de participantes) ----------
+// Os mesmos dois controles aparecem no quadradinho e no card da grade. Um molde so evita
+// que eles se afastem um do outro com o tempo -- e e o que permite ao pintarControleDeVolume
+// tratar os dois pelo mesmo caminho.
+const LINHA_DE_VOLUME = alvo => `
+  <input type="range" class="volume-slider" min="0" max="100" value="100" step="1" data-alvo="${alvo}">
+  <button class="mute-peer-btn" type="button" aria-pressed="false"></button>
+`;
+
+// Este botao era invisivel ate o mouse passar por cima, e existia mesmo sem camera nenhuma
+// para ocultar: um alvo transparente que nao anunciava nada e, quando anunciava, nao servia
+// para nada. Agora ele tem rotulo, e quem decide se ele aparece e a existencia da fonte.
+const BOTAO_DE_OCULTAR = () => `
+  <button class="hide-self-btn" type="button" aria-pressed="false" hidden><span>Ocultar</span></button>
+  <div class="oculto-overlay hidden">
+    <strong>Oculto para você</strong>
+    <small>A sala continua recebendo normalmente.</small>
+  </div>
+`;
+
+function pintarBotaoDeOcultar(refs, fonte, oculto, existe) {
+  if (!refs.hideBtn) return;
+  const coisa = fonte === 'screen' ? 'sua tela' : 'sua câmera';
+  refs.hideBtn.hidden = !existe;
+  refs.hideBtn.setAttribute('aria-pressed', String(oculto));
+  refs.hideBtn.querySelector('span').textContent = oculto ? 'Mostrar' : 'Ocultar';
+  refs.hideBtn.title = oculto
+    ? `Voltar a ver ${coisa} aqui`
+    : `Ocultar ${coisa} só para você — a sala continua recebendo`;
+  refs.hideBtn.setAttribute('aria-label', refs.hideBtn.title);
+  refs.ocultoOverlay.classList.toggle('hidden', !(existe && oculto));
+}
+
 function criarTileLocal() {
   criarTileBase('self', myName, meuEstado(), true);
 }
@@ -2142,6 +2561,7 @@ function criarTileBase(id, name, state, isSelf) {
       <div class="avatar-fallback"></div>
       <span class="mic-icon audio-icon" aria-hidden="true"></span>
       <span class="screen-badge hidden">Tela</span>
+      ${isSelf ? BOTAO_DE_OCULTAR('camera') : ''}
     </div>
     <div class="participant-name"></div>
     <div class="volume-row"></div>
@@ -2152,12 +2572,7 @@ function criarTileBase(id, name, state, isSelf) {
   el.querySelector('.avatar-fallback').textContent = iniciais(name);
   el.querySelector('.avatar-fallback').style.background = corDoNome(name);
   const volumeRow = el.querySelector('.volume-row');
-  if (!isSelf) {
-    volumeRow.innerHTML = `
-      <input type="range" class="volume-slider" min="0" max="100" value="100">
-      <button class="mute-peer-btn" type="button" title="Silenciar a voz deste participante"></button>
-    `;
-  }
+  if (!isSelf) volumeRow.innerHTML = LINHA_DE_VOLUME('voz');
   participantsEl.appendChild(el);
 
   const refs = {
@@ -2170,7 +2585,10 @@ function criarTileBase(id, name, state, isSelf) {
     screenAudio: el.querySelector('.screen-audio'),
     volumeSlider: el.querySelector('.volume-slider'),
     muteBtn: el.querySelector('.mute-peer-btn'),
-    localMute: false
+    hideBtn: el.querySelector('.hide-self-btn'),
+    ocultoOverlay: el.querySelector('.oculto-overlay'),
+    localMute: false,
+    volumeDeVoz: 1
   };
   tiles.set(id, refs);
   reordenarQuadradinhos();
@@ -2190,17 +2608,13 @@ function criarTileBase(id, name, state, isSelf) {
   });
 
   if (!isSelf) {
-    refs.volumeSlider.addEventListener('input', () => {
-      // volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
-      // IndexSizeError e o ajuste inteiro se perde.
-      const nivel = Math.max(0, Math.min(1, Number(refs.volumeSlider.value) / 100));
-      refs.peerAudio.volume = nivel;
-      if (pinned?.id === id) stageVideo.volume = nivel;
-    });
-    refs.muteBtn.addEventListener('click', () => {
-      refs.localMute = !refs.localMute;
-      refs.peerAudio.muted = refs.localMute;
-      refs.muteBtn.setAttribute('aria-pressed', String(refs.localMute));
+    refs.volumeSlider.addEventListener('input', () => definirAudioDaVoz(id, { nivel: refs.volumeSlider.value / 100 }));
+    refs.muteBtn.addEventListener('click', () => definirAudioDaVoz(id, { alternarMudo: true }));
+    sincronizarControlesDeAudio(id);
+  } else {
+    refs.hideBtn.addEventListener('click', evento => {
+      evento.stopPropagation();
+      alternarOcultarPropria('camera');
     });
   }
 
@@ -2254,6 +2668,118 @@ function preferenciaDeTela(id) {
   return pref;
 }
 
+// ---------- Volume, em um lugar so ----------
+// O mesmo som agora tem dois controles na tela: o do quadradinho, la embaixo, e o do card
+// na grade. Se cada um guardar o proprio numero, mexer em um deixa o outro mentindo. Entao
+// quem manda e a preferencia guardada aqui; os controles so a leem e a escrevem, e depois
+// de qualquer escrita todo mundo se redesenha a partir dela.
+//
+// Volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
+// IndexSizeError e o ajuste inteiro se perde.
+const entre0e1 = valor => Math.max(0, Math.min(1, Number(valor) || 0));
+
+function telaTemSom(id) {
+  const peer = peers.get(id);
+  return Boolean(peer?.state.screenAudio && peer.remoteStreams.screenAudio.getAudioTracks().some(t => t.readyState === 'live'));
+}
+
+function audioDaTela(id) {
+  const pref = preferenciaDeTela(id);
+  return { nivel: pref.nivel, mudo: pref.mudo, disponivel: telaTemSom(id) };
+}
+
+function definirAudioDaTela(id, { nivel, alternarMudo }) {
+  const pref = preferenciaDeTela(id);
+  if (nivel !== undefined) {
+    pref.nivel = entre0e1(nivel);
+    // Arrastar o volume para cima quer dizer "quero ouvir": tira do mudo sozinho.
+    if (pref.mudo && pref.nivel > 0) pref.mudo = false;
+  }
+  if (alternarMudo) pref.mudo = !pref.mudo;
+  atualizarAudioDeTela();
+  sincronizarControlesDeAudio(id);
+}
+
+function audioDaVoz(id) {
+  const refs = tiles.get(id);
+  const peer = peers.get(id);
+  return {
+    nivel: refs ? refs.volumeDeVoz : 1,
+    mudo: Boolean(refs?.localMute),
+    disponivel: Boolean(peer?.remoteStreams.micAudio.getAudioTracks().some(t => t.readyState === 'live'))
+  };
+}
+
+function definirAudioDaVoz(id, { nivel, alternarMudo }) {
+  const refs = tiles.get(id);
+  if (!refs) return;
+  if (nivel !== undefined) {
+    refs.volumeDeVoz = entre0e1(nivel);
+    if (refs.localMute && refs.volumeDeVoz > 0) refs.localMute = false;
+  }
+  if (alternarMudo) refs.localMute = !refs.localMute;
+  refs.peerAudio.volume = refs.volumeDeVoz;
+  refs.peerAudio.muted = refs.localMute;
+  if (pinned?.id === id && pinned.source === 'camera') stageVideo.volume = refs.volumeDeVoz;
+  sincronizarControlesDeAudio(id);
+}
+
+// Redesenha TODOS os controles do mesmo som a partir da preferencia — quem mexeu inclusive,
+// que assim nunca fica com um valor que a preferencia recusou (o 0 que desfaz o mudo, por
+// exemplo). São três lugares agora: o quadradinho, o card da grade e o palco.
+function sincronizarControlesDeAudio(id) {
+  const tela = tilesDeTela.get(id);
+  if (tela?.slider) pintarControleDeVolume(tela.slider, tela.muteBtn, audioDaTela(id));
+  const pessoa = tiles.get(id);
+  if (pessoa?.volumeSlider) pintarControleDeVolume(pessoa.volumeSlider, pessoa.muteBtn, audioDaVoz(id));
+  window.RoomMulti?.sincronizarAudio(id);
+  if (pinned?.id === id) sincronizarVolumeDoPalco();
+}
+
+// ---------- Volume de quem está no palco ----------
+// A grade ganhou volume por card, mas o destaque único — onde se passa a maior parte do
+// tempo — continuava mandando a pessoa até o quadradinho lá embaixo para abaixar um som.
+// O controle acompanha o que está em destaque: tela mexe no som da tela, câmera na voz.
+// A própria imagem não tem o que ajustar; ela não toca neste computador.
+function audioDoDestaque() {
+  if (!pinned || pinned.id === 'self') return null;
+  return pinned.source === 'screen' ? audioDaTela(pinned.id) : audioDaVoz(pinned.id);
+}
+
+function sincronizarVolumeDoPalco() {
+  const estado = audioDoDestaque();
+  stageVolume.hidden = !estado;
+  if (!estado) return;
+  stageSlider.dataset.alvo = pinned.source === 'screen' ? 'tela' : 'voz';
+  pintarControleDeVolume(stageSlider, stageMute, estado);
+}
+
+function mexerNoAudioDoDestaque(mudanca) {
+  if (!pinned || pinned.id === 'self') return;
+  (pinned.source === 'screen' ? definirAudioDaTela : definirAudioDaVoz)(pinned.id, mudanca);
+}
+stageSlider.addEventListener('input', () => mexerNoAudioDoDestaque({ nivel: stageSlider.value / 100 }));
+stageMute.addEventListener('click', () => mexerNoAudioDoDestaque({ alternarMudo: true }));
+
+// Um controle de volume desenhado em dois lugares diferentes precisa dizer a mesma coisa
+// nos dois: o mesmo numero, o mesmo estado de mudo e a mesma razao para estar apagado.
+function pintarControleDeVolume(slider, muteBtn, estado) {
+  const porcento = Math.round(estado.nivel * 100);
+  if (document.activeElement !== slider) slider.value = String(porcento);
+  slider.disabled = !estado.disponivel;
+  muteBtn.disabled = !estado.disponivel;
+  muteBtn.setAttribute('aria-pressed', String(estado.mudo));
+  // O artigo viaja junto com o nome: um "o" fixo daria "o voz desta pessoa" na metade dos
+  // casos, e este mesmo controle atende as duas fontes.
+  const ehTela = slider.dataset.alvo === 'tela';
+  const coisa = ehTela ? 'som desta tela' : 'voz desta pessoa';
+  const comArtigo = ehTela ? 'o som desta tela' : 'a voz desta pessoa';
+  slider.title = estado.disponivel ? `Volume: ${porcento}%` : `Sem ${coisa} para ajustar`;
+  slider.setAttribute('aria-label', `Volume ${ehTela ? 'do' : 'da'} ${coisa}`);
+  muteBtn.title = !estado.disponivel ? `Sem ${coisa}` : estado.mudo ? `Ouvir ${comArtigo}` : `Silenciar ${comArtigo}`;
+  muteBtn.setAttribute('aria-label', muteBtn.title);
+}
+
 // As telas ficam todas juntas, à esquerda, na ordem em que começaram; as pessoas vêm depois,
 // cada câmera no quadradinho de quem ela é.
 //
@@ -2294,10 +2820,11 @@ function garantirTileDeTela(id) {
       <video class="cam-video active" autoplay playsinline muted></video>
       <span class="screen-badge">Tela</span>
       <div class="convite-de-tela" hidden>
-        <span class="convite-texto">Transmitindo</span>
+        <span class="convite-texto">ao vivo</span>
         <button class="assistir-btn" type="button">Assistir</button>
       </div>
       <button class="parar-de-assistir" type="button" hidden title="Parar de assistir esta tela">Parar</button>
+      ${BOTAO_DE_OCULTAR()}
     </div>
     <div class="participant-name"></div>
     <div class="volume-row"></div>
@@ -2308,7 +2835,8 @@ function garantirTileDeTela(id) {
     root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name'),
     linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null,
     convite: el.querySelector('.convite-de-tela'), assistirBtn: el.querySelector('.assistir-btn'),
-    pararBtn: el.querySelector('.parar-de-assistir')
+    pararBtn: el.querySelector('.parar-de-assistir'),
+    hideBtn: el.querySelector('.hide-self-btn'), ocultoOverlay: el.querySelector('.oculto-overlay')
   };
   tilesDeTela.set(id, refs);
   reordenarQuadradinhos();
@@ -2318,6 +2846,10 @@ function garantirTileDeTela(id) {
   if (id === 'self') {
     refs.convite.remove(); refs.pararBtn.remove();
     refs.convite = null; refs.assistirBtn = null; refs.pararBtn = null;
+    refs.hideBtn.addEventListener('click', evento => { evento.stopPropagation(); alternarOcultarPropria('screen'); });
+  } else {
+    refs.hideBtn.remove(); refs.ocultoOverlay.remove();
+    refs.hideBtn = null; refs.ocultoOverlay = null;
   }
 
   // Um clique no quadradinho de quem nao esta sendo assistido quer dizer "quero ver": pedir
@@ -2332,27 +2864,12 @@ function garantirTileDeTela(id) {
   // A propria tela nao toca neste computador (seria o som saindo e voltando), entao os
   // controles so fazem sentido para quem esta assistindo.
   if (id !== 'self') {
-    const pref = preferenciaDeTela(id);
-    refs.linhaDeVolume.innerHTML = `
-      <input type="range" class="volume-slider" min="0" max="100" value="${Math.round(pref.nivel * 100)}">
-      <button class="mute-peer-btn" type="button" title="Silenciar o som desta tela" aria-pressed="${pref.mudo}"></button>
-    `;
+    refs.linhaDeVolume.innerHTML = LINHA_DE_VOLUME('tela');
     refs.slider = refs.linhaDeVolume.querySelector('.volume-slider');
     refs.muteBtn = refs.linhaDeVolume.querySelector('.mute-peer-btn');
-
-    refs.slider.addEventListener('input', () => {
-      // volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
-      // IndexSizeError e o ajuste inteiro se perde.
-      pref.nivel = Math.max(0, Math.min(1, Number(refs.slider.value) / 100));
-      // Arrastar o volume para cima quer dizer "quero ouvir": tira do mudo sozinho.
-      if (pref.mudo && pref.nivel > 0) { pref.mudo = false; refs.muteBtn.setAttribute('aria-pressed', 'false'); }
-      atualizarAudioDeTela();
-    });
-    refs.muteBtn.addEventListener('click', () => {
-      pref.mudo = !pref.mudo;
-      refs.muteBtn.setAttribute('aria-pressed', String(pref.mudo));
-      atualizarAudioDeTela();
-    });
+    refs.slider.addEventListener('input', () => definirAudioDaTela(id, { nivel: refs.slider.value / 100 }));
+    refs.muteBtn.addEventListener('click', () => definirAudioDaTela(id, { alternarMudo: true }));
+    sincronizarControlesDeAudio(id);
   }
   return refs;
 }
@@ -2401,17 +2918,11 @@ function atualizarTileDeTela(id) {
   refs.video.classList.toggle('active', assistindo);
   refs.root.classList.toggle('nao-assistida', !assistindo);
   refs.root.classList.toggle('pinned', pinned?.id === id && pinned.source === 'screen');
+  pintarBotaoDeOcultar(refs, 'screen', ocultarPropriaTela, true);
 
   // Da para compartilhar a tela sem som nenhum. Nesse caso os controles ficam apagados, em
   // vez de sumirem: some a duvida de "abaixei o volume e nao mudou nada".
-  if (refs.slider) {
-    const temSom = Boolean(peers.get(id)?.remoteStreams.screenAudio.getTracks().length);
-    refs.slider.disabled = !temSom;
-    refs.muteBtn.disabled = !temSom;
-    refs.linhaDeVolume.title = temSom
-      ? 'Volume do som desta tela'
-      : 'Esta tela está sendo compartilhada sem som';
-  }
+  if (refs.slider) sincronizarControlesDeAudio(id);
 }
 
 function atualizarTile(id) {
@@ -2426,6 +2937,14 @@ function atualizarTile(id) {
   // O selo "Tela" some do quadradinho da pessoa: agora a tela tem o proprio quadradinho.
   refs.screenBadge.classList.add('hidden');
   refs.micIcon.classList.toggle('muted', Boolean(estado.micMuted));
+  // Quem está com a conexão perdida aparecia assim só na lista lateral -- que em modo
+  // teatro nem existe. O quadradinho é onde se olha, então é nele que a queda precisa
+  // aparecer: a pessoa ainda está na sala, apagada, esperando a volta.
+  refs.root.classList.toggle('sem-conexao', Boolean(peers.get(id)?.semConexao));
+  // Sem camera nao ha o que ocultar: o botao nem aparece. Ele so existia o tempo todo
+  // porque nunca foi perguntado se havia imagem por baixo dele.
+  if (id === 'self') pintarBotaoDeOcultar(refs, 'camera', ocultarPropriaCamera, temCamera);
+  else sincronizarControlesDeAudio(id);
   atualizarTileDeTela(id);
 }
 
@@ -2435,6 +2954,30 @@ function atualizarContador() {
   document.dispatchEvent(new Event('room-update'));
 }
 
+// ---------- Ocultar a propria imagem so para mim ----------
+// So um overlay local: a faixa continua saindo normal para o resto da sala. Serve para
+// quem nao quer ver a propria cara/tela no quadradinho (ou no palco, quando esta sozinho
+// na sala e a propria imagem acaba indo ao centro).
+let ocultarPropriaCamera = false;
+let ocultarPropriaTela = false;
+
+// No palco o aviso ocupava a tela inteira sem oferecer a volta: para desfazer era preciso
+// achar o quadradinho certo la embaixo e o botao dentro dele.
+document.getElementById('stageMostrarBtn').onclick = () => {
+  if (pinned?.id === 'self') alternarOcultarPropria(pinned.source);
+};
+
+function alternarOcultarPropria(fonte) {
+  if (fonte === 'camera') ocultarPropriaCamera = !ocultarPropriaCamera;
+  else ocultarPropriaTela = !ocultarPropriaTela;
+  atualizarTile('self');
+  atualizarTileDeTela('self');
+  if (pinned?.id === 'self' && pinned.source === fonte) atualizarPalco();
+  // Tres lugares mostram a propria imagem (quadradinho, palco e a grade); qualquer um deles
+  // pode ter disparado esta troca, entao os outros dois tambem precisam saber.
+  window.RoomMulti?.render();
+}
+
 // ---------- Palco (spotlight) ----------
 // Destaque automatico, para ninguem precisar clicar em nada:
 //  - tela tem prioridade sobre camera;
@@ -2442,9 +2985,63 @@ function atualizarContador() {
 //  - a propria imagem so vai ao centro se nao houver mais ninguem compartilhando (ver a
 //    propria tela no palco gera o efeito de espelho infinito);
 //  - uma escolha manual manda mais que tudo, ate aquela fonte acabar.
-const TEXTO_PALCO_VAZIO = stageEmpty.innerHTML;
 let sequenciaDeCompartilhamento = 0;
 let destaqueManual = false;
+
+// ---------- O que o palco diz quando nao ha nada nele ----------
+// Este espaco e o maior da tela e ficava gasto com a mesma frase de sempre, que nao mudava
+// nada e nao levava a lugar nenhum. Ele sabe exatamente o que esta faltando -- alguem para
+// conversar, alguem que transmita, ou so um clique em "Assistir" -- entao e isso que ele
+// diz, com o botao que resolve ao lado.
+const stageEmptyTitle = document.getElementById('stageEmptyTitle');
+const stageEmptyText = document.getElementById('stageEmptyText');
+const stageEmptyActions = document.getElementById('stageEmptyActions');
+
+function porPalcoVazio(titulo, texto, acoes = []) {
+  stage.classList.toggle('so-mensagem', !acoes.length);
+  stageEmptyTitle.textContent = titulo;
+  stageEmptyText.textContent = texto || '';
+  stageEmptyText.hidden = !texto;
+  stageEmptyActions.replaceChildren(...acoes.map(([rotulo, aoClicar, secundario]) => {
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.textContent = rotulo;
+    if (secundario) botao.className = 'secondary';
+    botao.onclick = aoClicar;
+    return botao;
+  }));
+  stageEmptyActions.hidden = !acoes.length;
+}
+
+// Mensagem de passagem ("estou esperando a imagem"): sem ilustracao e sem botao, para nao
+// parecer que a transmissao acabou quando ela so esta chegando.
+const mensagemDePalco = texto => porPalcoVazio(texto, '');
+
+function convidarParaOPalco() {
+  const transmitindo = [...peers.values()].filter(par => par.state?.screen && !par.assistindo);
+  // Alguem ESTA transmitindo e o palco vazio pareceria defeito: como a tela so desce a
+  // pedido, o vazio precisa dizer que ha algo para pedir -- e deixar pedir daqui mesmo.
+  if (transmitindo.length === 1) {
+    porPalcoVazio(`${transmitindo[0].name} está compartilhando a tela`,
+      'A imagem só começa a descer quando você pede.',
+      [['Assistir agora', () => assistirTela(transmitindo[0].id, true)]]);
+    return;
+  }
+  if (transmitindo.length) {
+    porPalcoVazio(`${transmitindo.length} telas ao vivo na sala`,
+      'Escolha de quem você quer ver, nos quadradinhos abaixo.');
+    return;
+  }
+  if (!peers.size) {
+    porPalcoVazio('Você é o primeiro por aqui',
+      'Chame o squad — ou já deixe a tela pronta para quando eles chegarem.',
+      [['Convidar amigos', () => copyLinkBtn.click()], ['Compartilhar tela', () => screenBtn.click(), true]]);
+    return;
+  }
+  porPalcoVazio('Ninguém está transmitindo ainda',
+    'Compartilhe sua tela ou abra a câmera para colocar algo no palco.',
+    [['Compartilhar tela', () => screenBtn.click()], ['Ligar câmera', () => cameraBtn.click(), true]]);
+}
 
 // Fonte anunciada pelo estado, mesmo que o video ainda nao tenha chegado: e o que permite
 // destacar na hora e esperar a imagem, em vez de largar o palco vazio.
@@ -2514,20 +3111,24 @@ function avaliarDestaque() {
   atualizarAudioDeTela();
 }
 
-// Som de tela: toca o da tela em destaque. Se existe uma unica tela na sala, ela toca de
-// qualquer jeito -- assim ninguem fica mudo por ter clicado numa camera.
+// Som de tela: toca o de toda tela que voce PEDIU para assistir e nao silenciou.
+//
+// Antes so tocava a tela em destaque (mais a unica da sala, como remendo). Isso batia de
+// frente com a grade, onde cinco telas aparecem ao mesmo tempo e so uma tinha som -- e
+// com o proprio controle de volume, que ficava ali mexendo em nada nas outras quatro. Um
+// slider que nao faz barulho e um slider quebrado.
+//
+// O risco do contrario, varias telas falando juntas, e menor do que parece: nenhuma imagem
+// desce sem alguem clicar em "Assistir", entao ouvir tres telas e uma escolha de tres
+// cliques -- e agora cada uma tem volume e mudo proprios para equilibrar.
 function atualizarAudioDeTela() {
-  const comSom = [];
-  peers.forEach((peer, id) => { if (peer.state.screen && peer.state.screenAudio && peer.remoteStreams.screenAudio.getAudioTracks().some(t => t.readyState === 'live')) comSom.push(id); });
   tiles.forEach((refs, id) => {
     if (!refs.screenAudio) return;
     const peer = peers.get(id);
     if (!peer) return;
     const stream = peer.remoteStreams.screenAudio;
     if (refs.screenAudio.srcObject !== stream) refs.screenAudio.srcObject = stream;
-    const emDestaque = pinned?.id === id && pinned.source === 'screen';
-    const unicaTelaComSom = comSom.length === 1 && comSom[0] === id;
-    const deveTocar = peer.state.screenAudio && peer.state.screen && (emDestaque || unicaTelaComSom);
+    const deveTocar = Boolean(peer.state.screen && peer.state.screenAudio && peer.assistindo);
     // O mudo do participante vale para a VOZ dele; o som da tela tem o proprio controle, no
     // quadradinho da tela. Antes os dois andavam juntos e nao dava para calar so a tela.
     const pref = preferenciaDeTela(id);
@@ -2558,22 +3159,17 @@ function pin(id, source, manual) {
 function despinar() {
   pinned = null;
   destaqueManual = false;
+  transporte?.definirDestaque(null, null);
   stageVideo.srcObject = null;
-  // Palco vazio numa sala onde alguem ESTA transmitindo daria a impressao de defeito. Como
-  // a tela agora so desce a pedido, o vazio precisa dizer que existe algo para pedir.
-  const transmitindo = [...peers.values()].filter(par => par.state?.screen && !par.assistindo);
-  stageEmpty.innerHTML = TEXTO_PALCO_VAZIO;
-  if (transmitindo.length) {
-    stageEmpty.textContent = transmitindo.length === 1
-      ? `${transmitindo[0].name} está compartilhando a tela. Clique em "Assistir" no quadradinho para ver.`
-      : `${transmitindo.length} pessoas estão compartilhando a tela. Clique em "Assistir" no quadradinho de quem você quer ver.`;
-  }
+  stageOcultoOverlay.classList.add('hidden');
+  convidarParaOPalco();
   stage.classList.remove('is-waiting');
   document.getElementById('playbackRecovery').hidden = true;
   clearTimeout(esperaDoVideo);
   stageEmpty.classList.remove('hidden');
   stageLabel.classList.add('hidden');
   stageControls.classList.add('hidden');
+  sincronizarVolumeDoPalco();
   if (!window.RoomMulti?.active || !candidatosDeDestaque().length) definirModoTeatro(false);
   definirZoom(1);
   if (document.fullscreenElement === stage) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
@@ -2584,6 +3180,9 @@ function despinar() {
 
 function atualizarPalco() {
   window.RoomMulti?.render();
+  // Quem está no palco recebe a imagem inteira; quem está no quadradinho, a do meio.
+  // Avisar aqui é o que faz a câmera de quem sai do palco parar de custar caro.
+  transporte?.definirDestaque(pinned?.id, pinned?.source);
   if (!pinned) return;
   const { id, source } = pinned;
   const nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
@@ -2591,14 +3190,18 @@ function atualizarPalco() {
     ? (source === 'screen' ? screenStream : cameraStream)
     : (peers.get(id)?.remoteStreams[source] || null);
 
+  stageOcultoOverlay.classList.toggle('hidden',
+    !(id === 'self' && (source === 'screen' ? ocultarPropriaTela : ocultarPropriaCamera)));
+
   stageLabel.classList.remove('hidden');
   stageLabel.textContent = `${nome} — ${source === 'screen' ? 'Tela' : 'Câmera'}`;
+  sincronizarVolumeDoPalco();
 
   if (!stream || !stream.getVideoTracks().length) {
     // O estado ja anunciou a fonte, mas a faixa de video ainda nao chegou. Antes o palco
     // se desfazia sozinho aqui e so voltava com F5; agora ele espera.
     stageVideo.srcObject = null;
-    stageEmpty.textContent = 'Conectando à transmissão…';
+    mensagemDePalco('Conectando à transmissão…');
     stage.classList.add('is-waiting');
     stageEmpty.classList.remove('hidden');
     aguardarVideo();
@@ -2657,7 +3260,7 @@ function aguardarVideo() {
   esperaDoVideo = setTimeout(() => {
     esperaDoVideo = null;
     if (!pinned || (!stageVideo.paused && stageVideo.readyState >= 2 && stageVideo.videoWidth)) return;
-    stageEmpty.textContent = 'A imagem ainda não chegou. Tente reproduzir ou confira a conexão.';
+    mensagemDePalco('A imagem ainda não chegou.');
     document.getElementById('playbackRecovery').hidden = false;
   }, 8000);
 }
@@ -2672,7 +3275,7 @@ function atualizarEstadoDoVideo() {
     esperaDoVideo = null;
     document.getElementById('playbackRecovery').hidden = true;
   } else {
-    stageEmpty.textContent = midiasBloqueadas.has(stageVideo) ? 'Toque em Ativar reprodução para assistir.' : 'Recebendo vídeo…';
+    mensagemDePalco(midiasBloqueadas.has(stageVideo) ? 'Toque em Ativar reprodução para assistir.' : 'Recebendo vídeo…');
     aguardarVideo();
   }
 }
@@ -2686,10 +3289,22 @@ document.getElementById('retryPlaybackBtn').onclick = () => {
   }
   retomarMidias();
 };
-document.addEventListener('visibilitychange', () => { if (!document.hidden) retomarMidias(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  retomarMidias();
+  // Voltar do segundo plano é onde as duas proteções se restabelecem: o wake lock é
+  // liberado sozinho quando a aba fica oculta, e o áudio de fundo pode ter sido barrado
+  // pela política de autoplay na primeira tentativa.
+  atualizarModoSegundoPlano();
+});
 window.addEventListener('pageshow', retomarMidias);
 
-window.addEventListener('pagehide', () => {
+window.addEventListener('pagehide', event => {
+  // "persisted" quer dizer que a pagina foi para o bfcache (pausa reversivel, volta com
+  // "pageshow"/persisted) em vez de ser descartada de vez -- trocar de app entra nessa
+  // categoria em alguns navegadores. So um pagehide sem persisted significa que a aba
+  // esta mesmo sendo fechada, e so ai faz sentido desligar microfone, camera e conexao.
+  if (event.persisted) return;
   saindoDaSala = true;
   encerrarMidiasDaSala();
   socket?.disconnect();
@@ -2837,7 +3452,7 @@ function mostrarVazio() {
   p.className = 'chat-vazio';
   const heading = document.createElement('strong');
   heading.textContent = 'A resenha começa aqui.';
-  p.append(heading, document.createTextNode('Mande um oi, compartilhe um link ou aquela captura da última partida.'));
+  p.append(heading, document.createTextNode('Mande um oi, um link ou a captura da última partida.'));
   chatMsgs.appendChild(p);
 }
 mostrarVazio();
@@ -3035,7 +3650,27 @@ function pulsoDeVoz() {
     const media = soma / dados.length;
     const tile = tiles.get(id);
     if (tile) tile.root.classList.toggle('falando', media > 12);
+    // O mesmo analisador que acende o anel verde alimenta o medidor do painel. Ele só é
+    // lido quando o painel está aberto: fora disso não há para onde escrever.
+    if (id === 'self' && !devicesPanel.classList.contains('hidden')) {
+      micNivel.style.width = `${Math.min(100, Math.round(media * 2.4))}%`;
+    }
   });
   requestAnimationFrame(pulsoDeVoz);
+}
+
+// O painel só sabe o que está ligado no momento em que abre — e o que fecha precisa soltar
+// a prévia, senão a câmera continua desenhando num <video> que ninguém vê.
+function atualizarEspelhoDosAparelhos() {
+  const aberto = !devicesPanel.classList.contains('hidden');
+  const ouvindo = aberto && Boolean(micTrack) && !micMuted;
+  micDica.hidden = ouvindo;
+  micDica.textContent = !micTrack ? 'Ative o microfone para ver o nível.' : 'O microfone está mudo.';
+  if (!ouvindo) micNivel.style.width = '0';
+  const vendo = aberto && Boolean(cameraStream);
+  camPreview.hidden = !vendo;
+  camDica.hidden = vendo;
+  ligarFluxo(camPreview, vendo ? cameraStream : null);
+  if (vendo) garantirReproducao(camPreview);
 }
 requestAnimationFrame(pulsoDeVoz);

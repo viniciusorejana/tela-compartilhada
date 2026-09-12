@@ -13,7 +13,49 @@
     appRoot.classList.remove('sidebar-open');
     $('sidebarToggle').setAttribute('aria-expanded', 'false');
   }
+
+  // A barra vale por si -- lista, convite, perfil -- mas nem sempre. Quem esta assistindo
+  // uma tela quer o palco maior sem entrar no teatro, que apaga o chat junto. Recolher e a
+  // terceira posicao entre "tudo" e "so o palco", e a escolha fica gravada.
+  //
+  // O mesmo botao serve a duas gestualidades diferentes, porque a barra e duas coisas
+  // diferentes: no celular ela e uma gaveta sobreposta, que o botao abre e fecha; no
+  // desktop ela e uma coluna do grid, e o botao so aparece quando ela esta recolhida, para
+  // traze-la de volta. Um estado unico para os dois faria o botao mentir numa das larguras.
+  const CHAVE_DA_BARRA = 'nexoBarraRecolhida';
+  const estreita = window.matchMedia('(max-width:700px)');
+  const telaEstreita = () => estreita.matches;
+
+  // Um botao so, e ele fica no TOPO -- nunca dentro da barra. A primeira versao tinha um
+  // botao proprio no cabecalho da barra, e o cabecalho e um link que sai da sala: quem
+  // errasse o alvo por alguns pixels caia fora da conversa. Alvo pequeno em cima de acao
+  // destrutiva e armadilha, por melhor que fique.
+  function rotularToggle() {
+    const botao = $('sidebarToggle');
+    botao.title = telaEstreita()
+      ? 'Abrir lista de participantes'
+      : appRoot.classList.contains('barra-recolhida') ? 'Mostrar a barra lateral' : 'Recolher a barra lateral';
+    botao.setAttribute('aria-label', botao.title);
+  }
+
+  function definirBarraRecolhida(recolhida, gravar) {
+    appRoot.classList.toggle('barra-recolhida', recolhida);
+    if (!telaEstreita()) $('sidebarToggle').setAttribute('aria-expanded', String(!recolhida));
+    rotularToggle();
+    if (gravar === false) return;
+    try { localStorage.setItem(CHAVE_DA_BARRA, recolhida ? '1' : '0'); } catch (_) { /* Vale so nesta aba. */ }
+  }
+
+  try {
+    if (localStorage.getItem(CHAVE_DA_BARRA) === '1') definirBarraRecolhida(true, false);
+  } catch (_) { /* Sem armazenamento, a barra comeca aberta -- que e o padrao. */ }
+  rotularToggle();
+  // O mesmo botao quer dizer coisas diferentes nas duas larguras: atravessar o limite sem
+  // reescrever o rotulo deixaria "Recolher a barra lateral" num botao que abre uma gaveta.
+  estreita.addEventListener('change', rotularToggle);
+
   $('sidebarToggle').onclick = () => {
+    if (!telaEstreita()) { definirBarraRecolhida(!appRoot.classList.contains('barra-recolhida')); return; }
     const open = appRoot.classList.toggle('sidebar-open');
     $('sidebarToggle').setAttribute('aria-expanded', String(open));
   };
@@ -55,8 +97,13 @@
     const live = [...peers.values()].filter(p => p.state.screen).length + Number(Boolean(screenStream));
     $('sessionBadge').textContent = live ? `${live} ${live === 1 ? 'TELA AO VIVO' : 'TELAS AO VIVO'}` : 'SALA DE VOZ';
     $('sessionBadge').classList.toggle('live', live > 0);
-    $('missionTitle').textContent = total > 1 ? 'Squad reunido' : 'Monte seu squad';
-    $('missionText').textContent = total > 1 ? `${total} pessoas, uma sala. ${live ? 'A transmissão já começou.' : 'Que tal compartilhar uma jogada?'}` : 'Copie o convite e chame alguém para a sala.';
+    // O cartao do topo da barra lateral conta o que esta acontecendo agora. Antes eram tres
+    // blocos separados (uma frase de efeito, um botao e um "mande um convite") dizendo a
+    // mesma coisa em lugares diferentes.
+    $('missionTitle').textContent = !joined ? 'Entrando na sala' : total > 1 ? `${total} pessoas na sala` : 'Só você por aqui';
+    $('missionText').textContent = !joined ? 'Um instante.'
+      : live ? `${live} ${live === 1 ? 'tela ao vivo agora.' : 'telas ao vivo agora.'}`
+      : total > 1 ? 'Ninguém transmitindo ainda.' : 'Chame alguém para a sala.';
     const members = joined ? [{ id: 'self', name: myName, state: meuEstado() }, ...peers.values()] : [];
     const signature = JSON.stringify(members.map(p => [p.id, p.name, p.state, Boolean(p.semConexao)]));
     if (signature !== memberSignature) {
@@ -75,18 +122,30 @@
         const state = document.createElement('span');
         // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
-        state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : person.state.micMuted ? 'mudo' : 'voz';
+        state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : person.state.micMuted ? '' : 'voz';
         row.append(avatar, name, state);
         return row;
       }));
     }
     document.querySelectorAll('.member').forEach(row => row.classList.toggle('falando', Boolean(tiles.get(row.dataset.memberId)?.root.classList.contains('falando'))));
+        // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
+        // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
+        // pergunta "por que ela não responde?" ficava sem resposta aqui.
+        if (person.state.micMuted && !person.semConexao) {
+          const mudo = document.createElement('span');
+          mudo.className = 'member-mudo';
+          mudo.title = 'Microfone desligado';
+          mudo.setAttribute('role', 'img');
+          mudo.setAttribute('aria-label', 'Microfone desligado');
+          row.append(mudo);
+        }
     document.querySelectorAll('.avatar-wrap').forEach(element => {
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
       element.setAttribute('aria-label', `Destacar ${element.parentElement.querySelector('.participant-name').textContent}`);
     });
-    document.querySelectorAll('.volume-slider').forEach(element => element.setAttribute('aria-label', `Volume de ${element.closest('.participant').querySelector('.participant-name').textContent}`));
+    // Os controles de volume são rotulados pelo pintarControleDeVolume: ele sabe de quem é
+    // o som, e alcança também os que vivem na grade, fora de qualquer .participant.
     if (!suportaCompartilharTela) {
       screenBtn.setAttribute('aria-label', 'Este navegador permite assistir, mas não transmitir a tela');
       screenBtn.title = 'Você pode assistir às telas. Para transmitir a sua, use um computador.';
@@ -163,6 +222,14 @@
       if (comHardware === null) {
         lines.push('Codificação por hardware: este navegador não sabe informar.');
       } else if (comHardware.length) {
+      // O que aconteceu com a página em segundo plano — a pergunta que só aparece no
+      // celular, onde não há DevTools à mão. Isto era despejado na barra de status da sala
+      // a cada volta para a aba: um texto de depuração no lugar reservado a avisos de uso.
+      // O histórico guarda até 300 linhas; o que interessa a quem abre o painel são as
+      // últimas, de perto do problema.
+      const segundoPlano = (window.verDiagnosticoSegundoPlano?.() || '').trim().split('\n').slice(-25);
+      if (segundoPlano[0]) lines.push('', 'Eventos em segundo plano:', ...segundoPlano);
+
         lines.push(`Codificação por hardware disponível para: ${comHardware.join(', ')}.`);
       } else {
         lines.push('Codificação por hardware: NENHUM codec. Quem codifica é o processador,'
@@ -223,12 +290,12 @@
       }
 
       let summary = !socket?.connected ? 'O servidor está desconectado. Confira o endereço e se ele está ligado.'
-        : !conectado ? 'A sala não está conectada ao servidor de mídia. Sem ele o chat funciona, mas ninguém vê nem ouve ninguém — confira se o processo do servidor de mídia está no ar.'
-        : !peers.size ? 'Você está conectado ao servidor de mídia. O diagnóstico de recepção aparece quando outra pessoa entrar.'
+        : !conectado ? 'A sala não alcança o servidor de mídia: o chat funciona, mas ninguém vê nem ouve ninguém.'
+        : !peers.size ? 'Tudo conectado. O diagnóstico de recepção aparece quando outra pessoa entrar.'
         : midiasBloqueadas.size ? 'O navegador bloqueou a reprodução. Feche este painel e toque em Ativar reprodução.'
-        : recebidos > 0 ? 'Há quadros de vídeo decodificados. Se a imagem não aparece, feche este painel e tente Reproduzir vídeo.'
-        : 'A sala está conectada. Se alguém já transmite, aguarde os primeiros quadros e confira as faixas abaixo.';
-      if (pinned?.id === 'self') summary = 'O palco mostra sua prévia local. Para conferir a recepção, abra o diagnóstico em outro participante.';
+        : recebidos > 0 ? 'O vídeo está chegando e sendo decodificado. Se a imagem não aparece, tente Reproduzir vídeo.'
+        : 'Tudo conectado. Se alguém já transmite, aguarde os primeiros quadros.';
+      if (pinned?.id === 'self') summary = 'O palco mostra sua própria imagem. Para conferir a recepção, destaque outro participante.';
       report = lines.join('\n');
       $('diagnosticsSummary').textContent = summary;
       $('diagnosticsReport').textContent = report;

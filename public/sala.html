@@ -13,9 +13,9 @@
 <div id="nameGate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
   <div class="gate-card">
     <img class="gate-mark" src="/mark.svg" alt="Nexo" width="52" height="52">
-    <span class="eyebrow">SEU PRÓXIMO PONTO DE ENCONTRO</span>
-    <h1 id="gateTitle">O squad te espera.</h1>
-    <p>Escolha como você quer aparecer na sala.<br>O microfone e a câmera começam desligados.</p>
+    <span class="eyebrow">VOCÊ ESTÁ ENTRANDO NA SALA</span>
+    <h1 id="gateTitle">sala</h1>
+    <p>Escolha como quer aparecer para o resto do squad. O microfone e a câmera começam desligados.</p>
     <label for="nameInput">Seu nome</label>
     <input id="nameInput" type="text" maxlength="40" placeholder="Seu nome ou nickname" autocomplete="nickname" autofocus>
     <button id="nameConfirmBtn">Entrar na sala →</button>
@@ -29,14 +29,18 @@
   <aside class="room-sidebar" aria-label="Sala e participantes" id="roomSidebar">
     <a class="workspace-name" href="/" title="Sair da sala e voltar ao início"><img src="/mark.svg" alt="" width="30" height="30"><strong>NEXO</strong><span>seu espaço</span></a>
     <div class="sidebar-content">
-      <div class="space-cover"><span class="eyebrow">BORA SE CONECTAR</span><strong>Juntos, a partida<br>é outra.</strong><span class="cover-orbit" aria-hidden="true">✳</span></div>
+      <div class="space-cover">
+        <span class="cover-orbit" aria-hidden="true">✳</span>
+        <span class="eyebrow">SUA SESSÃO</span>
+        <strong id="missionTitle">Só você por aqui</strong>
+        <small id="missionText">Chame alguém para a sala.</small>
+        <button class="cover-invite" data-action="invite" type="button"><span aria-hidden="true">＋</span> Convidar amigos</button>
+      </div>
       <div class="section-caption">CANAIS DA SALA</div>
       <button class="channel active" data-action="room" type="button"><span class="channel-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span><span><strong id="sidebarRoom">Sala de voz</strong><small>Voz, câmera e tela</small></span><span class="channel-count" id="sidebarCount">0</span></button>
       <button class="channel" data-action="chat" type="button"><span class="channel-symbol" aria-hidden="true">#</span><span>chat da sala</span></button>
       <div class="section-caption member-caption">NO SQUAD <span id="memberTotal">0</span></div>
       <div id="memberList" class="member-list"></div>
-      <button class="sidebar-invite" data-action="invite" type="button"><span aria-hidden="true">＋</span> Convidar amigos</button>
-      <div class="squad-mission"><span class="mission-icon" aria-hidden="true">✦</span><span><strong id="missionTitle">Monte seu squad</strong><small id="missionText">Copie o convite e chame alguém para a sala.</small></span></div>
     </div>
     <div class="connection-box"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão">⌁</button></div>
     <div class="self-profile"><span class="self-avatar" id="selfAvatar">?</span><div><strong id="selfName">Seu perfil</strong><small id="selfState">Pronto para entrar</small></div><button class="ghost" type="button" data-action="devices" title="Configurar dispositivos" aria-label="Configurar dispositivos">⚙</button></div>
@@ -48,27 +52,33 @@
       <h1 id="roomTitle">sala</h1>
       <span id="participantCount">Seu ponto de encontro</span>
     </div>
+      <span class="session-badge" id="sessionBadge">SALA DE VOZ</span>
     <div class="topbar-actions">
-      <button id="copyLinkBtn" class="secondary" type="button" title="Copiar convite da sala">Convidar amigos</button>
+      <button id="copyLinkBtn" class="secondary" type="button" title="Copiar o link desta sala">Convidar amigos</button>
       <button id="chatToggle" class="ghost" type="button" aria-label="Abrir chat" aria-controls="chatPanel">Chat<span id="chatBadge" class="badge hidden">0</span></button>
     </div>
   </header>
 
   <main class="palco-area">
-    <div class="session-heading"><div><span class="eyebrow">SEU SQUAD, EM TEMPO REAL</span><h2>O melhor é estar junto<span>.</span></h2></div><span class="session-badge" id="sessionBadge">SALA DE VOZ</span></div>
     <div class="stage" id="stage">
       <video id="stageVideo" autoplay playsinline muted></video>
       <div id="multiStage" class="multi-stage" aria-label="Telas e câmeras em destaque" hidden></div>
       <div class="stage-empty" id="stageEmpty">
+      <div class="oculto-overlay hidden" id="stageOcultoOverlay"><strong>Oculto para você</strong><small>A sala continua recebendo normalmente.</small><button type="button" id="stageMostrarBtn">Mostrar de novo</button></div>
         <div class="stage-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="orbit-spark spark-one">✦</span><span class="orbit-spark spark-two">+</span><div class="screen-illustration"><span></span><i></i><b>✳</b></div><div class="art-badge">PLAY TOGETHER</div></div>
-        <span class="eyebrow">UM LINK. TODO MUNDO PERTO.</span><h3>A próxima boa história<br>começa nessa sala.</h3><p>Compartilhe a jogada, abra a câmera ou só fique na resenha.<br> Este espaço é de vocês.</p>
-        <button type="button" data-action="invite">＋ Chamar meu squad</button><small>O vídeo aparece aqui assim que alguém transmitir.</small>
+        <h3 id="stageEmptyTitle">O palco está livre</h3>
+        <p id="stageEmptyText">Compartilhe sua tela ou abra a câmera para começar.</p>
+        <div class="stage-empty-actions" id="stageEmptyActions"></div>
       </div>
       <div id="playbackRecovery" class="playback-recovery" hidden><button type="button" id="retryPlaybackBtn">Reproduzir vídeo</button><button type="button" class="secondary" data-action="diagnostics">Ver diagnóstico</button></div>
       <div class="stage-label hidden" id="stageLabel"></div>
       <div class="stage-controls hidden" id="stageControls">
         <button id="multiViewBtn" type="button" title="Ver telas e câmeras em grade" aria-label="Ver telas e câmeras em grade" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
         <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
+        <div class="volume-row stage-volume" id="stageVolume" hidden>
+          <button class="mute-peer-btn" id="stageMute" type="button" aria-pressed="false"></button>
+          <input type="range" class="volume-slider" id="stageSlider" min="0" max="100" value="100" step="1" data-alvo="tela">
+        </div>
         <span id="zoomLevelLabel">100%</span>
         <button id="zoomInBtn" type="button" title="Aumentar zoom">+</button>
         <button id="theaterBtn" type="button" title="Modo teatro" aria-label="Ativar modo teatro" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h12v6H6z"/></svg></button>
@@ -77,7 +87,7 @@
     </div>
 
     <div class="aviso-eco hidden" id="avisoDeEco"></div>
-    <div class="participants-section"><div class="participants-heading"><strong>Na sala <span id="tileCount">0</span></strong><span>Clique em uma câmera ou tela para destacar</span></div><div class="participants" id="participants"></div></div>
+    <div class="participants-section"><div class="participants-heading"><strong>Na sala <span id="tileCount">0</span></strong><span>Clique para destacar no palco</span></div><div class="participants" id="participants"></div></div>
     <p id="status" class="status-line" role="status" aria-live="polite">Escolha seu nome para entrar na sala.</p>
   </main>
 
@@ -119,8 +129,8 @@
 
 <div class="modal hidden" id="devicesPanel" role="dialog" aria-modal="true" aria-labelledby="devicesTitle">
   <div class="modal-card">
-    <h2 id="devicesTitle">Do seu jeito</h2>
-    <p class="modal-sub">Vale na hora, mesmo no meio da conversa.</p>
+    <h2 id="devicesTitle">Áudio e vídeo</h2>
+    <p class="modal-sub">Tudo aqui vale na hora, mesmo no meio da conversa.</p>
 
     <div class="abas" data-abas>
       <div class="abas-fita" role="tablist" aria-label="Seções das preferências">
@@ -142,17 +152,20 @@
           <label for="camDevice">Câmera</label>
           <select id="camDevice"></select>
         </div>
-        <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Testar áudio</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
-        <small class="modal-sub">RNNoise reduz o ruído do microfone neste dispositivo, sem limite de uso. O áudio de jogos e telas mantém o som original.</small>
+        <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Tocar som de teste</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
+        <small class="modal-sub">A redução de ruído limpa só a sua voz. O som de jogos e telas vai inteiro.</small>
         <small id="devicesDica" class="modal-sub"></small>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
         <div class="field"><label for="videoQuality">Qualidade da transmissão · 30 fps</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small id="qualidadeBtn"></small></div>
-        <div class="field"><label for="videoPriority">Quando faltar banda ou processador</label><select id="videoPriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Alguma coisa tem de ceder: ou os detalhes, ou o movimento. Para ler código, nitidez; para jogo, fluidez.</small></div>
-        <div class="field"><label for="videoCodec">Codec de vídeo</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">O navegador escolhe sozinho se usa a placa de vídeo; aqui você escolhe o codec. H.264 é o único decodificado por hardware no iPhone. Quem não suportar a escolha recebe pelo melhor codec em comum.</small></div>
-        <small class="modal-sub">Sua tela sobe uma vez para o servidor de mídia, que entrega a cada pessoa a qualidade que a conexão dela aguenta. Quem está numa rede lenta não derruba a imagem dos outros.</small>
-        <small id="qualityLive" style="white-space:pre-line" aria-live="off"></small>
+        <div class="field"><label for="videoPriority">Quando faltar banda ou processador</label><select id="videoPriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Para ler código, nitidez. Para jogo, fluidez.</small></div>
+        <details class="avancado">
+          <summary>Codec de vídeo</summary>
+          <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">H.264 é o mais compatível e o único que o iPhone decodifica por hardware. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
+        </details>
+        <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
+        <small id="qualityLive" class="medicao" style="white-space:pre-line" aria-live="off"></small>
       </div>
     </div>
 
@@ -165,7 +178,7 @@
 <div class="modal hidden" id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
   <div class="modal-card">
     <h2 id="settingsTitle">Compartilhar tela</h2>
-    <p class="modal-sub">Escolha o que transmitir. A janela do navegador para escolher a tela aparece depois de confirmar.</p>
+    <p class="modal-sub">Ajuste aqui e confirme. O navegador pergunta qual tela em seguida.</p>
 
     <div class="abas" data-abas>
       <div class="abas-fita" role="tablist" aria-label="Seções do compartilhamento">
@@ -177,15 +190,19 @@
     <div class="field">
       <label for="captureMode">O que compartilhar</label>
       <select id="captureMode">
+          <div class="medidor" id="micMedidor" role="img" aria-label="Nível do microfone"><span id="micNivel"></span></div>
+          <small id="micDica">Ative o microfone para ver o nível.</small>
         <option value="browser">Aba do navegador</option>
         <option value="window">Janela ou aplicativo</option>
         <option value="monitor">Tela inteira</option>
       </select>
-      <small id="captureCompatibility" hidden>Para compartilhar uma única aba com seu áudio, abra o link desta sala no Chrome ou Edge. No aplicativo, você pode compartilhar a janela do navegador com o áudio do programa.</small>
+      <small id="captureCompatibility" hidden>Compartilhar uma única aba com áudio só funciona no Chrome ou no Edge. No aplicativo, dá para compartilhar a janela do navegador com o som do programa.</small>
       <div id="capturaAviso" class="echo-warning" hidden>
         <small id="capturaAvisoTexto"></small>
         <button id="usarTelaInteiraBtn" type="button" class="secondary">Compartilhar a tela inteira</button>
       </div>
+          <video id="camPreview" class="cam-preview" autoplay muted playsinline hidden></video>
+          <small id="camDica">Ligue a câmera para se ver aqui.</small>
     </div>
     <div class="field">
       <label for="audioPolicy">Áudio</label>
@@ -221,9 +238,12 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelEnvio" aria-labelledby="abaEnvio" hidden>
-    <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small>Adaptada para cada participante. Você pode mudar durante a transmissão em Dispositivos.</small></div>
+    <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small>Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
     <div class="field"><label for="sharePriority">Quando faltar banda ou processador</label><select id="sharePriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Nitidez segura os detalhes e derruba os quadros; fluidez faz o contrário.</small></div>
-    <div class="field"><label for="shareCodec">Codec de vídeo</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>H.264 costuma usar a placa de vídeo para codificar e é o único que o iPhone decodifica por hardware. Veja o codificador em uso no Diagnóstico.</small></div>
+    <details class="avancado">
+      <summary>Codec de vídeo</summary>
+      <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>H.264 costuma usar a placa de vídeo e é o único que o iPhone decodifica por hardware. O codificador em uso aparece no Diagnóstico.</small></div>
+    </details>
       </div>
 
     </div>
