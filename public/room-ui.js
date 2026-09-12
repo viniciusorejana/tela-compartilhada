@@ -275,6 +275,19 @@
             recebidos += item.framesDecoded || 0;
             lines.push(`  ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; bytes=${item.bytesReceived ?? '?'}; quadros decodificados=${item.framesDecoded ?? '?'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}`);
             lines.push(`  keyframes=${item.keyFramesDecoded ?? '?'}; descartados=${item.framesDropped ?? '?'}; PLI=${item.pliCount ?? '?'}; decodificador=${item.decoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientDecoder)}`);
+            // "Travadinha" tem nome no relatório do navegador: congelamento. Sem estas duas
+            // linhas, quem sente a imagem tropeçar não tinha o que mostrar -- só a
+            // impressão. Com elas dá para separar o que congela (imagem parada) do que
+            // chega picotado (quadros descartados), que têm causas diferentes.
+            lines.push(`  congelamentos=${item.freezeCount ?? '?'} (${item.totalFreezesDuration != null ? item.totalFreezesDuration.toFixed(2) + ' s no total' : 'duração não informada'}); pausas=${item.pauseCount ?? '?'}`);
+            lines.push(`  atraso do buffer=${item.jitterBufferDelay != null && item.jitterBufferEmittedCount ? Math.round(item.jitterBufferDelay / item.jitterBufferEmittedCount * 1000) + ' ms' : '?'}; jitter=${item.jitter != null ? Math.round(item.jitter * 1000) + ' ms' : '?'}; perdidos=${item.packetsLost ?? '?'}`);
+          }
+          // Música e voz sofrem de coisas diferentes na mesma rede, e o áudio é onde um
+          // engasgo aparece primeiro: a imagem tem quadros para descartar, o som não.
+          if (item.type === 'inbound-rtp' && item.kind === 'audio') {
+            const buffer = item.jitterBufferDelay != null && item.jitterBufferEmittedCount
+              ? Math.round(item.jitterBufferDelay / item.jitterBufferEmittedCount * 1000) + ' ms' : '?';
+            lines.push(`  Áudio: buffer=${buffer}; jitter=${item.jitter != null ? Math.round(item.jitter * 1000) + ' ms' : '?'}; perdidos=${item.packetsLost ?? '?'}; remendos=${item.concealedSamples ?? '?'}`);
           }
           // Do lado de quem envia, e aqui que se ve se a GPU esta sendo usada de verdade.
           if (item.type === 'outbound-rtp' && item.kind === 'video') {

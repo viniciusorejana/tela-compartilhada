@@ -84,6 +84,17 @@ const temMediaDevices = Boolean(navigator.mediaDevices && navigator.mediaDevices
 const suportaWebRTC = Boolean(window.RTCPeerConnection && window.RTCRtpSender);
 const suportaCompartilharTela = Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 const ehWindows = /Windows/i.test(navigator.userAgent);
+// Celular ou tablet. Interessa porque o codificador deles e muito mais apertado que o de
+// um PC: a mesma configuracao que um desktop engole sem suar faz um telefone aquecer,
+// baixar o relogio e entregar a imagem aos tropecos.
+//
+// `userAgentData.mobile` e a resposta direta onde existe; nos demais, um iPad moderno se
+// declara "Macintosh" e so se entrega pelos pontos de toque.
+const ehCelular = Boolean(
+  navigator.userAgentData?.mobile
+  || /Android|iPhone|iPod/i.test(navigator.userAgent)
+  || (/iPad|Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+);
 const suportaTelaCheia = Boolean(
   document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen
 );
@@ -535,7 +546,28 @@ function opcoesDePublicacao(fonte) {
   const perfil = perfilAtual();
   if (fonte === 'camera') {
     // Camera e movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
-    return { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true, degradationPreference: 'maintain-framerate' };
+    const opcoes = { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true, degradationPreference: 'maintain-framerate' };
+    // No celular, DUAS camadas em vez de tres.
+    //
+    // Simulcast codifica a mesma imagem varias vezes, uma por qualidade, para que cada
+    // espectador receba a que a conexao dele aguenta. Num PC isso e barato. Num telefone e
+    // a terceira codificacao que empurra o aparelho para o limite -- e o sintoma nao e a
+    // imagem ficar feia, e ela tropecar de tempos em tempos, porque o codificador nao
+    // termina um quadro antes do proximo chegar.
+    //
+    // Com duas camadas a adaptacao continua existindo (quem esta na rede ruim ainda recebe
+    // a pequena), e some um terco do trabalho de codificar.
+    //
+    // As camadas sao declaradas a mao em vez de usar os presets prontos da biblioteca: os
+    // dela limitam a 20 quadros por segundo, e trocar tres camadas a 30 por duas a 20
+    // consertaria o tropeco criando outro -- a imagem ficaria constante, porem lenta.
+    if (ehCelular) {
+      opcoes.videoSimulcastLayers = [
+        new LivekitClient.VideoPreset(640, 360, 500_000, 30),
+        new LivekitClient.VideoPreset(1280, 720, 1_700_000, 30)
+      ];
+    }
+    return opcoes;
   }
   const prioridade = PRIORIDADES_DE_TELA[prioridadeDaTela];
   return {

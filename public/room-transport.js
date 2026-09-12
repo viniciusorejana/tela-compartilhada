@@ -158,10 +158,17 @@
 
   // Cria a mesma forma de objeto que a interface sempre recebeu. `pc` sobrevive apenas
   // como um estado de conexao sintetico: e o unico campo que a lista da sala consulta.
+  // A identidade do bot de musica. O servidor recusa esse nome para gente (ver
+  // `nomeQueNaoSeFingeDeBot`, em server.js), entao ver este prefixo e prova de que aquele
+  // participante e o bot -- e nao alguem que escolheu se chamar assim.
+  const PREFIXO_DO_BOT = 'nexo-dj#';
+
   function criarPar(participante, sequencia) {
     return {
       id: participante.identity,
       name: participante.name || participante.identity.split('#')[0] || 'Participante',
+      // Muda como a faixa de audio dele e recebida: musica pode esperar, conversa nao.
+      ehBot: String(participante.identity || '').startsWith(PREFIXO_DO_BOT),
       state: estadoVazio(),
       remoteStreams: streamsVazios(),
       ordem: { screen: 0, camera: 0 },
@@ -445,6 +452,33 @@
       return mudou;
     }
 
+    // ---------- Música aguenta esperar; conversa, não ----------
+    //
+    // O navegador guarda uns 30 ms de áudio antes de tocar, e esse número existe para
+    // CONVERSA: cada milissegundo a mais é um milissegundo de atraso entre alguém falar e
+    // o outro ouvir. O preço é não ter folga nenhuma -- num Wi-Fi que oscila ou numa rede
+    // móvel, qualquer pacote que chegue fora de hora vira um engasgo audível, porque não
+    // havia reserva para cobrir o atraso.
+    //
+    // Com o bot, esse preço não se justifica: ninguém conversa com a música. Meio segundo
+    // de reserva absorve a oscilação inteira sem que nada se perca -- e como o alvo é o
+    // mesmo em todas as telas, quem está na mesma sala continua ouvindo junto.
+    //
+    // Vale só para a faixa do bot. A voz das pessoas continua com a folga curta de sempre.
+    const MS_DE_RESERVA_PARA_MUSICA = 500;
+
+    function amortecerSeForMusica(par, publicacao) {
+      if (!par.ehBot || fonteDaPublicacao(publicacao) !== 'micAudio') return;
+      const receptor = publicacao.track?.receiver || publicacao.receiver;
+      if (!receptor) return;
+      try {
+        // `jitterBufferTarget` é o nome padronizado; `playoutDelayHint` é o antigo do
+        // Chrome. Escrever nos dois cobre as duas gerações sem precisar detectar versão.
+        if ('jitterBufferTarget' in receptor) receptor.jitterBufferTarget = MS_DE_RESERVA_PARA_MUSICA;
+        else if ('playoutDelayHint' in receptor) receptor.playoutDelayHint = MS_DE_RESERVA_PARA_MUSICA / 1000;
+      } catch (_) { /* Navegador sem o ajuste: fica com a folga padrão, como antes. */ }
+    }
+
     function guardarFaixa(par, publicacao, faixa) {
       const fonte = fonteDaPublicacao(publicacao);
       if (!fonte) return;
@@ -495,6 +529,7 @@
         // quem esta com a conexao ruim recebe a camada cheia de tudo que assinar daqui em
         // diante -- e volta a afogar no primeiro clique em "Assistir".
         aplicarCamada(par, publicacao);
+        amortecerSeForMusica(par, publicacao);
         guardarFaixa(par, publicacao, faixa);
         recalcularEstado(par);
       })
