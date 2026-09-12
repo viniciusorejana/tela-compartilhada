@@ -45,7 +45,9 @@ input::placeholder,textarea::placeholder { color:#89899f; }
 .channel.active { background:#8980f21a; color:#c7bcff; }
 .channel>span:nth-child(2) { min-width:0; flex:1; }
 .channel strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
-.channel small { display:block; color:#9390ac; font-size:10px; margin-top:2px; font-weight:400; }
+/* O nome da faixa que esta tocando entra aqui, e ele pode ter setenta caracteres: sem o
+   corte, o canal de musica cresce para tres linhas e empurra a lista de gente para baixo. */
+.channel small { display:block; color:#9390ac; font-size:10px; margin-top:2px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .channel-symbol { flex:none; font-size:20px; font-weight:400; width:24px; }
 .channel-count { font-size:10px; padding:1px 5px; background:#a599ff20; border-radius:4px; }
 .member-caption { margin-top:26px; }
@@ -251,11 +253,92 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .msg-img { max-width:100%; max-height:260px; border-radius:8px; margin-top:5px; display:block; cursor:zoom-in; }
 .msg-sistema { font-size:10px; color:var(--muted); text-align:center; }
 .chat-compose { margin:8px 12px 0; border:1px solid #ffffff0a; background:#282835; border-radius:11px; display:flex; align-items:flex-end; padding:5px; gap:2px; }
-#chatInput { resize:none; max-height:120px; min-height:35px; background:transparent; border:none; font-size:11px; padding:9px 3px; line-height:1.5; }
-#chatInput:focus-visible { outline-offset:0; }
-#chatSend { font-size:15px; background:transparent; color:#a998f1; padding:7px; }
+#chatInput,#musicaInput { resize:none; max-height:120px; min-height:35px; background:transparent; border:none; font-size:11px; padding:9px 3px; line-height:1.5; }
+#chatInput:focus-visible,#musicaInput:focus-visible { outline-offset:0; }
+#chatSend,#musicaSend { font-size:15px; background:transparent; color:#a998f1; padding:7px; }
 #attachImageBtn { padding:5px; font-size:21px; line-height:25px; }
 .chat-hint { display:block; padding:9px 19px 17px; font-size:8px; color:#9a8ca8; }
+.chat-hint code { background:#ffffff0f; border-radius:4px; padding:1px 4px; color:#b9aee0; }
+
+/* ---------- Canal de música ----------
+   O painel de música é o MESMO objeto que o chat -- mesma classe, mesma coluna do grid,
+   mesmo comportamento em tela estreita e no teatro. Só um dos dois aparece por vez, e é
+   isso que a classe no `.app` decide. Fazer dele uma coluna separada teria exigido
+   reescrever o grid e as cinco media queries que já o afinam. */
+.app.painel-musica #chatPanel { display:none; }
+.app:not(.painel-musica) #musicaPanel { display:none; }
+/* O convite vazio e o mesmo do chat, e o "#" dele nomeia um canal de conversa. Aqui o
+   canal e outro. */
+#musicaMsgs .chat-vazio::before { content:'♪'; }
+.musica-corpo { display:grid; grid-template-rows:auto auto auto minmax(0,1fr); min-height:0; }
+.channel-live { flex:none; font-size:10px; color:#a6e7c4; animation:pulsa-nota 1.6s ease-in-out infinite; }
+@keyframes pulsa-nota { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+
+/* O cartão do que está tocando. Fica preso no topo do canal: rolar as mensagens não pode
+   esconder a única informação que a sala consulta o tempo todo. */
+.tocando { display:flex; gap:10px; align-items:center; padding:13px 14px; margin:12px 12px 0; border-radius:12px; background:linear-gradient(120deg,#332e4d,#272638); border:1px solid #aaa0fb1a; }
+.tocando-capa { flex:none; display:grid; place-items:center; width:44px; height:44px; border-radius:9px; background:#4a4272 center/cover no-repeat; color:#cdc2ff; font-size:20px; }
+.tocando-info { flex:1; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:8px; }
+.tocando-info strong { grid-column:1 / 3; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.02em; }
+.tocando-info small { grid-column:1 / 3; font-size:10px; color:#b3a9cf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:6px; }
+.tocando-info small:empty { display:none; }
+.tocando-barra { height:3px; border-radius:2px; background:#ffffff1c; overflow:hidden; align-self:center; }
+.tocando-barra i { display:block; height:100%; width:0; border-radius:2px; background:#a292ff; transition:width .9s linear; }
+.tocando-tempo { font-size:9px; color:#a79ec2; font-variant-numeric:tabular-nums; }
+.tocando-botoes { flex:none; display:flex; gap:2px; }
+.tocando-botoes button { font-size:14px; padding:6px 7px; }
+.tocando.pausado .tocando-capa { opacity:.5; }
+.tocando.pausado .tocando-barra i { transition:none; }
+
+.musica-volume { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:10px 15px 0; }
+.musica-volume label { grid-column:1 / 3; font-size:9px; font-weight:600; color:#a79ec2; }
+.musica-volume span { font-size:9px; color:#a79ec2; font-variant-numeric:tabular-nums; }
+.musica-fila { margin:11px 14px 0; font-size:10px; }
+.musica-fila summary { cursor:pointer; color:#b0a6cc; font-weight:650; padding:4px 0; }
+.musica-fila summary span { color:#8e86a8; font-weight:400; }
+.musica-fila ol { margin:5px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:5px; max-height:148px; overflow-y:auto; }
+.musica-fila li { color:#b6afc6; line-height:1.5; }
+.musica-fila li small { display:block; color:#8b849f; font-size:9px; }
+.musica-fila button { background:transparent; color:#c98d9c; font-size:9px; padding:0 3px; }
+.musica-fila button:hover:not(:disabled) { background:transparent; color:#f07583; }
+
+/* A fala do bot não usa avatar de pessoa: ela é resposta a um comando, não conversa. */
+.msg.do-bot .msg-avatar { background:#4b3f85; color:#d6ccff; }
+.msg.do-bot .msg-autor { color:#b7a7ff; }
+.msg.do-bot .msg-texto { color:#b9b2ca; }
+.msg-texto strong { color:#e3ddf3; font-weight:650; }
+/* Listas achadas por nome: alvos grandes, porque a maioria dos toques vem de celular. */
+.escolhas-de-lista { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
+.escolhas-de-lista button { text-align:left; font-size:11px; font-weight:600; line-height:1.35; padding:9px 11px; background:var(--bg-3); color:#d6d0e6; border:1px solid #ffffff0d; }
+.escolhas-de-lista button::before { content:'♪'; margin-right:7px; color:#a292ff; }
+.escolhas-de-lista button:hover:not(:disabled) { background:#3c3d50; color:#fff; }
+.escolhas-de-lista button.escolhida { background:#5d51b8; color:#f3f0fd; opacity:1; }
+.msg-texto code { background:#ffffff0f; border-radius:4px; padding:1px 5px; font-size:10px; color:#c1b6e6; }
+
+/* ---------- Mesa de sons ---------- */
+#soundboardBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 10v4M8 6v12M12 3v18M16 7v10M20 11v2'/%3E%3C/svg%3E"); }
+.soundboard-card { width:min(100%,540px); }
+.sons-grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:8px; max-height:280px; overflow-y:auto; margin-bottom:14px; }
+.sons-grade:empty { display:none; }
+.som-card { position:relative; }
+/* O botão inteiro é o alvo: numa mesa de sons se erra o clique com pressa, e um alvo
+   pequeno no meio de um cartão grande transforma isso em "não tocou e não sei por quê". */
+.som-btn { display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%; min-height:56px; padding:10px 11px; text-align:left; background:var(--bg-3); color:var(--text); border:1px solid #ffffff0a; }
+.som-btn:hover:not(:disabled) { background:#3c3d50; }
+.som-btn strong { font-size:11px; font-weight:650; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.som-btn small { font-size:9px; color:#9c96b0; font-weight:400; }
+.som-btn.tocando-agora { background:#5d51b8; }
+.som-btn.tocando-agora small { color:#d7d0f7; }
+.som-apagar { position:absolute; top:4px; right:4px; padding:2px 6px; font-size:11px; background:transparent; color:#8a8399; opacity:0; transition:opacity .12s; }
+.som-card:hover .som-apagar,.som-apagar:focus-visible { opacity:1; }
+.som-apagar:hover:not(:disabled) { background:#f0758326; color:#ff98a4; }
+@media(max-width:760px) { .som-apagar { opacity:1; } }
+.sons-vazio { font-size:11px; color:#9690a8; line-height:1.7; margin:0 0 16px; }
+.sons-envio { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+.sons-envio small { font-size:10px; color:#a99fba; }
+.sons-volume { margin-bottom:0; }
+.sons-volume .volume-row { gap:8px; }
+.sons-volume span { font-size:10px; color:#a99fba; font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
 .badge { display:inline-grid; place-items:center; min-width:16px; height:16px; border-radius:8px; font-size:9px; font-weight:700; background:#db7994; color:#251821; margin-left:4px; }
 #chatToggle { display:none; }
 .app.sem-chat #chatToggle { display:inline-flex; align-items:center; }

@@ -334,7 +334,11 @@ function base64url(valor) {
 // Token de acesso do LiveKit: um JWT HS256 assinado com o segredo que so existe aqui.
 // O navegador recebe apenas o token pronto, com prazo, sala e permissoes ja embutidos --
 // ele nao escolhe sala nem permissao.
-function criarToken(sala, identidade, nome) {
+//
+// `podeReceber` existe para o bot de musica: ele so PUBLICA. Negar a assinatura no proprio
+// token e mais forte do que pedir ao cliente dele para nao assinar -- um defeito futuro no
+// bot nao consegue passar a baixar a camera e a voz da sala inteira.
+function criarToken(sala, identidade, nome, { podeReceber = true } = {}) {
   const { apiKey, apiSecret } = lerOuCriarChaves();
   const agora = Math.floor(Date.now() / 1000);
   const cabecalho = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -344,7 +348,7 @@ function criarToken(sala, identidade, nome) {
     name: nome,
     nbf: agora,
     exp: agora + VALIDADE_DO_TOKEN,
-    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true }
+    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: podeReceber, canPublishData: podeReceber }
   }));
   const assinatura = crypto.createHmac('sha256', apiSecret).update(`${cabecalho}.${corpo}`).digest('base64url');
   return `${cabecalho}.${corpo}.${assinatura}`;

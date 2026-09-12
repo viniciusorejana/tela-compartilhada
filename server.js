@@ -27,6 +27,8 @@ const FAMILIAS_DE_NAVEGADOR = {
 };
 
 const sfu = require('./sfu');
+const musica = require('./musica');
+const soundboard = require('./soundboard');
 
 const app = express();
 require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'));
@@ -80,7 +82,7 @@ app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res) => {
 // nao escolhe nada disso, e o segredo que o assina nunca sai desta maquina.
 app.get('/api/sala-config', (req, res) => {
   const sala = String(req.query.sala || '').toLowerCase();
-  const nome = String(req.query.nome || 'Convidado').trim().slice(0, 40) || 'Convidado';
+  const nome = nomeQueNaoSeFingeDeBot(String(req.query.nome || 'Convidado').trim().slice(0, 40) || 'Convidado');
   if (!/^[a-z0-9_-]{4,32}$/.test(sala)) return res.status(400).json({ error: 'Codigo de sala invalido.' });
 
   let publicUrl = null;
@@ -113,6 +115,15 @@ app.get('/api/sala-config', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl });
 });
+
+// A identidade de midia e `nome#sufixo`, e a do bot de musica e `nexo-dj#sala`. Quem se
+// chamasse "nexo-dj" produziria uma identidade com o MESMO prefixo -- e a sala passaria a
+// tratar essa pessoa como o bot: sem controle de microfone, com cara de robo na lista e
+// com os comandos de musica respondendo por ela. Um sufixo no nome resolve sem recusar a
+// entrada de ninguem.
+function nomeQueNaoSeFingeDeBot(nome) {
+  return nome.toLowerCase() === musica.PREFIXO_DA_IDENTIDADE.replace('#', '') ? `${nome} (pessoa)` : nome;
+}
 
 // O cliente acrescenta "/rtc" sozinho, entao aqui vai so a origem -- a MESMA que serviu a
 // pagina. Assim a sinalizacao herda o HTTPS do tunel, sem porta nem certificado extra.
@@ -155,6 +166,64 @@ app.get('/api/agente', (req, res) => {
   console.log(`Agente baixado para ${hospedeiro} (arquivo: ${nome})`);
 });
 
+// ---------- Mesa de sons ----------
+//
+// O arquivo sobe e desce por HTTP, nao pela sinalizacao. Sao alguns megabytes por som: se
+// passassem pelo Socket.IO, empurrariam para tras o chat, os avisos de entrada e saida e
+// o estado das midias -- que sao pequenos, mas dependem de chegar na hora. Por HTTP o
+// download ainda ganha cache do navegador, entao cada um baixa cada som uma vez so.
+const CODIGO_DE_SALA = /^[a-z0-9_-]{4,32}$/;
+
+// Quem sobe ou apaga um som precisa estar NA sala. O identificador do socket serve de
+// credencial: ele e sorteado pelo servidor, so o dono dele o conhece, e a conferencia
+// abaixo diz em que sala ele esta de verdade.
+function socketEstaNaSala(socketId, roomCode) {
+  return Boolean(socketId) && socketRoomCodes.get(String(socketId)) === roomCode;
+}
+
+function nomeDoSocket(socketId) {
+  const roomCode = socketRoomCodes.get(String(socketId));
+  return roomMembers.get(roomCode)?.get(String(socketId))?.name || 'Alguém';
+}
+
+app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.BYTES_MAXIMOS_DO_SOM + 1024 }), async (req, res) => {
+  const sala = String(req.params.sala || '').toLowerCase();
+  if (!CODIGO_DE_SALA.test(sala)) return res.status(400).json({ error: 'Código de sala inválido.' });
+  const socketId = String(req.query.socket || '');
+  if (!socketEstaNaSala(socketId, sala)) return res.status(403).json({ error: 'Entre na sala antes de enviar sons.' });
+
+  const { erro, som, cortado } = await soundboard.adicionar(sala, {
+    nome: req.query.nome,
+    tipo: req.headers['content-type'],
+    bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+    porQuem: nomeDoSocket(socketId),
+    // Só para saber se vale avisar "cortei": o corte em si é do ffmpeg, que não pergunta
+    // a ninguém quanto tempo o arquivo tem.
+    segundos: req.query.segundos
+  });
+  if (erro) return res.status(400).json({ error: erro });
+
+  io.to(roomName(sala)).emit('soundboard-lista', { sons: soundboard.listar(sala), espaco: soundboard.espacoDaSala(sala) });
+  res.json({ ok: true, som, cortado });
+});
+
+app.get('/api/soundboard/:sala/:id', (req, res) => {
+  const sala = String(req.params.sala || '').toLowerCase();
+  if (!CODIGO_DE_SALA.test(sala)) return res.status(400).end();
+  const som = soundboard.obter(sala, req.params.id);
+  if (!som) return res.status(404).end();
+
+  res.setHeader('Content-Type', som.tipo);
+  res.setHeader('Content-Length', som.tamanho);
+  // O identificador e sorteado e o conteudo nunca muda, entao o navegador pode guardar sem
+  // perguntar de novo -- e o que faz o disparo ser imediato depois da primeira vez.
+  res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
+  // O arquivo veio de alguem da sala: o navegador nao deve tentar interpreta-lo como outra
+  // coisa por causa do nome ou do conteudo.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.end(som.bytes);
+});
+
 // roomCode -> Map<socketId, { name, state }>
 const roomMembers = new Map();
 
@@ -180,6 +249,12 @@ function guardarNoHistorico(roomCode, msg) {
   while (bytes > BYTES_MAXIMOS_DO_HISTORICO && lista.length > 1) bytes -= tamanhoDaMensagem(lista.shift());
   historicoPorSala.set(roomCode, lista);
 }
+// O canal de musica tem historico proprio, e bem menor: ali as mensagens sao pedidos e
+// respostas do bot, que envelhecem rapido. Quem entra no meio quer ver o que esta tocando
+// -- e isso vem no estado, nao no historico.
+const MENSAGENS_DE_MUSICA_NO_HISTORICO = 40;
+const historicoDeMusicaPorSala = new Map();
+
 const socketRoomCodes = new Map();
 const audioCaptureProcesses = new Map();
 
@@ -430,6 +505,142 @@ function misturarAudio(socket, captures) {
   });
 }
 
+// ---------- O bot de musica falando com a sala ----------
+
+function publicarNaMusica(roomCode, mensagem) {
+  const lista = historicoDeMusicaPorSala.get(roomCode) || [];
+  lista.push(mensagem);
+  while (lista.length > MENSAGENS_DE_MUSICA_NO_HISTORICO) lista.shift();
+  historicoDeMusicaPorSala.set(roomCode, lista);
+  io.to(roomName(roomCode)).emit('musica-mensagem', mensagem);
+}
+
+function falarComoBot(roomCode, texto) {
+  publicarNaMusica(roomCode, { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, texto, em: Date.now() });
+}
+
+function duracaoLegivel(segundos) {
+  if (!segundos) return 'ao vivo';
+  const minutos = Math.floor(segundos / 60);
+  return `${minutos}:${String(Math.floor(segundos % 60)).padStart(2, '0')}`;
+}
+
+const AJUDA_DA_MUSICA = [
+  'Escreva o nome de uma música (ou cole um link) e eu toco.',
+  '`!bot <música>` · `!lista <nome ou link>` · `!pular` · `!pausar` · `!voltar`',
+  '`!parar` esvazia a fila e me tira da chamada (`!sair` faz o mesmo).',
+  '`!fila` · `!agora` · `!volume 0-150` · `!remover <n>` · `!embaralhar`',
+  'Aceito YouTube, SoundCloud, Bandcamp, links diretos e muito mais. Link do Spotify eu procuro pelo nome.',
+  'Link de playlist entra inteiro. Link de música que estava numa playlist toca só ela — use `!lista` para pegar tudo.'
+].join('\n');
+
+async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
+  const casou = texto.match(/^!(\S+)\s*([\s\S]*)$/);
+  const comando = casou ? casou[1].toLowerCase() : '';
+  const resto = casou ? casou[2].trim() : texto;
+
+  // Sem "!", o canal inteiro e um pedido de musica: e para isso que ele existe, e obrigar
+  // um prefixo em todas as linhas so seria cerimonia.
+  const ehPedido = !casou || ['bot', 'tocar', 'p', 'play', 'toca'].includes(comando);
+
+  try {
+    if (ehPedido) {
+      const busca = ehPedido && casou ? resto : texto;
+      if (!busca) return falarComoBot(roomCode, AJUDA_DA_MUSICA);
+      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(busca).slice(0, 120)}**…`);
+      const faixa = await musica.pedir(roomCode, busca, quemPediu);
+      if (!faixa) falarComoBot(roomCode, 'Não achei nada com isso.');
+      return;
+    }
+
+    // Força a lista inteira, inclusive quando o link é de uma música que estava dentro
+    // dela -- que é a forma como o YouTube monta o endereço de qualquer vídeo aberto a
+    // partir de uma playlist.
+    if (['lista', 'playlist', 'album', 'álbum'].includes(comando)) {
+      if (!resto) return falarComoBot(roomCode, 'Escreva o nome de uma lista ou cole um link: `!lista rock anos 80`');
+      // Link: já se sabe qual é. Texto: procura listas e deixa a sala escolher, para
+      // ninguém ter de sair da conversa, achar a playlist em outro aplicativo, copiar o
+      // endereço e voltar.
+      if (/^https?:\/\//i.test(resto)) {
+        falarComoBot(roomCode, 'Abrindo a lista…');
+        await musica.pedir(roomCode, resto, quemPediu, { listaInteira: true });
+        return;
+      }
+      falarComoBot(roomCode, `Procurando listas de **${musica.semMarcacao(resto).slice(0, 80)}**…`);
+      const achadas = await musica.buscarListas(resto);
+      return publicarNaMusica(roomCode, {
+        autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, em: Date.now(),
+        texto: `Achei ${achadas.length} ${achadas.length === 1 ? 'lista' : 'listas'}. Toque em uma para enfileirar:`,
+        opcoes: achadas
+      });
+    }
+
+    if (['pular', 'skip', 'next', 'n'].includes(comando)) {
+      const saindo = musica.pular(roomCode);
+      return falarComoBot(roomCode, saindo ? `⏭ Pulei **${saindo.titulo}**.` : 'Não tem nada tocando.');
+    }
+    // Parar é sair. Antes o bot limpava a fila e continuava plantado na sala por mais um
+    // minuto e meio, mudo, ocupando um lugar na lista de todo mundo -- e quem escreveu
+    // `!parar` já tinha dito que não queria mais música ali.
+    if (['parar', 'stop', 'limpar', 'sair', 'leave', 'fora'].includes(comando)) {
+      const tinhaFila = musica.instantaneo(roomCode).fila.length;
+      await musica.desconectar(roomCode, 'pedido');
+      return falarComoBot(roomCode, tinhaFila
+        ? `⏹ Parei, esvaziei a fila (${tinhaFila} ${tinhaFila === 1 ? 'faixa' : 'faixas'}) e saí da chamada.`
+        : '⏹ Parei e saí da chamada. Peça uma música que eu volto.');
+    }
+    if (['pausar', 'pause'].includes(comando)) {
+      return falarComoBot(roomCode, musica.pausar(roomCode, true) ? '⏸ Pausado.' : 'Não tem nada tocando.');
+    }
+    if (['voltar', 'resume', 'continuar', 'despausar'].includes(comando)) {
+      return falarComoBot(roomCode, musica.pausar(roomCode, false) ? '▶ Voltando.' : 'Não tem nada tocando.');
+    }
+    if (['fila', 'queue', 'q'].includes(comando)) {
+      const estado = musica.instantaneo(roomCode);
+      if (!estado.tocando && !estado.fila.length) return falarComoBot(roomCode, 'A fila está vazia. Peça alguma coisa.');
+      const linhas = [estado.tocando ? `▶ **${estado.tocando.titulo}** · ${duracaoLegivel(estado.tocando.duracao)}` : null]
+        .concat(estado.fila.slice(0, 15).map((faixa, i) => `${i + 1}. ${faixa.titulo} · ${duracaoLegivel(faixa.duracao)} · pedida por ${faixa.pedidoPor}`))
+        .filter(Boolean);
+      if (estado.fila.length > 15) linhas.push(`…e mais ${estado.fila.length - 15}.`);
+      return falarComoBot(roomCode, linhas.join('\n'));
+    }
+    if (['agora', 'np', 'tocando'].includes(comando)) {
+      const estado = musica.instantaneo(roomCode);
+      return falarComoBot(roomCode, estado.tocando
+        ? `▶ **${estado.tocando.titulo}**${estado.tocando.autor ? ` · ${estado.tocando.autor}` : ''} · ${duracaoLegivel(estado.tocando.decorrido)} de ${duracaoLegivel(estado.tocando.duracao)}`
+        : 'Não tem nada tocando.');
+    }
+    if (['volume', 'vol', 'v'].includes(comando)) {
+      const valor = musica.definirVolume(roomCode, resto);
+      if (valor === null) return falarComoBot(roomCode, 'O bot nem entrou na sala ainda.');
+      return falarComoBot(roomCode, `🔊 Volume do bot em ${valor}%. Cada um ainda regula o próprio no painel.`);
+    }
+    if (['remover', 'rm', 'tirar'].includes(comando)) {
+      const removida = musica.removerDaFila(roomCode, resto);
+      return falarComoBot(roomCode, removida ? `Tirei **${removida.titulo}** da fila.` : 'Não existe essa posição na fila.');
+    }
+    if (['embaralhar', 'shuffle'].includes(comando)) {
+      return falarComoBot(roomCode, musica.embaralhar(roomCode) ? '🔀 Embaralhei a fila.' : 'Precisa de pelo menos duas faixas na fila.');
+    }
+    if (['ajuda', 'help', 'comandos'].includes(comando)) return falarComoBot(roomCode, AJUDA_DA_MUSICA);
+
+    falarComoBot(roomCode, `Não conheço \`!${comando}\`. Escreva \`!ajuda\` para ver o que eu faço.`);
+  } catch (erro) {
+    falarComoBot(roomCode, `Não deu: ${erro.message}`);
+  }
+}
+
+musica.configurar({
+  aoMudar: (sala, estado) => io.to(roomName(sala)).emit('musica-estado', estado),
+  // O bot so publica. Negar a assinatura no token e o que garante que ele nunca baixe a
+  // camera nem a voz de ninguem, por mais que o codigo dele mude no futuro.
+  criarToken: (sala, identidade, nome) => sfu.criarToken(sala, identidade, nome, { podeReceber: false }),
+  // Ele fala com o servidor de midia pelo endereco local, sem sair para a internet nem
+  // passar pelo proxy que existe para os navegadores.
+  enderecoLocal: () => `ws://127.0.0.1:${sfu.PORTA_LOCAL}`
+});
+musica.definirCanalDeMensagens(falarComoBot);
+
 io.on('connection', (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
 
@@ -440,8 +651,16 @@ io.on('connection', (socket) => {
     const membros = roomMembers.get(roomCode);
     if (membros) {
       membros.delete(socket.id);
-      // Sala vazia: o historico do chat some junto, nada fica guardado em disco.
-      if (!membros.size) { roomMembers.delete(roomCode); historicoPorSala.delete(roomCode); }
+      // Sala vazia: o historico do chat some junto, nada fica guardado em disco. A mesa de
+      // sons e o bot de musica seguem a mesma regra -- o bot sai da chamada e para de
+      // baixar, e os sons enviados somem da memoria. Nada de uma sala fechada sobrevive.
+      if (!membros.size) {
+        roomMembers.delete(roomCode);
+        historicoPorSala.delete(roomCode);
+        historicoDeMusicaPorSala.delete(roomCode);
+        soundboard.limparSala(roomCode);
+        musica.desconectar(roomCode, 'sala-vazia');
+      }
     }
     // A identidade da midia vai junto: e por ela que a sala reconhece quem saiu. O socket
     // percebe a saida em segundos; o servidor de midia guarda a pessoa por muito mais
@@ -479,8 +698,16 @@ io.on('connection', (socket) => {
     membros.set(socket.id, { name, state: estadoPadrao() });
 
     if (typeof callback === 'function') {
-      // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda.
-      callback({ ok: true, roomCode, selfId: socket.id, peers, historico: historicoPorSala.get(roomCode) || [] });
+      // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda. A
+      // mesa de sons e o que esta tocando vao junto, e pelo mesmo motivo: chegar numa sala
+      // com musica no ar e nao ver o que e (nem conseguir tocar um som que ja esta la)
+      // faria parecer que aquilo nao e desta sala.
+      callback({
+        ok: true, roomCode, selfId: socket.id, peers,
+        historico: historicoPorSala.get(roomCode) || [],
+        musica: { disponivel: musica.disponivel(), estado: musica.instantaneo(roomCode), historico: historicoDeMusicaPorSala.get(roomCode) || [] },
+        soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM }
+      });
     }
     // A identidade da midia vai junto, e pelo mesmo motivo que ela vai no "peer-left":
     // quem recebe precisa poder ligar este aviso a pessoa certa na lista da midia. Sem
@@ -633,6 +860,92 @@ io.on('connection', (socket) => {
     io.to(roomName(roomCode)).emit('chat-mensagem', mensagem);
   });
 
+  // ---------- Canal de musica ----------
+  //
+  // Um canal separado do chat da sala, e nao um comando escondido no meio da conversa: uma
+  // fila de musica e uma conversa entre gente sao duas coisas com ritmos diferentes, e
+  // misturadas uma sempre atrapalha a leitura da outra.
+  socket.on('musica-comando', async (dados) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return;
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return;
+
+    const texto = String(dados?.texto || '').slice(0, 400).trim();
+    if (!texto) return;
+
+    // O que a pessoa escreveu aparece para todo mundo antes de qualquer coisa acontecer:
+    // uma busca demora alguns segundos, e sem este eco a sala fica sem saber que alguem
+    // ja pediu -- e dois pedem a mesma coisa.
+    publicarNaMusica(roomCode, { autor: membro.name, autorId: socket.id, texto, em: Date.now() });
+
+    if (!musica.disponivel()) {
+      return falarComoBot(roomCode, 'O bot não está instalado neste servidor. Rode `npm run musica:instalar` na máquina que hospeda a sala.');
+    }
+    await interpretarComandoDeMusica(roomCode, texto, membro.name);
+  });
+
+  socket.on('musica-estado', (callback) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (typeof callback !== 'function') return;
+    callback({
+      disponivel: musica.disponivel(),
+      estado: roomCode ? musica.instantaneo(roomCode) : null,
+      historico: (roomCode && historicoDeMusicaPorSala.get(roomCode)) || []
+    });
+  });
+
+  // "A música engasgou" tem duas causas que soam idênticas para quem ouve: o servidor não
+  // entregou a tempo, ou a rede de quem escuta perdeu pacote. Isto responde a primeira --
+  // se `quaseSecou` for zero, o servidor entregou tudo e o problema é do caminho.
+  socket.on('musica-saude', (callback) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (typeof callback === 'function') callback(roomCode ? musica.saudeDaSala(roomCode) : null);
+  });
+
+  // ---------- Mesa de sons ----------
+  //
+  // O servidor so repassa o aviso: o som ja esta no navegador de cada um, e e la que ele
+  // toca. Por isso o disparo e do tamanho de uma mensagem de chat e chega junto para todo
+  // mundo, sem passar pelo servidor de midia.
+  socket.on('soundboard-tocar', (dados) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return;
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return;
+    const som = soundboard.obter(roomCode, dados?.id);
+    if (!som) return;
+
+    // Dois cliques por segundo ja e mais do que qualquer pessoa aperta de proposito, e o
+    // suficiente para uma aba com defeito (ou alguem se divertindo) virar um zumbido na
+    // sala inteira.
+    const agora = Date.now();
+    if (agora - (socket.data.ultimoSom || 0) < 400) return;
+    socket.data.ultimoSom = agora;
+
+    io.to(roomName(roomCode)).emit('soundboard-tocou', { id: som.id, nome: som.nome, por: membro.name, porId: socket.id });
+  });
+
+  socket.on('soundboard-remover', (dados, callback) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return;
+    const removido = soundboard.remover(roomCode, dados?.id);
+    if (removido) {
+      io.to(roomName(roomCode)).emit('soundboard-lista', { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode) });
+    }
+    if (typeof callback === 'function') callback({ ok: Boolean(removido) });
+  });
+
+  socket.on('soundboard-lista', (callback) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (typeof callback !== 'function') return;
+    callback({
+      sons: roomCode ? soundboard.listar(roomCode) : [],
+      espaco: roomCode ? soundboard.espacoDaSala(roomCode) : null,
+      limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM
+    });
+  });
+
   // A escolha de qual programa fica fora da captura. Vale na hora: se o agente ja estiver
   // capturando, ele mesmo refaz a captura com o novo alvo, sem interromper a tela.
   socket.on('agente-aplicativos', async (familia) => {
@@ -707,4 +1020,18 @@ server.listen(PORT, HOST, () => {
   console.log(`\nServidor rodando em ${publicUrl}`);
   console.log(`  -> Entrar na sala: ${publicUrl}/sala\n`);
   sfu.iniciarSfu();
+  // Um download que tenha sobrevivido a uma queda feia do processo anterior nao pode
+  // continuar rodando sem dono.
+  musica.encerrarOrfaos();
+  // As ferramentas do bot sao conferidas em segundo plano: elas nao seguram a abertura da
+  // sala, e a sala funciona inteira sem elas -- so o canal de musica fica de fora.
+  if (!musica.disponivel()) {
+    console.log('O bot de música ainda não está instalado. Rode "npm run musica:instalar" para habilitá-lo.');
+  }
 });
+
+// Sem isto, um Ctrl+C deixaria o bot baixando musica em segundo plano e segurando uma
+// sessao no servidor de midia.
+for (const sinal of ['SIGINT', 'SIGTERM']) {
+  process.on(sinal, () => { musica.encerrarTudo().finally(() => process.exit(0)); });
+}

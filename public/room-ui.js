@@ -64,7 +64,11 @@
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'invite') copyLinkBtn.click();
     if (action === 'chat') { closeSidebar(); abrirChat(); }
-    if (action === 'room') { closeSidebar(); fecharChat(); }
+    if (action === 'musica') { closeSidebar(); window.NexoMusica?.abrir(); }
+    if (action === 'soundboard') { closeSidebar(); window.NexoSoundboard?.abrir(); }
+    // "Sala de voz" fecha a coluna lateral inteira, qualquer que seja o canal aberto nela.
+    if (action === 'room') { closeSidebar(); window.NexoMusica?.fechar(); fecharChat(); }
+    if (['chat', 'room', 'musica'].includes(action)) window.NexoMusica?.marcarSidebar();
     if (action === 'devices') devicesBtn.click();
     if (action === 'diagnostics') abrirDiagnostico();
     const close = event.target.closest('[data-close]')?.dataset.close;
@@ -124,10 +128,6 @@
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
         state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : person.state.micMuted ? '' : 'voz';
         row.append(avatar, name, state);
-        return row;
-      }));
-    }
-    document.querySelectorAll('.member').forEach(row => row.classList.toggle('falando', Boolean(tiles.get(row.dataset.memberId)?.root.classList.contains('falando'))));
         // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
         // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
         // pergunta "por que ela não responde?" ficava sem resposta aqui.
@@ -139,6 +139,10 @@
           mudo.setAttribute('aria-label', 'Microfone desligado');
           row.append(mudo);
         }
+        return row;
+      }));
+    }
+    document.querySelectorAll('.member').forEach(row => row.classList.toggle('falando', Boolean(tiles.get(row.dataset.memberId)?.root.classList.contains('falando'))));
     document.querySelectorAll('.avatar-wrap').forEach(element => {
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
@@ -218,10 +222,6 @@
         `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
         'Revisão de mídia: sfu-1'];
 
-      const comHardware = await codificadoresPorHardware();
-      if (comHardware === null) {
-        lines.push('Codificação por hardware: este navegador não sabe informar.');
-      } else if (comHardware.length) {
       // O que aconteceu com a página em segundo plano — a pergunta que só aparece no
       // celular, onde não há DevTools à mão. Isto era despejado na barra de status da sala
       // a cada volta para a aba: um texto de depuração no lugar reservado a avisos de uso.
@@ -230,6 +230,10 @@
       const segundoPlano = (window.verDiagnosticoSegundoPlano?.() || '').trim().split('\n').slice(-25);
       if (segundoPlano[0]) lines.push('', 'Eventos em segundo plano:', ...segundoPlano);
 
+      const comHardware = await codificadoresPorHardware();
+      if (comHardware === null) {
+        lines.push('Codificação por hardware: este navegador não sabe informar.');
+      } else if (comHardware.length) {
         lines.push(`Codificação por hardware disponível para: ${comHardware.join(', ')}.`);
       } else {
         lines.push('Codificação por hardware: NENHUM codec. Quem codifica é o processador,'

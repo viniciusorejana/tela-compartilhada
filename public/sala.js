@@ -284,6 +284,11 @@ async function iniciarConexao() {
   }
 
   socket = io({ autoConnect: false });
+  // O canal de musica e a mesa de sons vivem em arquivos proprios e precisam do MESMO
+  // socket -- ele e criado aqui, uma vez, e reconecta sozinho, entao os ouvintes deles
+  // sobrevivem a uma queda de rede sem serem religados.
+  window.NexoMusica?.ligar(socket);
+  window.NexoSoundboard?.ligar(socket);
 
   socket.on('connect', async () => {
     // O Socket.IO cuida do chat, do agente de audio e do historico. A midia vive na conexao
@@ -321,6 +326,10 @@ async function iniciarConexao() {
         naoLidas = 0;
         chatBadge.classList.add('hidden');
       }
+      // A fila de musica e a mesa de sons chegam na mesma resposta, pelo mesmo motivo do
+      // historico: quem entra no meio precisa ver a sala como ela esta, nao vazia.
+      window.NexoMusica?.aoEntrar(response.musica);
+      window.NexoSoundboard?.aoEntrar(response.soundboard);
       // O agente precisa saber o modo ANTES de comecar a capturar.
       enviarEscolhaDeAudio();
       status.textContent = salaConfig
@@ -3251,6 +3260,10 @@ function retomarMidias() {
   document.querySelectorAll('video, audio').forEach(garantirReproducao);
   liberarContextoDeAudio();
   contextoDeAnalise?.resume().catch(() => {});
+  // A mesa de sons não toca por um <audio> da página: ela tem um contexto de áudio
+  // próprio, e o Safari só o libera dentro de um gesto. Sem esta linha, quem entrasse no
+  // iPhone e nunca abrisse a janela de sons ouviria a sala inteira, menos a mesa.
+  window.NexoSoundboard?.destravar();
 }
 enableSoundBtn.onclick = retomarMidias;
 
@@ -3339,6 +3352,10 @@ let naoLidas = 0;
 function chatVisivel() {
   if (document.querySelector('.app').classList.contains('teatro')) return false;
   if (document.querySelector('.app').classList.contains('sem-chat')) return false;
+  // A coluna e uma so, e o canal de musica pode estar ocupando ela. Sem esta linha, uma
+  // mensagem que chegasse com a musica aberta seria contada como lida -- o contador nao
+  // apareceria, e ela passaria despercebida.
+  if (document.querySelector('.app').classList.contains('painel-musica')) return false;
   return window.matchMedia('(min-width: 1101px)').matches || chatPanel.classList.contains('aberto');
 }
 function abrirChat() {

@@ -12,10 +12,13 @@
     "build:icon": "node scripts/build-icon.cjs",
     "build:helper": "powershell -ExecutionPolicy Bypass -File .\\build-helper.ps1",
     "start": "npm run build:sfu && npm run build:helper && node server.js",
-    "build:sfu": "node scripts/baixar-livekit.cjs"
+    "build:sfu": "node scripts/baixar-livekit.cjs",
+    "musica:instalar": "node scripts/baixar-musica.cjs",
+    "musica:atualizar": "node scripts/baixar-musica.cjs --atualizar"
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "0.2.1",
+    "@livekit/rtc-node": "^1.0.0",
     "express": "^4.19.2",
     "livekit-client": "^2.22.3",
     "socket.io": "^4.7.5",

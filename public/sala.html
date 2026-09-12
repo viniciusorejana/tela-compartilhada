@@ -39,6 +39,8 @@
       <div class="section-caption">CANAIS DA SALA</div>
       <button class="channel active" data-action="room" type="button"><span class="channel-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span><span><strong id="sidebarRoom">Sala de voz</strong><small>Voz, câmera e tela</small></span><span class="channel-count" id="sidebarCount">0</span></button>
       <button class="channel" data-action="chat" type="button"><span class="channel-symbol" aria-hidden="true">#</span><span>chat da sala</span></button>
+      <button class="channel" data-action="musica" type="button"><span class="channel-symbol" aria-hidden="true">♪</span><span><strong>música</strong><small id="sidebarMusica">Peça uma música</small></span><span class="channel-live" id="musicaLive" hidden>♪</span></button>
+      <button class="channel" data-action="soundboard" type="button"><span class="channel-symbol" aria-hidden="true">◎</span><span><strong>mesa de sons</strong><small id="sidebarSons">Nenhum som ainda</small></span></button>
       <div class="section-caption member-caption">NO SQUAD <span id="memberTotal">0</span></div>
       <div id="memberList" class="member-list"></div>
     </div>
@@ -50,9 +52,9 @@
       <button class="ghost" id="sidebarToggle" type="button" aria-label="Abrir lista de participantes" aria-expanded="false" aria-controls="roomSidebar">☰</button>
       <span class="topbar-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span>
       <h1 id="roomTitle">sala</h1>
+      <span class="session-badge" id="sessionBadge">SALA DE VOZ</span>
       <span id="participantCount">Seu ponto de encontro</span>
     </div>
-      <span class="session-badge" id="sessionBadge">SALA DE VOZ</span>
     <div class="topbar-actions">
       <button id="copyLinkBtn" class="secondary" type="button" title="Copiar o link desta sala">Convidar amigos</button>
       <button id="chatToggle" class="ghost" type="button" aria-label="Abrir chat" aria-controls="chatPanel">Chat<span id="chatBadge" class="badge hidden">0</span></button>
@@ -62,9 +64,9 @@
   <main class="palco-area">
     <div class="stage" id="stage">
       <video id="stageVideo" autoplay playsinline muted></video>
+      <div class="oculto-overlay hidden" id="stageOcultoOverlay"><strong>Oculto para você</strong><small>A sala continua recebendo normalmente.</small><button type="button" id="stageMostrarBtn">Mostrar de novo</button></div>
       <div id="multiStage" class="multi-stage" aria-label="Telas e câmeras em destaque" hidden></div>
       <div class="stage-empty" id="stageEmpty">
-      <div class="oculto-overlay hidden" id="stageOcultoOverlay"><strong>Oculto para você</strong><small>A sala continua recebendo normalmente.</small><button type="button" id="stageMostrarBtn">Mostrar de novo</button></div>
         <div class="stage-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="orbit-spark spark-one">✦</span><span class="orbit-spark spark-two">+</span><div class="screen-illustration"><span></span><i></i><b>✳</b></div><div class="art-badge">PLAY TOGETHER</div></div>
         <h3 id="stageEmptyTitle">O palco está livre</h3>
         <p id="stageEmptyText">Compartilhe sua tela ou abra a câmera para começar.</p>
@@ -73,12 +75,12 @@
       <div id="playbackRecovery" class="playback-recovery" hidden><button type="button" id="retryPlaybackBtn">Reproduzir vídeo</button><button type="button" class="secondary" data-action="diagnostics">Ver diagnóstico</button></div>
       <div class="stage-label hidden" id="stageLabel"></div>
       <div class="stage-controls hidden" id="stageControls">
-        <button id="multiViewBtn" type="button" title="Ver telas e câmeras em grade" aria-label="Ver telas e câmeras em grade" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
-        <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
         <div class="volume-row stage-volume" id="stageVolume" hidden>
           <button class="mute-peer-btn" id="stageMute" type="button" aria-pressed="false"></button>
           <input type="range" class="volume-slider" id="stageSlider" min="0" max="100" value="100" step="1" data-alvo="tela">
         </div>
+        <button id="multiViewBtn" type="button" title="Ver telas e câmeras em grade" aria-label="Ver telas e câmeras em grade" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+        <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
         <span id="zoomLevelLabel">100%</span>
         <button id="zoomInBtn" type="button" title="Aumentar zoom">+</button>
         <button id="theaterBtn" type="button" title="Modo teatro" aria-label="Ativar modo teatro" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h12v6H6z"/></svg></button>
@@ -106,13 +108,56 @@
     <small class="chat-hint">Enter envia · Shift+Enter quebra linha</small>
   </aside>
 
+  <aside class="chat musica" id="musicaPanel" aria-label="Canal de música">
+    <div class="chat-head">
+      <strong><span aria-hidden="true">♪</span> música</strong>
+      <button id="musicaClose" class="ghost" type="button" title="Fechar canal de música">✕</button>
+    </div>
+
+    <div class="musica-corpo">
+      <div class="tocando" id="tocandoAgora" hidden>
+        <div class="tocando-capa" id="tocandoCapa" aria-hidden="true">♪</div>
+        <div class="tocando-info">
+          <strong id="tocandoTitulo">—</strong>
+          <small id="tocandoAutor"></small>
+          <div class="tocando-barra" role="img" aria-label="Progresso da faixa"><i id="tocandoProgresso"></i></div>
+          <span class="tocando-tempo" id="tocandoTempo">0:00</span>
+        </div>
+        <div class="tocando-botoes">
+          <button id="musicaPausar" class="ghost" type="button" title="Pausar" aria-label="Pausar">⏸</button>
+          <button id="musicaPular" class="ghost" type="button" title="Pular" aria-label="Pular">⏭</button>
+        </div>
+      </div>
+
+      <div class="musica-volume" id="musicaVolume" hidden>
+        <label for="musicaVolumeSlider">Volume do bot na sala</label>
+        <input type="range" class="volume-slider" id="musicaVolumeSlider" min="0" max="150" step="5" value="85">
+        <span id="musicaVolumeValor">85%</span>
+      </div>
+
+      <details class="musica-fila" id="musicaFila" hidden>
+        <summary>Na fila <span id="musicaFilaTotal">0</span></summary>
+        <ol id="musicaFilaLista"></ol>
+      </details>
+
+      <div class="chat-msgs" id="musicaMsgs" role="log" aria-label="Mensagens do canal de música" aria-live="polite"></div>
+    </div>
+
+    <div class="chat-compose">
+      <textarea id="musicaInput" rows="1" maxlength="400" placeholder="Nome da música, link ou !ajuda…" aria-label="Pedir uma música"></textarea>
+      <button id="musicaSend" type="button" title="Pedir">➤</button>
+    </div>
+    <small class="chat-hint">Escreva o nome e eu toco · <code>!pular</code> <code>!fila</code> <code>!ajuda</code></small>
+  </aside>
+
   <nav class="control-bar" aria-label="Controles da chamada">
     <span class="call-indicator"><i></i><span>NA SALA</span></span>
-    <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Ativar o microfone">Ativar mic</button>
-    <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Câmera">Ligar câmera</button>
-    <button id="flipCameraBtn" class="control-btn secondary" type="button" hidden title="Usar a câmera traseira">Câmera traseira</button>
-    <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar tela">Compartilhar tela</button>
-    <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Atualizar tela</button>
+    <button id="micBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Ativar o microfone">Microfone</button>
+    <button id="cameraBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Ligar a câmera">Câmera</button>
+    <button id="flipCameraBtn" class="control-btn secondary" type="button" hidden title="Usar a câmera traseira">Virar</button>
+    <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar sua tela">Tela</button>
+    <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Trocar</button>
+    <button id="soundboardBtn" class="control-btn secondary" type="button" title="Mesa de sons da sala">Sons</button>
     <button id="devicesBtn" class="control-btn secondary" type="button" title="Escolher microfone, fone e câmera">Dispositivos</button>
     <button id="leaveBtn" class="control-btn danger" type="button" title="Sair da sala">Sair</button>
   </nav>
@@ -142,6 +187,8 @@
         <div class="field">
           <label for="micDevice">Microfone</label>
           <select id="micDevice"></select>
+          <div class="medidor" id="micMedidor" role="img" aria-label="Nível do microfone"><span id="micNivel"></span></div>
+          <small id="micDica">Ative o microfone para ver o nível.</small>
         </div>
         <div class="field" id="saidaCampo">
           <label for="outDevice">Fone / alto-falante</label>
@@ -151,6 +198,8 @@
         <div class="field">
           <label for="camDevice">Câmera</label>
           <select id="camDevice"></select>
+          <video id="camPreview" class="cam-preview" autoplay muted playsinline hidden></video>
+          <small id="camDica">Ligue a câmera para se ver aqui.</small>
         </div>
         <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Tocar som de teste</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
         <small class="modal-sub">A redução de ruído limpa só a sua voz. O som de jogos e telas vai inteiro.</small>
@@ -190,8 +239,6 @@
     <div class="field">
       <label for="captureMode">O que compartilhar</label>
       <select id="captureMode">
-          <div class="medidor" id="micMedidor" role="img" aria-label="Nível do microfone"><span id="micNivel"></span></div>
-          <small id="micDica">Ative o microfone para ver o nível.</small>
         <option value="browser">Aba do navegador</option>
         <option value="window">Janela ou aplicativo</option>
         <option value="monitor">Tela inteira</option>
@@ -201,8 +248,6 @@
         <small id="capturaAvisoTexto"></small>
         <button id="usarTelaInteiraBtn" type="button" class="secondary">Compartilhar a tela inteira</button>
       </div>
-          <video id="camPreview" class="cam-preview" autoplay muted playsinline hidden></video>
-          <small id="camDica">Ligue a câmera para se ver aqui.</small>
     </div>
     <div class="field">
       <label for="audioPolicy">Áudio</label>
@@ -255,8 +300,38 @@
   </div>
 </div>
 
-<div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Chame seu squad</h2><p class="modal-sub">Copie este link e envie para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
-<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><span class="eyebrow">SAÚDE DA SALA</span><h2 id="diagnosticsTitle">Como está sua conexão?</h2><p class="modal-sub">Confira se a sala conectou e se o vídeo está chegando.</p><div id="diagnosticsSummary" role="status"></div><pre id="diagnosticsReport"></pre><small class="modal-sub">O relatório não inclui IPs, credenciais, mensagens ou o endereço privado da sala.</small><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="soundboardPanel" role="dialog" aria-modal="true" aria-labelledby="soundboardTitle">
+  <div class="modal-card soundboard-card">
+    <h2 id="soundboardTitle">Mesa de sons</h2>
+    <p class="modal-sub">Toca para todo mundo na hora. Arquivo maior que 30 segundos entra cortado no começo. Os sons vivem só enquanto a sala existir.</p>
+
+    <div class="sons-grade" id="sonsGrade"></div>
+    <p class="sons-vazio" id="sonsVazio">Nenhum som ainda. Envie um arquivo curto e ele aparece aqui para todo mundo.</p>
+
+    <div class="sons-envio">
+      <button id="sonsEnviarBtn" class="secondary" type="button">＋ Enviar som</button>
+      <input id="sonsArquivo" type="file" accept="audio/*" hidden>
+      <small id="sonsEspaco"></small>
+    </div>
+
+    <div class="field sons-volume">
+      <label for="sonsVolume">Volume da mesa · só para você</label>
+      <div class="volume-row">
+        <button class="mute-peer-btn" id="sonsMudo" type="button" aria-pressed="false"></button>
+        <input type="range" class="volume-slider" id="sonsVolume" min="0" max="100" step="1" value="70">
+        <span id="sonsVolumeValor">70%</span>
+      </div>
+      <small>Cada pessoa regula o quanto ouve. Não muda nada para os outros.</small>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" data-close="soundboardPanel">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">Envie este link para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
+<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><details class="avancado"><summary>Relatório técnico</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/livekit-client.js"></script>
 <script src="/media-utils.js"></script>
@@ -264,6 +339,8 @@
 <script src="/quality-utils.js"></script>
 <script src="/sala.js"></script>
 <script src="/multi-view.js"></script>
+<script src="/musica.js"></script>
+<script src="/soundboard.js"></script>
 <script src="/room-ui.js"></script>
 </body>
 </html>
