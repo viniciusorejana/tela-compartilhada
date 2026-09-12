@@ -22,9 +22,14 @@ descer ao clicar em **Parar**. Numa sala com várias telas no ar isso muda o cus
 conversar, e reduz o de quem transmite: sem ninguém assistindo, o servidor desliga as camadas e o
 codificador fica ocioso. Câmera e voz continuam chegando sozinhas.
 
+A sala tem ainda um **bot de música por sala**, que entra na chamada como participante e toca o
+que for pedido no canal `♪ música`, e uma **mesa de sons** temporária, que vive enquanto a sala
+existir. Os dois estão descritos abaixo.
+
 Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev`. A captura de
-áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`, e a
-mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois.
+áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`, a
+mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois — e o bot de
+música exige as ferramentas baixadas por `npm run musica:instalar`.
 
 ## Requisitos
 
@@ -71,7 +76,10 @@ Para uma conferência da interface na mesma rede, o IP local do servidor permite
 2. Escolha um nome de exibição. Você entra com microfone e câmera desligados; as permissões só são pedidas quando você ativa cada recurso.
 3. Use a barra inferior para ligar microfone, câmera ou compartilhar a tela. Em **Dispositivos** ficam o teste de áudio, a prioridade de vídeo e o RNNoise. No Electron, compartilhar uma janela seleciona automaticamente o áudio do programa. Para transmitir uma única aba com áudio, use Chrome/Edge. Ao compartilhar o monitor inteiro, permanecem as opções de inclusão/exclusão de programas.
 4. Cada participante controla localmente o volume e o mudo de cada outro participante (sem afetar o que os demais ouvem). Clique na camera ou na tela de alguem para destacar no palco.
-5. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS do Funnel para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
+5. Na barra lateral, ao lado do chat, ficam os canais **♪ música** (peça uma faixa e o bot toca
+   para a sala) e **◎ mesa de sons** (efeitos sonoros que qualquer um envia e dispara). Veja
+   [Bot de música](#bot-de-música-canal--música) e [Mesa de sons](#mesa-de-sons-soundboard).
+6. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS do Funnel para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
 
 Cada participante conecta diretamente com cada outro (mesh P2P) -- funciona bem em salas pequenas (ate 4-5 pessoas); o servidor nao retransmite midia, so a sinalizacao.
 
@@ -148,6 +156,313 @@ conseguir isso e dizer o que **entra**. Escolha o jogo (ou o que estiver tocando
 A sala tambem **avisa antes** de o eco acontecer: se voce esta mandando som de tela, alguem mais
 tambem esta, e o modo escolhido deixa o navegador dentro da captura, aparece uma faixa dizendo
 quem esta voltando como eco e o que fazer.
+
+## Download do aplicativo
+
+O `.exe` tem cerca de **95 MB** — um Electron carrega o Chromium inteiro, então ele não é o
+arquivo pequeno que parece. Medido: o servidor entrega os 95 MB em **0,35 s** pelo loopback
+(285 MB/s), então quando o download demora o gargalo não está aqui.
+
+Pelo **Tailscale Funnel** o tráfego público não vai direto: ele atravessa um relay DERP da
+Tailscale (o mais próximo daqui é São Paulo, 35 ms), e esses relays limitam a banda de propósito,
+para ser justo entre todos que os usam. Somando a isso a subida da sua casa — que costuma ser
+uma fração da descida —, 95 MB demoram mesmo. Não há ajuste no Nexo que contorne isso: o limite
+é do caminho, não do servidor.
+
+O que dá para fazer:
+
+- **Rebaixar não custa nada.** O download passou a permitir cache com revalidação obrigatória,
+  então um segundo clique devolve `304` e zero byte em vez dos 95 MB. Continua sem servir build
+  velha: quando o `.exe` muda, o `ETag` muda e o arquivo novo desce inteiro.
+- **Retomar funciona** (`Accept-Ranges: bytes`), então uma queda no meio continua de onde parou
+  em vez de recomeçar.
+- **Hospedar o arquivo fora** é o único jeito de sair do Funnel. Publicando o `.exe` em algo com
+  CDN própria, o download deixa de passar pela sua conexão.
+
+### Teto de downloads
+
+| Limite | Valor |
+| --- | --- |
+| Downloads simultâneos por endereço | 3 |
+| Downloads iniciados por endereço | 20 a cada 10 min |
+
+Existe porque o arquivo é grande e sai pela sua subida: sem teto, uma aba com defeito — ou
+alguém se divertindo — ocupa a banda da casa inteira e a sala toda sente. Quem estoura recebe
+`429` com `Retry-After`; **nada mais é afetado**, porque o teto vale só para
+`/downloads/SalaCompartilhada.exe`. Entrar na sala, o token de mídia, o chat e os arquivos da
+página continuam respondendo normalmente para a mesma pessoa.
+
+Os números são generosos de propósito: uma retomada legítima reabre a conexão várias vezes, e um
+teto apertado transformaria uma rede instável em "o download não funciona". O que ele barra é o
+laço automatizado.
+
+Atrás do Funnel toda conexão chega de `127.0.0.1`, e o endereço real de quem baixa vem no
+cabeçalho `X-Forwarded-For`. O teto lê esse cabeçalho — **e só quando quem o entrega é o proxy
+local**. Sem essa leitura, o teto viraria um teto para a sala inteira, com o primeiro a baixar
+gastando a cota de todos; e sem a checagem de origem, qualquer um escreveria o cabeçalho e
+burlaria o próprio limite.
+
+## Por onde cada coisa passa
+
+Tudo sai da mesma máquina, mas por **dois caminhos diferentes** — e a diferença é o que decide
+o custo e a latência de cada recurso:
+
+| O quê | Caminho | Por quê |
+| --- | --- | --- |
+| Voz, câmera, tela | servidor de mídia (WebRTC) | é fluxo contínuo; o SFU entrega a cada um a qualidade que a conexão dele aguenta |
+| **Bot de música** | servidor de mídia (WebRTC) | entra como participante, então a sala ouve o mesmo instante da música e o volume por pessoa já existe |
+| Chat e avisos | sinalização (Socket.IO) | mensagens pequenas que precisam chegar na hora |
+| **Mesa de sons** | HTTP + reprodução local | o arquivo desce uma vez por navegador, com cache, e toca **ali**; o disparo é só um aviso |
+
+A mesa é o único caso que **não** passa pelo servidor de mídia, e é de propósito: um efeito
+sonoro vale pelo tempo. Subir, codificar, distribuir e decodificar custaria centenas de
+milissegundos; tocando local o atraso é o do aviso — **1 ms** entre o clique de uma pessoa e o
+som na outra aba, medido em rede local.
+
+Em compatibilidade os dois caminhos pedem coisas diferentes. Voz, câmera, tela e o bot pedem
+WebRTC, que todo navegador atual tem. A mesa pede Web Audio e um `<audio>` capaz de tocar MP3 —
+por isso tudo que entra nela é convertido para MP3, o formato que até o Safari do iPhone toca.
+
+No iPhone há uma regra a mais: o Safari só libera áudio dentro de um gesto. O botão **Ativar
+reprodução · som e vídeo**, que a sala já mostrava para vídeo e voz, agora destrava também o
+contexto da mesa de sons. Sem isso, quem entrasse pelo iPhone e nunca abrisse a janela de sons
+ouviria a sala inteira menos a mesa — e sem nada na tela explicando por quê.
+
+### Engasgos no celular
+
+Duas mudanças atacam o "engasginho" que aparece em rede móvel ou Wi-Fi instável.
+
+**A música ganhou meio segundo de reserva.** O navegador guarda uns **30 ms** de áudio antes de
+tocar, e esse número existe para conversa: cada milissegundo a mais é atraso entre alguém falar e
+o outro ouvir. O preço é não ter folga — um pacote fora de hora vira engasgo audível. Com o bot
+esse preço não se justifica, porque ninguém conversa com a música: a faixa dele agora pede
+**500 ms** de reserva (medido: o buffer real subiu de 30 ms para 345 ms e segue subindo). A voz
+das pessoas continua com a folga curta de sempre — a diferença é aplicada só à faixa do bot,
+reconhecida pela identidade reservada.
+
+**A câmera do celular passou a codificar duas camadas, não três.** Simulcast codifica a mesma
+imagem uma vez por qualidade, para cada espectador receber a que a conexão dele aguenta. Num PC
+isso é barato; num telefone é a terceira codificação que empurra o aparelho ao limite — e o
+sintoma não é a imagem ficar feia, é ela tropeçar, porque o codificador não termina um quadro
+antes do próximo chegar. Com duas camadas a adaptação continua existindo e some um terço do
+trabalho. As duas são declaradas a 30 fps de propósito: os presets prontos da biblioteca limitam
+a 20, e trocar três camadas a 30 por duas a 20 consertaria o tropeço criando outro. No
+computador nada muda.
+
+Se o engasgo persistir, o **Diagnóstico** agora mede exatamente isso: `congelamentos` e
+`descartados` no vídeo, e `buffer`, `jitter`, `perdidos` e `remendos` no áudio. Do lado do
+servidor a reprodução foi medida por 138 segundos sem uma única falha de entrega (a fila ficou
+estável em ~510 ms, o Node em 1,8 % de processador) — então, se o diagnóstico mostrar perdas, a
+causa está no caminho até o aparelho, e não no bot.
+
+## Bot de música (canal `♪ música`)
+
+Cada sala tem um canal próprio para música. Escreva o nome de uma faixa — ou cole um link — e o
+**Nexo DJ** entra na chamada como mais um participante e toca para todo mundo.
+
+```
+tame impala the less i know the better     pedir é só escrever
+https://youtu.be/...                       link também: cole e pronto
+!bot <música>                              o mesmo, explícito (!tocar e !p também servem)
+!lista <link>                              a playlist inteira, mesmo de um link de música
+!pular  !pausar  !voltar                   controle da reprodução
+!parar                                     esvazia a fila e tira o bot da chamada (= !sair)
+!fila  !agora  !embaralhar  !remover <n>   a fila
+!volume 0-150                              volume do bot para a sala inteira
+!ajuda
+```
+
+`!parar` e `!sair` são a mesma coisa: a fila é esvaziada, o download encerrado, a faixa
+despublicada e o bot deixa a chamada — medido em **100 ms** do comando até ele sumir da lista de
+participantes. Ele volta sozinho no próximo pedido. Sem isso o bot continuava plantado na sala
+por mais um minuto e meio depois de `!parar`, mudo, ocupando um lugar na lista de todo mundo.
+
+Aceita YouTube, SoundCloud, Bandcamp, links diretos e tudo mais que o `yt-dlp` resolve — por nome
+ou por endereço. Um link do **Spotify** é procurado pelo nome em outra fonte: o Spotify não
+entrega o áudio para fora do aplicativo dele, nem com conta paga, então o que dá para fazer é ler
+o nome da faixa na página pública e tocar a mesma música de onde for possível.
+
+### Listas sem sair da sala
+
+`!lista <nome>` procura playlists e devolve cinco para escolher, com um toque:
+
+```
+!lista rock anos 80
+→ Achei 5 listas. Toque em uma para enfileirar:
+  ♪ Best of Classic Rock
+  ♪ Top 500 Classic Rock songs
+  ♪ 80s Rock Hits Music Playlist …
+```
+
+Colar um link continua funcionando e é o caminho mais direto quando você já tem a lista aberta.
+A busca existe para o outro caso: quando encontrá-la significaria trocar de aplicativo, procurar,
+copiar o endereço e voltar — três passos fora da conversa para uma coisa que a conversa devia
+resolver. Os botões travam depois do primeiro toque, para dois cliques não enfileirarem duas
+listas.
+
+### Playlists
+
+Um `list=` no endereço quer dizer duas coisas diferentes, e o bot trata cada uma como ela é:
+
+| O que você cola | O que acontece |
+| --- | --- |
+| `/playlist?list=…`, um `/sets/` do SoundCloud, um `/album/` do Bandcamp | **Entra inteira** (até 100 faixas, limitado pelo espaço na fila) |
+| `/watch?v=X&list=Y` — uma música que por acaso estava numa lista | Toca **só ela**, e avisa que dá para pegar a lista com `!lista` |
+
+A distinção existe porque o YouTube monta o segundo formato para *qualquer* vídeo aberto a partir
+de uma playlist: enfileirar cinquenta faixas ali seria sequestrar a sala por causa de um copiar e
+colar. Quando a lista é o que você quer mesmo, `!lista <link>` força.
+
+Uma lista de sessenta faixas entra em cerca de dois segundos porque o bot **não** resolve as
+sessenta: ele lê o índice de uma vez (título, duração, endereço da página) e descobre o áudio de
+cada uma só quando chega a vez dela — com a seguinte sendo preparada enquanto a atual toca.
+Medido numa playlist real: cinco trocas seguidas com **20 ms** de silêncio em média, 101 ms no
+pior caso.
+
+**Por que um participante de verdade, e não um player em cada navegador.** Todo mundo recebe os
+mesmos pacotes pelo mesmo caminho do áudio de tela: não há relógio para acertar nem deriva para
+corrigir — a sala inteira ouve o mesmo instante da música. E o controle de volume que a sala já
+tem **por participante** passa a valer para o bot sem nenhuma interface nova: o `!volume` é o
+rádio da sala; o slider no quadradinho do Nexo DJ é o seu.
+
+Três coisas cuidam do desempenho. O bot **só entra quando há pedido**, sai sozinho depois de 90
+segundos sem nada na fila e sai na hora com `!parar`; o token dele **não autoriza receber**, então ele nunca baixa a câmera
+nem a voz de ninguém; e decodificar acontece num processo à parte por sala, de modo que uma sala
+tocando não atrapalha as outras — o Node só recorta o áudio já pronto em quadros de 20 ms.
+
+A busca (a parte cara, uns três segundos conversando com o site) é paga **quando a faixa entra na
+fila**, e dela se guarda o endereço direto do áudio. Na hora de tocar, o `ffmpeg` abre esse
+endereço sozinho: a troca de faixa sai em torno de **50 ms** em vez de três segundos de silêncio,
+e o `yt-dlp` nem aparece no caminho. Ele volta como reserva quando o endereço não serve — porque
+venceu, ou porque o site entrega o áudio em pedaços — e aí a faixa é refeita por ele sem que
+ninguém precise pedir de novo.
+
+Medido numa sala tocando: 150 s de reprodução contínua sem uma única falha de áudio, memória do
+Node constante, e duas salas simultâneas somando 4% de um processador de 12 núcleos.
+
+### Instalar o bot
+
+```powershell
+npm run musica:instalar
+```
+
+Baixa o `yt-dlp` (17 MB) e, se não houver nenhum no sistema, o `ffmpeg` (106 MB). Sem isso a sala
+funciona inteira — só o canal de música fica de fora, dizendo o que falta.
+
+O `yt-dlp` é **sempre o nosso**, nunca o do `PATH`: ele é a peça que negocia com o YouTube, e o
+YouTube muda essa negociação a cada poucas semanas. Uma cópia velha não dá erro claro — ela
+devolve `403 Forbidden` ou "the page needs to be reloaded", e a sala acha que o bot quebrou.
+Quando isso acontecer:
+
+```powershell
+npm run musica:atualizar
+```
+
+O `ffmpeg` é diferente: ele só converte áudio para PCM, e essa parte não muda entre versões — o do
+sistema serve, se existir.
+
+### O que ocupa espaço (e o que não ocupa)
+
+**Música: nada toca o disco.** O `yt-dlp` não baixa para um arquivo — quando ele é usado, escreve
+no cano do `ffmpeg`; no caminho normal ele nem entra, e o `ffmpeg` lê o endereço direto da rede.
+O áudio decodificado atravessa a memória do Node em quadros de 20 ms (3,8 KB cada) e é descartado
+assim que sai para o servidor de mídia. Não existe pasta de cache de música, nem arquivo
+temporário, nem limpeza a fazer — não há o que limpar.
+
+Verificado em 12/09/2026: com uma sala tocando por 30 s, a pasta do projeto ficou em 13 708
+arquivos e 1 153,87 MB, exatamente como antes, e nenhum `.webm`, `.m4a`, `.part` ou `.ytdl`
+apareceu em lugar nenhum. O que cresce enquanto o bot toca é só a memória do processo: **88 MB
+constantes**, sem subir ao longo de 150 s.
+
+**Mesa de sons: memória, e só enquanto a sala existir.** Os arquivos ficam num `Map` dentro do
+processo Node, nunca em disco, com teto de 2 MB por som, 30 sons e 24 MB por sala, e 256 MB
+somando todas as salas. Quando a última pessoa sai, a mesa é apagada junto com o histórico do
+chat — o mesmo `if (!membros.size)` cuida dos dois. Reiniciar o servidor também zera tudo,
+porque nada disso sobrevive ao processo. Ver [Mesa de sons](#mesa-de-sons-soundboard) para o
+porquê de cada limite.
+
+**O que de fato fica gravado em disco:**
+
+| Onde | O quê | Tamanho |
+| --- | --- | --- |
+| `native/musica/` | o `yt-dlp.exe` (e o `ffmpeg.exe`, se você não tinha um) | 17 MB (+106 MB) |
+| `~/.cache/yt-dlp/` | metadados de extração do `yt-dlp` — nunca áudio | dezenas de bytes |
+| `node_modules/@livekit/` | o SDK e o binário nativo dele | ~30 MB |
+
+O `~/.cache/yt-dlp` é do próprio `yt-dlp`, não nosso: ele guarda coisas como o `client_id` do
+SoundCloud para não pedir de novo a cada faixa. Na máquina de teste o diretório inteiro tinha
+**76 bytes**. Para dispensá-lo, acrescente `--no-cache-dir` em `NEXO_YTDLP_ARGS`.
+
+| Variável | Para quê |
+| --- | --- |
+| `NEXO_MAXIMO_DE_BOTS` | Salas tocando ao mesmo tempo (padrão 8). Recusar a próxima é melhor do que estragar as que já tocam. |
+| `NEXO_DURACAO_MAXIMA` | Segundos que uma faixa pode ter (padrão 3 h). |
+| `NEXO_YTDLP_ARGS` | Argumentos extras do `yt-dlp` — é aqui que entra `--cookies-from-browser chrome`, se um site exigir login. |
+| `NEXO_FILTRO_DE_AUDIO` | Filtro do `ffmpeg` (padrão `loudnorm`, que iguala o volume entre faixas). |
+
+## Mesa de sons (soundboard)
+
+O botão **Sons** na barra inferior abre a mesa da sala: qualquer participante envia um arquivo
+curto (MP3, OGG, WAV, M4A, FLAC ou WebM), ele vira um botão, e quem clicar toca **para todo mundo
+na hora**.
+
+Cada sala tem a sua, e elas não se enxergam: a sala 1 pode ter dois sons enquanto a sala 2 está
+vazia, e o que a sala 2 enviar depois só existe lá. Um clique na sala 1 também não é ouvido na
+sala 2 — o aviso de disparo só vai para quem está naquela sala.
+
+Nada disso é guardado em disco. Os sons vivem na memória do processo enquanto a sala existir e
+somem quando a última pessoa sai — junto com o histórico do chat e com o bot, pela mesma regra:
+nada de uma sala fechada sobrevive a ela. Reiniciar o servidor também zera tudo.
+
+Um arquivo com mais de 30 segundos **não é recusado: entra cortado no começo**, e quem enviou é
+avisado disso. Recusar seria grosseiro com quem arrastou uma música de três minutos querendo só o
+comecinho dela.
+
+Todo arquivo que entra é convertido para **MP3 de 128 kbps** no caminho, pelo `ffmpeg`. Isso
+resolve três coisas de uma vez: o corte fica garantido no servidor e não na boa vontade de quem
+envia, um WAV de 2 MB vira um MP3 de 300 KB, e todo navegador toca o que sair — inclusive o do
+iPhone. Sem o `ffmpeg` instalado a mesa continua funcionando, só sem cortar e sem converter.
+
+| Limite | Valor | Quem garante |
+| --- | --- | --- |
+| Tamanho de um som | 2 MB | servidor |
+| Duração de um som | 30 s (corta o excedente) | servidor, pelo `ffmpeg` |
+| Sons por sala | 30 | servidor |
+| Memória por sala | 24 MB | servidor |
+| Memória de todas as salas | 256 MB (`NEXO_SOUNDBOARD_MAXIMO_MB`) | servidor |
+
+Quem pode enviar é **quem está naquela sala**: o envio exige o identificador de socket, que o
+servidor sorteia, só o dono conhece, e é conferido contra a sala em que ele realmente está. Um
+pedido sem credencial, com uma inventada, ou com a de outra sala recebe `403` — testado também
+por `curl`, fora do navegador. Não há como enviar para uma sala em que você não entrou; e quem
+entrou já podia enviar de qualquer forma, porque a sala é aberta a quem tem o código.
+
+Os dois últimos são o que impede a mesa de derrubar o Nexo. O limite por sala sozinho não protege
+nada, porque se multiplica pelo número de salas — e esse não tem limite: vinte salas cheias
+seriam meio giga de `Buffer`, e cem seriam dois giga e meio. Como `Buffer` não vive no monte do
+V8 e sim na memória do processo, o desfecho não seria uma exceção tratável, e sim o alocador
+falhando ou o sistema encerrando o Node — derrubando vídeo, voz e chat por causa de uma mesa de
+sons. Com o teto global, o envio seguinte é recusado com uma frase explicando, e a sala continua.
+
+O limite de **duração** precisa existir porque o de bytes não o implica: dois megabytes são 52
+segundos a 320 kbps, mas quase nove minutos a 32 kbps — sem ele dava para usar a mesa como
+rádio. Quem corta é o `ffmpeg`, no servidor, e por isso o corte vale mesmo para quem não passa
+pela interface: um envio de 90 segundos declarando "5 segundos" foi guardado com **30,0 s**
+exatos. O navegador mede a duração antes de enviar apenas para poder avisar ("mando os primeiros
+30 s…"), nunca para decidir.
+
+Apagar um som devolve a memória: medido com 40 sons de 1 MB, a memória externa do processo foi de
+2 MB para 25 MB e **voltou aos 2 MB** depois que a sala foi limpa. O `Map` solta a referência e o
+coletor libera o `Buffer` — não imediatamente, porque objetos grandes têm finalização adiada,
+mas sem sobrar nada.
+
+O som **não passa pelo servidor de mídia**. Ele é baixado uma vez por cada navegador, por HTTP com
+cache, e tocado ali no instante em que o aviso chega — o disparo tem o tamanho de uma mensagem de
+chat. Um efeito sonoro vale pelo tempo: a volta completa pelo servidor de mídia custaria algumas
+centenas de milissegundos, e um toque que chega tarde perde a graça.
+
+Cada pessoa tem seu **próprio volume** da mesa, com mudo, guardado no navegador dela. Não muda
+nada para os outros — é o equivalente a tapar o próprio ouvido, não a abaixar o rádio.
 
 ## Aplicativo de mesa (opcional, Windows)
 
@@ -405,6 +720,11 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
 | `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
+| `NEXO_MAXIMO_DE_BOTS` | `8` | Salas com musica tocando ao mesmo tempo |
+| `NEXO_DURACAO_MAXIMA` | `10800` | Segundos que uma faixa pode ter |
+| `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
+| `NEXO_FILTRO_DE_AUDIO` | `loudnorm=I=-16:TP=-1.5:LRA=11` | Filtro do `ffmpeg` aplicado a musica |
+| `NEXO_SOUNDBOARD_MAXIMO_MB` | `256` | Memoria da mesa de sons somando TODAS as salas |
 
 Exemplo:
 
@@ -556,6 +876,9 @@ tela-compartilhada/
 ├── package.json                    # scripts e dependencias Node.js
 ├── package-lock.json               # versoes fixadas das dependencias
 ├── server.js                       # Express, Socket.IO e sinalizacao WebRTC
+├── sfu.js                          # sobe o servidor de midia e emite os tokens de acesso
+├── musica.js                       # o bot: fila por sala, yt-dlp/ffmpeg e a faixa publicada
+├── soundboard.js                   # a mesa de sons de cada sala, so na memoria
 ├── build-helper.ps1                # build Release x64 do helper C++
 ├── native/audio-helper/            # captura de audio por processo no Windows
 ├── native/audio-agent/             # agente que cada participante roda no proprio PC
@@ -570,6 +893,8 @@ tela-compartilhada/
     ├── sala.html, sala.css          # interface da sala
     ├── sala.js                     # captura, sinalização, chat e reprodução
     ├── media-utils.js              # identidade das faixas, codecs e streams de vídeo
+    ├── musica.js                   # o canal de música: pedidos, fila e o que está tocando
+    ├── soundboard.js               # a mesa de sons: envio, disparo e volume de cada um
     └── room-ui.js                  # presença, acessibilidade e diagnóstico
 ```
 
@@ -590,6 +915,12 @@ Remove-Item Env:TEST_BROWSER
 Os testes iniciam um servidor isolado em `127.0.0.1:3217` (Chromium) ou `:3218` (WebKit).
 Usam câmera/tela sintéticas e comunicação WebRTC real; não capturam o desktop ou microfone
 de quem executa. As imagens de revisão ficam em `test-results/`, ignorado pelo Git.
+
+`tests/musica.test.js` e `tests/soundboard.test.js` rodam sem rede: fixam o que não pode mudar
+sem alguém perceber — que o token do bot **não** autoriza receber mídia, que a mesa de sons
+confere os primeiros bytes do arquivo em vez de acreditar no tipo declarado, que uma sala não
+enxerga a mesa de outra, e que um comando de música numa sala sem bot responde em vez de estourar.
+Tocar de verdade depende de sites externos e não entra em teste automático.
 
 O WebKit de teste para Windows não implementa WebRTC: nesse ambiente os testes verificam
 interface, chat e navegação e informam explicitamente a limitação. A validação final do Safari
