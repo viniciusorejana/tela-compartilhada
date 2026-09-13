@@ -202,6 +202,48 @@ local**. Sem essa leitura, o teto viraria um teto para a sala inteira, com o pri
 gastando a cota de todos; e sem a checagem de origem, qualquer um escreveria o cabeçalho e
 burlaria o próprio limite.
 
+## O que a sala lembra de você
+
+Cada pessoa tem escolhas que repete toda vez: o volume de quem fala alto, o fone certo, a
+qualidade que a conexão dela aguenta. Refazer isso a cada entrada é o tipo de atrito que
+some sozinho quando a sala presta atenção.
+
+| Lembrado | Onde vale |
+| --- | --- |
+| Nome de exibição | sempre |
+| Microfone, fone e câmera | sempre |
+| Qualidade, prioridade e codec | sempre |
+| Redução de ruído ligada/desligada | sempre |
+| O que compartilhar e se o som vai junto | sempre |
+| **Volume e mudo de cada pessoa** | por nome, em qualquer sala |
+| **Volume do bot de música** | por nome, em qualquer sala |
+| Volume da mesa de sons | sempre |
+| Barra lateral recolhida | sempre |
+
+Tudo vive no `localStorage` do navegador de cada um. **Nada disso vai para o servidor nem é
+visto por outra pessoa** — abaixar o volume de alguém é uma decisão privada, e continua sendo.
+Numa janela anônima, ou com armazenamento bloqueado, a sala funciona igual: apenas não lembra.
+
+O volume é guardado pelo **nome**, e não pela identidade. A identidade de mídia carrega um
+sufixo sorteado a cada entrada (`Ana#3f2a91c0`), então lembrar por ela seria não lembrar nada.
+Pelo nome, o ajuste sobrevive a sair e voltar — e é o mesmo motivo pelo qual o volume do bot
+vale em qualquer sala: o nome dele é sempre o mesmo.
+
+Três decisões contêm o tamanho disso. Só se guarda o que foi **mudado** (voltar ao padrão apaga
+a entrada em vez de gravar o padrão); a lista tem **teto de 40 pessoas**, descartando quem foi
+ajustado há mais tempo; e a gravação é **adiada**, porque arrastar um controle de volume dispara
+dezenas de eventos e escrever no armazenamento é síncrono — trava a mesma linha que desenha a
+sala. Uma escrita por ajuste, não trinta por gesto.
+
+O que **não** é lembrado, de propósito: zoom do palco, modo teatro e qual painel estava aberto.
+São estado de navegação, não preferência — restaurá-los faria a pessoa entrar numa tela que ela
+não pediu.
+
+Em **Dispositivos** há uma linha dizendo quantas pessoas têm volume ajustado, e um botão para
+esquecer tudo. Ela existe porque uma preferência guardada vira um mistério no dia em que a
+pessoa esquece que a fez: "não estou ouvindo fulano" cuja causa é um volume baixado meses atrás
+e sem nada na tela que explique.
+
 ## Por onde cada coisa passa
 
 Tudo sai da mesma máquina, mas por **dois caminhos diferentes** — e a diferença é o que decide
