@@ -204,6 +204,11 @@
         <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Tocar som de teste</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
         <small class="modal-sub">A redução de ruído limpa só a sua voz. O som de jogos e telas vai inteiro.</small>
         <small id="devicesDica" class="modal-sub"></small>
+        <div class="field lembrados">
+          <label>O que a sala lembra de você</label>
+          <small id="lembradosTexto">Nada ajustado ainda.</small>
+          <button id="esquecerBtn" class="secondary" type="button">Esquecer meus ajustes</button>
+        </div>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
@@ -334,6 +339,7 @@
 <div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><details class="avancado"><summary>Relatório técnico</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/livekit-client.js"></script>
+<script src="/preferencias.js"></script>
 <script src="/media-utils.js"></script>
 <script src="/room-transport.js"></script>
 <script src="/quality-utils.js"></script>

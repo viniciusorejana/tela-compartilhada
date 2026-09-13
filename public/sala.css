@@ -338,6 +338,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .sons-envio small { font-size:10px; color:#a99fba; }
 .sons-volume { margin-bottom:0; }
 .sons-volume .volume-row { gap:8px; }
+/* O que a sala guardou das escolhas de quem está aqui. Vive no fim das preferências de
+   aparelhos porque é dali que se resolve o "não estou ouvindo fulano" cuja causa é um
+   volume baixado meses atrás e esquecido. */
+.lembrados small { margin-bottom:9px; }
+.lembrados button { font-size:11px; padding:7px 11px; }
 .sons-volume span { font-size:10px; color:#a99fba; font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
 .badge { display:inline-grid; place-items:center; min-width:16px; height:16px; border-radius:8px; font-size:9px; font-weight:700; background:#db7994; color:#251821; margin-left:4px; }
 #chatToggle { display:none; }

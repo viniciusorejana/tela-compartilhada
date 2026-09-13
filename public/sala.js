@@ -928,7 +928,10 @@ async function abrirMicrofone(forcarDispositivo) {
 }
 
 // ---------- Redução de ruído local: RNNoise em AudioWorklet ----------
-let filtroDeRuidoLigado = true;
+// Quem desliga a reducao de ruido costuma ter um motivo que nao muda de uma sessao para
+// a outra -- um microfone bom, um instrumento, uma placa que ja limpa o som. Religar
+// sozinho a cada entrada desfaz essa decisao todo dia.
+let filtroDeRuidoLigado = window.Preferencias ? window.Preferencias.ler('reducaoDeRuido', true) !== false : true;
 let cadeiaDeRuido = null;
 let faixaEnviadaDoMic = null;
 let geracaoDoFiltro = 0;
@@ -1032,6 +1035,7 @@ function liberarContextoDeAudio() {
 
 noiseBtn.onclick = () => {
   filtroDeRuidoLigado = !filtroDeRuidoLigado;
+  window.Preferencias?.gravar('reducaoDeRuido', filtroDeRuidoLigado);
   if (filtroDeRuidoLigado) montarFiltroDeRuido();
   else desmontarFiltroDeRuido();
   liberarContextoDeAudio();
@@ -1092,6 +1096,10 @@ async function ativarMicrofone() {
     micMuted = false;
     micTrack.enabled = true;
     noiseBtn.hidden = false;
+    // O botao nasce dizendo a verdade. `montarFiltroDeRuido` desiste logo na primeira
+    // linha quando a reducao esta desligada -- e desiste ANTES de pintar --, entao quem
+    // guardou "desligado" via o botao aparecer anunciando "Ruído reduzido".
+    atualizarBotaoDeRuido();
     // O clique e um gesto do usuario -- exatamente o que o celular exige para deixar o
     // AudioContext do filtro sair de "suspended".
     montarFiltroDeRuido();
@@ -1299,7 +1307,41 @@ outDevice.onchange = () => {
   status.textContent = 'Saída de áudio trocada.';
 };
 
-devicesBtn.onclick = () => { listarDispositivos(); devicesPanel.classList.remove('hidden'); };
+devicesBtn.onclick = () => { listarDispositivos(); mostrarOQueELembrado(); devicesPanel.classList.remove('hidden'); };
+
+// ---------- O que a sala lembra de voce ----------
+//
+// Uma preferencia guardada e util ate o dia em que ela vira um misterio: alguem baixou o
+// volume de fulano ha dois meses, esqueceu, e agora nao ouve a pessoa sem saber por que --
+// e nao ha nada na tela que explique. Dizer quantas escolhas estao guardadas, e permitir
+// apaga-las de uma vez, e o que impede essa camada de virar um defeito silencioso.
+function mostrarOQueELembrado() {
+  const texto = document.getElementById('lembradosTexto');
+  const botao = document.getElementById('esquecerBtn');
+  if (!texto || !botao || !window.Preferencias) return;
+  const { pessoas } = window.Preferencias.resumo();
+  texto.textContent = pessoas
+    ? `Volume ajustado para ${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}, além dos aparelhos e da qualidade escolhidos. Tudo fica só neste navegador.`
+    : 'Só os aparelhos e a qualidade escolhidos. Volumes ajustados por pessoa aparecem aqui.';
+  botao.disabled = !pessoas;
+}
+
+document.getElementById('esquecerBtn').onclick = () => {
+  if (!window.Preferencias?.esquecerTudo()) return;
+  // Devolve o volume de todo mundo que esta na sala AGORA ao padrao: sem isto a tela
+  // continuaria mostrando o que acabou de ser esquecido, ate alguem sair e voltar.
+  for (const id of tiles.keys()) {
+    if (id === 'self') continue;
+    const refs = tiles.get(id);
+    refs.volumeDeVoz = 1;
+    refs.localMute = false;
+    definirAudioDaVoz(id, { lembrar: false });
+    const tela = volumeDaTela.get(id);
+    if (tela) { tela.nivel = 1; tela.mudo = false; definirAudioDaTela(id, { lembrar: false }); }
+  }
+  mostrarOQueELembrado();
+  status.textContent = 'Pronto: os ajustes guardados neste navegador foram esquecidos.';
+};
 devicesClose.onclick = () => devicesPanel.classList.add('hidden');
 devicesPanel.addEventListener('click', (e) => {
   if (e.target === devicesPanel) devicesPanel.classList.add('hidden');
@@ -1668,6 +1710,12 @@ if (aplicativoNativo) {
   fixEchoBtn.hidden = true;
   document.getElementById('captureCompatibility').hidden = false;
 }
+// O modo escolhido da ultima vez, se ainda fizer sentido. "excluir-pid" fica de fora de
+// proposito: ele so existe rodando dentro do aplicativo, e e decidido logo abaixo pelo
+// PID que ele mesmo informa -- restaurar um "excluir-pid" guardado no navegador comum
+// deixaria o seletor apontando para um modo que nao tem como funcionar ali.
+const modoGuardado = window.Preferencias?.ler('compartilhar.modoDoSom', null);
+if (modoGuardado === 'excluir' || modoGuardado === 'incluir') modoDeAudio = modoGuardado;
 if (aplicativoNativo?.pid) {
   modoDeAudio = 'excluir-pid';
   modoDeAudioSelect.querySelector('option[value="excluir-pid"]').hidden = false;
@@ -1766,6 +1814,7 @@ function nomeDoApp(executavel) {
 
 modoDeAudioSelect.onchange = () => {
   modoDeAudio = modoDeAudioSelect.value;
+  if (modoDeAudio !== 'excluir-pid') window.Preferencias?.gravar('compartilhar.modoDoSom', modoDeAudio);
   // Trocar para "somente" sem alvo mandaria silencio: adota o que estiver selecionado.
   if (modoDeAudio === 'incluir' && !appEscolhido) appEscolhido = excluirApp.value || '';
   enviarEscolhaDeAudio();
@@ -1853,6 +1902,30 @@ function montarAbas(caixa) {
   });
 }
 document.querySelectorAll('[data-abas]').forEach(montarAbas);
+
+// O que compartilhar e se o som vai junto sao decisoes que a mesma pessoa repete toda vez:
+// quem sempre manda a tela inteira com audio nao deveria reescolher isso a cada partida.
+//
+// So estes dois vivem aqui. O "modo do som do sistema" e restaurado la em cima, junto com
+// a variavel de estado que o acompanha, porque o seletor sozinho nao conta a historia --
+// e porque dentro do aplicativo ele ja vem decidido pelo PID.
+for (const [seletor, chave, respeitarOAplicativo] of [
+  [captureMode, 'compartilhar.oQue', true],
+  [audioPolicy, 'compartilhar.audio', false]
+]) {
+  const guardado = window.Preferencias?.ler(chave, null);
+  // So aceita valor que ainda EXISTE na lista: uma opcao removida numa versao futura
+  // deixaria o seletor num estado que a sala nao sabe tratar.
+  //
+  // E dentro do aplicativo o QUE compartilhar nao se restaura: ele ja escolheu tela
+  // inteira alguns blocos acima, por um motivo que nao e preferencia -- capturar uma
+  // janela obriga o Windows a compor aquela janela de novo so para a captura, e quem
+  // perde quadros e o jogo. Uma escolha guardada no navegador nao pode desfazer isso.
+  const podeRestaurar = guardado && !(respeitarOAplicativo && aplicativoNativo)
+    && [...seletor.options].some(o => o.value === guardado);
+  if (podeRestaurar) seletor.value = guardado;
+  seletor.addEventListener('change', () => window.Preferencias?.gravar(chave, seletor.value));
+}
 
 captureMode.onchange = atualizarExplicacaoDeAudio;
 audioPolicy.onchange = atualizarExplicacaoDeAudio;
@@ -2637,6 +2710,9 @@ function criarTileBase(id, name, state, isSelf) {
   // pelo fone certo, e quem entrasse depois voltaria para o padrao do sistema.
   aplicarSaidaEm(refs.peerAudio);
   aplicarSaidaEm(refs.screenAudio);
+  // E no volume em que esta pessoa foi deixada da ultima vez. Quem baixou o som de alguem
+  // que fala alto nao deveria ter de baixar de novo a cada entrada.
+  aplicarAudioLembrado(id);
 
   el.querySelector('.avatar-wrap').addEventListener('click', () => {
     const estado = id === 'self' ? meuEstado() : peers.get(id)?.state;
@@ -2729,7 +2805,7 @@ function audioDaTela(id) {
   return { nivel: pref.nivel, mudo: pref.mudo, disponivel: telaTemSom(id) };
 }
 
-function definirAudioDaTela(id, { nivel, alternarMudo }) {
+function definirAudioDaTela(id, { nivel, alternarMudo, lembrar = true }) {
   const pref = preferenciaDeTela(id);
   if (nivel !== undefined) {
     pref.nivel = entre0e1(nivel);
@@ -2737,6 +2813,7 @@ function definirAudioDaTela(id, { nivel, alternarMudo }) {
     if (pref.mudo && pref.nivel > 0) pref.mudo = false;
   }
   if (alternarMudo) pref.mudo = !pref.mudo;
+  if (lembrar) lembrarAudioDe(id);
   atualizarAudioDeTela();
   sincronizarControlesDeAudio(id);
 }
@@ -2751,7 +2828,7 @@ function audioDaVoz(id) {
   };
 }
 
-function definirAudioDaVoz(id, { nivel, alternarMudo }) {
+function definirAudioDaVoz(id, { nivel, alternarMudo, lembrar = true }) {
   const refs = tiles.get(id);
   if (!refs) return;
   if (nivel !== undefined) {
@@ -2763,6 +2840,75 @@ function definirAudioDaVoz(id, { nivel, alternarMudo }) {
   refs.peerAudio.muted = refs.localMute;
   if (pinned?.id === id && pinned.source === 'camera') stageVideo.volume = refs.volumeDeVoz;
   sincronizarControlesDeAudio(id);
+  // `lembrar: false` e usado ao APLICAR o que ja estava guardado -- senao a aplicacao
+  // regravaria a mesma coisa e mexeria na ordem de despejo por nada.
+  if (lembrar) lembrarAudioDe(id);
+}
+
+// ---------- O que foi escolhido para cada pessoa ----------
+//
+// Guardado pelo NOME, e nao pelo identificador: a identidade de midia carrega um sufixo
+// sorteado a cada entrada, entao lembrar por ela seria nao lembrar nada. Pelo nome, a
+// escolha sobrevive a sair e voltar, e vale em qualquer sala -- inclusive para o bot de
+// musica, cujo nome e sempre o mesmo.
+function nomeParaPreferencia(id) {
+  if (id === 'self') return null;                    // o proprio audio nao se ouve
+  return peers.get(id)?.name || null;
+}
+
+// Arrastar um controle de volume dispara "input" a cada pixel -- algumas dezenas de vezes
+// num gesto so. Gravar em cada uma seria gravar trinta vezes o caminho de um dedo, e
+// escrever no armazenamento do navegador e SINCRONO: trava a mesma linha de execucao que
+// desenha a sala. Guardar so depois que a mao para custa uma escrita por ajuste.
+let gravacaoAdiada = null;
+const pendentes = new Set();
+
+function lembrarAudioDe(id) {
+  if (!nomeParaPreferencia(id) || !window.Preferencias) return;
+  pendentes.add(id);
+  clearTimeout(gravacaoAdiada);
+  gravacaoAdiada = setTimeout(gravarOQueFicouPendente, 400);
+}
+
+function gravarOQueFicouPendente() {
+  clearTimeout(gravacaoAdiada);
+  gravacaoAdiada = null;
+  for (const id of pendentes) {
+    const nome = nomeParaPreferencia(id);
+    if (!nome) continue;
+    const voz = tiles.get(id);
+    const tela = volumeDaTela.get(id);
+    window.Preferencias?.guardarAudioDe(nome, {
+      voz: voz ? voz.volumeDeVoz : 1,
+      vozMuda: Boolean(voz?.localMute),
+      tela: tela ? tela.nivel : 1,
+      telaMuda: Boolean(tela?.mudo)
+    });
+  }
+  pendentes.clear();
+}
+
+// Fechar a aba no meio do atraso nao pode perder o ajuste que a pessoa acabou de fazer.
+window.addEventListener('pagehide', gravarOQueFicouPendente);
+
+// Chamado quando alguem entra: devolve a essa pessoa o volume em que ela foi deixada da
+// ultima vez, em vez de comecar todo mundo em 100% de novo a cada sessao.
+function aplicarAudioLembrado(id) {
+  const nome = nomeParaPreferencia(id);
+  if (!nome || !window.Preferencias) return;
+  const guardado = window.Preferencias.audioDe(nome);
+  const refs = tiles.get(id);
+  if (refs) {
+    refs.volumeDeVoz = entre0e1(guardado.voz);
+    refs.localMute = Boolean(guardado.vozMuda);
+    definirAudioDaVoz(id, { lembrar: false });
+  }
+  if (guardado.tela !== 1 || guardado.telaMuda) {
+    const pref = preferenciaDeTela(id);
+    pref.nivel = entre0e1(guardado.tela);
+    pref.mudo = Boolean(guardado.telaMuda);
+    definirAudioDaTela(id, { lembrar: false });
+  }
 }
 
 // Redesenha TODOS os controles do mesmo som a partir da preferencia — quem mexeu inclusive,
