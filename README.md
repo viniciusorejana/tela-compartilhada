@@ -842,7 +842,7 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | Variavel | Padrao | Funcao |
 | --- | --- | --- |
 | `PORT` | `3000` | Porta HTTP do servidor |
-| `HOST` | `0.0.0.0` | Endereco onde o servidor escuta |
+| `HOST` | `::` | Endereco onde o servidor escuta; `::` atende IPv4 e IPv6, e cai para IPv4 sozinho se a maquina nao tiver IPv6 |
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
@@ -854,6 +854,10 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
 | `NEXO_FILTRO_DE_AUDIO` | `loudnorm=I=-16:TP=-1.5:LRA=11` | Filtro do `ffmpeg` aplicado a musica |
 | `NEXO_SOUNDBOARD_MAXIMO_MB` | `256` | Memoria da mesa de sons somando TODAS as salas |
+| `NEXO_ANUNCIAR_TAILSCALE` | `0` | `1` oferece o endereco da tailnet como candidato ICE. So vale a pena se `tailscale status` listar mais de uma maquina: quem chega pelo Funnel nao alcanca um `100.x` e so ganharia espera |
+| `NEXO_LOG_SFU` | vazio | Vazio mostra so ERROR/FATAL/WARN do servidor de midia; `1` mostra tudo (util para ICE, mas traz nome e endereco dos participantes); `arquivo` grava tudo em `native/livekit/sfu.log`; `0` silencia |
+| `NEXO_PAINEL_REMOTO` | `0` | `1` permite abrir `/painel` fora da maquina do servidor. Exige `PUBLIC_URL` https e proxy declarado |
+| `NEXO_PROXIES_CONFIAVEIS` | vazio | IPs dos proxies de quem o servidor aceita `X-Forwarded-For`. Sem isso, todos atras de um tunel dividem o mesmo limite por origem |
 
 Exemplo:
 

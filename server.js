@@ -697,12 +697,13 @@ io.on('connection', (socket) => {
   socket.on('join-room', (requestedCode, displayName, identidadeDeMidia, callback) => {
     const roomCode = String(requestedCode || 'principal').toLowerCase();
     const sessao = socket.data.sessaoNexo;
-    if (roomCode !== sessao.sala || (!roomMembers.has(roomCode) && roomMembers.size >= 512)) {
+    // O formato ja foi conferido ao emitir a sessao, e a igualdade abaixo torna esta
+    // conferencia redundante hoje. Ela fica porque e barata e porque e o que segura o
+    // formato no dia em que existir outro caminho para criar uma sessao -- estava solta
+    // num "if" seguinte, onde nunca podia ser alcancada e parecia protecao sem proteger.
+    const salaValida = /^[a-z0-9_-]{4,32}$/.test(roomCode) && roomCode === sessao.sala;
+    if (!salaValida || (!roomMembers.has(roomCode) && roomMembers.size >= 512)) {
       if (typeof callback === 'function') callback({ ok: false, error: 'Sessão inválida ou capacidade de salas atingida.' });
-      return;
-    }
-    if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
-      if (typeof callback === 'function') callback({ ok: false, error: 'Codigo de sala invalido.' });
       return;
     }
     const name = sessao.nome;
@@ -1052,9 +1053,27 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
+// "::" escuta IPv4 e IPv6 na mesma porta; "0.0.0.0" escuta so IPv4.
+//
+// A diferenca aparece em quem digita "localhost". No Windows isso resolve para ::1 ANTES de
+// 127.0.0.1, e com o servidor so em IPv4 a tentativa em ::1 nao e recusada -- ela fica
+// pendurada. Medido nesta maquina: 1,4 ms por 127.0.0.1, 205 ms por localhost (o navegador
+// desiste do IPv6 e recomeca), e 2 s cheios para quem so tem IPv6. Era um pedagio em cada
+// conexao, inclusive as do aplicativo de desktop.
+//
+// Maquina com IPv6 desligado nao consegue abrir "::", entao a queda para IPv4 fica no lugar:
+// o servidor tem de subir mesmo na rede mais capenga.
+const HOST = process.env.HOST || '::';
 const publicUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
-server.listen(PORT, HOST, () => {
+if (!process.env.HOST) {
+  server.once('error', erro => {
+    if (!['EAFNOSUPPORT', 'EADDRNOTAVAIL', 'EINVAL', 'EPROTONOSUPPORT'].includes(erro.code)) throw erro;
+    console.log('IPv6 indisponível nesta máquina: escutando só em IPv4.');
+    server.listen(PORT, '0.0.0.0', aoSubir);
+  });
+}
+server.listen(PORT, HOST, aoSubir);
+function aoSubir() {
   process.send?.({ tipo: 'pronto', porta: server.address().port });
   console.log(`\nServidor rodando em ${publicUrl}`);
   console.log(`  -> Entrar na sala: ${publicUrl}/sala\n`);
@@ -1067,7 +1086,7 @@ server.listen(PORT, HOST, () => {
   if (!musica.disponivel()) {
     console.log('O bot de música ainda não está instalado. Rode "npm run musica:instalar" para habilitá-lo.');
   }
-});
+}
 
 // Sem isto, um Ctrl+C deixaria o bot baixando musica em segundo plano e segurando uma
 // sessao no servidor de midia.

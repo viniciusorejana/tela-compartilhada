@@ -27,6 +27,43 @@ const ARQUIVO_DE_CONFIG = path.join(PASTA, 'livekit.yaml');
 const PORTA_LOCAL = Number(process.env.SFU_PORT) || 7880;
 const PORTA_METRICAS = Number(process.env.SFU_METRICAS_PORT) || 7883;
 const PORTA_TCP = Number(process.env.SFU_TCP_PORT) || 7881;
+
+// Quanto do servidor de midia aparece no terminal:
+//
+//   (vazio)   so as linhas de ERROR, FATAL e WARN -- o padrao
+//   1         tudo, para investigar ICE de perto
+//   arquivo   tudo em native/livekit/sfu.log, porque problema de ICE costuma acontecer as
+//             duas da manha, quando ninguem esta olhando o terminal
+//   0         silencio total
+//
+// O padrao mudou de "silencio com um aviso generico" para "so os avisos". O aviso generico
+// dizia para conferir o painel, mas o painel mostra saude e reinicios -- nao a frase que o
+// SFU escreveu. Quem lia aquilo nao tinha para onde ir.
+//
+// As linhas de INFO sao as que carregam nome e endereco dos participantes; as de erro
+// falam do servidor. Por isso o padrao mostra as segundas e esconde as primeiras.
+const REGISTRO_SFU = (process.env.NEXO_LOG_SFU || '').trim().toLowerCase();
+const registroDetalhado = REGISTRO_SFU === '1' || REGISTRO_SFU === 'console' || REGISTRO_SFU === 'arquivo';
+const registroSilencioso = REGISTRO_SFU === '0';
+const LINHA_DE_PROBLEMA = /\b(ERROR|FATAL|WARN)\b|"level":"(?:error|warn)"/i;
+const ARQUIVO_DE_LOG = path.join(PASTA, 'sfu.log');
+const BYTES_MAXIMOS_DO_LOG = 8 * 1024 * 1024;
+let bytesDoLog = 0;
+
+function guardarLinha(linha) {
+  if (REGISTRO_SFU !== 'arquivo') { console.log(linha); return; }
+  try {
+    // Uma rotacao so, para o log nunca virar o maior arquivo do disco durante uma
+    // investigacao esquecida ligada.
+    if (bytesDoLog > BYTES_MAXIMOS_DO_LOG) {
+      fs.renameSync(ARQUIVO_DE_LOG, `${ARQUIVO_DE_LOG}.anterior`);
+      bytesDoLog = 0;
+    }
+    const texto = `${new Date().toISOString()} ${linha}\n`;
+    fs.appendFileSync(ARQUIVO_DE_LOG, texto);
+    bytesDoLog += Buffer.byteLength(texto);
+  } catch (_) { /* Sem log nao se derruba a sala: o diagnostico e opcional, a midia nao. */ }
+}
 // UMA porta de midia, nao uma faixa. Com uma faixa, o servidor de midia abre uma porta por
 // conexao: dez regras para acertar no roteador em vez de uma, dez associacoes de NAT para o
 // roteador domestico manter vivas, e dez chances de uma delas expirar no meio da conversa --
@@ -46,6 +83,30 @@ const FAIXAS_QUE_NAO_SERVEM = [
   [/^25\./, 'Hamachi']
 ];
 
+// O Tailscale é a exceção da faixa acima, e a exceção foi comprada com tempo de conexão.
+//
+// Quem entra pela URL da tailnet recebia dois candidatos: o da LAN e o IP público. O da LAN
+// tem prioridade de "host" -- é tentado primeiro -- e para quem está fora daquela LAN ele
+// simplesmente não responde. A conexão só acontecia depois de esse candidato morto esgotar
+// o prazo. O endereço da tailnet conserta isso: para quem está na tailnet ele responde na
+// hora, direto e cifrado, sem depender de encaminhamento de porta no roteador.
+//
+// O preço: para quem NÃO está na tailnet o 100.x é mais um candidato que nunca responde.
+// E "usar a URL da tailnet" não é o mesmo que "estar na tailnet": com o Funnel ligado, o
+// endereço .ts.net atende a internet inteira, e quem chega por ali não alcança um 100.x.
+//
+// Por isso o padrão é DESLIGADO: só ajuda quando existem outras máquinas registradas na
+// tailnet, e ligar sem elas só acrescenta espera para todo mundo. Confira com
+// `tailscale status`; se aparecer mais de uma máquina, NEXO_ANUNCIAR_TAILSCALE=1 passa a
+// valer a pena.
+//
+// A faixa 100.64/10 também é CGNAT de operadora, onde nada disso vale. Por isso a exceção
+// olha o NOME da interface, não só o endereço.
+const INTERFACE_DE_TAILSCALE = /tailscale|^ts\d/i;
+const anunciarTailscale = (process.env.NEXO_ANUNCIAR_TAILSCALE || '').trim() === '1';
+const ehEnderecoDeTailscale = (nome, ip) =>
+  anunciarTailscale && INTERFACE_DE_TAILSCALE.test(nome) && /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip);
+
 // Descobre os endereços IPv4 reais desta máquina e restringe o servidor de mídia a eles.
 //
 // Sem isso ele tenta abrir a porta em TODOS os endereços que encontrar -- e um PC comum tem
@@ -58,7 +119,7 @@ function enderecosParaEscutar() {
     for (const endereco of enderecos || []) {
       if (endereco.family !== 'IPv4' || endereco.internal) continue;
       const motivo = FAIXAS_QUE_NAO_SERVEM.find(([padrao]) => padrao.test(endereco.address));
-      if (motivo) continue;
+      if (motivo && !ehEnderecoDeTailscale(nome, endereco.address)) continue;
       escolhidos.push({ ip: endereco.address, interface: nome });
     }
   }
@@ -290,15 +351,20 @@ async function iniciarSfu(portaHttp) {
   aguardarProntidao();
 
   const registrar = (fluxo, prefixo) => {
-    let restante = '', ultimoAviso = 0;
+    let restante = '';
     fluxo.setEncoding('utf8');
     fluxo.on('data', pedaco => {
       const linhas = (restante + pedaco).split('\n');
       restante = linhas.pop().slice(-8192);
-      // O SFU inclui identidade e endereço nos logs estruturados. O painel guarda
-      // nomes apenas em alertas; o console precisa respeitar a mesma escolha.
-      if (Date.now() - ultimoAviso > 60000 && linhas.some(linha => /\b(ERROR|FATAL|WARN)\b|"level":"(?:error|warn)"/i.test(linha))) {
-        ultimoAviso = Date.now(); console.error(`${prefixo} O SFU registrou avisos. Confira saúde e reinícios no painel.`);
+      // Diagnosticar ICE -- par trocado, candidato que não responde, reconexão em laço --
+      // se faz LENDO estas linhas: elas dizem qual endereço falhou e por quanto tempo, e
+      // nada no painel substitui isso. O que o SFU escreve em INFO é que traz identidade e
+      // endereço de quem está na sala; o que ele escreve em ERROR e WARN fala dele mesmo.
+      // Daí o corte: os problemas aparecem sempre, o resto só quando alguém pedir.
+      if (registroSilencioso) return;
+      for (const linha of linhas) {
+        if (!linha || (!registroDetalhado && !LINHA_DE_PROBLEMA.test(linha))) continue;
+        guardarLinha(`${prefixo} ${linha}`);
       }
     });
   };
