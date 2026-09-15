@@ -100,6 +100,47 @@
     gravar('audioPorPessoa', pessoas);
   }
 
+  // ---------- Escolhas que valem só numa sala ----------
+  //
+  // Quase tudo aqui é da PESSOA e atravessa salas de propósito: o nome, os aparelhos, o
+  // volume de quem fala alto. A mesa de sons é a exceção, porque ela não é a mesma coisa
+  // em duas salas: cada uma tem os sons que subiram nela. Uma mesa de gritaria pede 20%;
+  // uma de trilha de fundo pede 80%. Um número só para todas fazia reajustar a cada troca.
+  //
+  // Entrar numa sala nova não começa do zero: vale o último volume escolhido em qualquer
+  // lugar, e só a partir do primeiro ajuste ali aquela sala passa a ter o dela.
+  const SALAS_LEMBRADAS = 20;
+
+  function nomeDaSala(sala) {
+    return String(sala || '').trim().toLowerCase().slice(0, 60);
+  }
+
+  function todasAsSalas() {
+    const guardado = ler('porSala', {});
+    return guardado && typeof guardado === 'object' ? guardado : {};
+  }
+
+  function daSala(sala, chave, padrao) {
+    const entrada = todasAsSalas()[nomeDaSala(sala)];
+    const valor = entrada && entrada[chave];
+    return valor === undefined ? padrao : valor;
+  }
+
+  function guardarDaSala(sala, chave, valor) {
+    const nome = nomeDaSala(sala);
+    if (!nome) return;
+    const salas = todasAsSalas();
+    salas[nome] = { ...(salas[nome] || {}), [chave]: valor, em: Date.now() };
+
+    const nomes = Object.keys(salas);
+    if (nomes.length > SALAS_LEMBRADAS) {
+      nomes.sort((a, b) => (salas[a].em || 0) - (salas[b].em || 0))
+        .slice(0, nomes.length - SALAS_LEMBRADAS)
+        .forEach(velha => delete salas[velha]);
+    }
+    gravar('porSala', salas);
+  }
+
   function esquecerTudo() {
     try {
       Object.keys(localStorage).filter(k => k.startsWith(PREFIXO)).forEach(k => localStorage.removeItem(k));
@@ -113,10 +154,14 @@
   // "esquecer o que ajustei" com um número em vez de uma promessa vaga.
   function resumo() {
     const pessoas = Object.keys(todasAsPessoas()).length;
+    const salas = Object.keys(todasAsSalas()).length;
     let chaves = 0;
     try { chaves = Object.keys(localStorage).filter(k => k.startsWith(PREFIXO)).length; } catch (_) { /* sem acesso */ }
-    return { pessoas, chaves };
+    return { pessoas, salas, chaves };
   }
 
-  root.Preferencias = { ler, gravar, audioDe, guardarAudioDe, esquecerTudo, resumo, PESSOAS_LEMBRADAS };
+  root.Preferencias = {
+    ler, gravar, audioDe, guardarAudioDe, daSala, guardarDaSala,
+    esquecerTudo, resumo, PESSOAS_LEMBRADAS, SALAS_LEMBRADAS
+  };
 })(window);

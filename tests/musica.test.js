@@ -51,12 +51,15 @@ test('comandos numa sala sem bot não derrubam o servidor', () => {
   // "não tem nada tocando" em vez de estourar.
   assert.equal(musica.pular('sala-vazia'), null);
   assert.equal(musica.pausar('sala-vazia', true), false);
-  assert.equal(musica.definirVolume('sala-vazia', 50), null);
   assert.equal(musica.removerDaFila('sala-vazia', 1), null);
   assert.equal(musica.embaralhar('sala-vazia'), false);
   // `!parar` virou desconexão: esvazia a fila e tira o bot da chamada. Numa sala onde ele
   // nunca entrou, isso tem de ser uma operação silenciosa em vez de um erro.
   assert.doesNotReject(musica.desconectar('sala-vazia', 'pedido'));
+  // O volume é a exceção da lista, e de propósito: ele é da SALA, não da passagem do bot
+  // por ela. Anotar antes de o bot chegar é o que evita chamá-lo alto para só então
+  // abaixá-lo -- ver o teste do volume mais abaixo.
+  assert.equal(musica.definirVolume('sala-vazia', 50).naSala, false);
 });
 
 test('a identidade do bot é reservada e reconhecível', () => {
@@ -98,4 +101,81 @@ test('desconectar uma sala que não tem bot é uma operação silenciosa', async
   // O servidor chama isto toda vez que uma sala esvazia, tenha havido música ou não.
   await assert.doesNotReject(musica.desconectar('sala-sem-bot', 'sala-vazia'));
   await assert.doesNotReject(musica.encerrarTudo());
+});
+
+// Spotify, Deezer e Apple Music não entregam o áudio para ninguém de fora: o bot lê o
+// nome da música na página pública e procura essa música onde dá para baixar. Ler o
+// endereço errado aqui erra a música inteira -- foi assim que um link da faixa `RUDE!`,
+// do Hearts2Hearts, virou `Rude`, do Magic!, que é outra música de outra década.
+test('o endereço diz a plataforma, o tipo e o id -- inclusive com idioma no caminho', () => {
+  const comoLido = pedido => {
+    const lugar = musica.ondeMora(pedido);
+    return lugar && `${lugar.plataforma}/${lugar.tipo}/${lugar.id}`;
+  };
+
+  // O `/intl-pt/` é o que o Spotify monta para quem abre o site em português. Ignorá-lo é
+  // o que faz o link copiado do celular brasileiro valer igual ao copiado do desktop.
+  assert.equal(comoLido('https://open.spotify.com/intl-pt/track/2bAQsNqdo62T8akkIvWzGl'), 'spotify/track/2bAQsNqdo62T8akkIvWzGl');
+  assert.equal(comoLido('https://open.spotify.com/track/2bAQsNqdo62T8akkIvWzGl?si=abc'), 'spotify/track/2bAQsNqdo62T8akkIvWzGl');
+  assert.equal(comoLido('spotify:track:2bAQsNqdo62T8akkIvWzGl'), 'spotify/track/2bAQsNqdo62T8akkIvWzGl');
+  assert.equal(comoLido('https://open.spotify.com/album/3053E9tumiU5rqbAPWF06s'), 'spotify/album/3053E9tumiU5rqbAPWF06s');
+
+  // O Deezer põe o país no caminho às vezes, e às vezes não.
+  assert.equal(comoLido('https://www.deezer.com/br/track/3135556'), 'deezer/track/3135556');
+  assert.equal(comoLido('https://deezer.com/album/302127'), 'deezer/album/302127');
+
+  // A Apple põe a FAIXA dentro do álbum: o mesmo endereço, com e sem `?i=`, é a faixa e
+  // o álbum inteiro. Tratar os dois igual enfileirava um disco por causa de uma música.
+  assert.equal(comoLido('https://music.apple.com/br/album/better-together/1440857781?i=1440857786'), 'apple/track/1440857786');
+  assert.equal(comoLido('https://music.apple.com/br/album/in-between-dreams/1440857781'), 'apple/album/1440857781');
+
+  // O que o yt-dlp já baixa sozinho não passa por ponte nenhuma.
+  assert.equal(comoLido('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), null);
+  assert.equal(comoLido('https://soundcloud.com/artista/faixa'), null);
+  assert.equal(comoLido('nome de música solto'), null);
+
+  // Id fora do formato não vira endereço de consulta.
+  assert.equal(comoLido('https://open.spotify.com/track/../../etc'), null);
+  assert.equal(comoLido('https://www.deezer.com/br/track/abc'), null);
+});
+
+test('álbum e lista dessas plataformas contam como lista; faixa avulsa não', () => {
+  assert.equal(musica.ehListaInteira('https://open.spotify.com/album/3053E9tumiU5rqbAPWF06s'), true);
+  assert.equal(musica.ehListaInteira('https://open.spotify.com/intl-pt/playlist/37i9dQZF1DXcBWIGoYBM5M'), true);
+  assert.equal(musica.ehListaInteira('https://www.deezer.com/br/playlist/908622995'), true);
+  assert.equal(musica.ehListaInteira('https://music.apple.com/br/album/in-between-dreams/1440857781'), true);
+
+  assert.equal(musica.ehListaInteira('https://open.spotify.com/intl-pt/track/2bAQsNqdo62T8akkIvWzGl'), false);
+  assert.equal(musica.ehListaInteira('https://www.deezer.com/br/track/3135556'), false);
+  // Faixa dentro de um álbum da Apple: é uma música, não o disco.
+  assert.equal(musica.ehListaInteira('https://music.apple.com/br/album/better-together/1440857781?i=1440857786'), false);
+});
+
+// O bot sai da chamada sozinho depois de um minuto e meio sem fila, e o estado dele morre
+// junto. O volume não pode morrer junto: quem abaixou para 40 abaixou o volume DA SALA, e
+// voltar em 85 no próximo pedido é um susto no meio da conversa de todo mundo.
+test('o volume é da sala e sobrevive ao bot sair e voltar', async () => {
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 85, 'sala nova começa no padrão');
+
+  const ajuste = musica.definirVolume('sala-do-volume', 40);
+  assert.equal(ajuste.porcento, 40);
+  assert.equal(ajuste.naSala, false, 'dá para deixar o volume pronto antes de chamar o bot');
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 40, 'o painel mostra o que a sala escolheu');
+
+  // O bot indo embora não apaga a escolha.
+  await musica.desconectar('sala-do-volume', 'silencioso');
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 40);
+
+  // Cada sala com o seu: mexer numa não mexe na outra.
+  musica.definirVolume('outra-sala', 120);
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 40);
+  assert.equal(musica.instantaneo('outra-sala').volume, 120);
+
+  // Fora da faixa aceita, corta nas pontas em vez de distorcer ou emudecer por engano.
+  assert.equal(musica.definirVolume('outra-sala', 900).porcento, 150);
+  assert.equal(musica.definirVolume('outra-sala', -30).porcento, 0);
+
+  // A sala esvaziou: aí sim, nada dela sobrevive -- como o histórico e a mesa de sons.
+  await musica.esquecerSala('sala-do-volume');
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 85);
 });

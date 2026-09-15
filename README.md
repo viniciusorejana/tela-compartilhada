@@ -216,9 +216,13 @@ some sozinho quando a sala presta atenção.
 | Redução de ruído ligada/desligada | sempre |
 | O que compartilhar e se o som vai junto | sempre |
 | **Volume e mudo de cada pessoa** | por nome, em qualquer sala |
-| **Volume do bot de música** | por nome, em qualquer sala |
-| Volume da mesa de sons | sempre |
+| **Volume do bot de música** (o seu) | por nome, em qualquer sala |
+| **Volume da mesa de sons** | **por sala** (a primeira vez herda o último usado) |
 | Barra lateral recolhida | sempre |
+
+E uma que **não** fica no navegador de ninguém, porque não é de ninguém: o **volume do bot na
+sala** (`!volume`) é da sala, vale para todo mundo e vive no servidor enquanto a sala existir —
+ver [Bot de música](#bot-de-música-canal--música).
 
 Tudo vive no `localStorage` do navegador de cada um. **Nada disso vai para o servidor nem é
 visto por outra pessoa** — abaixar o volume de alguém é uma decisão privada, e continua sendo.
@@ -234,6 +238,13 @@ a entrada em vez de gravar o padrão); a lista tem **teto de 40 pessoas**, desca
 ajustado há mais tempo; e a gravação é **adiada**, porque arrastar um controle de volume dispara
 dezenas de eventos e escrever no armazenamento é síncrono — trava a mesma linha que desenha a
 sala. Uma escrita por ajuste, não trinta por gesto.
+
+A mesa de sons é a exceção que é guardada **por sala**, e não pela pessoa em geral: cada sala
+tem os sons que subiram nela, e o quanto eles incomodam depende de quais são — uma mesa de
+gritaria pede 20%, uma de trilha de fundo pede 80%. Um número só para todas fazia reajustar a
+cada troca. Entrar numa sala nova não recomeça do zero: vale o último volume escolhido em
+qualquer lugar, e só a partir do primeiro ajuste ali aquela sala passa a ter o dela. O teto
+aqui é de **20 salas**.
 
 O que **não** é lembrado, de propósito: zoom do palco, modo teatro e qual painel estava aberto.
 São estado de navegação, não preferência — restaurá-los faria a pessoa entrar numa tela que ela
@@ -310,7 +321,7 @@ https://youtu.be/...                       link também: cole e pronto
 !pular  !pausar  !voltar                   controle da reprodução
 !parar                                     esvazia a fila e tira o bot da chamada (= !sair)
 !fila  !agora  !embaralhar  !remover <n>   a fila
-!volume 0-150                              volume do bot para a sala inteira
+!volume 0-150                              volume do bot para a sala inteira (fica guardado)
 !ajuda
 ```
 
@@ -319,10 +330,45 @@ despublicada e o bot deixa a chamada — medido em **100 ms** do comando até el
 participantes. Ele volta sozinho no próximo pedido. Sem isso o bot continuava plantado na sala
 por mais um minuto e meio depois de `!parar`, mudo, ocupando um lugar na lista de todo mundo.
 
-Aceita YouTube, SoundCloud, Bandcamp, links diretos e tudo mais que o `yt-dlp` resolve — por nome
-ou por endereço. Um link do **Spotify** é procurado pelo nome em outra fonte: o Spotify não
-entrega o áudio para fora do aplicativo dele, nem com conta paga, então o que dá para fazer é ler
-o nome da faixa na página pública e tocar a mesma música de onde for possível.
+**O volume é da sala, não da passagem do bot por ela.** Quem deixou em 40% deixou a sala em 40%:
+o bot sair (por `!parar`, ou sozinho depois de 90 s sem fila) não desfaz isso, e o próximo pedido
+entra nos mesmos 40%. Antes voltava a 85% a cada ida e volta, o que é um susto no meio da conversa
+de todo mundo. `!volume` também vale **antes** de o bot chegar — dá para deixar a sala pronta em
+vez de chamá-lo alto para só então abaixá-lo. A escolha vive no servidor enquanto a sala existir
+e some com ela, como o histórico do chat e a mesa de sons. O slider no quadradinho do Nexo DJ
+continua sendo o seu, separado deste, e é lembrado no seu navegador.
+
+### De onde o bot aceita link
+
+| Plataforma | Faixa | Álbum / playlist | Como |
+| --- | --- | --- | --- |
+| YouTube, YouTube Music | ✅ | ✅ | baixado direto |
+| SoundCloud (`/sets/`) | ✅ | ✅ | baixado direto |
+| Bandcamp (`/album/`) | ✅ | ✅ | baixado direto |
+| **Spotify** | ✅ | ✅ | nome + artista lidos da página, tocado do YouTube |
+| **Deezer** | ✅ | ✅ | idem |
+| **Apple Music** | ✅ | ✅ álbum | idem (playlist da Apple não abre para fora) |
+
+As três últimas **não entregam o áudio para ninguém de fora** — o fluxo é cifrado e não há conta
+paga que resolva. O que dá para fazer é o que todo bot de música faz: ler na página pública qual
+é a música e tocá-la de onde é possível baixar.
+
+**O que decide se toca a música certa é ler o artista junto com o nome.** O `oEmbed` do Spotify
+devolve só o título: para a faixa [`RUDE!`, do Hearts2Hearts](https://open.spotify.com/track/2bAQsNqdo62T8akkIvWzGl),
+ele devolve `RUDE!` e mais nada — e a busca trazia `Rude`, do Magic!, outra música de outra
+década, incomparavelmente mais popular. Tocava a errada sem nenhum aviso de que era. Lendo a
+mesma ficha que o tocador do Spotify usa, a busca vira `Hearts2Hearts RUDE!` e o primeiro
+resultado é o certo:
+
+| Busca | Primeiro resultado |
+| --- | --- |
+| `RUDE!` (antes) | ❌ MAGIC! — Rude (Official Video) |
+| `Hearts2Hearts RUDE!` (agora) | ✅ Hearts2Hearts 하츠투하츠 'RUDE!' MV — SMTOWN |
+
+Também entendidos: o `/intl-pt/` que o Spotify põe no caminho de quem abre o site em português,
+o `spotify:track:…` do aplicativo, os links encurtados do botão de compartilhar (`spotify.link`),
+e a diferença entre `…/album/<id>` (o disco) e `…/album/<id>?i=<faixa>` da Apple Music (uma
+música só). O que o `yt-dlp` já baixa sozinho não passa por nada disso.
 
 ### Listas sem sair da sala
 
@@ -349,7 +395,9 @@ Um `list=` no endereço quer dizer duas coisas diferentes, e o bot trata cada um
 | O que você cola | O que acontece |
 | --- | --- |
 | `/playlist?list=…`, um `/sets/` do SoundCloud, um `/album/` do Bandcamp | **Entra inteira** (até 100 faixas, limitado pelo espaço na fila) |
+| Um álbum ou uma playlist do Spotify, do Deezer ou da Apple Music | **Entra inteira**, cada faixa com nome e artista de origem |
 | `/watch?v=X&list=Y` — uma música que por acaso estava numa lista | Toca **só ela**, e avisa que dá para pegar a lista com `!lista` |
+| Uma faixa do Spotify que por acaso está num álbum | Toca **só ela** |
 
 A distinção existe porque o YouTube monta o segundo formato para *qualquer* vídeo aberto a partir
 de uma playlist: enfileirar cinquenta faixas ali seria sequestrar a sala por causa de um copiar e
@@ -357,7 +405,11 @@ colar. Quando a lista é o que você quer mesmo, `!lista <link>` força.
 
 Uma lista de sessenta faixas entra em cerca de dois segundos porque o bot **não** resolve as
 sessenta: ele lê o índice de uma vez (título, duração, endereço da página) e descobre o áudio de
-cada uma só quando chega a vez dela — com a seguinte sendo preparada enquanto a atual toca.
+cada uma só quando chega a vez dela — com a seguinte sendo preparada enquanto a atual toca. Vale
+igual para as listas do Spotify, do Deezer e da Apple Music: o que entra na fila é o nome e o
+artista de cada faixa, e a busca de cada uma é paga quando ela vira a próxima. Medido com o
+álbum *Scorpion* pelo link do Spotify: 25 faixas na fila, a primeira tocando, e `!pular` levando
+à segunda sem pausa perceptível.
 Medido numa playlist real: cinco trocas seguidas com **20 ms** de silêncio em média, 101 ms no
 pior caso.
 
@@ -455,6 +507,34 @@ sala 2 — o aviso de disparo só vai para quem está naquela sala.
 Nada disso é guardado em disco. Os sons vivem na memória do processo enquanto a sala existir e
 somem quando a última pessoa sai — junto com o histórico do chat e com o bot, pela mesma regra:
 nada de uma sala fechada sobrevive a ela. Reiniciar o servidor também zera tudo.
+
+**O volume da mesa é seu e é por sala.** Ele não sobe para o servidor: baixar a mesa não baixa
+para os outros, e cada sala guarda o próprio número no seu navegador, porque uma mesa de
+gritaria e uma de trilha de fundo não pedem o mesmo volume. A primeira vez numa sala herda o
+último volume que você escolheu em qualquer lugar. Detalhes em
+[O que a sala lembra de você](#o-que-a-sala-lembra-de-você).
+
+### Um som por pessoa de cada vez
+
+Apertar de novo **troca** o som em vez de somar mais um por cima. A regra é por **pessoa**:
+
+| Quem aperta | O que se ouve |
+| --- | --- |
+| Você, o mesmo som cinco vezes | só o último — cada toque corta o anterior |
+| Você, um som e depois outro | só o segundo |
+| Você e outra pessoa, ao mesmo tempo | **os dois juntos** — isso é a mesa funcionando |
+
+Duas pessoas tocando coisas diferentes é metade da graça; uma pessoa tocando quatro ao mesmo
+tempo é sempre engano ou bagunça. E não havia como desfazer: não existe botão de "parar", então
+cinco cliques num som de trinta segundos deixavam a sala inteira debaixo de uma parede de
+barulho até ela acabar sozinha. Medido antes: **cinco cópias vivas ao mesmo tempo**; depois,
+uma. O limite de dois cliques por segundo do servidor continua valendo, e ainda permitia umas
+setenta cópias no ar.
+
+O corte tem um desligamento de **40 ms** em vez de ser seco: cortar uma onda no meio estala, e
+um estalo assusta mais que o som. Quem decide é o navegador de cada ouvinte, sozinho — os avisos
+chegam na mesma ordem para todo mundo e a regra só depende de quem disparou, então ninguém
+precisa arbitrar.
 
 Um arquivo com mais de 30 segundos **não é recusado: entra cortado no começo**, e quem enviou é
 avisado disso. Recusar seria grosseiro com quem arrastou uma música de três minutos querendo só o
@@ -949,6 +1029,7 @@ npm install
 npx playwright install chromium webkit
 npm test
 npm run test:browser
+npm run test:soundboard
 $env:TEST_BROWSER="webkit"
 npm run test:browser
 Remove-Item Env:TEST_BROWSER
@@ -957,6 +1038,11 @@ Remove-Item Env:TEST_BROWSER
 Os testes iniciam um servidor isolado em `127.0.0.1:3217` (Chromium) ou `:3218` (WebKit).
 Usam câmera/tela sintéticas e comunicação WebRTC real; não capturam o desktop ou microfone
 de quem executa. As imagens de revisão ficam em `test-results/`, ignorado pelo Git.
+
+`npm run test:soundboard` (porta `:3219`) sobe dois navegadores na mesma sala e **conta quantas
+fontes de áudio ficam vivas ao mesmo tempo** — a única forma de verificar a regra de um som por
+pessoa, que só existe dentro da Web Audio de quem ouve. O tom de teste é sintetizado pelo
+próprio teste; não depende de arquivo no repositório nem do `ffmpeg`.
 
 `tests/musica.test.js` e `tests/soundboard.test.js` rodam sem rede: fixam o que não pode mudar
 sem alguém perceber — que o token do bot **não** autoriza receber mídia, que a mesa de sons

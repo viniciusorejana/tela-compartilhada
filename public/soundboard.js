@@ -30,13 +30,32 @@
   const decodificados = new Map();
   const baixando = new Map();
 
+  // O volume da mesa é POR SALA. Cada sala tem os sons dela, e o quanto eles incomodam
+  // depende de quais são: uma mesa de gritaria pede 20%, uma de trilha pede 80%. Guardar
+  // um número só para todas fazia reajustar a cada troca de sala.
+  //
+  // As duas chaves antigas continuam valendo como ponto de partida -- é o último volume
+  // escolhido em qualquer lugar. Entrar numa sala nova não recomeça do zero: começa no que
+  // a pessoa costuma usar, e só depois do primeiro ajuste aquela sala passa a ter o dela.
   let volume = 0.7;
   let mudo = false;
   try {
-    const guardado = Number(localStorage.getItem(CHAVE_DO_VOLUME));
+    // A chave ausente volta como `null`, e `Number(null)` é ZERO -- que passa raspando no
+    // teste de faixa logo abaixo. Quem entrava pela primeira vez ficava com a mesa em 0%:
+    // clicava num som, nada saía, e não havia nada na tela explicando. Por isso a ausência
+    // é conferida ANTES da conversão, e não pela aparência do número que ela produz.
+    const bruto = localStorage.getItem(CHAVE_DO_VOLUME);
+    const guardado = bruto === null ? NaN : Number(bruto);
     if (Number.isFinite(guardado) && guardado >= 0 && guardado <= 1) volume = guardado;
     mudo = localStorage.getItem(CHAVE_DO_MUDO) === '1';
   } catch (_) { /* Sem armazenamento, vale o padrao desta aba. */ }
+  if (window.Preferencias) {
+    const daSala = window.Preferencias.daSala(roomCode, 'sons', null);
+    if (daSala && typeof daSala === 'object') {
+      if (Number.isFinite(daSala.volume) && daSala.volume >= 0 && daSala.volume <= 1) volume = daSala.volume;
+      mudo = Boolean(daSala.mudo);
+    }
+  }
 
   function garantirContexto() {
     if (!ContextoDeAudio) return null;
@@ -69,6 +88,9 @@
   }
 
   function guardarPreferencia() {
+    // Guardado nos dois lugares: nesta sala, que é o que vale ao voltar para ela, e no
+    // valor geral, que é o ponto de partida da próxima sala em que nunca se mexeu.
+    window.Preferencias?.guardarDaSala(roomCode, 'sons', { volume, mudo });
     try {
       localStorage.setItem(CHAVE_DO_VOLUME, String(volume));
       localStorage.setItem(CHAVE_DO_MUDO, mudo ? '1' : '0');
@@ -98,14 +120,61 @@
     return tarefa;
   }
 
-  async function tocarLocalmente(id) {
+  // ---------- Um som de cada vez, POR PESSOA ----------
+  //
+  // Cada disparo criava uma fonte nova e nada segurava a anterior: apertar cinco vezes
+  // tocava as cinco cópias sobrepostas, e um som de trinta segundos deixava a sala
+  // inteira debaixo de uma parede de barulho que ninguém conseguia interromper -- não há
+  // botão de "parar", e o limite de dois cliques por segundo do servidor ainda permite
+  // umas setenta cópias ao vivo.
+  //
+  // A regra é por PESSOA, e não por som nem pela sala: duas pessoas tocando coisas
+  // diferentes ao mesmo tempo é a mesa funcionando, e é metade da graça. Uma pessoa
+  // tocando duas ao mesmo tempo é sempre engano ou bagunça. Então cada participante tem
+  // um canal só: o disparo novo dela corta o que ela tinha começado antes, seja o mesmo
+  // som ou outro.
+  //
+  // Todo mundo chega à mesma conclusão sozinho, sem o servidor arbitrar: os avisos chegam
+  // na mesma ordem para todos, e a decisão depende só de quem disparou.
+  const tocandoPorPessoa = new Map();
+
+  // Cortar uma onda no meio estala. Um desligamento de 40 ms é curto demais para soar
+  // como "abaixou o volume" e longo o suficiente para não estalar.
+  const SEGUNDOS_DO_CORTE = 0.04;
+
+  function cortarDe(quem) {
+    const atual = tocandoPorPessoa.get(quem);
+    if (!atual) return;
+    tocandoPorPessoa.delete(quem);
+    try {
+      atual.ganho.gain.setTargetAtTime(0, atual.contexto.currentTime, SEGUNDOS_DO_CORTE / 3);
+      atual.fonte.stop(atual.contexto.currentTime + SEGUNDOS_DO_CORTE);
+    } catch (_) { /* Ja terminou sozinha; nao ha o que cortar. */ }
+  }
+
+  async function tocarLocalmente(id, quem) {
     const contexto = garantirContexto();
     if (!contexto) return;
     const buffer = decodificados.get(id) || await prepararSom({ id });
     if (!buffer) return;
+    // O corte fica DEPOIS do await de propósito: um som que ainda não terminou de baixar
+    // cortaria o anterior e não colocaria nada no lugar, deixando um buraco no áudio.
+    cortarDe(quem);
+
+    // Um ganho por disparo, entre a fonte e o volume da mesa. É ele que permite desligar
+    // este som sem mexer no volume geral nem no som que outra pessoa esteja tocando.
+    const proprio = contexto.createGain();
+    proprio.connect(ganho);
     const fonte = contexto.createBufferSource();
     fonte.buffer = buffer;
-    fonte.connect(ganho);
+    fonte.connect(proprio);
+    const registro = { fonte, ganho: proprio, contexto };
+    fonte.onended = () => {
+      // Só se ainda for o meu: um corte já trocou a entrada por outra mais nova.
+      if (tocandoPorPessoa.get(quem) === registro) tocandoPorPessoa.delete(quem);
+      try { proprio.disconnect(); } catch (_) { /* ja desconectado */ }
+    };
+    tocandoPorPessoa.set(quem, registro);
     fonte.start();
   }
 
@@ -252,6 +321,19 @@
 
   window.NexoSoundboard = {
     abrir: abrirPainel,
+    // "Esquecer o que ajustei", em Dispositivos. Devolve a mesa ao padrão e apaga as duas
+    // chaves antigas -- elas são desta mesa, e não da camada de preferências, então
+    // ninguém mais pode apagá-las.
+    esquecerAjustes() {
+      volume = 0.7;
+      mudo = false;
+      try {
+        localStorage.removeItem(CHAVE_DO_VOLUME);
+        localStorage.removeItem(CHAVE_DO_MUDO);
+      } catch (_) { /* Sem armazenamento, nao havia o que apagar. */ }
+      aplicarGanho();
+      pintarVolume();
+    },
     // Chamado por `retomarMidias`, em sala.js, junto com todo <audio> da página: no toque
     // em "Ativar reprodução", ao voltar do segundo plano e no "pageshow".
     //
@@ -292,7 +374,9 @@
       });
       soquete.on('soundboard-tocou', dados => {
         if (!dados?.id) return;
-        tocarLocalmente(dados.id);
+        // Quem disparou é o que separa um canal do outro. O servidor sempre manda; o
+        // `||` é só para nunca cair num `undefined` que juntaria pessoas diferentes.
+        tocarLocalmente(dados.id, String(dados.porId || 'sem-dono'));
         acenderBotao(dados.id);
       });
     },

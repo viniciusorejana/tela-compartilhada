@@ -69,6 +69,8 @@ test('janela privada sem armazenamento não derruba nada', () => {
   assert.equal(janela.Preferencias.gravar('x', 1), false);
   mesmoConteudo(janela.Preferencias.audioDe('Ana'), PADRAO);
   assert.doesNotThrow(() => janela.Preferencias.guardarAudioDe('Ana', { voz: 0.5, vozMuda: false, tela: 1, telaMuda: false }));
+  assert.doesNotThrow(() => janela.Preferencias.guardarDaSala('x', 'sons', { volume: 0.5 }));
+  mesmoConteudo(janela.Preferencias.daSala('x', 'sons', { volume: 0.7 }), { volume: 0.7 });
 });
 
 // O volume é guardado pelo NOME porque a identidade de mídia carrega um sufixo sorteado a
@@ -124,4 +126,44 @@ test('esquecer apaga só o que é da sala, e diz que apagou', () => {
   assert.equal(Preferencias.audioDe('Ana').voz, 1);
   // O que não é nosso não se toca: o prefixo existe exatamente para isso.
   assert.equal(dados.get('algoDeOutroApp'), 'preservar');
+});
+
+// A mesa de sons é a exceção da camada: ela NÃO atravessa salas, porque cada sala tem os
+// sons que subiram nela. Uma mesa de gritaria pede 20%, uma de trilha pede 80%, e um
+// número só para as duas faz reajustar a cada troca.
+test('o volume de uma sala fica naquela sala, e não vaza para as outras', () => {
+  const { Preferencias } = comArmazenamento();
+  // Sala em que nunca se mexeu: vale o padrão que quem chamou ofereceu -- é assim que a
+  // mesa herda o último volume escolhido em qualquer lugar em vez de começar do zero.
+  mesmoConteudo(Preferencias.daSala('gritaria', 'sons', { volume: 0.7 }), { volume: 0.7 });
+
+  Preferencias.guardarDaSala('gritaria', 'sons', { volume: 0.2, mudo: false });
+  Preferencias.guardarDaSala('trilha', 'sons', { volume: 0.9, mudo: true });
+  mesmoConteudo(Preferencias.daSala('gritaria', 'sons', null), { volume: 0.2, mudo: false });
+  mesmoConteudo(Preferencias.daSala('trilha', 'sons', null), { volume: 0.9, mudo: true });
+  assert.equal(Preferencias.daSala('outra-qualquer', 'sons', null), null, 'sala nova não herda o ajuste de outra');
+
+  // A mesma sala escrita com outra caixa é a mesma sala: a URL não distingue, e dois
+  // volumes para o mesmo lugar seria um defeito impossível de descrever.
+  mesmoConteudo(Preferencias.daSala('GRITARIA', 'sons', null), { volume: 0.2, mudo: false });
+});
+
+test('a lista de salas tem teto, e quem sai é a que ficou parada há mais tempo', () => {
+  const { Preferencias } = comArmazenamento();
+  const teto = Preferencias.SALAS_LEMBRADAS;
+  for (let n = 0; n < teto + 5; n++) Preferencias.guardarDaSala(`sala-${n}`, 'sons', { volume: n / 100 });
+  assert.equal(Preferencias.resumo().salas, teto, 'o teto de salas precisa valer');
+  assert.equal(Preferencias.daSala('sala-0', 'sons', null), null, 'a mais antiga sai');
+  mesmoConteudo(Preferencias.daSala(`sala-${teto + 4}`, 'sons', null), { volume: (teto + 4) / 100 }, 'a última entra');
+});
+
+test('esquecer tudo leva junto o que era de cada sala', () => {
+  const { Preferencias } = comArmazenamento();
+  Preferencias.guardarAudioDe('Amiga', { voz: 0.2, vozMuda: false, tela: 1, telaMuda: false });
+  Preferencias.guardarDaSala('gritaria', 'sons', { volume: 0.2 });
+  assert.equal(Preferencias.resumo().pessoas, 1);
+  assert.equal(Preferencias.resumo().salas, 1);
+  Preferencias.esquecerTudo();
+  assert.equal(Preferencias.resumo().pessoas, 0);
+  assert.equal(Preferencias.resumo().salas, 0);
 });

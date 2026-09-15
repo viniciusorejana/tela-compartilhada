@@ -66,6 +66,19 @@ const identidadeDoBot = sala => `${PREFIXO_DA_IDENTIDADE}${sala}`;
 // Estado por sala. Nenhuma sala aparece aqui antes do primeiro pedido.
 const salas = new Map();
 
+// Volume com que o bot toca, guardado POR SALA e fora do estado acima.
+//
+// Fica separado de propósito: o estado do bot morre toda vez que ele sai da chamada -- e
+// ele sai sozinho depois de um minuto e meio sem fila. Guardar o volume junto significava
+// que, no pedido seguinte, a sala voltava a ouvir a música a 85% por mais alto ou mais
+// baixo que tivessem deixado. Quem ajustou o volume ajustou o volume DA SALA, não o de
+// uma passagem do bot por ela, e essa escolha vale enquanto a sala existir.
+//
+// Some junto com a sala, como todo o resto: quando a última pessoa sai, `esquecerSala`
+// apaga isto do mesmo jeito que a mesa de sons e o histórico do chat são apagados.
+const volumePorSala = new Map();
+const VOLUME_PADRAO = 0.85;
+
 // Como a sala e avisada. Preenchido por server.js na inicializacao para este modulo nao
 // precisar conhecer o Socket.IO.
 let anunciar = () => {};
@@ -81,7 +94,6 @@ function configurar({ aoMudar, criarToken, enderecoLocal }) {
 // ---------- Resolucao: de "o que a pessoa escreveu" para "uma faixa tocavel" ----------
 
 const EH_ENDERECO = /^https?:\/\//i;
-const EH_SPOTIFY = /^https?:\/\/(open\.)?spotify\.com\//i;
 
 // O bot escreve em negrito e em `código`, e quase tudo que ele diz carrega texto de fora:
 // o titulo que o site devolveu, o que a pessoa pediu, o nome de quem pediu. Um asterisco
@@ -140,20 +152,229 @@ function argumentosBase() {
   return ['--no-playlist', '--no-warnings', '--no-update', '--no-color', '--socket-timeout', '15', '-f', FORMATO_DE_AUDIO, ...extras];
 }
 
-// O Spotify nao entrega o audio para ninguem de fora do aplicativo dele -- nem com conta
-// paga, porque o fluxo e cifrado. O que da para fazer e o que todo bot de musica faz: ler
-// o NOME da faixa na pagina publica e procurar esse nome em outra fonte. O oEmbed e um
-// endereco publico e sem chave; nada da conta de ninguem entra nisso.
-async function tituloNoSpotify(endereco) {
-  const resposta = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(endereco)}`, {
+// ---------- Plataformas que não entregam o áudio ----------
+//
+// Spotify, Deezer e Apple Music não deixam ninguém de fora baixar o som: o fluxo é cifrado
+// e não há conta paga que resolva. O que dá para fazer é o que todo bot de música faz --
+// ler na página pública QUAL é a música e procurar essa música onde dá para baixar.
+//
+// O detalhe que decide se a música certa toca é ler o ARTISTA junto com o nome. O oEmbed
+// do Spotify devolve só o título: para a faixa `RUDE!`, do Hearts2Hearts, ele devolve
+// `RUDE!` e mais nada, e a busca no YouTube trazia `Rude`, do Magic! -- uma música
+// diferente, de outra década, incomparavelmente mais popular. Tocava a errada sem nenhum
+// aviso de que era. Procurando por `Hearts2Hearts RUDE!`, o primeiro resultado é o certo.
+//
+// Nenhum destes endereços pede chave nem conta: são os mesmos que o navegador de qualquer
+// pessoa abre ao ver a página.
+
+// Ids das três plataformas, conferidos antes de entrarem numa URL de consulta. O id sai do
+// que alguém colou no chat, e daqui ele vira endereço de rede.
+const ID_DO_SPOTIFY = /^[A-Za-z0-9]{22}$/;
+const ID_NUMERICO = /^[0-9]{1,15}$/;
+
+// Encurtadores. O botão de compartilhar do celular entrega estes, e sem abri-los não dá
+// para saber se o que vem é uma faixa ou um álbum inteiro.
+const ENCURTADORES = /^(spotify\.link|link\.tospotify\.com|deezer\.page\.link|dzr\.page\.link)$/i;
+
+async function expandirAtalho(pedido) {
+  if (!EH_ENDERECO.test(pedido)) return pedido;
+  let endereco;
+  try { endereco = new URL(pedido); } catch (_) { return pedido; }
+  if (!ENCURTADORES.test(endereco.hostname)) return pedido;
+  try {
+    // "manual" em vez de seguir: o destino é tudo que interessa, e seguir baixaria a
+    // página inteira do Spotify (quase 300 KB) para ler uma linha de cabeçalho.
+    const resposta = await fetch(pedido, { redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    const destino = resposta.headers.get('location');
+    return destino && EH_ENDERECO.test(destino) ? destino : pedido;
+  } catch (_) {
+    return pedido;
+  }
+}
+
+// De um endereço colado para "que plataforma, que tipo de coisa, qual id". Devolve null
+// para tudo que o yt-dlp já baixa sozinho -- YouTube, SoundCloud, Bandcamp --, que é o
+// caminho bom e não passa por ponte nenhuma.
+function ondeMora(pedido) {
+  const uri = /^spotify:(track|album|playlist):([A-Za-z0-9]{22})$/i.exec(String(pedido).trim());
+  if (uri) return { plataforma: 'spotify', tipo: uri[1].toLowerCase(), id: uri[2] };
+  if (!EH_ENDERECO.test(pedido)) return null;
+
+  let endereco;
+  try { endereco = new URL(pedido); } catch (_) { return null; }
+  const host = endereco.hostname.replace(/^www\./i, '').toLowerCase();
+  // "/intl-pt/track/..." é o que o Spotify monta para quem abre o site em português. O
+  // idioma no caminho não muda nada do que vem depois dele.
+  const partes = endereco.pathname.split('/').filter(Boolean).filter(p => !/^intl-[a-z-]+$/i.test(p));
+
+  if (host === 'open.spotify.com' || host === 'play.spotify.com') {
+    const [tipo, id] = partes;
+    if (!ID_DO_SPOTIFY.test(id || '')) return null;
+    if (tipo === 'track' || tipo === 'album' || tipo === 'playlist') return { plataforma: 'spotify', tipo, id };
+    return null;
+  }
+
+  if (host === 'deezer.com' || host === 'deezer.page.link') {
+    // O país aparece no caminho ("/br/track/123") e às vezes não aparece.
+    const indice = partes.findIndex(p => p === 'track' || p === 'album' || p === 'playlist');
+    if (indice < 0) return null;
+    const tipo = partes[indice];
+    const id = partes[indice + 1];
+    return ID_NUMERICO.test(id || '') ? { plataforma: 'deezer', tipo, id } : null;
+  }
+
+  if (host === 'music.apple.com' || host === 'itunes.apple.com') {
+    // A Apple põe a faixa DENTRO do álbum: ".../album/<slug>/<idDoAlbum>?i=<idDaFaixa>".
+    // Sem o "?i=", o mesmo endereço é o álbum inteiro.
+    const faixaNoAlbum = endereco.searchParams.get('i');
+    const indice = partes.findIndex(p => p === 'album' || p === 'song' || p === 'playlist');
+    if (indice < 0) return null;
+    const alvo = partes[indice];
+    const id = partes[partes.length - 1];
+    if (alvo === 'playlist') return { plataforma: 'apple', tipo: 'playlist', id };
+    if (faixaNoAlbum && ID_NUMERICO.test(faixaNoAlbum)) return { plataforma: 'apple', tipo: 'track', id: faixaNoAlbum };
+    if (!ID_NUMERICO.test(id || '')) return null;
+    return { plataforma: 'apple', tipo: alvo === 'song' ? 'track' : 'album', id };
+  }
+
+  return null;
+}
+
+const NOME_DA_PLATAFORMA = { spotify: 'Spotify', deezer: 'Deezer', apple: 'Apple Music' };
+
+// O que o bot procura no YouTube. Artista primeiro porque é assim que as pessoas nomeiam
+// os vídeos, e porque é o que separa duas músicas de mesmo nome.
+function termoDeBusca(titulo, autor) {
+  return `${autor || ''} ${titulo || ''}`.trim().replace(/\s+/g, ' ').slice(0, 160);
+}
+
+async function lerJson(endereco, plataforma) {
+  const resposta = await fetch(endereco, {
     headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(10000)
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!resposta.ok) throw new Error(`o ${plataforma} não respondeu`);
+  return resposta.json();
+}
+
+// ---------- Spotify ----------
+
+// A página de incorporação traz a mesma ficha que o tocador usa, num JSON já pronto: nome,
+// artistas e, em álbum e lista, a lista de faixas inteira. São 10 KB contra os quase 300 KB
+// da página normal, e não é raspagem de HTML -- é o mesmo JSON que o tocador lê.
+async function fichaDoSpotify(tipo, id) {
+  const resposta = await fetch(`https://open.spotify.com/embed/${tipo}/${id}`, {
+    headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0 (compatible; NexoDJ/1.0)' },
+    signal: AbortSignal.timeout(12000)
   });
   if (!resposta.ok) throw new Error('esse link do Spotify não abriu');
-  const dados = await resposta.json();
+  const pagina = await resposta.text();
+  const bloco = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(pagina);
+  if (!bloco) return null;
+  try {
+    return JSON.parse(bloco[1])?.props?.pageProps?.state?.data?.entity || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// O caminho de antes, guardado como rede de proteção: se o Spotify mudar o formato da
+// página de incorporação, o bot volta a tocar a música mais ou menos certa em vez de
+// simplesmente parar de aceitar links do Spotify.
+async function tituloNoSpotify(tipo, id) {
+  const dados = await lerJson(`https://open.spotify.com/oembed?url=${encodeURIComponent(`https://open.spotify.com/${tipo}/${id}`)}`, 'Spotify');
   const titulo = String(dados?.title || '').trim();
   if (!titulo) throw new Error('não achei o nome dessa faixa no Spotify');
   return titulo;
+}
+
+async function doSpotify(tipo, id) {
+  const ficha = await fichaDoSpotify(tipo, id);
+  if (!ficha) {
+    // Os dois caminhos falharam. Dizer que o link não abriu é o que a pessoa precisa
+    // saber; "o Spotify não respondeu" mandaria procurar defeito na internet dela.
+    try { return { tipo: 'faixa', busca: await tituloNoSpotify(tipo, id) }; }
+    catch (_) { throw new Error('esse link do Spotify não abriu'); }
+  }
+
+  if (tipo === 'track') {
+    const autor = (ficha.artists || []).map(a => a.name).filter(Boolean).join(', ');
+    return { tipo: 'faixa', titulo: ficha.name || ficha.title, autor, busca: termoDeBusca(ficha.name || ficha.title, autor) };
+  }
+
+  // Em álbum e lista cada linha já vem com o artista dela em "subtitle" -- o que importa,
+  // porque uma coletânea tem um artista diferente por faixa.
+  const faixas = (ficha.trackList || []).map(f => ({
+    titulo: f.title,
+    autor: f.subtitle || ficha.subtitle || '',
+    pagina: /^spotify:track:([A-Za-z0-9]{22})$/.test(f.uri || '')
+      ? `https://open.spotify.com/track/${f.uri.split(':')[2]}`
+      : null
+  }));
+  return { tipo: 'lista', nome: ficha.name || ficha.title || 'Lista do Spotify', faixas };
+}
+
+// ---------- Deezer ----------
+
+async function doDeezer(tipo, id) {
+  const dados = await lerJson(`https://api.deezer.com/${tipo}/${id}`, 'Deezer');
+  if (dados?.error) throw new Error('esse link do Deezer não abriu');
+  if (tipo === 'track') {
+    const autor = dados?.artist?.name || '';
+    return { tipo: 'faixa', titulo: dados?.title, autor, busca: termoDeBusca(dados?.title, autor) };
+  }
+  const faixas = (dados?.tracks?.data || []).map(f => ({
+    titulo: f.title,
+    autor: f.artist?.name || dados?.artist?.name || '',
+    pagina: /^https:\/\//.test(f.link || '') ? f.link : null
+  }));
+  return { tipo: 'lista', nome: dados?.title || 'Lista do Deezer', faixas };
+}
+
+// ---------- Apple Music ----------
+
+async function daApple(tipo, id) {
+  if (tipo === 'playlist') throw new Error('lista da Apple Music não abre para quem está de fora; mande o link de um álbum ou o nome das músicas');
+  // A mesma consulta que o site da Apple usa para montar a página. "entity=song" é o que
+  // faz o álbum vir com as faixas em vez de só com o nome.
+  const dados = await lerJson(`https://itunes.apple.com/lookup?id=${id}${tipo === 'album' ? '&entity=song&limit=200' : ''}`, 'Apple Music');
+  const achados = Array.isArray(dados?.results) ? dados.results : [];
+  if (!achados.length) throw new Error('esse link da Apple Music não abriu');
+
+  if (tipo === 'track') {
+    const f = achados.find(r => r.wrapperType === 'track') || achados[0];
+    return { tipo: 'faixa', titulo: f.trackName, autor: f.artistName, busca: termoDeBusca(f.trackName, f.artistName) };
+  }
+  const disco = achados.find(r => r.wrapperType === 'collection');
+  const faixas = achados.filter(r => r.wrapperType === 'track' && r.trackName).map(f => ({
+    titulo: f.trackName,
+    autor: f.artistName || disco?.artistName || '',
+    pagina: /^https:\/\//.test(f.trackViewUrl || '') ? f.trackViewUrl : null
+  }));
+  return { tipo: 'lista', nome: disco?.collectionName || 'Álbum da Apple Music', faixas };
+}
+
+// A ponte de uma plataforma, já normalizada. Devolve null quando o endereço não precisa de
+// ponte -- e é esse null que mantém YouTube, SoundCloud e Bandcamp no caminho direto.
+async function atravessarPonte(pedido) {
+  const lugar = ondeMora(pedido);
+  if (!lugar) return null;
+  const leitor = { spotify: doSpotify, deezer: doDeezer, apple: daApple }[lugar.plataforma];
+  const lido = await leitor(lugar.tipo, lugar.id);
+  const plataforma = NOME_DA_PLATAFORMA[lugar.plataforma];
+
+  if (lido.tipo === 'faixa') {
+    if (!lido.busca) throw new Error(`não achei o nome dessa faixa no ${plataforma}`);
+    return { tipo: 'faixa', plataforma, busca: semMarcacao(lido.busca) };
+  }
+  const faixas = lido.faixas.filter(f => f.titulo).map(f => ({
+    titulo: semMarcacao(f.titulo).slice(0, 160),
+    autor: semMarcacao(f.autor).slice(0, 80),
+    busca: semMarcacao(termoDeBusca(f.titulo, f.autor)),
+    pagina: f.pagina
+  }));
+  if (!faixas.length) throw new Error(`essa lista do ${plataforma} está vazia ou é privada`);
+  return { tipo: 'lista', plataforma, nome: semMarcacao(lido.nome).slice(0, 80), faixas };
 }
 
 // Quantos resultados de uma busca sao tentados antes de desistir. O primeiro nem sempre
@@ -184,6 +405,11 @@ const MAXIMO_DA_LISTA = 100;
 //                           a partir de uma lista. Enfileirar cinquenta faixas aqui seria
 //                           sequestrar a sala por causa de um copiar e colar.
 function ehListaInteira(pedido) {
+  // Spotify, Deezer e Apple Music dizem no proprio caminho o que sao. Sem esta pergunta,
+  // um album inteiro do Spotify era tratado como uma faixa so -- e o bot ia procurar no
+  // YouTube uma musica chamada com o nome do album.
+  const lugar = ondeMora(pedido);
+  if (lugar) return lugar.tipo === 'album' || lugar.tipo === 'playlist';
   if (!EH_ENDERECO.test(pedido)) return false;
   try {
     const endereco = new URL(pedido);
@@ -243,7 +469,35 @@ async function buscarListas(termo) {
   return achadas;
 }
 
+const novoId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
 async function listarFaixasDaLista(endereco, quantas) {
+  // Álbum ou lista de uma plataforma que não entrega áudio. A lista de faixas vem da
+  // própria plataforma -- com nome E artista de cada uma --, e cada faixa vira uma busca
+  // quando chegar a vez dela. É o mesmo adiamento das listas do YouTube: enfileirar uma
+  // lista de cinquenta não pode custar cinquenta buscas antes da primeira nota sair.
+  const ponte = await atravessarPonte(endereco);
+  if (ponte) {
+    // `!lista` apontando para uma faixa avulsa: uma faixa é o que ela é. A busca sai
+    // daqui em vez de voltar por `resolver`, que leria a mesma página de novo.
+    if (ponte.tipo === 'faixa') return [await tentarAlvo(`ytsearch${RESULTADOS_A_TENTAR}:${ponte.busca}`, ponte.plataforma)];
+    return ponte.faixas.slice(0, quantas).map(f => ({
+      id: novoId(),
+      titulo: f.titulo,
+      autor: f.autor,
+      duracao: 0,
+      // O endereço da página na plataforma de origem, que é o que a sala mostra como
+      // "abrir". O endereço do áudio é outro, e nasce da busca lá na frente.
+      endereco: f.pagina || '',
+      capa: null,
+      origem: `${ponte.nome} (${ponte.plataforma})`.slice(0, 80),
+      midia: null,
+      porResolver: true,
+      busca: f.busca,
+      plataformaDaPonte: ponte.plataforma
+    }));
+  }
+
   const modelo = '%(.{id,title,url,duration,uploader,channel,playlist_title})j';
   const bruto = await executar(caminhoDoYtdlp(), [
     // "--flat-playlist" e o que torna isto barato: ele NAO abre cada video, so le o indice.
@@ -261,7 +515,7 @@ async function listarFaixasDaLista(endereco, quantas) {
     const pagina = String(ficha.url || '');
     if (!/^https?:\/\//i.test(pagina)) continue;
     faixas.push({
-      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      id: novoId(),
       titulo: semMarcacao(ficha.title || 'Sem título').slice(0, 160),
       autor: semMarcacao(ficha.channel || ficha.uploader || '').slice(0, 80),
       duracao: Number(ficha.duration) || 0,
@@ -286,33 +540,31 @@ async function listarFaixasDaLista(endereco, quantas) {
 function garantirResolvida(faixa) {
   if (!faixa.porResolver) return Promise.resolve(faixa);
   if (faixa.resolvendo) return faixa.resolvendo;
-  faixa.resolvendo = resolverUm(faixa.endereco, null, false).then(cheia => {
+  // Faixa vinda de uma lista do Spotify (ou do Deezer, ou da Apple) nao tem endereco para
+  // baixar: o que ela tem e nome e artista. Ai a resolucao e a mesma busca que uma faixa
+  // avulsa daquela plataforma faria -- inclusive tentando o segundo e o terceiro
+  // resultado, que e o que salva quando o primeiro e um clipe com restricao de idade.
+  const alvo = faixa.busca ? `ytsearch${RESULTADOS_A_TENTAR}:${faixa.busca}` : faixa.endereco;
+  faixa.resolvendo = tentarAlvo(alvo, faixa.plataformaDaPonte || null).then(cheia => {
     faixa.midia = cheia.midia;
     faixa.duracao = faixa.duracao || cheia.duracao;
     faixa.capa = faixa.capa || cheia.capa;
+    // Só quando não havia nenhum: o endereço da plataforma de origem é mais útil para
+    // quem pediu do que o do vídeo que acabou tocando.
+    faixa.endereco = faixa.endereco || cheia.endereco;
     faixa.porResolver = false;
     return faixa;
   }).finally(() => { faixa.resolvendo = null; });
   return faixa.resolvendo;
 }
 
-async function resolver(pedido) {
-  let alvo = pedido;
-  let veioDoSpotify = false;
-
-  if (EH_SPOTIFY.test(pedido)) {
-    alvo = `ytsearch${RESULTADOS_A_TENTAR}:${await tituloNoSpotify(pedido)}`;
-    veioDoSpotify = true;
-  } else if (!EH_ENDERECO.test(pedido)) {
-    alvo = `ytsearch${RESULTADOS_A_TENTAR}:${pedido}`;
-  }
-
-  // Um endereco direto e um so: se ele nao abre, nao ha "proximo" que possa servir.
+// Uma busca tem varios resultados e vale tentar o proximo; um endereco direto e um so.
+async function tentarAlvo(alvo, plataformaDaPonte) {
   const posicoes = alvo.startsWith('ytsearch') ? [...Array(RESULTADOS_A_TENTAR).keys()].map(i => i + 1) : [null];
   let ultimoErro = new Error('não achei nada com isso');
   for (const posicao of posicoes) {
     try {
-      return await resolverUm(alvo, posicao, veioDoSpotify);
+      return await resolverUm(alvo, posicao, plataformaDaPonte);
     } catch (erro) {
       ultimoErro = erro;
     }
@@ -320,7 +572,19 @@ async function resolver(pedido) {
   throw ultimoErro;
 }
 
-async function resolverUm(alvo, posicao, veioDoSpotify) {
+async function resolver(pedido) {
+  // Uma faixa de plataforma que nao entrega audio vira uma busca pelo nome COM o artista.
+  const ponte = await atravessarPonte(pedido);
+  if (ponte) {
+    // `!bot <link de album>` sem o `!lista`: toca a primeira e nao sequestra a fila.
+    const busca = ponte.tipo === 'faixa' ? ponte.busca : ponte.faixas[0].busca;
+    return tentarAlvo(`ytsearch${RESULTADOS_A_TENTAR}:${busca}`, ponte.plataforma);
+  }
+  const alvo = EH_ENDERECO.test(pedido) ? pedido : `ytsearch${RESULTADOS_A_TENTAR}:${pedido}`;
+  return tentarAlvo(alvo, null);
+}
+
+async function resolverUm(alvo, posicao, plataformaDaPonte) {
   // Um JSON com os campos que interessam, em vez do despejo inteiro: a ficha completa de
   // um video do YouTube passa de 400 KB porque traz todos os formatos, e nada disso e
   // usado aqui.
@@ -341,7 +605,7 @@ async function resolverUm(alvo, posicao, veioDoSpotify) {
   if (duracao > SEGUNDOS_MAXIMOS_DA_FAIXA) throw new Error('essa faixa é longa demais para a fila');
 
   return {
-    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    id: novoId(),
     // Limpo aqui, na entrada, e nao em cada frase que usa o titulo: sao nove lugares que
     // o citam hoje, e o decimo esqueceria.
     titulo: semMarcacao(ficha.title || 'Sem título').slice(0, 160),
@@ -349,7 +613,7 @@ async function resolverUm(alvo, posicao, veioDoSpotify) {
     duracao,
     endereco: String(ficha.webpage_url || alvo),
     capa: /^https:\/\//.test(ficha.thumbnail || '') ? String(ficha.thumbnail).slice(0, 400) : null,
-    origem: veioDoSpotify ? 'Spotify → YouTube' : String(ficha.extractor_key || 'Web'),
+    origem: plataformaDaPonte ? `${plataformaDaPonte} → YouTube` : String(ficha.extractor_key || 'Web'),
     // Fica de fora do que a sala ve: nao interessa a ninguem, e a URL assinada e longa.
     midia: enderecoDeMidia(ficha)
   };
@@ -384,7 +648,8 @@ function criarEstado(sala) {
     fila: [],
     tocando: null,
     pausado: false,
-    volume: 0.85,
+    // O que esta sala escolheu da última vez, e não o padrão de fábrica.
+    volume: volumePorSala.get(sala) ?? VOLUME_PADRAO,
     processos: null,
     // Cada reproducao ganha um numero. Um processo que morre depois de o comando "pular"
     // ja ter comecado a proxima faixa nao pode derrubar a faixa nova -- e sem esta marca
@@ -425,7 +690,11 @@ function saudeDaSala(sala) {
 
 function instantaneo(sala) {
   const estado = salas.get(sala);
-  if (!estado) return { conectado: false, tocando: null, fila: [], volume: 85, pausado: false };
+  // Sem bot na sala, o que a tela mostra é o volume que a sala escolheu -- e não 85%.
+  // Mostrar o padrão aqui fazia o controle mentir: dizia 85 enquanto o próximo pedido ia
+  // tocar nos 40 que alguém tinha deixado.
+  const volumeGuardado = Math.round((volumePorSala.get(sala) ?? VOLUME_PADRAO) * 100);
+  if (!estado) return { conectado: false, tocando: null, fila: [], volume: volumeGuardado, pausado: false };
   return {
     conectado: Boolean(estado.room),
     pausado: estado.pausado,
@@ -766,11 +1035,16 @@ function agendarSaidaPorOciosidade(estado) {
 let mensagemDoBot = () => {};
 function definirCanalDeMensagens(fn) { mensagemDoBot = fn; }
 
-async function pedir(sala, pedido, quemPediu, { listaInteira = false } = {}) {
+async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false } = {}) {
   const estado = salas.get(sala) || criarEstado(sala);
   const espacoNaFila = MAXIMO_NA_FILA - estado.fila.length;
   if (espacoNaFila <= 0) throw new Error(`a fila já tem ${MAXIMO_NA_FILA} faixas`);
   clearTimeout(estado.timerDeOciosidade);
+
+  // O botão de compartilhar do celular entrega um link encurtado, e dele não dá para saber
+  // nem a plataforma nem se o que vem é uma faixa ou um álbum inteiro. Abrir o atalho aqui,
+  // uma vez, faz todo o resto do caminho enxergar o endereço de verdade.
+  const pedido = await expandirAtalho(pedidoOriginal);
 
   const pediuLista = listaInteira || ehListaInteira(pedido);
   const autor = semMarcacao(quemPediu);
@@ -831,14 +1105,19 @@ function pausar(sala, pausado) {
 }
 
 function definirVolume(sala, porcento) {
-  const estado = salas.get(sala);
-  if (!estado) return null;
   // O teto de 150% existe para salvar gravacao muito baixa; acima disso so se ganha
   // distorcao, porque o corte em preencherQuadro passa a agir o tempo todo.
   const limitado = Math.max(0, Math.min(150, Math.round(Number(porcento) || 0)));
-  estado.volume = limitado / 100;
-  avisarSala(sala);
-  return limitado;
+  // Vale mesmo com o bot fora da sala: quem chega antes de pedir musica pode deixar o
+  // volume pronto, e o proximo pedido ja entra nele. Recusar aqui obrigava a chamar o bot
+  // alto para so entao abaixa-lo -- que e exatamente o susto que se queria evitar.
+  volumePorSala.set(sala, limitado / 100);
+  const estado = salas.get(sala);
+  if (estado) {
+    estado.volume = limitado / 100;
+    avisarSala(sala);
+  }
+  return { porcento: limitado, naSala: Boolean(estado) };
 }
 
 function removerDaFila(sala, posicao) {
@@ -888,6 +1167,14 @@ async function encerrarTudo() {
   await Promise.all([...salas.keys()].map(sala => desconectar(sala, 'silencioso')));
 }
 
+// A sala acabou (saiu a última pessoa). Aqui o bot esquece até o que sobrevive a ele sair
+// da chamada. Chamado por server.js no mesmo lugar em que a mesa de sons é esvaziada e o
+// histórico do chat é apagado -- nada de uma sala fechada sobrevive.
+async function esquecerSala(sala) {
+  volumePorSala.delete(sala);
+  await desconectar(sala, 'sala-vazia');
+}
+
 function disponivel() {
   return fs.existsSync(caminhoDoYtdlp()) && fs.existsSync(caminhoDoFfmpeg());
 }
@@ -918,8 +1205,9 @@ function encerrarOrfaos() {
 
 module.exports = {
   configurar, definirCanalDeMensagens, disponivel, semMarcacao, encerrarOrfaos,
-  ehListaInteira, listaEmbutida, buscarListas,
+  ehListaInteira, listaEmbutida, buscarListas, listarFaixasDaLista,
+  ondeMora, atravessarPonte, expandirAtalho,
   pedir, pular, pausar, definirVolume, removerDaFila, embaralhar,
-  desconectar, encerrarTudo, instantaneo, estadoDaSala, saudeDaSala,
+  desconectar, esquecerSala, encerrarTudo, instantaneo, estadoDaSala, saudeDaSala,
   PREFIXO_DA_IDENTIDADE, NOME_DO_BOT, MAXIMO_NA_FILA
 };
