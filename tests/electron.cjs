@@ -93,6 +93,17 @@ let server, electron;
   assert.equal(selected.pid, 0, 'native HWND resolver must reject capturing this app audio');
   const resolved = await electron.evaluate(() => global.resolveFixtureInNative());
   assert.equal(resolved.pid, resolved.expected, 'the compiled native resolver identifies the real window owner');
+
+  // Fechar o aplicativo compartilhado encerra a transmissao. Quem vigia o processo dono da
+  // janela e o processo principal; a sala so precisa ser avisada.
+  assert.equal(await room.evaluate(() => typeof appNativo.aoEncerrarCaptura), 'function',
+    'a sala precisa conseguir ouvir o fim da captura');
+  // Parar de compartilhar apaga a selecao. Sem isto o vigia continuaria de pe depois da
+  // transmissao acabar e dispararia fora de hora -- ao fechar aquele programa horas depois,
+  // sem estar compartilhando nada.
+  await room.evaluate(() => appNativo.encerreiCaptura());
+  assert.equal(await room.evaluate(() => appNativo.capturaSelecionada()), null,
+    'parar de compartilhar precisa encerrar a vigilancia da janela');
   const monitorPicker = await openPicker('monitor');
   assert.deepEqual(await electron.evaluate(() => global.sourceTypes), ['screen']);
   assert.equal(await monitorPicker.locator('.grupo-titulo').textContent(), 'Telas');

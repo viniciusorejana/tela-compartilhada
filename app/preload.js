@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('appNativo', {
   iniciarAgente: (url) => ipcRenderer.invoke('agente:iniciar', url),
   prepararCaptura: tipo => ipcRenderer.invoke('captura:preparar', tipo),
   capturaSelecionada: () => ipcRenderer.invoke('captura:selecionada'),
+  // O aplicativo dono da janela compartilhada fechou. Só o motivo atravessa a ponte: nada
+  // do processo principal entra na página, que é conteúdo remoto.
+  aoEncerrarCaptura: retorno => {
+    if (typeof retorno !== 'function') return;
+    ipcRenderer.on('captura:encerrada', (_evento, dados) => retorno(String(dados?.motivo || '')));
+  },
+  encerreiCaptura: () => ipcRenderer.invoke('captura:encerrei'),
   // A tela de endereco tambem passa por aqui: a janela roda isolada do Node, e uma pagina
   // local nao e excecao a isso.
   definirEndereco: (endereco) => ipcRenderer.invoke('endereco:definir', endereco),

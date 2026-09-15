@@ -2235,7 +2235,15 @@ confirmScreenBtn.onclick = async () => {
     const novaTela = await capturarTela();
     const telaAntiga = screenStream;
     screenStream = novaTela;
-    screenStream.getVideoTracks()[0].onended = pararTela;
+    const faixaDaTela = screenStream.getVideoTracks()[0];
+    faixaDaTela.onended = pararTela;
+    // O navegador encerra a faixa quando a fonte some -- aba fechada, janela fechada, botão
+    // "parar de compartilhar" da barra. Dentro do aplicativo esse aviso nem sempre chega, e
+    // é por isso que existe o vigia do processo. Estes dois registros dizem, no diagnóstico
+    // de quem relatar o problema, QUAL sinal chegou primeiro: sem isso a escolha entre
+    // "esperar o fim da faixa" e "vigiar por fora" seria palpite.
+    faixaDaTela.onmute = () => registrarDiagnostico('telaFaixa.muda', 'parou de entregar quadros');
+    faixaDaTela.onunmute = () => registrarDiagnostico('telaFaixa.voltou');
     // Entra na mesma fila das telas dos outros: quem comecou antes fica mais a esquerda.
     // Trocar a fonte da tela nao renova o lugar -- a transmissao e a mesma.
     if (!telaAntiga) ordemDaMinhaTela = ++sequenciaDeCompartilhamento;
@@ -2280,6 +2288,9 @@ function pararTela() {
   if (!screenStream) return;
   screenStream.getTracks().forEach(t => t.stop());
   screenStream = null;
+  // Sem este aviso o vigia do aplicativo continuaria de pé depois da transmissão acabar, e
+  // dispararia fora de hora -- quando a pessoa fechasse aquele programa horas depois.
+  aplicativoNativo?.encerreiCaptura?.().catch(() => {});
   ordemDaMinhaTela = 0;
   limparAudioDoAplicativo();
   definirFaixaEmTodosOsPares('screen', null, null);
@@ -2293,6 +2304,20 @@ function pararTela() {
   status.textContent = 'Compartilhamento de tela encerrado.';
   enviarEstado();
 }
+
+// Fechar o aplicativo compartilhado encerra a transmissão. Quem fecha o programa já decidiu
+// parar de mostrá-lo; deixar a sala olhando o último quadro congelado não é o que ninguém
+// espera, e ainda custa banda a quem hospeda.
+//
+// O aviso vem do processo principal, que vigia o processo dono da janela (ver app/main.js).
+// A guarda de "estou compartilhando agora" é o que separa este caso de um aviso atrasado:
+// o vigia é desligado ao parar, mas uma corrida entre parar e fechar continua possível.
+aplicativoNativo?.aoEncerrarCaptura?.(() => {
+  if (!screenStream) return;
+  registrarDiagnostico('tela.aplicativoFechou');
+  pararTela();
+  status.textContent = 'O aplicativo que você compartilhava foi fechado. Transmissão encerrada.';
+});
 
 // Celulares (iOS e Android) nao implementam getDisplayMedia: em vez de deixar o botao
 // falhar no clique, ele fica desativado com o motivo à vista. Câmera e microfone

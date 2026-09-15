@@ -166,13 +166,58 @@ function remetenteDaSala(evento) {
   return janela && evento.sender === janela.webContents && evento.senderFrame === janela.webContents.mainFrame
     && /^https?:/.test(evento.senderFrame.url);
 }
+// Fechar o aplicativo compartilhado deveria encerrar a transmissão, e não encerrava: a
+// faixa de vídeo continuava "viva", congelada no último quadro, e a sala seguia pagando
+// banda por uma imagem parada que ninguém podia mais mudar.
+//
+// O evento "ended" da faixa é quem deveria avisar, e no navegador ele avisa. Aqui dentro
+// não dá para contar com ele: quem entrega os quadros é o capturador de janela do Chromium,
+// e a janela sumir nem sempre vira fim de faixa. Então o aplicativo passa a vigiar por
+// fora, com o dado que já tinha em mãos.
+//
+// Vigiar o PROCESSO, e não a janela. Enumerar janelas seria o sinal mais preciso -- pegaria
+// até fechar uma janela de um aplicativo que continua aberto --, mas desktopCapturer não
+// lista todas as janelas do sistema (medido: um Bloco de Notas aberto não aparece), e um
+// sinal que some sozinho encerraria a transmissão de quem não fechou nada. Entre falhar em
+// encerrar e encerrar por engano, o engano é muito pior.
+//
+// O processo, ao contrário, é inequívoco: se ele não existe mais, aquela janela não volta.
+const MS_ENTRE_CONFERENCIAS = 2000;
+let vigiaDaCaptura = null;
+
+function pararDeVigiarCaptura() {
+  if (vigiaDaCaptura) { clearInterval(vigiaDaCaptura); vigiaDaCaptura = null; }
+}
+
+function vigiarProcessoDaCaptura(pid) {
+  pararDeVigiarCaptura();
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  vigiaDaCaptura = setInterval(() => {
+    let vivo = true;
+    // O sinal 0 não mata nada: só pergunta se o processo existe e se podemos alcançá-lo.
+    // "Sem permissão" é resposta de processo VIVO -- encerrar por causa dela seria desligar
+    // a tela de quem compartilhou algo que roda com outro usuário.
+    try { process.kill(pid, 0); } catch (erro) { vivo = erro.code === 'EPERM'; }
+    if (vivo) return;
+    pararDeVigiarCaptura();
+    ultimaCaptura = null;
+    if (janela && !janela.isDestroyed()) janela.webContents.send('captura:encerrada', { motivo: 'processo-encerrado' });
+  }, MS_ENTRE_CONFERENCIAS);
+  vigiaDaCaptura.unref?.();
+}
+
 ipcMain.handle('captura:preparar', (evento, tipo) => {
   if (!remetenteDaSala(evento) || selecionandoCaptura || !['monitor', 'window'].includes(tipo)) return false;
   capturaPendente = { tipo, frame: evento.senderFrame, criada: Date.now() };
   ultimaCaptura = null;
+  pararDeVigiarCaptura();
   return true;
 });
 ipcMain.handle('captura:selecionada', evento => remetenteDaSala(evento) ? ultimaCaptura : null);
+// A sala avisa quando para de compartilhar. Sem isto o vigia continuaria de pé depois de a
+// transmissão já ter acabado, e o aviso chegaria fora de hora -- quando a pessoa fechasse
+// aquele aplicativo horas depois, sem estar compartilhando nada.
+ipcMain.handle('captura:encerrei', evento => { if (remetenteDaSala(evento)) { pararDeVigiarCaptura(); ultimaCaptura = null; } });
 
 async function processoDaFonte(fonte) {
   const hwnd = /^window:(\d+):/.exec(fonte.id)?.[1];
@@ -201,6 +246,9 @@ function instalarSeletorDeTela() {
       const escolhida = await escolherFonte(fontes);
       if (escolhida) ultimaCaptura = { tipo: pedidoPreparado.tipo, nome: escolhida.name,
         pid: pedidoPreparado.tipo === 'window' ? await processoDaFonte(escolhida) : 0 };
+      // Só janela é vigiada. Uma tela inteira não tem dono que possa fechar, e o monitor
+      // sumir (cabo, projetor desligado) já vira fim de faixa por conta própria.
+      if (ultimaCaptura?.tipo === 'window') vigiarProcessoDaCaptura(ultimaCaptura.pid);
       // Sem áudio de propósito. O Electron sabe capturar o som do sistema aqui
       // ('audio: loopback'), mas seria TODO o som, sem forma de tirar este aplicativo de
       // dentro -- ou seja, exatamente o eco que o aplicativo existe para evitar. Quem
