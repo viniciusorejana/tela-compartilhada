@@ -20,6 +20,21 @@ const { caminhoDoBinario, VERSAO } = require('./scripts/baixar-livekit.cjs');
 const telemetriaLivekit = require('./telemetria/livekit');
 
 const PASTA = path.resolve(process.env.NEXO_PASTA_SFU || path.join(__dirname, 'native', 'livekit'));
+
+// O executável e a configuração não precisam morar juntos.
+//
+// O Windows Defender cria a regra de firewall por CAMINHO do executável: binário em pasta
+// nova é aplicativo novo, e a caixa de "permitir acesso" reaparece. Os testes isolavam a
+// configuração numa pasta sorteada e levavam o binário junto, então cada execução pedia a
+// permissão outra vez.
+//
+// Separar os dois resolve sem desfazer o isolamento que importa. A configuração continua
+// sorteada por execução; o binário fica num caminho fixo -- e ainda assim diferente do
+// instalado, porque encerrarOrfaos() casa pelo caminho exato e um teste não pode alcançar
+// o servidor de verdade que esteja rodando na máquina.
+const BINARIO = process.env.NEXO_BINARIO_SFU
+  ? path.resolve(process.env.NEXO_BINARIO_SFU)
+  : path.join(PASTA, path.basename(caminhoDoBinario()));
 let portaWebhook = Number(process.env.PORT) || 3000;
 const ARQUIVO_DE_CHAVES = path.join(PASTA, 'chaves.json');
 const ARQUIVO_DE_CONFIG = path.join(PASTA, 'livekit.yaml');
@@ -327,7 +342,7 @@ function encerrarOrfaos(binario) {
 async function iniciarSfu(portaHttp) {
   if (Number.isInteger(portaHttp) && portaHttp > 0) portaWebhook = portaHttp;
   if (process.env.NEXO_SEM_MIDIA === '1') { estado.motivo = 'desativado'; return estado; }
-  const binario = path.join(PASTA, path.basename(caminhoDoBinario()));
+  const binario = BINARIO;
   if (!fs.existsSync(binario)) {
     estado.motivo = 'binario-ausente';
     console.error(`\nO servidor de mídia não está instalado em ${binario}.`);

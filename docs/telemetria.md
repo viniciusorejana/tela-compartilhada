@@ -204,8 +204,15 @@ desde a inicialização deste processo Node.
 
 Variáveis opcionais: `NEXO_FUSO` (fuso do sistema por padrão), `NEXO_DADOS_TELEMETRIA` e
 `NEXO_PASTA_PAINEL` para pastas. `NEXO_SEM_MIDIA=1` permite operar só chat/painel.
-`NEXO_PASTA_SFU` permite instância isolada com binário, YAML e chaves próprios; os testes
-usam essa opção para preservar a instância principal.
+`NEXO_PASTA_SFU` isola YAML e chaves; `NEXO_BINARIO_SFU` diz onde está o executável. Os
+testes usam as duas juntas: configuração numa pasta sorteada a cada execução, executável
+num caminho fixo em `%TEMP%\nexo-sfu-de-teste`.
+
+A separação existe por causa do firewall do Windows, que cria a regra por caminho de
+executável — com o binário viajando junto da pasta sorteada, cada rodada de teste pedia
+uma permissão nova. Continua sendo uma cópia, e não o binário instalado, porque a limpeza
+de órfãos encerra processos casando pelo caminho exato: apontar para `native/livekit` faria
+um teste derrubar a sala de quem estivesse usando o servidor na mesma máquina.
 
 ## Testes
 

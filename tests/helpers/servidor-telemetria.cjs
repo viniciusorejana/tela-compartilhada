@@ -20,6 +20,32 @@ async function portasLivres() {
   } finally { await Promise.all(reservas.map(r => new Promise(resolve => r.close(resolve)))); }
 }
 
+// O binário dos testes fica num caminho FIXO, e é por isso que ele existe.
+//
+// A regra de firewall do Windows é por caminho de executável. Copiando para a pasta
+// sorteada de cada execução, toda rodada de teste era um aplicativo novo aos olhos do
+// Defender e abria a caixa de "permitir acesso" de novo. Num caminho fixo, permite-se uma
+// vez e acabou.
+//
+// Continua sendo uma CÓPIA, e não o binário instalado, porque encerrarOrfaos() encerra
+// processos casando pelo caminho exato: apontar para native/livekit faria um teste matar o
+// servidor de verdade de quem estivesse com a sala aberta na mesma máquina.
+const PASTA_DO_BINARIO = path.join(os.tmpdir(), 'nexo-sfu-de-teste');
+
+async function binarioDeTeste() {
+  const { caminhoDoBinario } = require('../../scripts/baixar-livekit.cjs');
+  const origem = caminhoDoBinario();
+  const destino = path.join(PASTA_DO_BINARIO, path.basename(origem));
+  await fs.mkdir(PASTA_DO_BINARIO, { recursive: true });
+  const [dados, copia] = await Promise.all([fs.stat(origem), fs.stat(destino).catch(() => null)]);
+  if (copia && copia.size === dados.size && copia.mtimeMs >= dados.mtimeMs) return destino;
+  // O Windows tranca o executável enquanto ele roda. Se outra execução de teste estiver
+  // usando a cópia, ficamos com a que já está lá -- é a mesma versão em todo caso.
+  try { await fs.copyFile(origem, destino); }
+  catch (erro) { if (!copia) throw erro; }
+  return destino;
+}
+
 async function iniciarServidor({ ambiente = {}, registros = [], observacoes = [], midia = false } = {}) {
   const pasta = await fs.mkdtemp(path.join(os.tmpdir(), 'nexo-painel-teste-'));
   const medicao = path.join(pasta, 'medicao'), painel = path.join(pasta, 'painel');
@@ -27,13 +53,11 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
   if (registros.length) await fs.writeFile(path.join(medicao, 'banda.jsonl'), registros.map(r => JSON.stringify(r)).join('\n') + '\n');
   if (observacoes.length) await fs.writeFile(path.join(medicao, 'uso.jsonl'), observacoes.map(r => JSON.stringify(r)).join('\n') + '\n');
   const pastaSfu = path.join(pasta, 'livekit');
-  if (midia) {
-    const { caminhoDoBinario } = require('../../scripts/baixar-livekit.cjs');
-    await fs.mkdir(pastaSfu); await fs.copyFile(caminhoDoBinario(), path.join(pastaSfu, path.basename(caminhoDoBinario())));
-  }
+  let binarioSfu = '';
+  if (midia) { await fs.mkdir(pastaSfu); binarioSfu = await binarioDeTeste(); }
   const [portaSfu, portaMetricas, portaTcp, portaUdp] = await portasLivres();
   const filho = spawn(process.execPath, ['tests/helpers/iniciar-telemetria.cjs'], { cwd: path.join(__dirname, '..', '..'), windowsHide: true,
-    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, ...ambiente },
+    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, ...ambiente },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let erros = ''; filho.stderr.on('data', p => { erros = (erros + p).slice(-16000); });
   async function encerrar() {

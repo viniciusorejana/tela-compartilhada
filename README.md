@@ -849,6 +849,7 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
 | `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
+| `NEXO_BINARIO_SFU` | dentro de `NEXO_PASTA_SFU` | Caminho do executavel do servidor de midia. Separado da pasta de configuracao porque a regra de firewall do Windows e por caminho: binario em pasta nova pede permissao de novo |
 | `NEXO_MAXIMO_DE_BOTS` | `8` | Salas com musica tocando ao mesmo tempo |
 | `NEXO_DURACAO_MAXIMA` | `10800` | Segundos que uma faixa pode ter |
 | `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
