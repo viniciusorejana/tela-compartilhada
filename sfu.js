@@ -60,7 +60,15 @@ const PORTA_TCP = Number(process.env.SFU_TCP_PORT) || 7881;
 const REGISTRO_SFU = (process.env.NEXO_LOG_SFU || '').trim().toLowerCase();
 const registroDetalhado = REGISTRO_SFU === '1' || REGISTRO_SFU === 'console' || REGISTRO_SFU === 'arquivo';
 const registroSilencioso = REGISTRO_SFU === '0';
-const LINHA_DE_PROBLEMA = /\b(ERROR|FATAL|WARN)\b|"level":"(?:error|warn)"/i;
+// O nível é o SEGUNDO campo da linha, separado por tabulação:
+//
+//   2026-09-15T12:00:01-0400 <tab> INFO <tab> livekit.sub <tab> ...
+//
+// Procurar a palavra em qualquer lugar da linha não serve: metade das linhas de INFO
+// carrega um campo "error" no JSON -- é assim que o LiveKit conta por que desistiu de uma
+// faixa, por exemplo -- e todas elas vazavam para o terminal como se fossem problema.
+// Ancorar no campo do nível é o que separa "a linha é um erro" de "a linha fala de um erro".
+const LINHA_DE_PROBLEMA = /^\S+\s+(WARN|ERROR|FATAL|DPANIC|PANIC)\b|"level":"(?:warn|error|fatal|dpanic|panic)"/i;
 const ARQUIVO_DE_LOG = path.join(PASTA, 'sfu.log');
 const BYTES_MAXIMOS_DO_LOG = 8 * 1024 * 1024;
 let bytesDoLog = 0;
@@ -585,7 +593,7 @@ function identidadeDoToken(token) {
     return { sala: claims.video.room, identidade: claims.sub };
   } catch (_) { return null; }
 }
-module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken,
+module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken, LINHA_DE_PROBLEMA,
   configurarAcesso: fn => { validarAcesso = fn; },
   validarWebhook: (corpo, autorizacao) => telemetriaLivekit.validarWebhook(corpo, autorizacao, lerOuCriarChaves()),
   diagnostico: () => ({ ...estado, pid: processo?.pid || null, uptime: processo ? Math.max(0, (Date.now() - horaDoUltimoInicio) / 1000) : 0, reinicios: reiniciosTotais, tentativasSeguidas }) };

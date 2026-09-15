@@ -59,3 +59,23 @@ test('a porta Prometheus exige autenticação e o YAML aponta o webhook para a p
   assert.ok(yaml.includes(servidor.origem + '/api/telemetria/livekit'));
   assert.equal((await fetch(servidor.origem + '/rtc/validate')).status, 403);
 });
+
+// O terminal mostra só o que é problema. A tentação é procurar "error" na linha inteira, e
+// aí metade do INFO do LiveKit vaza: ele descreve em campo "error" por que desistiu de uma
+// faixa, o que é rotina toda vez que alguém troca de tela. O nível é o segundo campo, e é
+// só nele que se pode olhar.
+test('o filtro de log separa a linha que é um erro da linha que fala de um erro', () => {
+  const { LINHA_DE_PROBLEMA: filtro } = require('../sfu');
+  const linha = (nivel, texto) => `2026-09-15T12:00:01.127-0400\t${nivel}\tlivekit.sub\trtc/x.go:533\t${texto}`;
+
+  assert.ok(filtro.test(linha('ERROR', 'CPU monitoring unsupported on current platform')));
+  assert.ok(filtro.test(linha('WARN', 'error reading data channel')));
+  assert.ok(filtro.test(linha('FATAL', 'não deu')));
+  assert.ok(filtro.test('{"level":"error","msg":"formato JSON também conta"}'));
+
+  assert.ok(!filtro.test(linha('INFO', 'unsubscribing after notFoundTimeout\t{"error": "track cannot be found"}')));
+  assert.ok(!filtro.test(linha('INFO', 'using single-node routing')));
+  assert.ok(!filtro.test(linha('DEBUG', 'retry after error')));
+  // Continuação de stack trace não traz nível: fica de fora e o console não vira despejo.
+  assert.ok(!filtro.test('\tgithub.com/livekit/protocol/utils/hwstats.NewCPUStats'));
+});
