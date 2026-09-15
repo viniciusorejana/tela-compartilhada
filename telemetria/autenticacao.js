@@ -4,22 +4,30 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { hash } = require('./sessoes');
-const { origemSegura, ipDoPedido } = require('./origem');
+const { origemDoPainel, ipDoPedido } = require('./origem');
 
 const PASTA_PRIVADA = path.resolve(process.env.NEXO_PASTA_PAINEL || path.join(__dirname, '..', 'native', 'painel'));
 const ARQUIVO_CHAVE = path.join(PASTA_PRIVADA, 'segredo.json');
 const COOKIE = 'nexo_painel';
 const iguais = (a, b) => crypto.timingSafeEqual(Buffer.from(hash(String(a))), Buffer.from(hash(String(b))));
 
+// Pelo nome, quem resolve é o PATH -- e no Git Bash, no MSYS e no Cygwin existe um
+// "whoami.exe" de coreutils que vem ANTES do binário do Windows e recusa estes argumentos.
+// A ACL falhava, a chave nunca era criada, e o painel respondia 401 para sempre sem dizer
+// por quê. O caminho absoluto tira o PATH da decisão.
+const SISTEMA32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+const WHOAMI = path.join(SISTEMA32, 'whoami.exe');
+const ICACLS = path.join(SISTEMA32, 'icacls.exe');
+
 function protegerPasta(pasta) {
   fs.mkdirSync(pasta, { recursive: true, mode: 0o700 });
   if (process.platform !== 'win32') { fs.chmodSync(pasta, 0o700); return; }
   // mode: 0600 não separa usuários no Windows. A ACL é aplicada só à pasta criada
   // para este painel, nunca à árvore de mídia nem à pasta inteira do projeto.
-  const resposta = execFileSync('whoami.exe', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  const resposta = execFileSync(WHOAMI, ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
   const sid = resposta.match(/S-1-5-(?:\d+-)*\d+/)?.[0];
   if (!sid) throw new Error('Não foi possível identificar o proprietário do painel.');
-  execFileSync('icacls.exe', [pasta, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`, '*S-1-5-18:(OI)(CI)F'], { stdio: 'pipe', windowsHide: true, timeout: 5000 });
+  execFileSync(ICACLS, [pasta, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`, '*S-1-5-18:(OI)(CI)F'], { stdio: 'pipe', windowsHide: true, timeout: 5000 });
 }
 function prepararChave(arquivo = ARQUIVO_CHAVE, { rotacionar = false } = {}) {
   protegerPasta(path.dirname(arquivo));
@@ -79,7 +87,7 @@ function criarAutenticacao({ segredo, arquivo = ARQUIVO_CHAVE, agora = Date.now,
     return `${COOKIE}=${valor}; Path=/painel; HttpOnly; SameSite=Strict; ${apagar ? 'Max-Age=0' : 'Max-Age=28800'}${segura ? '; Secure' : ''}`;
   }
   async function entrar(req, res) {
-    const origem = origemSegura(req);
+    const origem = origemDoPainel(req);
     if (!origem || req.headers.origin !== origem.origem) return res.status(403).json({ erro: 'Acesso recusado.' });
     if (!permitiuTentativa(req)) return res.status(429).set('Retry-After', '600').json({ erro: 'Aguarde antes de tentar novamente.' });
     await atualizarChave();
@@ -93,7 +101,7 @@ function criarAutenticacao({ segredo, arquivo = ARQUIVO_CHAVE, agora = Date.now,
   }
   async function exigir(req, res, next) {
     await atualizarChave();
-    const origem = origemSegura(req);
+    const origem = origemDoPainel(req);
     if (!origem) return res.status(403).json({ erro: 'Acesso recusado.' });
     const sessao = obter(req, !req.path.endsWith('/eventos'));
     if (!sessao) return res.status(401).json({ erro: 'Autenticação necessária.' });
@@ -102,7 +110,7 @@ function criarAutenticacao({ segredo, arquivo = ARQUIVO_CHAVE, agora = Date.now,
   }
   function sair(req, res) {
     sessoes.delete(cookie(req));
-    res.set('Set-Cookie', cabecalhoCookie('', Boolean(origemSegura(req)?.segura), true)).json({ ok: true });
+    res.set('Set-Cookie', cabecalhoCookie('', Boolean(origemDoPainel(req)?.segura), true)).json({ ok: true });
   }
   return { entrar, exigir, sair, obter, atualizarChave, falha: () => falha, tamanho: () => sessoes.size };
 }

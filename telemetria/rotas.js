@@ -1,20 +1,25 @@
 const express = require('express');
 const path = require('node:path');
-const { origemSegura } = require('./origem');
+const { origemDoPainel } = require('./origem');
 
 function instalarRotas(app, { auth, consultar, instante, pasta = path.join(__dirname, '..', 'painel') }) {
   const clientes = new Set();
   const periodos = ['hoje', '7d', '30d', 'tudo'];
-  app.use('/painel', (_req, res, next) => {
+  // A porta fecha antes de tudo: antes da chave, antes do cookie, antes de servir a própria
+  // tela de login. Quem chega de fora não descobre sequer que existe um painel aqui -- daí
+  // 404, e não 403. Um túnel com Funnel ligado publica esta porta na internet inteira, e
+  // "protegido por uma chave" não é o mesmo que "não acessível".
+  app.use('/painel', (req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
       'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" });
+    if (!origemDoPainel(req)) return res.status(404).type('text').send('Não encontrado.');
     next();
   });
   app.get('/painel/entrar', (_req, res) => res.sendFile(path.join(pasta, 'entrada.html')));
   app.get('/painel/entrada.js', (_req, res) => res.sendFile(path.join(pasta, 'entrada.js')));
   app.get('/painel/entrada.css', (_req, res) => res.sendFile(path.join(pasta, 'entrada.css')));
   app.post('/painel/entrar', (req, res, next) => {
-    const origem = origemSegura(req);
+    const origem = origemDoPainel(req);
     if (!origem || req.headers.origin !== origem.origem) return res.status(403).json({ erro: 'Acesso recusado.' });
     next();
   }, express.json({ limit: 1024, strict: true }), (req, res, next) => auth.entrar(req, res).catch(next));

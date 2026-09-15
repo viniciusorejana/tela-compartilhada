@@ -21,10 +21,31 @@ O cookie é HttpOnly, SameSite=Strict, restrito a `/painel`, Secure em HTTPS. A 
 Login confere a origem; logout e renovação também conferem token CSRF. HTML privado,
 scripts, API e SSE exigem autenticação. A entrada é genérica, sem salas, nomes ou métricas.
 
-### Acesso remoto
+### O painel para na máquina do servidor
 
-Exige HTTPS e origem pública explícita. Exemplo para proxy local que preserva `Host` e
-fornece os cabeçalhos de encaminhamento:
+Por padrão `/painel` só responde a quem chega pelo loopback, com `Host` local e sem
+cabeçalhos de encaminhamento. De qualquer outro lugar a rota inteira devolve **404** — não
+403 — inclusive a tela de login: quem varre a porta de fora não descobre que existe um
+painel aqui.
+
+Isso **não** depende de `NEXO_PROXIES_CONFIAVEIS` nem de `PUBLIC_URL`. Antes dependia, por
+acidente: um túnel declarado como proxy confiável passava a valer como origem legítima do
+painel, e ligar os limites por IP abria o login junto. Com um túnel de Funnel ativo isso
+significava expor o login à internet inteira, protegido só pela chave. São duas decisões
+sem relação e agora ficam em variáveis separadas.
+
+Para abrir o painel fora da máquina, é preciso pedir por escrito:
+
+```powershell
+$env:NEXO_PAINEL_REMOTO = '1'   # exige também PUBLIC_URL https e proxy declarado
+```
+
+### Limites por IP atrás de um túnel
+
+`NEXO_PROXIES_CONFIAVEIS` agora governa só o que sempre deveria: de quem o servidor aceita
+`X-Forwarded-For`. Sem ela, todo mundo que chega por um túnel compartilha o mesmo orçamento
+de origem — uma pessoa reconectando em laço gasta a cota das outras, e a sala fica lenta
+para entrar sem nenhum culpado aparente.
 
 ```powershell
 $env:PUBLIC_URL = 'https://seu-servidor.ts.net'
@@ -32,11 +53,9 @@ $env:NEXO_PROXIES_CONFIAVEIS = '127.0.0.1,::1'
 npm start
 ```
 
-Declare somente os IPs dos proxies administrados por você. A lista também governa os
-limites por origem e downloads: `X-Forwarded-For` não confiável é ignorado; cadeias são
-percorridas da direita para a esquerda até o primeiro IP não confiável. Sem configuração,
-usuários atrás de um túnel compartilham o orçamento da origem. HTTP administrativo local
-só é aceito de loopback, com Host local e sem cabeçalhos de proxy.
+Declare somente os IPs dos proxies administrados por você. Cadeias são percorridas da
+direita para a esquerda até o primeiro IP não confiável, para que ninguém escolha o próprio
+endereço escrevendo um cabeçalho.
 
 ## Contabilidade por funcionalidade
 
