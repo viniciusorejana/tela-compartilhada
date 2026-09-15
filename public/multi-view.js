@@ -3,6 +3,7 @@
   const toggle = document.getElementById('multiViewBtn');
   const cards = new Map();
   let active = false;
+  let mostrando = new Set();
 
   const chave = item => JSON.stringify([item.id, item.source]);
 
@@ -144,6 +145,10 @@
     const items = (active ? candidatosDeDestaque() : [])
       .filter(item => !(item.id === 'self' && (item.source === 'screen' ? ocultarPropriaTela : ocultarPropriaCamera)));
     const wanted = new Set(items.map(chave));
+    // O que a grade assumiu, no formato que o transporte entende. A plateia consulta isto
+    // para não repetir uma imagem que já está grande aqui em cima; o transporte, para saber
+    // que um card merece a camada do meio e um quadradinho não.
+    mostrando = new Set(items.map(item => `${item.id}|${item.source}`));
     for (const [key, card] of cards) {
       if (wanted.has(key)) continue;
       card.video.pause(); card.video.srcObject = null;
@@ -173,9 +178,17 @@
 
   function setActive(value) {
     active = value; render(); mostrarControlesDoPalco();
-    if (!active) atualizarPalco();
+    // Abrir ou fechar a grade muda quem está em destaque -- e com isso quem sai da plateia,
+    // quem volta para ela e em que camada cada um desce. `atualizarPalco` é quem avisa as
+    // duas pontas, então vale nos dois sentidos, não só ao fechar.
+    atualizarPalco();
   }
   toggle.onclick = () => setActive(!active);
   new ResizeObserver(layout).observe(grid);
-  window.RoomMulti = { render, sincronizarAudio, get active() { return active; } };
+  window.RoomMulti = {
+    render, sincronizarAudio,
+    get active() { return active; },
+    mostra: (id, source) => mostrando.has(`${id}|${source}`),
+    get chaves() { return mostrando; }
+  };
 })();

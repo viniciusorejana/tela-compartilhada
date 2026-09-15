@@ -242,8 +242,11 @@
     // Teto imposto pela conexao desta maquina. `null` = ainda nao se sabe.
     let tetoDaConexao = null;
     let horaDaMelhora = 0;
-    // Quem esta no palco. Uma camera no palco e vista grande; no quadradinho, nao.
+    // Onde cada fonte está sendo mostrada. `destaque` é o palco -- uma fonte só; `naGrade`
+    // são as do modo múltiplo. A sala informa os dois e o transporte decide a camada: ele não
+    // precisa saber nada de layout, e a sala não precisa saber nada de camadas.
     let destaque = null;
+    let naGrade = new Set();
     // Ultima camada pedida por faixa, para nao repetir o pedido a cada conferencia.
     const camadasAplicadas = new Map();
 
@@ -344,17 +347,37 @@
     // uma camera de fato aparece aqui: o quadradinho e o card do modo multiplo. So o palco
     // -- uma camera de cada vez, ocupando a tela inteira -- justifica a camada cheia.
     //
+    // A tela seguia outra regra: bastava ser pedida para descer na camada cheia, em
+    // qualquer tamanho. Parecia seguro -- quem pede uma tela está olhando para ela --, mas
+    // "pedida" e "no palco" deixaram de ser a mesma coisa quando surgiu o modo múltiplo.
+    // Ali três telas convivem em cards de algumas centenas de pixels, e cada uma descia na
+    // camada cheia -- que é o bitrate de captura INTEIRO do perfil escolhido, não uma fatia
+    // dele (ver quality-utils.js). Com o perfil alto de então eram 8 Mbps por card: 24 Mbps
+    // para imagens que cabem num quarto do monitor, e mais a cada tela aberta.
+    //
+    // Agora a regra é uma só, para tela e para câmera: a camada cheia é do palco. Assistir
+    // continua pinando (ver `assistirTela`, em sala.js), então quem pede uma tela para ver
+    // grande recebe exatamente o que recebia antes; o que muda é o preço das outras.
+    //
     // Nao se usa o `adaptiveStream` da lib, que faria essa conta pelo tamanho real do
     // elemento, porque ele assume o controle do setVideoQuality e pausa faixa fora de
     // vista: as duas coisas brigariam com o "assistir a pedido", que e quem manda no que
     // desce nesta sala.
+    // Três tamanhos, três camadas. O palco ocupa a tela inteira e merece a imagem cheia; o
+    // card da grade é uma fração dela; o quadradinho da plateia tem duzentos pixels, e mandar
+    // 640x360 para ele era pagar três vezes pelo que ninguém consegue ver.
+    function ondeAparece(id, fonte) {
+      if (destaque?.id === id && destaque?.source === fonte) return 'palco';
+      if (naGrade.has(`${id}|${fonte}`)) return 'grade';
+      return 'plateia';
+    }
+
     function camadaDesejada(par, publicacao) {
       const V = LK.VideoQuality || {};
       const fonte = fonteDaPublicacao(publicacao);
       if (fonte !== 'screen' && fonte !== 'camera') return null;
-      // Tela so desce depois de pedida, e quem pediu esta vendo grande.
-      const noPalco = destaque?.id === par.id && destaque?.source === fonte;
-      const pelaTela = fonte === 'screen' || noPalco ? V.HIGH : V.MEDIUM;
+      const onde = ondeAparece(par.id, fonte);
+      const pelaTela = onde === 'palco' ? V.HIGH : onde === 'grade' ? V.MEDIUM : V.LOW;
       if (tetoDaConexao === null || tetoDaConexao === undefined) return pelaTela;
       return Math.min(pelaTela, tetoDaConexao);
     }
@@ -374,13 +397,26 @@
       peers.forEach(par => par.publicacoes.forEach(publicacao => aplicarCamada(par, publicacao)));
     }
 
-    // Chamada pela sala quando o palco muda: quem saiu dele volta ao quadradinho e para de
-    // custar caro, quem entrou passa a merecer a imagem inteira.
-    function definirDestaque(id, fonte) {
-      const igual = destaque?.id === (id || null) && destaque?.source === (fonte || null);
-      if (igual) return;
+    // Chamada pela sala quando o palco ou a grade mudam: quem saiu volta ao quadradinho e
+    // para de custar caro, quem entrou passa a merecer a imagem maior. A grade vem junto
+    // porque as duas decisões saem da mesma passada de layout -- separá-las faria a sala
+    // reavaliar tudo duas vezes, e pior, deixaria uma janela em que as duas discordam.
+    function definirExibicao(id, fonte, chavesNaGrade) {
+      const mesmoPalco = destaque?.id === (id || null) && destaque?.source === (fonte || null);
+      const grade = chavesNaGrade instanceof Set ? chavesNaGrade : new Set(chavesNaGrade || []);
+      const mesmaGrade = grade.size === naGrade.size && [...grade].every(chave => naGrade.has(chave));
+      if (mesmoPalco && mesmaGrade) return;
       destaque = id ? { id, source: fonte || null } : null;
+      naGrade = grade;
+      // A CAMADA muda na hora: é só um pedido ao servidor, não mexe em quem está assinado e
+      // portanto não dispara evento nenhum de volta.
       aplicarCamadaEmTodos();
+      // A ASSINATURA, não. Trocar o palco pode liberar ou ocupar uma vaga de câmera, mas
+      // assinar dispara eventos de faixa, que recalculam o estado, que reavaliam o destaque,
+      // que voltam aqui -- e o palco passa a perseguir o próprio rastro antes de assentar.
+      // Agendar quebra o ciclo e ainda agrupa a rajada de trocas de uma mudança de layout
+      // numa passada só.
+      agendarReavaliacaoDeAssinaturas();
     }
 
     // Chamada tanto pelo evento de qualidade quanto pela conferencia periodica. O evento so
@@ -413,6 +449,187 @@
       }
     }
 
+    // ---------- Quanto desceu ----------
+    //
+    // A soma do que TODO mundo recebeu é, por definição, o que saiu do servidor de mídia. É
+    // também o único jeito de saber isso separado por fonte: o servidor conta pacotes e não
+    // diz de onde vieram, então "a tela custa mais que as câmeras?" não tem resposta lá.
+    //
+    // O que sobe daqui é o DELTA desde a leitura anterior, nunca o acumulado. Trocar
+    // qualidade, codec ou fonte republica a faixa (ver a folga de tolerância, no topo deste
+    // arquivo), e a faixa nova começa a contar do zero. Somando acumulados, cada troca dessas
+    // apareceria como uma queda no total da sala -- e o relatório andaria para trás no exato
+    // momento em que alguém mexeu na qualidade para ver o efeito.
+    const bytesLidos = new Map();
+
+    async function medirRecebimento() {
+      const porFonte = { screen: 0, camera: 0, micAudio: 0, screenAudio: 0 };
+      const vistos = new Set();
+      const leituras = [];
+      peers.forEach(par => par.publicacoes.forEach(publicacao => {
+        const fonte = fonteDaPublicacao(publicacao);
+        if (!fonte || !publicacao.isSubscribed) return;
+        const faixa = publicacao.track;
+        if (typeof faixa?.getRTCStatsReport !== 'function') return;
+        vistos.add(publicacao.trackSid);
+        leituras.push(faixa.getRTCStatsReport().then(stats => {
+          if (!stats) return;
+          let bytes = 0;
+          for (const item of stats.values()) {
+            if (item.type === 'inbound-rtp' && Number.isFinite(item.bytesReceived)) bytes += item.bytesReceived;
+          }
+          const anterior = bytesLidos.get(publicacao.trackSid) || 0;
+          bytesLidos.set(publicacao.trackSid, bytes);
+          // Contador que andou para trás é faixa reiniciada, não banda devolvida.
+          if (bytes > anterior) porFonte[fonte] += bytes - anterior;
+        }).catch(() => { /* Faixa encerrada no meio da leitura: sai da janela, sem estrago. */ }));
+      }));
+      await Promise.all(leituras);
+      // Faixa que não existe mais não pode continuar guardada: numa sala longa este mapa
+      // cresceria sem parar, cheio de identificadores de sessões encerradas.
+      for (const sid of [...bytesLidos.keys()]) if (!vistos.has(sid)) bytesLidos.delete(sid);
+      return porFonte;
+    }
+
+    // ---------- Aba escondida ----------
+    //
+    // Uma aba em segundo plano continuava recebendo tudo: as câmeras e a tela que a pessoa
+    // pediu seguiam descendo para uma janela que ninguém está olhando. Com uma tela aberta,
+    // são alguns Mbps por pessoa ausente -- pagos por quem hospeda, para nada.
+    //
+    // Só o VÍDEO é dispensado. A voz continua, porque é justamente o motivo de a aba ter
+    // ficado aberta; o som da tela também, porque ouvir uma apresentação enquanto se faz
+    // outra coisa é uso legítimo, e emudecê-la seria quebrar a sala para economizar.
+    //
+    // A espera existe porque trocar de janela é corriqueiro. Sem ela, um alt+tab de cinco
+    // segundos custaria uma renegociação na ida e outra na volta, e a imagem voltaria
+    // piscando a cada vez -- o remédio sendo pior que a doença. Meio minuto separa "olhei
+    // outra coisa" de "saí".
+    const SEGUNDOS_ESCONDIDA_ATE_PAUSAR = 30;
+    let pausadaPorAusencia = false;
+    let timerDaAba = null;
+
+    // ---------- Quantas câmeras cabem ----------
+    //
+    // A câmera é a única fonte que cresce ao QUADRADO. Cada pessoa publica uma, e cada uma
+    // desce para todas as outras: numa sala de vinte são 380 fluxos. Mesmo na camada baixa
+    // isso passa de cem megabits -- mais do que a tela que todo mundo entrou para ver, e
+    // pagos por quem hospeda.
+    //
+    // A saída não é técnica, é de produto: ninguém olha vinte câmeras. Meet e Zoom também não
+    // mostram todas. O critério aqui é o do Discord -- quem falou mais recentemente fica
+    // visível, o resto vira avatar até abrir a boca --, e quem está no palco ou na grade entra
+    // de graça, porque foi escolha explícita de quem está assistindo.
+    const MAXIMO_DE_CAMERAS = 6;
+    // Rajada de trocas de orador vira UMA reavaliação. Sem isto, uma conversa cruzada faria
+    // as câmeras entrarem e saírem várias vezes por segundo, e cada entrada custa uma
+    // renegociação -- o remédio pior que a doença.
+    const SEGUNDOS_PARA_ACOMPANHAR_A_FALA = 3;
+    const ultimaFala = new Map();
+    let cameraLiberada = new Set();
+    let timerDeFala = null;
+
+    // Quem tem direito a descer com imagem agora. Ordem: destaque primeiro, depois quem falou
+    // por último, e ordem de chegada para desempatar -- um critério estável, para que a lista
+    // não se reorganize sozinha enquanto ninguém fala.
+    // Derivado das publicações, e não de `par.state`: o estado é recalculado DEPOIS de a
+    // publicação ser acompanhada, então perguntar a ele aqui faria a primeira câmera de uma
+    // sala parecer inexistente e nunca descer.
+    function publicaCamera(par) {
+      for (const publicacao of par.publicacoes.values()) {
+        if (fonteDaPublicacao(publicacao) === 'camera' && !publicacao.isMuted) return true;
+      }
+      return false;
+    }
+
+    function escolherCameras() {
+      const comCamera = [...peers.values()].filter(publicaCamera);
+      const escolhidas = new Set();
+      for (const par of comCamera) {
+        if (ondeAparece(par.id, 'camera') !== 'plateia') escolhidas.add(par.id);
+      }
+      const resto = comCamera
+        .filter(par => !escolhidas.has(par.id))
+        .sort((a, b) => ((ultimaFala.get(b.id) || 0) - (ultimaFala.get(a.id) || 0))
+          || ((a.ordem.camera || 0) - (b.ordem.camera || 0)));
+      for (const par of resto) {
+        if (escolhidas.size >= MAXIMO_DE_CAMERAS) break;
+        escolhidas.add(par.id);
+      }
+      return escolhidas;
+    }
+
+    function anotarFala(oradores) {
+      const agora = Date.now();
+      let mexeu = false;
+      for (const orador of oradores || []) {
+        const id = orador?.identity;
+        if (!id || orador.isLocal || !peers.has(id)) continue;
+        ultimaFala.set(id, agora);
+        if (!cameraLiberada.has(id)) mexeu = true;
+      }
+      // Quem já está visível falando de novo não muda nada: só quem está de fora justifica
+      // pagar uma reavaliação.
+      if (!mexeu || timerDeFala) return;
+      timerDeFala = agendar(() => { timerDeFala = null; reavaliarAssinaturas(); },
+        SEGUNDOS_PARA_ACOMPANHAR_A_FALA * 1000);
+    }
+
+    // Quem decide o que desce. Quatro perguntas: a fonte chega sozinha ou foi pedida? A aba
+    // está escondida? É vídeo? E, sendo câmera, ela cabe no teto? Reunir isso num lugar só
+    // importa porque são três caminhos diferentes que assinam faixa -- a publicação nova, o
+    // clique em assistir e a reavaliação --, e bastava um esquecer uma pergunta para o teto
+    // vazar por ali.
+    function deveReceber(par, fonte) {
+      if (!CHEGA_SOZINHA.has(fonte) && !par.assistindo) return false;
+      if (pausadaPorAusencia && (fonte === 'screen' || fonte === 'camera')) return false;
+      if (fonte === 'camera' && !cameraLiberada.has(par.id)) return false;
+      return true;
+    }
+
+    // Toda reavaliação de assinatura passa por aqui quando vem de uma mudança de layout. O
+    // atraso é curto o bastante para ninguém perceber e longo o bastante para o palco ter
+    // parado de se mexer antes de a conta ser refeita.
+    const MS_ATE_REAVALIAR = 300;
+    let timerDeAssinaturas = null;
+
+    function agendarReavaliacaoDeAssinaturas() {
+      if (timerDeAssinaturas) return;
+      timerDeAssinaturas = agendar(() => { timerDeAssinaturas = null; reavaliarAssinaturas(); }, MS_ATE_REAVALIAR);
+    }
+
+    function reavaliarAssinaturas() {
+      cameraLiberada = escolherCameras();
+      peers.forEach(par => par.publicacoes.forEach(publicacao => {
+        const fonte = fonteDaPublicacao(publicacao);
+        if (!fonte) return;
+        const querer = deveReceber(par, fonte);
+        if (publicacao.isSubscribed !== querer) publicacao.setSubscribed(querer);
+        if (querer) aplicarCamada(par, publicacao);
+      }));
+    }
+
+    // Chamada pela sala a cada "visibilitychange". Voltar é imediato -- a pessoa está
+    // olhando agora --, sair espera.
+    function definirAbaVisivel(visivel) {
+      clearTimeout(timerDaAba);
+      timerDaAba = null;
+      if (visivel) {
+        if (!pausadaPorAusencia) return;
+        pausadaPorAusencia = false;
+        window.registrarDiagnostico?.('midia.abaVoltou');
+        reavaliarAssinaturas();
+        return;
+      }
+      if (pausadaPorAusencia) return;
+      timerDaAba = agendar(() => {
+        timerDaAba = null;
+        pausadaPorAusencia = true;
+        window.registrarDiagnostico?.('midia.abaEscondida', 'vídeo pausado');
+        reavaliarAssinaturas();
+      }, SEGUNDOS_ESCONDIDA_ATE_PAUSAR * 1000);
+    }
+
     function acompanharPublicacao(par, publicacao) {
       par.publicacoes.set(publicacao.trackSid, publicacao);
       const fonte = fonteDaPublicacao(publicacao);
@@ -424,7 +641,12 @@
       }
       // O som da tela acompanha a imagem: assistir sem ouvir (ou ouvir sem ver) nao e um
       // estado que alguem peca.
-      const querer = CHEGA_SOZINHA.has(fonte) || par.assistindo;
+      //
+      // A câmera que acabou de ser anunciada pode caber no teto -- ou empurrar outra para
+      // fora. Refazer a conta aqui é o que permite decidir por esta faixa com a sala inteira
+      // em vista, em vez de com a foto de antes dela existir.
+      if (fonte === 'camera') cameraLiberada = escolherCameras();
+      const querer = deveReceber(par, fonte);
       if (publicacao.isSubscribed !== querer) publicacao.setSubscribed(querer);
       aplicarCamada(par, publicacao);
     }
@@ -560,6 +782,10 @@
         recalcularEstado(par);
         aoMudarMidia(par.id);
       })
+      // Quem fala sobe na fila das câmeras visíveis. É o mesmo critério do Discord, e é o que
+      // torna o teto aceitável: a pessoa que está falando aparece, mesmo que tenha entrado por
+      // último numa sala cheia.
+      .on(LK.RoomEvent.ActiveSpeakersChanged, oradores => anotarFala(oradores))
       // Quem fecha o notebook, perde o Wi-Fi ou mata o navegador nao consegue avisar
       // ninguem. O servidor de midia guarda essa pessoa por um bom tempo esperando ela
       // voltar -- prudente para uma oscilacao de rede, mas do lado de ca ela fica parada na
@@ -702,6 +928,10 @@
         recalcularEstado(par);
       });
       reavaliarCamada();
+      // O teto de câmeras se autocorrige aqui. Ele é mexido por vários caminhos -- alguém
+      // falou, alguém ligou a câmera, o palco mudou, a aba voltou --, e esta passada é a
+      // única que não depende de nenhum evento ter chegado.
+      reavaliarAssinaturas();
     }
 
     // ---------- Voltar para a sala ----------
@@ -827,8 +1057,9 @@
       par.publicacoes.forEach(publicacao => {
         const fonte = fonteDaPublicacao(publicacao);
         if (fonte !== 'screen' && fonte !== 'screenAudio') return;
-        publicacao.setSubscribed(par.assistindo);
-        if (par.assistindo) aplicarCamada(par, publicacao);
+        const querer = deveReceber(par, fonte);
+        publicacao.setSubscribed(querer);
+        if (querer) aplicarCamada(par, publicacao);
       });
       aoMudarEstado(par);
     }
@@ -843,7 +1074,9 @@
       assistir,
       descartar,
       readmitir,
-      definirDestaque,
+      definirExibicao,
+      definirAbaVisivel,
+      medirRecebimento,
 
       async conectar(url, token) {
         saindoDeVez = false;

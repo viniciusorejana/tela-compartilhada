@@ -187,7 +187,7 @@
       try {
         const r = await navigator.mediaCapabilities.encodingInfo({
           type: 'webrtc',
-          video: { contentType, width: 1920, height: 1080, bitrate: 8_000_000, framerate: 30 }
+          video: { contentType, width: 1920, height: 1080, bitrate: 4_000_000, framerate: 30 }
         });
         if (r.supported && r.powerEfficient) comHardware.push(nome);
       } catch (_) { /* Navegador sem suporte a esta consulta: some da lista, sem chute. */ }

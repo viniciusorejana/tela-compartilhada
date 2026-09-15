@@ -79,6 +79,7 @@
           <button class="mute-peer-btn" id="stageMute" type="button" aria-pressed="false"></button>
           <input type="range" class="volume-slider" id="stageSlider" min="0" max="100" value="100" step="1" data-alvo="tela">
         </div>
+        <button id="stageStopBtn" type="button" hidden title="Parar de assistir esta tela" aria-label="Parar de assistir esta tela">Parar</button>
         <button id="multiViewBtn" type="button" title="Ver telas e câmeras em grade" aria-label="Ver telas e câmeras em grade" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
         <button id="zoomOutBtn" type="button" title="Diminuir zoom">−</button>
         <span id="zoomLevelLabel">100%</span>
@@ -212,7 +213,7 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
-        <div class="field"><label for="videoQuality">Qualidade da transmissão · 30 fps</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small id="qualidadeBtn"></small></div>
+        <div class="field"><label for="videoQuality">Qualidade da transmissão · 30 fps</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica · até 2 Mbps</option><option value="high">1080p · Alta · até 4 Mbps</option><option value="ultra">1440p · Máxima · até 6 Mbps</option></select><small id="qualidadeBtn"></small></div>
         <div class="field"><label for="videoPriority">Quando faltar banda ou processador</label><select id="videoPriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Para ler código, nitidez. Para jogo, fluidez.</small></div>
         <details class="avancado">
           <summary>Codec de vídeo</summary>
@@ -288,7 +289,7 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelEnvio" aria-labelledby="abaEnvio" hidden>
-    <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 4 Mbps</option><option value="high">1080p · Alta · até 8 Mbps</option><option value="ultra">1440p · Máxima · até 14 Mbps</option></select><small>Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
+    <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 2 Mbps</option><option value="high">1080p · Alta · até 4 Mbps</option><option value="ultra">1440p · Máxima · até 6 Mbps</option></select><small>Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
     <div class="field"><label for="sharePriority">Quando faltar banda ou processador</label><select id="sharePriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Nitidez segura os detalhes e derruba os quadros; fluidez faz o contrário.</small></div>
     <details class="avancado">
       <summary>Codec de vídeo</summary>

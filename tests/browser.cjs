@@ -289,7 +289,7 @@ async function esperarCodec(page, fonte, esperado) {
   // A fonte deste teste e um canvas de tamanho fixo, entao applyConstraints nao muda a
   // captura. O que da para afirmar -- e o que importa -- e que o perfil novo chegou as
   // opcoes de publicacao. O bitrate por espectador quem decide e o servidor de midia.
-  await host.waitForFunction(() => publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate === 14_000_000, null, { timeout: 30000 });
+  await host.waitForFunction(() => publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate === 6_000_000, null, { timeout: 30000 });
   assert.equal(await host.locator('#shareQuality').inputValue(), 'ultra');
   await waitForDecodedVideos(viewer);
   await host.screenshot({ path: path.join(output, 'qualidade.png') });
@@ -752,7 +752,10 @@ async function esperarCodec(page, fonte, esperado) {
   await quemAssiste.locator('.assistir-btn').click();
   await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.screen.getTracks().length === 1, null, { timeout: 20000 });
   assert.equal(await quemAssiste.evaluate(() => pinned?.source), 'screen');
-  await quemAssiste.locator('.parar-de-assistir').click();
+  // Assistir poe a tela no palco, e uma fonte em destaque sai da plateia -- entao o botao de
+  // parar que vale aqui e o do palco, nao o do quadradinho (que nem existe mais neste estado).
+  // O do quadradinho continua servindo para uma segunda tela assistida fora do destaque.
+  await quemAssiste.locator('#stageStopBtn').click();
   await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.screen.getTracks().length === 0, null, { timeout: 20000 });
   // Parar de assistir nao pode fazer a tela sumir da sala: ela continua no ar para os outros.
   assert.deepEqual(await quemAssiste.evaluate(() => {

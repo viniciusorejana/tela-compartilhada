@@ -29,6 +29,7 @@ const FAMILIAS_DE_NAVEGADOR = {
 const sfu = require('./sfu');
 const musica = require('./musica');
 const soundboard = require('./soundboard');
+const medicao = require('./medicao');
 
 const app = express();
 require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'));
@@ -611,9 +612,10 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
         : 'Não tem nada tocando.');
     }
     if (['volume', 'vol', 'v'].includes(comando)) {
-      const valor = musica.definirVolume(roomCode, resto);
-      if (valor === null) return falarComoBot(roomCode, 'O bot nem entrou na sala ainda.');
-      return falarComoBot(roomCode, `🔊 Volume do bot em ${valor}%. Cada um ainda regula o próprio no painel.`);
+      const { porcento, naSala } = musica.definirVolume(roomCode, resto);
+      return falarComoBot(roomCode, naSala
+        ? `🔊 Volume do bot em ${porcento}%. Cada um ainda regula o próprio no painel.`
+        : `🔊 Anotado: ${porcento}%. O bot ainda não está na sala, mas já entra nesse volume.`);
     }
     if (['remover', 'rm', 'tirar'].includes(comando)) {
       const removida = musica.removerDaFila(roomCode, resto);
@@ -659,7 +661,7 @@ io.on('connection', (socket) => {
         historicoPorSala.delete(roomCode);
         historicoDeMusicaPorSala.delete(roomCode);
         soundboard.limparSala(roomCode);
-        musica.desconectar(roomCode, 'sala-vazia');
+        musica.esquecerSala(roomCode);
       }
     }
     // A identidade da midia vai junto: e por ela que a sala reconhece quem saiu. O socket
@@ -731,6 +733,15 @@ io.on('connection', (socket) => {
       micMuted: Boolean(state?.micMuted)
     };
     socket.to(roomName(roomCode)).emit('media-state', { id: socket.id, ...membro.state });
+  });
+
+  // Quanto esta página recebeu desde o relatório anterior dela. Somado com o de todo mundo,
+  // é o que saiu daqui -- a conta de banda de quem hospeda. Não é reenviado para ninguém e
+  // não altera nada na sala: vai direto para o arquivo. Ver medicao.js.
+  socket.on('medicao-de-banda', (porFonte) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return;
+    medicao.registrar(roomCode, porFonte, roomMembers.get(roomCode)?.size || 0);
   });
 
   // O cliente pergunta se ESTE participante pode usar a captura nativa por processo.

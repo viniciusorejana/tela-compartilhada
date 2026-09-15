@@ -9,6 +9,8 @@
     "test:browser": "node tests/browser.cjs",
     "test:electron": "node tests/electron.cjs",
     "test:download": "node tests/download-browser.cjs",
+    "test:soundboard": "node tests/soundboard-browser.cjs",
+    "banda": "node scripts/relatorio-de-banda.cjs",
     "build:icon": "node scripts/build-icon.cjs",
     "build:helper": "powershell -ExecutionPolicy Bypass -File .\\build-helper.ps1",
     "start": "npm run build:sfu && npm run build:helper && node server.js",

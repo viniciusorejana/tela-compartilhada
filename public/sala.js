@@ -22,6 +22,7 @@ const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomLevelLabel = document.getElementById('zoomLevelLabel');
 const stageVolume = document.getElementById('stageVolume');
+const stageStopBtn = document.getElementById('stageStopBtn');
 const stageSlider = document.getElementById('stageSlider');
 const stageMute = document.getElementById('stageMute');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -469,6 +470,24 @@ function codecDePublicacao() {
   return codecDeVideo === 'auto' ? 'h264' : codecDeVideo;
 }
 
+// Quanto do orçamento de H.264 cada codec precisa para a MESMA qualidade percebida.
+//
+// Sem isto, trocar de codec não economizava nada. O teto do perfil era o mesmo para todos, o
+// codificador recebia o orçamento inteiro e gastava até o fim: VP9 entregava imagem melhor
+// nos mesmos 4 Mbps em vez de a mesma imagem em 2,8. A economia ia para a nitidez, nunca para
+// a conta de quem hospeda -- e é por isso que as trocas de codec testadas em campo nunca
+// apareceram em lugar nenhum como redução de banda.
+//
+// Os fatores são conservadores de propósito. Em tela parada -- texto, código -- VP9 e AV1
+// rendem bem mais que isto; em cena de muito movimento, bem menos. Gastar menos do que o
+// codec aguentaria é invisível; gastar menos do que ele precisa aparece na hora, como borrão.
+// Entre os dois erros, este é o barato.
+const ORCAMENTO_POR_CODEC = { h264: 1, vp8: 1, vp9: 0.7, av1: 0.6 };
+
+function tetoParaOCodec(bitrate) {
+  return Math.round(bitrate * (ORCAMENTO_POR_CODEC[codecDePublicacao()] ?? 1));
+}
+
 async function republicarVideo() {
   if (!transporte?.conectada) return;
   const camera = cameraStream?.getVideoTracks()[0] || null;
@@ -580,7 +599,7 @@ function opcoesDePublicacao(fonte) {
     // esse, e o servidor acaba empurrando mais do que o canal aguenta ate derrubar a
     // pessoa. Os motivos estao por extenso em quality-utils.js.
     screenShareSimulcastLayers: camadasDaTela(perfil, prioridade),
-    screenShareEncoding: { maxBitrate: perfil.bitrate, maxFramerate: prioridade.fps }
+    screenShareEncoding: { maxBitrate: tetoParaOCodec(perfil.bitrate), maxFramerate: prioridade.fps }
   };
 }
 
@@ -588,9 +607,11 @@ function opcoesDePublicacao(fonte) {
 // quadros dele, baixa de proposito: numa conexao apertada, texto legivel a 15 quadros vale
 // mais do que borrao a 30. Nenhum degrau pede mais quadros do que a prioridade escolhida ja
 // permite -- "nitidez" a 30 nao deve virar 60 por causa da escada.
+// A escada inteira acompanha o codec, e não só o degrau de cima: encolher o topo sozinho
+// aproximaria as camadas até elas deixarem de ser escolhas distintas para quem assiste.
 function camadasDaTela(perfil, prioridade) {
   return (perfil.camadas || []).map(([largura, altura, bitrate, fps]) =>
-    new LivekitClient.VideoPreset(largura, altura, bitrate, Math.min(fps, prioridade.fps)));
+    new LivekitClient.VideoPreset(largura, altura, tetoParaOCodec(bitrate), Math.min(fps, prioridade.fps)));
 }
 
 // Substitui o que "definirFaixaEmTodosOsPares" fazia na malha: agora ha um destino so.
@@ -1319,11 +1340,14 @@ function mostrarOQueELembrado() {
   const texto = document.getElementById('lembradosTexto');
   const botao = document.getElementById('esquecerBtn');
   if (!texto || !botao || !window.Preferencias) return;
-  const { pessoas } = window.Preferencias.resumo();
-  texto.textContent = pessoas
-    ? `Volume ajustado para ${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}, além dos aparelhos e da qualidade escolhidos. Tudo fica só neste navegador.`
+  const { pessoas, salas } = window.Preferencias.resumo();
+  const partes = [];
+  if (pessoas) partes.push(`volume ajustado para ${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`);
+  if (salas) partes.push(`a mesa de sons de ${salas} ${salas === 1 ? 'sala' : 'salas'}`);
+  texto.textContent = partes.length
+    ? `Guardado: ${partes.join(' e ')}, além dos aparelhos e da qualidade escolhidos. Tudo fica só neste navegador.`
     : 'Só os aparelhos e a qualidade escolhidos. Volumes ajustados por pessoa aparecem aqui.';
-  botao.disabled = !pessoas;
+  botao.disabled = !partes.length;
 }
 
 document.getElementById('esquecerBtn').onclick = () => {
@@ -1339,6 +1363,10 @@ document.getElementById('esquecerBtn').onclick = () => {
     const tela = volumeDaTela.get(id);
     if (tela) { tela.nivel = 1; tela.mudo = false; definirAudioDaTela(id, { lembrar: false }); }
   }
+  // A mesa de sons guarda o volume dela por fora deste mapa, e em chaves mais antigas que
+  // esta camada. Sem avisá-la, "esquecer tudo" deixaria justamente o ajuste mais audível
+  // de pé -- e a pessoa continuaria sem ouvir os sons, sem nada na tela explicando.
+  window.NexoSoundboard?.esquecerAjustes?.();
   mostrarOQueELembrado();
   status.textContent = 'Pronto: os ajustes guardados neste navegador foram esquecidos.';
 };
@@ -1427,6 +1455,28 @@ async function medirEnvio() {
   finally { medindoEnvio = false; }
 }
 setInterval(medirEnvio, 2000);
+
+// ---------- Quanto a sala custou ----------
+//
+// A medição acima é do ENVIO e existe para a interface. Esta é do RECEBIMENTO e existe para o
+// histórico: a conta de banda de quem hospeda é a soma do que todos receberam, e essa soma só
+// pode acontecer no servidor. Cada página manda apenas o próprio pedaço.
+//
+// Uma vez por minuto, de propósito. A pergunta que isto responde -- "quanto a tela custou
+// nesta semana, comparada com a anterior" -- não melhora com amostras de dois em dois
+// segundos; e numa sala de vinte pessoas, medir a cada dois segundos seriam seiscentas
+// mensagens por minuto para acompanhar um número que mal se move.
+let medindoRecebimento = false;
+async function relatarRecebimento() {
+  if (medindoRecebimento || !transporte?.conectada || !socket?.connected) return;
+  medindoRecebimento = true;
+  try {
+    const porFonte = await transporte.medirRecebimento();
+    if (Object.values(porFonte).some(bytes => bytes > 0)) socket.emit('medicao-de-banda', porFonte);
+  } catch (_) { /* Sem medição, a sala não muda em nada: isto é histórico, não funcionamento. */ }
+  finally { medindoRecebimento = false; }
+}
+setInterval(relatarRecebimento, 60000);
 
 const seletoresDeQualidade = [...document.querySelectorAll('[data-quality-profile]')];
 seletoresDeQualidade.forEach(select => {
@@ -2320,6 +2370,11 @@ stageVideo.addEventListener('wheel', event => {
 }, { passive: false });
 
 const theaterBtn = document.getElementById('theaterBtn');
+// Parar de assistir tira a tela do palco sozinho: sem fonte, `avaliarDestaque` escolhe a
+// próxima. Não é preciso despinar aqui.
+stageStopBtn.onclick = () => {
+  if (pinned?.source === 'screen' && pinned.id !== 'self') assistirTela(pinned.id, false);
+};
 function definirModoTeatro(ativo) {
   document.querySelector('.app').classList.toggle('teatro', ativo);
   theaterBtn.setAttribute('aria-pressed', String(ativo));
@@ -2541,7 +2596,12 @@ function instrumentarFaixaDoMic(faixa) {
   faixa.onunmute = () => registrarDiagnostico('micTrack.unmute');
   faixa.onended = () => registrarDiagnostico('micTrack.ended');
 }
-document.addEventListener('visibilitychange', () => registrarDiagnostico('visibilitychange', document.visibilityState));
+document.addEventListener('visibilitychange', () => {
+  registrarDiagnostico('visibilitychange', document.visibilityState);
+  // Aba escondida não precisa receber imagem -- só som. Quem decide o que isso significa é
+  // o transporte; daqui vai apenas o fato.
+  transporte?.definirAbaVisivel(!document.hidden);
+});
 // O LiveKit se desconecta sozinho em "pagehide"/"beforeunload" (por causa da opcao
 // disconnectOnPageLeave) e tambem em "freeze" (a Page Lifecycle API do Chrome, sempre, mesmo
 // com a opcao desligada). Qualquer um destes tres pode ser quem esta matando a chamada ao
@@ -3093,6 +3153,12 @@ function atualizarTileDeTela(id) {
   if (!estado.screen) { removerTileDeTela(id); return; }
 
   const refs = garantirTileDeTela(id);
+  // Já está grande no palco ou na grade: aqui embaixo seria a segunda cópia da mesma imagem.
+  // O fluxo é desligado junto, e não só escondido -- um <video> oculto continua decodificando
+  // e compondo, e poupar esse trabalho é metade do motivo de não repetir.
+  const emDestaque = estaEmDestaque(id, 'screen');
+  refs.root.hidden = emDestaque;
+  if (emDestaque) { ligarFluxo(refs.video, null); return; }
   refs.nome.textContent = `${nomeDe(id)} — Tela`;
   const assistindo = assistindoTela(id);
   const stream = id === 'self' ? screenStream : peers.get(id)?.remoteStreams.screen;
@@ -3116,8 +3182,31 @@ function atualizarTile(id) {
   const refs = tiles.get(id);
   if (!refs) return;
   const estado = id === 'self' ? meuEstado() : (peers.get(id)?.state || {});
-  const temCamera = id === 'self' ? Boolean(cameraStream) : Boolean(estado.camera);
-  if (id === 'self' && cameraStream) ligarFluxo(refs.camVideo, cameraStream);
+  // "Tem câmera ligada" e "a imagem está chegando" deixaram de ser a mesma coisa: numa sala
+  // cheia, a câmera de quem não está falando nem em destaque não desce. Perguntar ao estado
+  // anunciado deixaria um retângulo preto no lugar do avatar -- o pior dos dois mundos.
+  const temCamera = id === 'self'
+    ? Boolean(cameraStream)
+    : Boolean(estado.camera && peers.get(id)?.remoteStreams.camera?.getTracks().length);
+
+  // A câmera desta pessoa já está grande no palco ou na grade: o quadradinho seria a segunda
+  // cópia. Sem câmera em destaque ele permanece -- é ele que diz que a pessoa está na sala, e
+  // presença não é redundância. Quem está sem câmera nunca some daqui.
+  const cameraEmDestaque = temCamera && estaEmDestaque(id, 'camera');
+  refs.root.hidden = cameraEmDestaque;
+  if (cameraEmDestaque) {
+    ligarFluxo(refs.camVideo, null);
+    atualizarTileDeTela(id);
+    return;
+  }
+
+  // Religar ao voltar do destaque: o fluxo foi desligado quando a câmera subiu, e sem isto o
+  // quadradinho voltaria preto para todo mundo menos para quem está olhando a própria imagem.
+  if (id === 'self') { if (cameraStream) ligarFluxo(refs.camVideo, cameraStream); }
+  else {
+    const peer = peers.get(id);
+    if (peer && ligarFluxo(refs.camVideo, peer.remoteStreams.camera)) garantirReproducao(refs.camVideo);
+  }
 
   refs.camVideo.classList.toggle('active', temCamera);
   refs.avatar.classList.toggle('hidden', temCamera);
@@ -3238,6 +3327,29 @@ function assistindoTela(id) {
   return id === 'self' || Boolean(peers.get(id)?.assistindo);
 }
 
+// ---------- Uma fonte, um lugar ----------
+//
+// A mesma tela aparecia duas vezes: grande no palco e pequena no quadradinho logo abaixo.
+// Três, com a grade aberta. Não custava banda -- é uma faixa só, descendo uma vez, pintada em
+// dois lugares --, mas custava duas outras coisas. Atenção, porque o olho não sabe qual das
+// cópias olhar e a plateia fica ocupada por uma miniatura do que já está em foco. E trabalho
+// do aparelho de quem assiste: cada <video> a mais compõe de novo, a cada quadro, e é no
+// celular que isso aparece primeiro.
+//
+// Agora vale uma hierarquia de tamanho: a fonte aparece no MAIOR lugar em que couber. Palco
+// ganha da grade, grade ganha da plateia. Quem não está em nenhum dos dois continua na
+// plateia -- que é onde a presença mora, e por isso quem está sem câmera nunca some de lá.
+function estaEmDestaque(id, source) {
+  if (pinned?.id === id && pinned.source === source) return true;
+  return Boolean(window.RoomMulti?.active && window.RoomMulti.mostra(id, source));
+}
+
+// Palco ou grade mudaram: quem entrou em destaque sai da plateia, quem saiu volta para ela.
+function reavaliarPlateia() {
+  atualizarTile('self');
+  peers.forEach((_par, id) => atualizarTile(id));
+}
+
 function fonteAnunciada(id, source) {
   if (id === 'self') {
     const stream = source === 'screen' ? screenStream : cameraStream;
@@ -3346,7 +3458,10 @@ function pin(id, source, manual) {
 function despinar() {
   pinned = null;
   destaqueManual = false;
-  transporte?.definirDestaque(null, null);
+  // Sai do palco, mas a grade pode continuar aberta: mandar as chaves dela junto evita que
+  // despinar rebaixe para a camada do quadradinho o que ainda está grande num card.
+  transporte?.definirExibicao(null, null, window.RoomMulti?.chaves);
+  reavaliarPlateia();
   stageVideo.srcObject = null;
   stageOcultoOverlay.classList.add('hidden');
   convidarParaOPalco();
@@ -3369,7 +3484,14 @@ function atualizarPalco() {
   window.RoomMulti?.render();
   // Quem está no palco recebe a imagem inteira; quem está no quadradinho, a do meio.
   // Avisar aqui é o que faz a câmera de quem sai do palco parar de custar caro.
-  transporte?.definirDestaque(pinned?.id, pinned?.source);
+  transporte?.definirExibicao(pinned?.id, pinned?.source, window.RoomMulti?.chaves);
+  // Quem subiu para o palco sai da plateia; quem desceu volta para ela. Precisa vir depois do
+  // render acima, que é quem sabe o que a grade assumiu nesta passada.
+  reavaliarPlateia();
+  // O botão de parar morava no quadradinho da tela -- que agora some quando ela está em
+  // destaque. Sem um substituto aqui, quem abrisse uma tela ficaria sem como fechá-la, e o
+  // custo dela seguiria sendo pago até a pessoa sair da sala.
+  stageStopBtn.hidden = !(pinned && pinned.id !== 'self' && pinned.source === 'screen' && assistindoTela(pinned.id));
   if (!pinned) return;
   const { id, source } = pinned;
   const nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');

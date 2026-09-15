@@ -1085,11 +1085,17 @@ Chromium do Playwright quando a marca for alterada.
 
 ## Perfis de qualidade (30 fps)
 
-Em **Compartilhar tela** ou **Dispositivos**, escolha 720p (até 4 Mbps), 1080p (até
-8 Mbps, padrão) ou 1440p (até 14 Mbps). Esses são tetos por destinatário, não consumo
+Em **Compartilhar tela** ou **Dispositivos**, escolha 720p (até 2 Mbps), 1080p (até
+4 Mbps, padrão) ou 1440p (até 6 Mbps). Esses são tetos por destinatário, não consumo
 constante nem garantia de resolução/fps. Uma fonte menor não ganha detalhes por escolher
 um perfil maior. O perfil pode mudar durante a transmissão; se a fonte recusar as novas
 restrições, a interface orienta usar **Atualizar tela**.
+
+O teto é orçamento, não meta: o codificador gasta o que receber, e cada Mbps a mais é
+multiplicado pelo número de espectadores. Quanto isso custa de verdade, o que já foi feito
+para reduzir e o que fazer quando a sala crescer estão em
+[`docs/banda-e-escala.md`](docs/banda-e-escala.md) — que também explica como medir
+(`npm run banda`).
 
 O limite total de upload, em Dispositivos, oferece 10/20/40/80 Mbps; o padrão é 40 Mbps,
 com 15% reservado para áudio e tráfego adicional. Escolha um valor abaixo da sua subida

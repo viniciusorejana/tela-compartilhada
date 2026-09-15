@@ -22,10 +22,10 @@ distribui. Todo mundo faz conexão de saída, então o problema de NAT contra NA
 ## O que isso custa, dito claramente
 
 O servidor roda na mesma máquina que já hospeda o Nexo. Ele **não reduz o upload de quem
-hospeda**: quando é a tela do host no ar, as mesmas 32 Mbps saem, agora pelo processo do
+hospeda**: quando é a tela do host no ar, as mesmas 16 Mbps saem, agora pelo processo do
 servidor de mídia. O que muda é que o custo passa a ser sempre do host — um participante com
 10 Mbps de upload, que antes não conseguia compartilhar tela para quatro pessoas, passa a enviar
-8 Mbps e o resto sai da conexão de quem hospeda.
+4 Mbps e o resto sai da conexão de quem hospeda.
 
 É uma troca deliberada, e é o que torna a sala utilizável para o grupo. O ganho que a malha
 nunca daria é o simulcast: quem está numa rede ruim recebe a camada baixa sem derrubar a

@@ -152,7 +152,7 @@ WebRTC samples, colando a URL, o usuário e a credencial que aparecem em `/api/r
 Com TURN, **toda a mídia daquela conexão passa pelo servidor** — o dobro do tráfego (entra e
 sai) e latência um pouco maior. Ele só é usado quando não há caminho direto; conexões que
 funcionam sozinhas continuam diretas. Numa VPS medida por tráfego, uma transmissão de tela a
-8 Mbps consome cerca de 7 GB por hora, por espectador que precise do relay.
+4 Mbps consome cerca de 3,5 GB por hora, por espectador que precise do relay.
 
 ## Referências
 
