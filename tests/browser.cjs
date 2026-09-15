@@ -270,14 +270,18 @@ async function esperarCodec(page, fonte, esperado) {
   // banda estimada, e num Chromium sem placa de video ela nem sobe. E a ESCADA declarada,
   // que e o que o servidor tem disponivel para oferecer a cada espectador.
   //
-  // O degrau de baixo e o que importa: deixada por conta da lib, a escada nasce com dois
-  // degraus e o menor custa um quarto da captura -- 2 Mbps numa captura de 8. Quem assiste
-  // de uma rede ruim nao alcanca nem esse, o servidor empurra assim mesmo, e o canal afoga
-  // junto com a sinalizacao que o mantem na sala. A pessoa nao fica com video ruim: ela cai.
+  // O degrau de baixo e o que importa: deixada por conta da lib, a escada nasce com o menor
+  // custando um quarto da captura -- 2 Mbps numa captura de 8. Quem assiste de uma rede ruim
+  // nao alcanca nem esse, o servidor empurra assim mesmo, e o canal afoga junto com a
+  // sinalizacao que o mantem na sala. A pessoa nao fica com video ruim: ela cai.
+  //
+  // Sao DOIS degraus, nao tres: o do meio custava a quem transmite 30% da codificacao e era
+  // usado so pela grade. Ver quality-utils.js. Se algum dia voltarem a ser tres, que seja por
+  // decisao e nao por acidente -- por isso a conta e exata.
   const escada = await host.evaluate(() =>
     (publicacoesLocais.screen.track.sender.getParameters().encodings || [])
       .map(e => ({ rid: e.rid || 'única', teto: e.maxBitrate, reducao: e.scaleResolutionDownBy })));
-  assert.equal(escada.length, 3, `a tela deveria subir em três degraus, veio ${JSON.stringify(escada)}`);
+  assert.equal(escada.length, 2, `a tela deveria subir em dois degraus, veio ${JSON.stringify(escada)}`);
   const degrauDeBaixo = Math.min(...escada.map(e => e.teto).filter(Boolean));
   assert.ok(degrauDeBaixo <= 400_000,
     `o degrau mais baixo precisa caber numa rede ruim, veio ${degrauDeBaixo} bps em ${JSON.stringify(escada)}`);

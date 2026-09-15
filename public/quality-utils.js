@@ -23,23 +23,41 @@
 // sinalizacao -- que viaja no MESMO transporte e e o que mantem a pessoa na sala. Ela nao
 // fica com video ruim: ela CAI.
 //
-// Declarar dois degraus faz o cliente montar tres camadas (ele usa presets[0] e presets[1]
-// como as duas de baixo e mantem a captura como a de cima). O degrau de baixo, a 300 kbps e
-// 15 quadros, cabe em praticamente qualquer lugar -- e quem esta mal ve a tela borrada em
-// vez de nao ver nada e perder o lugar na sala.
+// Cada degrau declarado vira uma camada, e a captura fica sendo a de cima. Declarar UM
+// degrau, portanto, publica duas camadas.
+//
+// Eram três, e a do meio foi retirada porque ela é paga por quem transmite, em processador.
+//
+// O custo de codificar acompanha os pixels por segundo, e as três camadas não custam o
+// mesmo. Numa captura de 1920x810 a 30 quadros: a de cima são 47 Mpx/s, a do meio
+// (1280x540) são 21, e a de baixo (640x270 a 15 quadros) são 2,6. A do meio sozinha é
+// 30% de tudo -- treze vezes o que custa a de baixo.
+//
+// Quem paga isso é o computador de quem compartilha, e sem placa de vídeo que codifique
+// H.264 é o processador dele. Quando ele não dá conta, o codificador engasga: a imagem
+// congela do lado de quem assiste, sem perda de pacote, sem quadro descartado e sem nada
+// no log da rede -- porque os quadros não se perderam, eles não chegaram a existir.
+//
+// O degrau de baixo FICA, e é o que não podia sair. A 300 kbps e 15 quadros ele cabe em
+// praticamente qualquer lugar; quem está com a rede ruim vê a tela borrada em vez de não
+// ver nada e perder o lugar na sala. É também o degrau que a plateia e a grade usam.
+//
+// O que se perde: em multi-view, a tela dos outros vem no degrau de baixo em vez de um
+// intermediário. É uma troca deliberada -- multi-view é para acompanhar de canto de olho,
+// e quem quer LER a tela põe ela no palco, onde a camada de cima continua inteira.
 (function(root) {
   const profiles = {
     economical: {
       label: '720p · Econômica', width: 1280, height: 720, bitrate: 2_000_000,
-      camadas: [[640, 360, 300_000, 15], [960, 540, 900_000, 30]]
+      camadas: [[640, 360, 300_000, 15]]
     },
     high: {
       label: '1080p · Alta', width: 1920, height: 1080, bitrate: 4_000_000,
-      camadas: [[640, 360, 300_000, 15], [1280, 720, 1_500_000, 30]]
+      camadas: [[640, 360, 300_000, 15]]
     },
     ultra: {
       label: '1440p · Máxima', width: 2560, height: 1440, bitrate: 6_000_000,
-      camadas: [[640, 360, 300_000, 15], [1280, 720, 2_000_000, 30]]
+      camadas: [[640, 360, 300_000, 15]]
     }
   };
   const api = { profiles };

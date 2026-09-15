@@ -609,10 +609,11 @@ function opcoesDePublicacao(fonte) {
     videoCodec: codecDePublicacao(),
     simulcast: true,
     degradationPreference: prioridade.degradacao,
-    // Sem esta linha o cliente monta a escada sozinho -- e monta de dois degraus, o de
-    // baixo custando um quarto da captura. Quem assiste de uma rede ruim nao alcanca nem
-    // esse, e o servidor acaba empurrando mais do que o canal aguenta ate derrubar a
-    // pessoa. Os motivos estao por extenso em quality-utils.js.
+    // Sem esta linha o cliente monta a escada sozinho -- e monta o degrau de baixo custando
+    // um quarto da captura. Quem assiste de uma rede ruim nao alcanca nem esse, e o servidor
+    // acaba empurrando mais do que o canal aguenta ate derrubar a pessoa. Declarada aqui, a
+    // escada tem um degrau barato de verdade e NAO tem o do meio, que custava a quem
+    // transmite quase o mesmo que a camada de cima. Os motivos estao em quality-utils.js.
     screenShareSimulcastLayers: camadasDaTela(perfil, prioridade),
     screenShareEncoding: { maxBitrate: tetoParaOCodec(perfil.bitrate), maxFramerate: prioridade.fps }
   };

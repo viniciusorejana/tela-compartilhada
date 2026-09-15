@@ -389,7 +389,13 @@
       const fonte = fonteDaPublicacao(publicacao);
       if (fonte !== 'screen' && fonte !== 'camera') return null;
       const onde = ondeAparece(par.id, fonte);
-      const pelaTela = onde === 'palco' ? V.HIGH : onde === 'grade' ? V.MEDIUM : V.LOW;
+      // A TELA sobe em dois degraus, não três (o porquê está em quality-utils.js). Pedir a
+      // camada do meio numa escada de dois devolve a de CIMA -- o servidor arredonda para a
+      // mais próxima que existe --, e a grade passaria a custar o mesmo que o palco, que é o
+      // oposto do que a grade serve. Então, para a tela, tudo que não está no palco pede o
+      // degrau de baixo. A câmera mantém três degraus e continua usando o do meio.
+      const naGradeQuer = fonte === 'screen' ? V.LOW : V.MEDIUM;
+      const pelaTela = onde === 'palco' ? V.HIGH : onde === 'grade' ? naGradeQuer : V.LOW;
       if (tetoDaConexao === null || tetoDaConexao === undefined) return pelaTela;
       return Math.min(pelaTela, tetoDaConexao);
     }

@@ -49,9 +49,21 @@ de 8 para 4, 1440p de 14 para 6. Os antigos eram números de gravação local, n
 Discord e Meet entregam a mesma tarefa na faixa nova. O teto é orçamento, não meta: o
 codificador gasta o que receber, e cada Mbps a mais é multiplicado pelo tamanho da sala.
 
-**Três tamanhos, três camadas** (`camadaDesejada`). O palco recebe a camada cheia, o card da
-grade a do meio, o quadradinho da plateia a baixa. Mandar 640×360 para um quadradinho de
-duzentos pixels era pagar três vezes pelo que ninguém consegue ver.
+**Três tamanhos, duas camadas na tela** (`camadaDesejada`). O palco recebe a camada cheia;
+a grade e a plateia recebem a baixa. Mandar 640×360 para um quadradinho de duzentos pixels
+era pagar três vezes pelo que ninguém consegue ver.
+
+A tela já teve três camadas, e a do meio saiu. Ela era paga em processador por quem
+compartilha: numa captura de 1920×810 a 30 quadros, a de cima custa 47 Mpx/s, a do meio 21
+e a de baixa 2,6 — a do meio sozinha é 30% do trabalho, treze vezes o degrau barato. Sem
+placa de vídeo que codifique H.264, isso sai do processador de quem transmite, e quando ele
+não dá conta o codificador engasga. O sintoma é imagem congelando com **zero** perda de
+pacote, **zero** quadro descartado e nada no log da rede: os quadros não se perderam, eles
+não chegaram a existir. É o mesmo raciocínio que já tinha tirado a terceira camada da câmera
+no celular. O degrau barato ficou: é ele que segura quem está com a rede ruim.
+
+Em multi-view a tela dos outros passa a vir no degrau de baixo. Troca deliberada —
+multi-view é para acompanhar de canto de olho; quem quer ler põe no palco.
 
 **Teto de câmeras por atividade de voz** (`escolherCameras`). A câmera é a única fonte que
 cresce ao quadrado: numa sala de vinte são 380 fluxos. No máximo seis descem ao mesmo tempo,
