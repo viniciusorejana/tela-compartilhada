@@ -451,9 +451,8 @@
 
     // ---------- Quanto desceu ----------
     //
-    // A soma do que TODO mundo recebeu é, por definição, o que saiu do servidor de mídia. É
-    // também o único jeito de saber isso separado por fonte: o servidor conta pacotes e não
-    // diz de onde vieram, então "a tela custa mais que as câmeras?" não tem resposta lá.
+    // A soma dos relatos estima a saída por fonte, mas não cobre overhead nem clientes
+    // que deixaram de reportar. É contabilidade declarada, nunca evidência contra alguém.
     //
     // O que sobe daqui é o DELTA desde a leitura anterior, nunca o acumulado. Trocar
     // qualidade, codec ou fonte republica a faixa (ver a folga de tolerância, no topo deste
@@ -463,11 +462,12 @@
     const bytesLidos = new Map();
 
     async function medirRecebimento() {
-      const porFonte = { screen: 0, camera: 0, micAudio: 0, screenAudio: 0 };
+      const porFonte = { screen: 0, camera: 0, micAudio: 0, screenAudio: 0, musica: 0 };
       const vistos = new Set();
       const leituras = [];
       peers.forEach(par => par.publicacoes.forEach(publicacao => {
-        const fonte = fonteDaPublicacao(publicacao);
+        const origem = fonteDaPublicacao(publicacao);
+        const fonte = origem === 'micAudio' && par.ehBot ? 'musica' : origem;
         if (!fonte || !publicacao.isSubscribed) return;
         const faixa = publicacao.track;
         if (typeof faixa?.getRTCStatsReport !== 'function') return;
@@ -481,7 +481,7 @@
           const anterior = bytesLidos.get(publicacao.trackSid) || 0;
           bytesLidos.set(publicacao.trackSid, bytes);
           // Contador que andou para trás é faixa reiniciada, não banda devolvida.
-          if (bytes > anterior) porFonte[fonte] += bytes - anterior;
+          porFonte[fonte] += bytes >= anterior ? bytes - anterior : bytes;
         }).catch(() => { /* Faixa encerrada no meio da leitura: sai da janela, sem estrago. */ }));
       }));
       await Promise.all(leituras);

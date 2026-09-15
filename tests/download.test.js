@@ -86,7 +86,9 @@ test('o download tem teto por endereço, e um endereço não gasta a cota do out
   const file = path.join(dir, 'portable.exe');
   await fs.writeFile(file, 'MZ-fixture');
   const app = express();
-  require('../desktop-download')(app, file);
+  // O transporte desta fixture é o proxy conhecido; produção usa a lista explícita
+  // NEXO_PROXIES_CONFIAVEIS, verificada também nos testes de acesso do painel.
+  require('../desktop-download')(app, file, { identificar: req => req.headers['x-forwarded-for'] });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(async () => {

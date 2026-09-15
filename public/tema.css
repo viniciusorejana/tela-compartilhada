@@ -1,0 +1,7 @@
+:root {
+  color-scheme: dark;
+  --bg:#191a24; --bg-2:#20212d; --bg-3:#2a2b3a; --bg-4:#353647;
+  --line:#ffffff0d; --text:#eeeef5; --muted:#a2a2b8;
+  --accent:#8879f6; --accent-hi:#a092ff; --online:#90dfb3; --danger:#f07583;
+  --raio:16px;
+}

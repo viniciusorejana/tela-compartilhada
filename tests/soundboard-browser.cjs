@@ -7,7 +7,7 @@
 // medido antes da correção: 5 fontes vivas e 2 540 ms de sons empilhados só na janela do
 // teste. Não há botão de "parar", então a sala inteira ficava debaixo daquilo até acabar.
 const { chromium } = require('playwright');
-const { spawn } = require('node:child_process');
+const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
@@ -15,7 +15,7 @@ const port = 3219;
 const origin = `http://localhost:${port}`;
 const SALA = 'sala-dos-sons';
 const SEGUNDOS_DO_TOM = 10;
-let server, browser;
+let server, browser, instancia;
 
 // Um WAV sintetizado aqui mesmo, para o teste não depender de um arquivo no repositório
 // nem do ffmpeg estar instalado. Dez segundos é longo o bastante para que cinco disparos
@@ -94,13 +94,8 @@ const medir = page => page.evaluate(() => ({
 }));
 
 (async () => {
-  server = spawn(process.execPath, ['server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_URL: 'https://convite.example' },
-    windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
-  });
-  server.stderr.on('data', pedaco => process.stderr.write(pedaco));
-  server.stdout.on('data', () => {});
+  instancia = await iniciarServidor({ ambiente: { PORT: String(port) } });
+  server = instancia.filho;
   await esperarServidor();
 
   browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
@@ -112,8 +107,8 @@ const medir = page => page.evaluate(() => ({
 
   // Sobe um som pela mesma rota que o botão de enviar usa.
   const envio = await ana.evaluate(async ([bytes, sala, segundos]) => {
-    const resposta = await fetch(`/api/soundboard/${sala}?socket=${encodeURIComponent(socket.id)}&nome=tom&segundos=${segundos}`, {
-      method: 'POST', headers: { 'content-type': 'audio/wav' }, body: new Uint8Array(bytes)
+    const resposta = await fetch(`/api/soundboard/${sala}?nome=tom&segundos=${segundos}`, {
+      method: 'POST', headers: { 'content-type': 'audio/wav', ...window.NexoSessao.cabecalhos() }, body: new Uint8Array(bytes)
     });
     return resposta.json();
   }, [[...tomDeTeste()], SALA, SEGUNDOS_DO_TOM]);
@@ -157,12 +152,12 @@ const medir = page => page.evaluate(() => ({
   console.log('PASS: cortar troca o som em vez de deixar um buraco');
 
   await browser.close();
-  server.kill();
+  await instancia.encerrar();
   console.log('Mesa de sons: tudo certo.');
   process.exit(0);
 })().catch(async erro => {
   console.error(erro);
   try { await browser?.close(); } catch (_) { /* ja fechou */ }
-  server?.kill();
+  await instancia?.encerrar();
   process.exit(1);
 });

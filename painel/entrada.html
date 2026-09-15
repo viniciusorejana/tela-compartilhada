@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Entrar · NEXO</title>
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/tema.css">
+  <link rel="stylesheet" href="/painel/entrada.css">
+  <script src="/painel/entrada.js" defer></script>
+</head>
+<body>
+  <main>
+    <a class="marca" href="/" aria-label="NEXO, início"><img src="/mark.svg" alt="" width="32" height="32"> NEXO</a>
+    <p class="sobretitulo">ACESSO DO SERVIDOR</p>
+    <h1>Seu servidor,<br>em perspectiva.</h1>
+    <p class="descricao">Entre com a chave local para abrir o painel.</p>
+    <form id="entrada">
+      <label for="segredo">Chave de acesso</label>
+      <input id="segredo" name="segredo" type="password" autocomplete="current-password" required maxlength="128" spellcheck="false">
+      <button type="submit">Entrar no painel <span aria-hidden="true">→</span></button>
+      <p id="mensagem" role="status" aria-live="polite"></p>
+    </form>
+    <p class="ajuda">Na máquina do servidor, use <code>npm run painel:chave</code> para consultar sua chave.</p>
+  </main>
+</body>
+</html>

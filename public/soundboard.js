@@ -107,7 +107,7 @@
     if (decodificados.has(som.id) || baixando.has(som.id)) return baixando.get(som.id);
     const contexto = garantirContexto();
     if (!contexto) return null;
-    const tarefa = fetch(enderecoDoSom(som.id))
+    const tarefa = fetch(enderecoDoSom(som.id), { headers: window.NexoSessao?.cabecalhos() || {} })
       .then(resposta => (resposta.ok ? resposta.arrayBuffer() : Promise.reject(new Error(String(resposta.status)))))
       .then(bytes => contexto.decodeAudioData(bytes))
       .then(buffer => { decodificados.set(som.id, buffer); baixando.delete(som.id); return buffer; })
@@ -266,11 +266,11 @@
       ? `"${nome}" tem ${Math.round(segundos)}s — mando os primeiros ${SEGUNDOS_MAXIMOS_DO_SOM}s…`
       : `Enviando "${nome}"…`;
     try {
-      const parametros = new URLSearchParams({ socket: socket.id, nome });
+      const parametros = new URLSearchParams({ nome });
       if (segundos !== null) parametros.set('segundos', String(Math.round(segundos)));
       const resposta = await fetch(`/api/soundboard/${encodeURIComponent(roomCode)}?${parametros}`, {
         method: 'POST',
-        headers: { 'Content-Type': arquivo.type || 'application/octet-stream' },
+        headers: { 'Content-Type': arquivo.type || 'application/octet-stream', ...window.NexoSessao?.cabecalhos() },
         body: arquivo
       });
       const corpo = await resposta.json().catch(() => ({}));

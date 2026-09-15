@@ -1057,6 +1057,9 @@ async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false } =
   await garantirNaSala(estado);
 
   const tocavaAntes = Boolean(estado.tocando);
+  // A busca cedeu a execução. Outra pessoa pode ter ocupado a fila enquanto isto
+  // resolvia o link; a cota precisa continuar valendo depois do await.
+  if (estado.fila.length + novas.length > MAXIMO_NA_FILA) throw new Error('A fila foi preenchida durante a busca. Tente novamente depois.');
   estado.fila.push(...novas);
   if (!tocavaAntes) seguirParaProxima(estado);
   else { avisarSala(sala); adiantarProxima(estado); }

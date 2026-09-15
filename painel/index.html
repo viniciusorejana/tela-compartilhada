@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Telemetria · NEXO</title>
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/tema.css">
+  <link rel="stylesheet" href="/painel/painel.css">
+  <script type="module" src="/painel/painel.js"></script>
+</head>
+<body>
+  <a class="pular" href="#conteudo">Ir para o conteúdo</a>
+  <aside class="lateral">
+    <a class="marca" href="/" aria-label="NEXO, início"><img src="/mark.svg" alt="" width="30" height="30"> NEXO <span>SERVER</span></a>
+    <p class="rotulo-lateral">VISÃO DO SERVIDOR</p>
+    <nav aria-label="Seções do painel">
+      <a href="#custo" class="selecionado"><span aria-hidden="true">↗</span> Custo e banda</a>
+      <a href="#saude"><span aria-hidden="true">◈</span> Abuso e saúde <span id="numero-alertas" class="contagem">0</span></a>
+      <a href="#salas"><span aria-hidden="true">▦</span> Salas e uso</a>
+      <a href="#recursos"><span aria-hidden="true">≋</span> Recursos</a>
+    </nav>
+    <div class="lateral-fim"><span class="selo">ACESSO PRIVADO</span><p>Funcionalidades em perspectiva.<br>Identidade só nos alertas.</p><button id="sair" class="discreto">Sair do painel <span aria-hidden="true">↗</span></button></div>
+  </aside>
+  <div class="pagina">
+    <header class="topo"><span>Servidor <span class="separador">/</span> Telemetria</span><div class="conexao"><span id="ponto-conexao" class="ponto"></span><span id="conexao" role="status">Conectando…</span></div></header>
+    <main id="conteudo" tabindex="-1">
+      <div class="cabecalho-pagina">
+        <div><p class="sobretitulo">NEXO · OBSERVABILIDADE</p><h1>O que passa por aqui.</h1><p class="subtitulo">Banda, uso e saúde do seu servidor, em um só lugar.</p></div>
+        <div class="filtro"><label for="periodo">Período</label><select id="periodo"><option value="hoje">Hoje</option><option value="7d" selected>Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="tudo">Todo o histórico retido</option></select></div>
+      </div>
+      <p id="erro" class="aviso" role="alert" hidden></p>
+      <section id="custo" aria-labelledby="titulo-custo">
+        <div class="titulo-secao"><h2 id="titulo-custo">Custo e banda</h2><span class="selo">POR FUNCIONALIDADE</span></div>
+        <nexo-resumo></nexo-resumo>
+        <div class="grade principal"><nexo-fontes class="cartao"></nexo-fontes><nexo-serie class="cartao"></nexo-serie></div>
+        <div class="grade dupla"><nexo-ranking class="cartao"></nexo-ranking><nexo-projecao class="cartao"></nexo-projecao></div>
+        <nexo-horarios class="cartao"></nexo-horarios>
+      </section>
+      <section id="saude" aria-labelledby="titulo-saude">
+        <div class="titulo-secao"><h2 id="titulo-saude">Abuso e saúde</h2><span class="selo">MEDIDO NO SERVIDOR</span></div>
+        <nexo-alertas class="cartao"></nexo-alertas>
+        <div class="grade dupla"><nexo-eventos class="cartao"></nexo-eventos><nexo-saude class="cartao"></nexo-saude></div>
+        <nexo-limites class="cartao"></nexo-limites>
+      </section>
+      <section id="salas" aria-labelledby="titulo-salas">
+        <div class="titulo-secao"><h2 id="titulo-salas">Salas e uso</h2><span class="selo">PESSOAS E BOTS SEPARADOS</span></div>
+        <nexo-uso class="cartao"></nexo-uso>
+        <nexo-salas class="cartao"></nexo-salas>
+      </section>
+      <section id="recursos" aria-labelledby="titulo-recursos">
+        <div class="titulo-secao"><h2 id="titulo-recursos">Recursos do servidor</h2><span class="selo">COLETA A CADA 15 S</span></div>
+        <nexo-recursos class="cartao"></nexo-recursos>
+      </section>
+      <footer class="rodape"><span>NEXO · Telemetria local</span><span id="cobertura">Aguardando a primeira coleta.</span></footer>
+    </main>
+  </div>
+</body>
+</html>

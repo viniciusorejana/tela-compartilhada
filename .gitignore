@@ -1,6 +1,7 @@
 node_modules
 test-results/
 playwright-report/
+/debug.log
 app/dist/
 native/audio-helper/x64/
 native/audio-helper/Applicat.*/
@@ -9,3 +10,4 @@ native/audio-agent/AgenteAudio/
 native/livekit/
 native/musica/
 native/medicao/
+native/painel/

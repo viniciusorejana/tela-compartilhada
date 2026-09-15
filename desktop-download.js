@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const { ipDoPedido } = require('./telemetria/origem');
 
 // O executavel do Windows. Um arquivo so, fixo: nada que venha de um pedido vira caminho.
 //
@@ -27,21 +28,18 @@ const historico = new Map();   // cliente -> [instantes]
 // o proxy local. Sem olhar o cabecalho, o limite por pessoa viraria um limite para a sala
 // inteira: o primeiro a baixar gastaria a cota de todos.
 //
-// O cabecalho so vale quando quem o entrega e o proxy local. Vindo de qualquer outro lugar
-// ele e apenas texto que o cliente escreveu, e usa-lo seria oferecer a forma de burlar o
-// proprio limite.
+// O cabeçalho só vale quando o proxy consta de NEXO_PROXIES_CONFIAVEIS. Mesmo um túnel
+// local precisa ser declarado: localhost, sozinho, não prova a origem do cabeçalho.
 function quemEsta(req) {
-  const conexao = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-  const ehProxyLocal = conexao === '127.0.0.1' || conexao === '::1';
-  if (ehProxyLocal) {
-    const encaminhado = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    if (encaminhado) return encaminhado;
-  }
-  return conexao || 'desconhecido';
+  return ipDoPedido(req);
 }
 
 function dentroDoLimite(cliente) {
   const agora = Date.now();
+  if (!historico.has(cliente) && historico.size >= 2048) {
+    esquecerAntigos();
+    if (historico.size >= 2048) return { ok: false, segundos: 60 };
+  }
   const recentes = (historico.get(cliente) || []).filter(quando => agora - quando < MINUTOS_DA_JANELA * 60_000);
   if (recentes.length >= DOWNLOADS_POR_JANELA) return { ok: false, segundos: Math.ceil((MINUTOS_DA_JANELA * 60_000 - (agora - recentes[0])) / 1000) };
   if ((emCurso.get(cliente) || 0) >= DOWNLOADS_SIMULTANEOS_POR_PESSOA) return { ok: false, segundos: 0 };
@@ -61,7 +59,7 @@ function esquecerAntigos() {
   }
 }
 
-module.exports = function desktopDownload(app, file) {
+module.exports = function desktopDownload(app, file, { permitir = () => true, identificar = quemEsta } = {}) {
   const url = '/downloads/SalaCompartilhada.exe';
   const faxina = setInterval(esquecerAntigos, MINUTOS_DA_JANELA * 60_000);
   faxina.unref?.();
@@ -84,6 +82,7 @@ module.exports = function desktopDownload(app, file) {
     } catch (error) { next(error); }
   });
   app.get(url, async (req, res, next) => {
+    if (!permitir(req)) return res.status(429).set('Retry-After', '60').end();
     res.set({
       // Antes era "no-store", o que mandava o navegador esquecer o arquivo assim que ele
       // chegava: clicar de novo rebaixava tudo. Com revalidacao, o pedido seguinte carrega
@@ -98,7 +97,7 @@ module.exports = function desktopDownload(app, file) {
     try {
       if (!await artifact()) return res.status(503).type('text').send('O aplicativo para Windows ainda não está disponível. Você pode entrar na sala pelo navegador.');
 
-      const cliente = quemEsta(req);
+      const cliente = identificar(req);
       const permissao = dentroDoLimite(cliente);
       if (!permissao.ok) {
         if (permissao.segundos) res.set('Retry-After', String(permissao.segundos));

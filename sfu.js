@@ -17,12 +17,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { caminhoDoBinario, VERSAO } = require('./scripts/baixar-livekit.cjs');
+const telemetriaLivekit = require('./telemetria/livekit');
 
-const PASTA = path.join(__dirname, 'native', 'livekit');
+const PASTA = path.resolve(process.env.NEXO_PASTA_SFU || path.join(__dirname, 'native', 'livekit'));
+let portaWebhook = Number(process.env.PORT) || 3000;
 const ARQUIVO_DE_CHAVES = path.join(PASTA, 'chaves.json');
 const ARQUIVO_DE_CONFIG = path.join(PASTA, 'livekit.yaml');
 
 const PORTA_LOCAL = Number(process.env.SFU_PORT) || 7880;
+const PORTA_METRICAS = Number(process.env.SFU_METRICAS_PORT) || 7883;
 const PORTA_TCP = Number(process.env.SFU_TCP_PORT) || 7881;
 // UMA porta de midia, nao uma faixa. Com uma faixa, o servidor de midia abre uma porta por
 // conexao: dez regras para acertar no roteador em vez de uma, dez associacoes de NAT para o
@@ -125,6 +128,8 @@ let encerrando = false;
 let tentativasSeguidas = 0;
 let horaDoUltimoInicio = 0;
 let timerDeReinicio = null;
+let reiniciosTotais = 0;
+let validarAcesso = null;
 const MAXIMO_DE_REINICIOS = 8;
 const SEGUNDOS_PARA_CONSIDERAR_ESTAVEL = 60;
 
@@ -197,6 +202,14 @@ async function escreverConfig() {
 
   const linhas = [
     `port: ${PORTA_LOCAL}`,
+    'prometheus:',
+    `  port: ${PORTA_METRICAS}`,
+    '  username: nexo-metricas',
+    `  password: ${crypto.createHmac('sha256', apiSecret).update('metricas').digest('hex')}`,
+    'webhook:',
+    `  api_key: ${apiKey}`,
+    '  urls:',
+    `    - http://127.0.0.1:${portaWebhook}/api/telemetria/livekit`,
     // O 7880 so escuta em localhost: quem chega de fora passa obrigatoriamente pelo proxy
     // do Node, entao abrir essa porta no roteador por engano nao expoe nada.
     'bind_addresses:',
@@ -250,8 +263,10 @@ function encerrarOrfaos(binario) {
   } catch (_) { /* Nenhum órfão, ou nada que possamos encerrar: seguir e deixar o log dizer. */ }
 }
 
-async function iniciarSfu() {
-  const binario = caminhoDoBinario();
+async function iniciarSfu(portaHttp) {
+  if (Number.isInteger(portaHttp) && portaHttp > 0) portaWebhook = portaHttp;
+  if (process.env.NEXO_SEM_MIDIA === '1') { estado.motivo = 'desativado'; return estado; }
+  const binario = path.join(PASTA, path.basename(caminhoDoBinario()));
   if (!fs.existsSync(binario)) {
     estado.motivo = 'binario-ausente';
     console.error(`\nO servidor de mídia não está instalado em ${binario}.`);
@@ -275,12 +290,16 @@ async function iniciarSfu() {
   aguardarProntidao();
 
   const registrar = (fluxo, prefixo) => {
-    let restante = '';
+    let restante = '', ultimoAviso = 0;
     fluxo.setEncoding('utf8');
     fluxo.on('data', pedaco => {
       const linhas = (restante + pedaco).split('\n');
-      restante = linhas.pop();
-      linhas.filter(Boolean).forEach(linha => console.log(`${prefixo} ${linha}`));
+      restante = linhas.pop().slice(-8192);
+      // O SFU inclui identidade e endereço nos logs estruturados. O painel guarda
+      // nomes apenas em alertas; o console precisa respeitar a mesma escolha.
+      if (Date.now() - ultimoAviso > 60000 && linhas.some(linha => /\b(ERROR|FATAL|WARN)\b|"level":"(?:error|warn)"/i.test(linha))) {
+        ultimoAviso = Date.now(); console.error(`${prefixo} O SFU registrou avisos. Confira saúde e reinícios no painel.`);
+      }
     });
   };
   registrar(processo.stdout, '[mídia]');
@@ -327,6 +346,7 @@ function reiniciarDepoisDeCair() {
   }
   const espera = Math.min(30, 2 ** tentativasSeguidas);
   tentativasSeguidas++;
+  reiniciosTotais++;
   console.error(`Subindo de novo em ${espera}s (tentativa ${tentativasSeguidas}).\n`);
   timerDeReinicio = setTimeout(() => { timerDeReinicio = null; if (!encerrando) iniciarSfu(); }, espera * 1000);
   timerDeReinicio.unref?.();
@@ -371,7 +391,7 @@ function encerrarSfu() {
   processo = null;
 }
 for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-  process.on(sinal, () => { encerrarSfu(); process.exit(0); });
+  process.on(sinal, encerrarSfu);
 }
 process.on('exit', encerrarSfu);
 
@@ -407,6 +427,7 @@ function criarToken(sala, identidade, nome, { podeReceber = true } = {}) {
 // porta extra, certificado ou dominio proprio para o WebSocket.
 function instalarProxy(app, server) {
   app.use('/rtc', (req, res) => {
+    if (validarAcesso && !validarAcesso(req)) return res.status(403).end();
     const alvo = http.request({
       host: '127.0.0.1', port: PORTA_LOCAL, method: req.method,
       path: '/rtc' + req.url, headers: { ...req.headers, host: `127.0.0.1:${PORTA_LOCAL}` }
@@ -425,6 +446,7 @@ function instalarProxy(app, server) {
     let caminho = '';
     try { caminho = new URL(req.url, 'http://local').pathname; } catch (_) { return; }
     if (caminho !== '/rtc' && !caminho.startsWith('/rtc/')) return;
+    if (validarAcesso && !validarAcesso(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
 
     // Sem desligar o algoritmo de Nagle, os pacotes pequenos de ping/pong ficam retidos
     // esperando companhia. O cliente conclui que o servidor sumiu e derruba a sessao no
@@ -452,4 +474,37 @@ function instalarProxy(app, server) {
   });
 }
 
-module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL };
+function tokenDeServidor(video) {
+  const { apiKey, apiSecret } = lerOuCriarChaves();
+  const cabecalho = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const agora = Math.floor(Date.now() / 1000);
+  const corpo = base64url(JSON.stringify({ iss: apiKey, nbf: agora - 5, exp: agora + 60, video }));
+  return `${cabecalho}.${corpo}.${crypto.createHmac('sha256', apiSecret).update(`${cabecalho}.${corpo}`).digest('base64url')}`;
+}
+async function consultar(metodo, corpo) {
+  if (!['ListRooms', 'ListParticipants', 'RemoveParticipant'].includes(metodo)) throw new Error('Método não permitido.');
+  const video = metodo === 'ListRooms' ? { roomList: true } : { roomAdmin: true, room: corpo.room };
+  return JSON.parse(await telemetriaLivekit.pedir({ porta: PORTA_LOCAL, caminho: `/twirp/livekit.RoomService/${metodo}`, corpo: JSON.stringify(corpo), autorizacao: `Bearer ${tokenDeServidor(video)}` }));
+}
+function metricas() {
+  const { apiSecret } = lerOuCriarChaves();
+  const senha = crypto.createHmac('sha256', apiSecret).update('metricas').digest('hex');
+  return telemetriaLivekit.pedir({ porta: PORTA_METRICAS, caminho: '/metrics', autorizacao: `Basic ${Buffer.from(`nexo-metricas:${senha}`).toString('base64')}` });
+}
+function identidadeDoToken(token) {
+  try {
+    if (typeof token !== 'string' || token.length > 8192) return null;
+    const [cabecalho, corpo, assinatura] = token.split('.');
+    const { apiKey, apiSecret } = lerOuCriarChaves();
+    const esperado = crypto.createHmac('sha256', apiSecret).update(`${cabecalho}.${corpo}`).digest();
+    const recebido = Buffer.from(assinatura, 'base64url');
+    if (JSON.parse(Buffer.from(cabecalho, 'base64url')).alg !== 'HS256' || recebido.length !== esperado.length || !crypto.timingSafeEqual(esperado, recebido)) return null;
+    const claims = JSON.parse(Buffer.from(corpo, 'base64url'));
+    if (claims.iss !== apiKey || !Number.isFinite(claims.exp) || claims.exp * 1000 < Date.now() || !claims.video?.roomJoin) return null;
+    return { sala: claims.video.room, identidade: claims.sub };
+  } catch (_) { return null; }
+}
+module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken,
+  configurarAcesso: fn => { validarAcesso = fn; },
+  validarWebhook: (corpo, autorizacao) => telemetriaLivekit.validarWebhook(corpo, autorizacao, lerOuCriarChaves()),
+  diagnostico: () => ({ ...estado, pid: processo?.pid || null, uptime: processo ? Math.max(0, (Date.now() - horaDoUltimoInicio) / 1000) : 0, reinicios: reiniciosTotais, tentativasSeguidas }) };

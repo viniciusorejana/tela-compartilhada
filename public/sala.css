@@ -1,4 +1,5 @@
-:root { color-scheme: dark; --bg:#191a24; --bg-2:#20212d; --bg-3:#2a2b3a; --bg-4:#353647; --line:#ffffff0d; --text:#eeeef5; --muted:#a2a2b8; --accent:#8879f6; --accent-hi:#a092ff; --online:#90dfb3; --danger:#f07583; --raio:16px; --barra:84px; }
+@import url('/tema.css');
+:root { --barra:84px; }
 * { box-sizing:border-box; scrollbar-width:thin; scrollbar-color:#45465c transparent; }
 html,body { height:100%; }
 body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; -webkit-font-smoothing:antialiased; }

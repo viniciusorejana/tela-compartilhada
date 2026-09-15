@@ -30,9 +30,9 @@ const sfu = require('./sfu');
 const musica = require('./musica');
 const soundboard = require('./soundboard');
 const medicao = require('./medicao');
+const { iniciarTelemetria } = require('./telemetria');
 
 const app = express();
-require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'));
 const server = http.createServer(app);
 // Precisa vir antes do Socket.IO: os dois escutam "upgrade" no mesmo servidor, e cada um
 // so atende o proprio caminho.
@@ -55,6 +55,9 @@ const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 25000
 });
+const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, salas: () => roomMembers });
+require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'), { permitir: req => telemetria.limitarOrigem(req) });
+app.use('/api/soundboard', telemetria.soundboardHttp);
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));
 app.get('/vendor/livekit-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/LICENSE')));
@@ -92,29 +95,21 @@ app.get('/api/sala-config', (req, res) => {
     if (['https:', 'http:'].includes(configured.protocol)) publicUrl = configured.origin;
   } catch (_) { /* Without configuration, invite links use the browser's origin. */ }
 
+  const preparada = telemetria.prepararSessao(req, res, sala, nome);
+  if (!preparada) return;
+  const { sessao, credencial: credencialSessao } = preparada;
+  const identidade = sessao.identidade;
+  res.set('Cache-Control', 'no-store');
+
   if (!sfu.estado.ativo) {
-    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl });
+    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, credencialSessao });
   }
 
-  // Duas abas com a mesma identidade fazem o servidor de midia derrubar a primeira. O
-  // sufixo aleatorio mantem o nome visivel e ainda assim separa as sessoes.
-  //
-  // A pagina pode pedir o sufixo de volta, e e o que ela faz ao reconectar. Voltar com a
-  // MESMA identidade e o que permite ao servidor de midia entender que e a mesma pessoa:
-  // ele solta a sessao velha e adota a nova. Sorteando um sufixo novo a cada queda, quem
-  // volta de uma oscilacao de rede vira um segundo participante, e o primeiro fica
-  // apodrecendo na lista de todo mundo ate o tempo de espera dele estourar -- com a
-  // imagem congelada, ocupando lugar, e sem que ninguem consiga tirar.
-  //
-  // Aceitar um sufixo de fora nao abre nada que ja nao estivesse aberto: o NOME sempre veio
-  // de fora, e o token continua sendo assinado aqui, com sala e permissoes que a pagina nao
-  // escolhe. So o formato passa -- oito digitos hexadecimais.
-  const sessaoPedida = String(req.query.sessao || '');
-  const sufixo = /^[a-f0-9]{8}$/.test(sessaoPedida) ? sessaoPedida : crypto.randomBytes(4).toString('hex');
-  const identidade = `${nome}#${sufixo}`;
+  // A retomada agora apresenta uma credencial privada da sessão. O sufixo visível aos
+  // pares continua estável, mas conhecê-lo não permite assumir a sessão de outra pessoa.
   // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
   res.set('Cache-Control', 'no-store');
-  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl });
+  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl, credencialSessao });
 });
 
 // A identidade de midia e `nome#sufixo`, e a do bot de musica e `nexo-dj#sala`. Quem se
@@ -147,6 +142,7 @@ const TOKEN_VALIDO = /^[a-f0-9]{16,64}$/i;
 // e capturar audio, o binario ja foi marcado assim mesmo intacto. Ver o aviso de antivirus
 // no README (metadados de versao, ganho de reputacao e envio de falso positivo).
 app.get('/api/agente', (req, res) => {
+  if (!telemetria.limitarOrigem(req)) return res.status(429).set('Retry-After', '60').end();
   const token = String(req.query.token || '');
   if (!TOKEN_VALIDO.test(token)) return res.status(400).send('Token invalido.');
   if (!fs.existsSync(AGENTE_PATH)) {
@@ -164,7 +160,7 @@ app.get('/api/agente', (req, res) => {
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
   fs.createReadStream(AGENTE_PATH).pipe(res);
-  console.log(`Agente baixado para ${hospedeiro} (arquivo: ${nome})`);
+  console.log('Agente de áudio baixado.');
 });
 
 // ---------- Mesa de sons ----------
@@ -175,9 +171,8 @@ app.get('/api/agente', (req, res) => {
 // download ainda ganha cache do navegador, entao cada um baixa cada som uma vez so.
 const CODIGO_DE_SALA = /^[a-z0-9_-]{4,32}$/;
 
-// Quem sobe ou apaga um som precisa estar NA sala. O identificador do socket serve de
-// credencial: ele e sorteado pelo servidor, so o dono dele o conhece, e a conferencia
-// abaixo diz em que sala ele esta de verdade.
+// A credencial privada foi conferida antes de ler o corpo. Esta consulta confirma que
+// o socket autenticado continua na sala, inclusive depois de converter o áudio.
 function socketEstaNaSala(socketId, roomCode) {
   return Boolean(socketId) && socketRoomCodes.get(String(socketId)) === roomCode;
 }
@@ -187,12 +182,14 @@ function nomeDoSocket(socketId) {
   return roomMembers.get(roomCode)?.get(String(socketId))?.name || 'Alguém';
 }
 
-app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.BYTES_MAXIMOS_DO_SOM + 1024 }), async (req, res) => {
+app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.BYTES_MAXIMOS_DO_SOM }), async (req, res, next) => {
   const sala = String(req.params.sala || '').toLowerCase();
   if (!CODIGO_DE_SALA.test(sala)) return res.status(400).json({ error: 'Código de sala inválido.' });
-  const socketId = String(req.query.socket || '');
+  const socketId = req.sessaoNexo.socket?.id;
   if (!socketEstaNaSala(socketId, sala)) return res.status(403).json({ error: 'Entre na sala antes de enviar sons.' });
 
+  req.processandoUpload = true;
+  try {
   const { erro, som, cortado } = await soundboard.adicionar(sala, {
     nome: req.query.nome,
     tipo: req.headers['content-type'],
@@ -203,9 +200,15 @@ app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.B
     segundos: req.query.segundos
   });
   if (erro) return res.status(400).json({ error: erro });
+  if (!socketEstaNaSala(socketId, sala)) {
+    soundboard.remover(sala, som.id);
+    return res.status(403).json({ error: 'A sessão saiu da sala durante o envio.' });
+  }
 
   io.to(roomName(sala)).emit('soundboard-lista', { sons: soundboard.listar(sala), espaco: soundboard.espacoDaSala(sala) });
   res.json({ ok: true, som, cortado });
+  } catch (erro) { next(erro); }
+  finally { req.terminarUpload?.(); }
 });
 
 app.get('/api/soundboard/:sala/:id', (req, res) => {
@@ -213,6 +216,7 @@ app.get('/api/soundboard/:sala/:id', (req, res) => {
   if (!CODIGO_DE_SALA.test(sala)) return res.status(400).end();
   const som = soundboard.obter(sala, req.params.id);
   if (!som) return res.status(404).end();
+  if (!telemetria.downloadPermitido(req, res, som.tamanho)) return;
 
   res.setHeader('Content-Type', som.tipo);
   res.setHeader('Content-Length', som.tamanho);
@@ -224,12 +228,16 @@ app.get('/api/soundboard/:sala/:id', (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.end(som.bytes);
 });
+app.use('/api/soundboard', (erro, req, res, _next) => {
+  req.terminarUpload?.();
+  if (!res.headersSent) res.status(erro.type === 'entity.too.large' ? 413 : 400).json({ error: 'Não foi possível receber o som.' });
+});
 
 // roomCode -> Map<socketId, { name, state }>
 const roomMembers = new Map();
 
 // Chat da sala. Fica na conexao de sinalizacao, que ja existe e passa o tempo todo ociosa:
-// video e voz vao ponto a ponto e nao encostam nisso. O historico serve para quem entra
+// vídeo e voz passam pelo SFU e não encostam nisso. O histórico serve para quem entra
 // depois nao achar a sala muda, e vive so na memoria -- some quando a sala esvazia.
 const HISTORICO_MAXIMO = 80;
 const BYTES_MAXIMOS_DO_HISTORICO = 6 * 1024 * 1024;
@@ -277,12 +285,16 @@ function avisarStatusDoAgente(token) {
 
 // Os agentes falam WebSocket puro (bem mais simples de implementar em C++ que o
 // protocolo do Socket.IO). Roteamos o upgrade manualmente para nao brigar com o Socket.IO.
-const wssAgentes = new WebSocketServer({ noServer: true });
+const wssAgentes = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 
 server.on('upgrade', (req, socket, head) => {
   let caminho = '';
   try { caminho = new URL(req.url, 'http://local').pathname; } catch (_) { return; }
   if (caminho !== '/agente') return; // deixa o Socket.IO cuidar do resto
+
+  if (wssAgentes.clients.size >= 128 || !telemetria.limitarOrigem(req, 'conexao')) {
+    socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return;
+  }
 
   const token = new URL(req.url, 'http://local').searchParams.get('token') || '';
   if (!TOKEN_VALIDO.test(token)) {
@@ -312,10 +324,12 @@ wssAgentes.on('connection', (ws) => {
   const anterior = agentesPorToken.get(token);
   if (anterior && anterior !== ws) anterior.terminate();
   agentesPorToken.set(token, ws);
-  console.log(`Agente conectado (token ${token.slice(0, 8)}...)`);
+  console.log('Agente de áudio conectado.');
   avisarStatusDoAgente(token);
 
   ws.on('message', (dados, ehBinario) => {
+    const navegador = io.sockets.sockets.get(navegadoresPorToken.get(token));
+    if (!telemetria.agentePermitido(token, dados, ehBinario, navegador)) { ws.close(1008, 'Limite temporário de áudio'); return; }
     if (ehBinario) {
       // PCM do computador do participante -> navegador dele, no mesmo formato que o
       // caminho local ja usa (44100 Hz, estereo, 16 bits). So faz sentido com um
@@ -354,7 +368,7 @@ wssAgentes.on('connection', (ws) => {
     if (agentesPorToken.get(token) === ws) {
       agentesPorToken.delete(token);
       portasLocaisPorToken.delete(token);
-      console.log(`Agente desconectado (token ${token.slice(0, 8)}...)`);
+      console.log('Agente de áudio desconectado.');
       avisarStatusDoAgente(token);
     }
   });
@@ -644,11 +658,12 @@ musica.configurar({
 musica.definirCanalDeMensagens(falarComoBot);
 
 io.on('connection', (socket) => {
-  console.log(`Cliente conectado: ${socket.id}`);
+  telemetria.instalarSocket(socket);
 
   function sairDaSalaAtual() {
     const roomCode = roomCodeForSocket(socket);
     if (!roomCode) return;
+    telemetria.saiu(socket);
     socket.leave(roomName(roomCode));
     const membros = roomMembers.get(roomCode);
     if (membros) {
@@ -681,23 +696,29 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', (requestedCode, displayName, identidadeDeMidia, callback) => {
     const roomCode = String(requestedCode || 'principal').toLowerCase();
+    const sessao = socket.data.sessaoNexo;
+    if (roomCode !== sessao.sala || (!roomMembers.has(roomCode) && roomMembers.size >= 512)) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Sessão inválida ou capacidade de salas atingida.' });
+      return;
+    }
     if (!/^[a-z0-9_-]{4,32}$/.test(roomCode)) {
       if (typeof callback === 'function') callback({ ok: false, error: 'Codigo de sala invalido.' });
       return;
     }
-    const name = String(displayName || 'Convidado').trim().slice(0, 40) || 'Convidado';
+    const name = sessao.nome;
 
     // A saida da sala anterior tem de ser anunciada com a identidade ANTIGA. Gravar a nova
     // antes faria o aviso de "fulano saiu" carregar o nome de quem acabou de chegar: os
     // outros tirariam da lista a pessoa errada e deixariam a que saiu parada la.
     sairDaSalaAtual();
-    socket.data.identidadeDeMidia = typeof identidadeDeMidia === 'string' ? identidadeDeMidia.slice(0, 80) : null;
+    socket.data.identidadeDeMidia = sessao.identidade;
 
     socket.join(roomName(roomCode));
     socketRoomCodes.set(socket.id, roomCode);
     const membros = membrosDaSala(roomCode);
     const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state }));
     membros.set(socket.id, { name, state: estadoPadrao() });
+    telemetria.entrou(socket);
 
     if (typeof callback === 'function') {
       // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda. A
@@ -717,7 +738,6 @@ io.on('connection', (socket) => {
     // dispara o "peer-left", tira a pessoa da lista de todo mundo, e nada a traz de volta
     // ate o luto vencer, porque a sessao de midia continua sendo a mesma.
     socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null });
-    console.log(`${socket.id} (${name}) entrou na sala ${roomCode}`);
   });
 
   socket.on('media-state', (state) => {
@@ -741,6 +761,11 @@ io.on('connection', (socket) => {
   socket.on('medicao-de-banda', (porFonte) => {
     const roomCode = roomCodeForSocket(socket);
     if (!roomCode) return;
+    if (porFonte?.v === 2) {
+      const sessao = socket.data.sessaoNexo;
+      if (!Number.isSafeInteger(porFonte.sequencia) || porFonte.sequencia <= sessao.sequencia) return;
+      sessao.sequencia = porFonte.sequencia;
+    }
     medicao.registrar(roomCode, porFonte, roomMembers.get(roomCode)?.size || 0);
   });
 
@@ -791,7 +816,7 @@ io.on('connection', (socket) => {
         return;
       }
       comandarAgente(token, { acao: 'iniciar', familia: familiaPedida });
-      console.log(`Agente do token ${token.slice(0, 8)}... iniciou a captura (${familiaPedida}).`);
+      console.log('Agente iniciou a captura de áudio.');
       return;
     }
 
@@ -838,7 +863,7 @@ io.on('connection', (socket) => {
     const captures = [capture];
     audioCaptureProcesses.set(socket.id, captures);
     misturarAudio(socket, captures);
-    console.log(`Audio do sistema para ${socket.id}: ${argumentos[0]} ${alvo}.`);
+    console.log('Captura de áudio local iniciada.');
 
     capture.stderr.on('data', (chunk) => console.error(`Audio helper: ${chunk}`));
     capture.on('close', (codigo) => {
@@ -884,6 +909,9 @@ io.on('connection', (socket) => {
 
     const texto = String(dados?.texto || '').slice(0, 400).trim();
     if (!texto) return;
+    const terminarBusca = telemetria.comecarBusca(socket, texto);
+    if (!terminarBusca) return;
+    try {
 
     // O que a pessoa escreveu aparece para todo mundo antes de qualquer coisa acontecer:
     // uma busca demora alguns segundos, e sem este eco a sala fica sem saber que alguem
@@ -894,6 +922,7 @@ io.on('connection', (socket) => {
       return falarComoBot(roomCode, 'O bot não está instalado neste servidor. Rode `npm run musica:instalar` na máquina que hospeda a sala.');
     }
     await interpretarComandoDeMusica(roomCode, texto, membro.name);
+    } finally { terminarBusca(); }
   });
 
   socket.on('musica-estado', (callback) => {
@@ -930,9 +959,7 @@ io.on('connection', (socket) => {
     // Dois cliques por segundo ja e mais do que qualquer pessoa aperta de proposito, e o
     // suficiente para uma aba com defeito (ou alguem se divertindo) virar um zumbido na
     // sala inteira.
-    const agora = Date.now();
-    if (agora - (socket.data.ultimoSom || 0) < 400) return;
-    socket.data.ultimoSom = agora;
+    // O intervalo e a cota são aplicados antes do handler pelo limitador central.
 
     io.to(roomName(roomCode)).emit('soundboard-tocou', { id: som.id, nome: som.nome, por: membro.name, porId: socket.id });
   });
@@ -1028,12 +1055,13 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const publicUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
 server.listen(PORT, HOST, () => {
+  process.send?.({ tipo: 'pronto', porta: server.address().port });
   console.log(`\nServidor rodando em ${publicUrl}`);
   console.log(`  -> Entrar na sala: ${publicUrl}/sala\n`);
-  sfu.iniciarSfu();
+  sfu.iniciarSfu(server.address().port);
   // Um download que tenha sobrevivido a uma queda feia do processo anterior nao pode
   // continuar rodando sem dono.
-  musica.encerrarOrfaos();
+  if (process.env.NEXO_SEM_MIDIA !== '1') musica.encerrarOrfaos();
   // As ferramentas do bot sao conferidas em segundo plano: elas nao seguram a abertura da
   // sala, e a sala funciona inteira sem elas -- so o canal de musica fica de fora.
   if (!musica.disponivel()) {
@@ -1043,6 +1071,12 @@ server.listen(PORT, HOST, () => {
 
 // Sem isto, um Ctrl+C deixaria o bot baixando musica em segundo plano e segurando uma
 // sessao no servidor de midia.
-for (const sinal of ['SIGINT', 'SIGTERM']) {
-  process.on(sinal, () => { musica.encerrarTudo().finally(() => process.exit(0)); });
+let encerrandoServidor = false;
+function encerrarServidor() {
+  if (encerrandoServidor) return;
+  encerrandoServidor = true; sfu.encerrarSfu();
+  Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo()]).finally(() => process.exit(0));
 }
+for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sinal, encerrarServidor);
+// Supervisores locais e as fixtures podem pedir a mesma saída limpa pelo canal IPC.
+process.on('message', mensagem => { if (mensagem?.tipo === 'encerrar') encerrarServidor(); });

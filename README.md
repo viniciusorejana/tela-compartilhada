@@ -31,6 +31,13 @@ Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev
 mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois — e o bot de
 música exige as ferramentas baixadas por `npm run musica:instalar`.
 
+## Painel privado de telemetria
+
+O dashboard de custo, banda, limites de uso e saúde sobe junto com o servidor em `/painel`.
+Na máquina do servidor, execute `npm run painel:chave` para consultar a chave de acesso.
+Consulte [acesso remoto, contabilidade, limites e testes](docs/telemetria.md) para configurar
+HTTPS/proxy e entender a cobertura dos números. Verificações: `npm test` e `npm run test:painel`.
+
 ## Requisitos
 
 - Windows 10/11 para executar o helper nativo de captura de audio por aplicativo.

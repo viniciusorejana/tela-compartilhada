@@ -101,25 +101,12 @@ const suportaTelaCheia = Boolean(
 );
 
 let socket = null;
-// O sufixo que separa ESTA aba das outras dentro do servidor de midia. Sorteado uma vez
-// por carregamento da pagina e repetido em cada pedido de credencial -- inclusive nos
-// pedidos que uma reconexao faz.
-//
-// Voltar com a MESMA identidade e o que permite ao servidor de midia entender que quem
-// chegou e quem caiu: ele solta a sessao morta e adota a nova. Sorteando um sufixo a cada
-// volta, quem se reconecta vira um segundo participante, e o primeiro fica apodrecendo na
-// lista de todo mundo -- com a imagem congelada, ocupando lugar -- ate o tempo de espera
-// do servidor vencer.
-const sessaoDeMidia = (() => {
-  try {
-    const bytes = new Uint8Array(4);
-    crypto.getRandomValues(bytes);
-    return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch (_) {
-    // Sem crypto forte o sufixo ainda precisa existir: ele separa abas, nao protege nada.
-    return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
-  }
-})();
+let credencialSessao = null;
+let identidadeSessao = null;
+let sequenciaMedicao = 0;
+window.NexoSessao = { cabecalhos: () => credencialSessao ? { 'X-Nexo-Sessao': credencialSessao } : {} };
+// A credencial privada retoma a mesma identidade de mídia durante uma oscilação.
+// Ela fica só nesta aba; o identificador público não permite assumir outra sessão.
 // Duas identidades diferentes, de proposito: "myId" e como o servidor de midia me conhece
 // (e o que aparece no mapa de participantes); "meuSocketId" e a conexao de sinalizacao, que
 // carimba o autor de cada mensagem do chat.
@@ -175,14 +162,22 @@ let transporte = null;
 // Logo depois de o servidor subir, o servidor de midia ainda esta descobrindo o proprio
 // endereco. Quem abre a pagina nesse intervalo receberia um erro e ficaria sem midia ate
 // recarregar; entao vale a pena esperar em vez de desistir na primeira resposta.
-async function buscarConfigDaSala(nome) {
+let pedidoDeConfig = null;
+function buscarConfigDaSala(nome) {
+  // Chat e mídia podem retomar juntos. Um único pedido evita criar duas sessões
+  // quando o processo reiniciou e a credencial anterior deixou de existir.
+  pedidoDeConfig ||= pedirConfigDaSala(nome).finally(() => { pedidoDeConfig = null; });
+  return pedidoDeConfig;
+}
+async function pedirConfigDaSala(nome) {
   let ultimoMotivo = 'sala-config';
   for (let tentativa = 0; tentativa < 12; tentativa++) {
     const controle = new AbortController();
     const prazo = setTimeout(() => controle.abort(), 8000);
     try {
-      const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}&sessao=${sessaoDeMidia}`, { signal: controle.signal });
+      const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}`, { signal: controle.signal, headers: window.NexoSessao.cabecalhos() });
       const dados = await resposta.json().catch(() => ({}));
+      if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
       ultimoMotivo = dados.error || 'sala-config';
@@ -236,7 +231,7 @@ async function iniciarConexao() {
     if (erro.message !== 'servidor-de-midia-indisponivel') return;
   }
   if (saindoDaSala) return;
-  myId = salaConfig?.identidade || `local-${Math.random().toString(36).slice(2)}`;
+  myId = salaConfig?.identidade || identidadeSessao || `local-${Math.random().toString(36).slice(2)}`;
 
   if (salaConfig && !suportaWebRTC) {
     salaConfig = null;
@@ -295,7 +290,27 @@ async function iniciarConexao() {
     if (saindoDaSala) { await transporte.desconectar(); return; }
   }
 
-  socket = io({ autoConnect: false });
+  socket = io({ autoConnect: false, auth: responder => responder({ credencial: credencialSessao }) });
+  socket.on('limite-atingido', aviso => { status.textContent = aviso.error || 'Aguarde antes de tentar novamente.'; });
+  let renovandoSessao = false;
+  socket.on('connect_error', async erro => {
+    status.textContent = erro.message || 'Não foi possível conectar ao chat.';
+    if (renovandoSessao || saindoDaSala || !erro.message?.includes('Sessão inválida')) return;
+    renovandoSessao = true;
+    try {
+      const antiga = myId;
+      try { salaConfig = await buscarConfigDaSala(myName); }
+      catch (falha) { if (falha.message !== 'servidor-de-midia-indisponivel' || !credencialSessao) throw falha; salaConfig = null; }
+      myId = salaConfig?.identidade || identidadeSessao;
+      if (transporte && salaConfig && antiga !== myId) {
+        await transporte.desconectar();
+        await transporte.conectar(salaConfig.url, salaConfig.token);
+        await republicarTudo();
+      }
+      socket.connect();
+    } catch (_) { status.textContent = 'Não foi possível renovar a sessão. Aguarde e recarregue a página.'; }
+    finally { renovandoSessao = false; }
+  });
   // O canal de musica e a mesa de sons vivem em arquivos proprios e precisam do MESMO
   // socket -- ele e criado aqui, uma vez, e reconecta sozinho, entao os ouvintes deles
   // sobrevivem a uma queda de rede sem serem religados.
@@ -422,8 +437,8 @@ async function iniciarConexao() {
     status.textContent = 'Desconectado do servidor. Tentando reconectar...';
     registrarDiagnostico('socket.disconnect');
   });
-  socket.on('connect_error', () => {
-    status.textContent = 'Não foi possível alcançar o servidor. Tentando novamente...';
+  socket.on('connect_error', erro => {
+    if (!erro.message?.includes('Sessão inválida') && !erro.message?.includes('Aguarde')) status.textContent = 'Não foi possível alcançar o servidor. Tentando novamente...';
     registrarDiagnostico('socket.connect_error');
   });
   // Register listeners before connecting: a fast socket used to beat the RTC fetch.
@@ -1472,7 +1487,7 @@ async function relatarRecebimento() {
   medindoRecebimento = true;
   try {
     const porFonte = await transporte.medirRecebimento();
-    if (Object.values(porFonte).some(bytes => bytes > 0)) socket.emit('medicao-de-banda', porFonte);
+    socket.emit('medicao-de-banda', { v: 2, sequencia: ++sequenciaMedicao, fontes: porFonte });
   } catch (_) { /* Sem medição, a sala não muda em nada: isto é histórico, não funcionamento. */ }
   finally { medindoRecebimento = false; }
 }
@@ -2644,6 +2659,7 @@ function encerrarMidiasDaSala() {
 async function sairDaSala() {
   if (saindoDaSala) return;
   saindoDaSala = true;
+  await Promise.race([relatarRecebimento(), new Promise(resolve => setTimeout(resolve, 400))]);
   encerrarMidiasDaSala();
   if (socket?.connected) {
     await new Promise(resolve => socket.timeout(900).emit('leave-room', () => resolve()));

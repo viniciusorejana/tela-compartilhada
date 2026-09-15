@@ -1,7 +1,7 @@
 // Synthetic capture, real WebRTC between isolated browser contexts. No real camera,
 // microphone, desktop content, public server, or audio helper is used by this test.
 const { chromium, webkit } = require('playwright');
-const { spawn } = require('node:child_process');
+const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -11,7 +11,7 @@ const port = process.env.TEST_BROWSER === 'webkit' ? 3218 : 3217;
 const origin = `http://localhost:${port}`;
 const output = path.join(__dirname, '..', 'test-results', process.env.TEST_BROWSER || 'chromium');
 fs.mkdirSync(output, { recursive: true });
-let server, browser;
+let server, browser, instancia;
 const errors = [];
 
 async function waitServer() {
@@ -131,12 +131,9 @@ async function esperarCodec(page, fonte, esperado) {
 }
 
 (async () => {
-  server = spawn(process.execPath, ['server.js'], {
-    cwd: path.join(__dirname, '..'), env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_URL: 'https://convite.example' },
-    windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
-  });
+  instancia = await iniciarServidor({ midia: true, ambiente: { PORT: String(port), PUBLIC_URL: 'https://convite.example' } });
+  server = instancia.filho;
   server.stderr.on('data', chunk => process.stderr.write(chunk));
-  server.stdout.on('data', chunk => { const t = String(chunk); if (t.includes('[proxy]') || /erro|error/i.test(t)) process.stdout.write(t); });
   await waitServer();
   const engine = process.env.TEST_BROWSER === 'webkit' ? webkit : chromium;
   browser = await engine.launch({ headless: true, executablePath: process.env.TEST_BROWSER_EXECUTABLE || undefined, args: engine === chromium ? ['--autoplay-policy=no-user-gesture-required'] : [] });
@@ -190,6 +187,16 @@ async function esperarCodec(page, fonte, esperado) {
     await route.continue();
   });
   const viewer = await join(mobile, '<img src=x onerror="window.xss=1">');
+  await viewer.evaluate(() => {
+    window.eventosDeFaixas = [];
+    for (const evento of ['trackPublished', 'trackUnpublished', 'trackSubscribed', 'trackUnsubscribed']) {
+      transporte.sala.on(evento, (...args) => {
+        const p = args.find(a => a?.trackSid);
+        window.eventosDeFaixas.push({ evento, sid: p?.trackSid, fonte: p?.source });
+        if (window.eventosDeFaixas.length > 256) window.eventosDeFaixas.shift();
+      });
+    }
+  });
   // A camera chega sozinha e vai ao palco; a tela espera ser pedida. Ate aqui o palco
   // mostra a camera, e nao a tela -- e e assim que tem de ser.
   await viewer.waitForFunction(() => peers.size === 1 && stageVideo.videoWidth > 0 && !stageVideo.paused, null, { timeout: 40000 });
@@ -361,7 +368,12 @@ async function esperarCodec(page, fonte, esperado) {
   await viewer.waitForFunction(() => stageVideo.videoWidth > 0 && !stageVideo.paused);
   assert.equal(await viewer.evaluate(() => [...peers.values()][0].remoteStreams.screen.getVideoTracks()[0].id), originalTrack);
   await host.locator('#screenBtn').click();
-  await viewer.waitForFunction(() => pinned?.source === 'camera');
+  try { await viewer.waitForFunction(() => pinned?.source === 'camera'); }
+  catch (erro) {
+    console.error('Publicações do SDK e eventos:', await viewer.evaluate(() => ({ sdk: [...transporte.sala.remoteParticipants.values()].map(p => ({ id: p.identity, faixas: [...p.trackPublications.values()].map(t => ({ sid: t.trackSid, fonte: t.source })) })), eventos: window.eventosDeFaixas })));
+    console.error('Estado após parar tela:', await viewer.evaluate(() => ({ pinned, estado: [...peers.values()][0]?.state, publicacoes: [...([...peers.values()][0]?.publicacoes.values() || [])].map(p => ({ fonte: p.source, muda: p.isMuted, recebida: p.isSubscribed })), visibilidade: document.visibilityState, conectado: transporte?.conectada })), await host.evaluate(() => ({ screen: Boolean(screenStream), camera: Boolean(cameraStream), faixas: [...transporte.sala.localParticipant.trackPublications.values()].map(p => ({ fonte: p.source, muda: p.isMuted, estado: p.track?.mediaStreamTrack?.readyState })), aviso: status.textContent })));
+    throw erro;
+  }
   await share(host);
   await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0);
   console.log('PASS: replace, stop, and restart screen sharing while camera remains active');
@@ -784,5 +796,5 @@ async function esperarCodec(page, fonte, esperado) {
   console.log(`PASS: responsive layout, dialogs, diagnostics. Engine: ${process.env.TEST_BROWSER || 'chromium'}`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   await browser?.close();
-  server?.kill();
+  await instancia?.encerrar();
 });
