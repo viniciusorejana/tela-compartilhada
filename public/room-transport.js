@@ -115,14 +115,26 @@
         if (!entrada.repetir) pendentes.delete(evento.data.id);
         try { entrada.fn(...entrada.args); } catch (erro) { console.error('relógio:', erro); }
       };
+      // Os identificadores deste relógio começam MUITO acima dos que o navegador entrega.
+      //
+      // Sem isso, os dois relógios sorteiam números da mesma faixa pequena -- 1, 2, 3 -- e
+      // um "clearTimeout" escrito por engano num temporizador daqui não só deixava de
+      // cancelar o certo: ele cancelava um temporizador alheio, do navegador, com o mesmo
+      // número. Falha em dois lugares ao mesmo tempo, e nenhum deles onde se está olhando.
+      // Com a faixa separada, o engano vira um cancelamento que não acerta nada.
+      const PRIMEIRO_ID = 1e9;
       const agendar = repetir => (fn, atraso, ...args) => {
-        const id = ++sequencia;
+        const id = PRIMEIRO_ID + (++sequencia);
         pendentes.set(id, { fn, args, repetir });
         worker.postMessage({ acao: 'iniciar', id, atraso: atraso || 0, repetir });
         return id;
       };
+      // Cancela os dois tipos. Quem recebe um identificador não precisa lembrar de onde ele
+      // veio, e misturar as duas origens deixa de ser capaz de produzir um temporizador
+      // imortal.
       const cancelar = id => {
         if (id === undefined || id === null) return;
+        if (id < PRIMEIRO_ID) { clearTimeout(id); clearInterval(id); return; }
         pendentes.delete(id);
         worker.postMessage({ acao: 'parar', id });
       };
@@ -270,8 +282,8 @@
     // Um par removido nao pode deixar temporizador vivo atras de si: ele voltaria a mexer
     // num objeto que ninguem mais consulta.
     function esquecerTemporizadores(par) {
-      clearTimeout(par?.timeoutDeAusencia);
-      clearTimeout(par?.toleranciaDaTroca);
+      cancelar(par?.timeoutDeAusencia);
+      cancelar(par?.toleranciaDaTroca);
     }
 
     // Uma queda apagava o par inteiro, e com ele o fato de que eu estava assistindo aquela
@@ -611,8 +623,15 @@
 
     // Chamada pela sala a cada "visibilitychange". Voltar é imediato -- a pessoa está
     // olhando agora --, sair espera.
+    // Este cancelamento precisa ser o "cancelar" do relógio da sala, e não o clearTimeout do
+    // navegador. O temporizador nasce em "agendar" -- no relógio do Worker, justamente para
+    // não ser estrangulado pela aba em segundo plano, que é quando ele importa. Cancelado
+    // pela API errada, ele sobrevivia: alt+tab rápido deixava um disparo pendente que
+    // acordava DEPOIS de a pessoa já estar olhando, pausava o vídeo dela e não tinha quem
+    // desfizesse -- só outro visibilitychange, que não vem de quem está parado assistindo.
+    // O áudio continuava, porque a pausa só alcança vídeo. Tela preta com som.
     function definirAbaVisivel(visivel) {
-      clearTimeout(timerDaAba);
+      cancelar(timerDaAba);
       timerDaAba = null;
       if (visivel) {
         if (!pausadaPorAusencia) return;
@@ -636,7 +655,7 @@
       if (!fonte) return;
       // A tela voltou dentro da folga: era um ajuste, nao uma saida. Segue assistindo.
       if (fonte === 'screen' && par.toleranciaDaTroca) {
-        clearTimeout(par.toleranciaDaTroca);
+        cancelar(par.toleranciaDaTroca);
         par.toleranciaDaTroca = null;
       }
       // O som da tela acompanha a imagem: assistir sem ouvir (ou ouvir sem ver) nao e um
@@ -738,8 +757,8 @@
         // sozinho traria de volta um custo que a pessoa nao pediu duas vezes -- mas so
         // depois da folga, porque um simples ajuste de qualidade passa por aqui tambem.
         if (fonteDaPublicacao(publicacao) === 'screen' && par.assistindo) {
-          clearTimeout(par.toleranciaDaTroca);
-          par.toleranciaDaTroca = setTimeout(() => { par.assistindo = false; aoMudarEstado(par); },
+          cancelar(par.toleranciaDaTroca);
+          par.toleranciaDaTroca = agendar(() => { par.assistindo = false; aoMudarEstado(par); },
             SEGUNDOS_DE_TOLERANCIA_NA_TROCA * 1000);
         }
         recalcularEstado(par);
@@ -806,7 +825,7 @@
         const perdida = qualidade === LK.ConnectionQuality.Lost;
         if (perdida === Boolean(par.semConexao)) return;
         par.semConexao = perdida;
-        clearTimeout(par.timeoutDeAusencia);
+        cancelar(par.timeoutDeAusencia);
         par.timeoutDeAusencia = null;
         if (perdida) {
           par.timeoutDeAusencia = agendar(() => {
@@ -1048,7 +1067,7 @@
     function assistir(id, ligar) {
       const par = peers.get(id);
       if (!par || par.assistindo === Boolean(ligar)) return;
-      clearTimeout(par.toleranciaDaTroca);
+      cancelar(par.toleranciaDaTroca);
       par.toleranciaDaTroca = null;
       par.assistindo = Boolean(ligar);
       // Parar de assistir e uma decisao, nao um acidente: apaga a anotacao, ou uma queda

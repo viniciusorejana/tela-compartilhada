@@ -779,6 +779,27 @@ async function esperarCodec(page, fonte, esperado) {
   await quemAssiste.waitForFunction(() => [...peers.values()][0]?.remoteStreams.camera.getTracks().length > 0, null, { timeout: 20000 });
   console.log('PASS: a remote screen only streams after you ask, and stops when you stop watching');
 
+  // Alt+tab rapido nao pode deixar um disparo pendente da pausa de segundo plano.
+  //
+  // O temporizador nasce no relogio do Worker -- de proposito, para a aba escondida nao
+  // estrangular justamente o temporizador que so importa quando ela esta escondida. Se for
+  // cancelado pelo clearTimeout do NAVEGADOR, o identificador nao diz nada a ele: o disparo
+  // sobrevive e acorda 30 s depois, ja com a pessoa olhando. Ele pausa o video dela, e nada
+  // desfaz -- so outro visibilitychange, que nao vem de quem esta parado assistindo. O audio
+  // continua, porque a pausa so alcanca video: tela preta com som, sem nada no console.
+  //
+  // A espera e o proprio prazo da pausa. Encurtar aqui seria testar outra coisa.
+  await quemAssiste.evaluate(() => {
+    localStorage.removeItem('sala.diagnosticoSegundoPlano');
+    for (let i = 0; i < 3; i++) { transporte.definirAbaVisivel(false); transporte.definirAbaVisivel(true); }
+  });
+  await new Promise(resolve => setTimeout(resolve, 33000));
+  assert.deepEqual(await quemAssiste.evaluate(() => ({
+    camera: [...peers.values()][0]?.remoteStreams.camera.getTracks().length,
+    pausas: JSON.parse(localStorage.getItem('sala.diagnosticoSegundoPlano') || '[]').filter(l => l.includes('abaEscondida')).length
+  })), { camera: 1, pausas: 0 });
+  console.log('PASS: alt+tab rápido não deixa a pausa de segundo plano disparar sobre quem já voltou');
+
   // O fantasma: quando a saida vem do servidor de midia, a pessoa ja saiu do mapa ANTES de a
   // limpeza rodar. Se a limpeza depender de encontra-la la, o quadradinho fica orfao para
   // sempre -- que era o defeito relatado em sala cheia e em celular.
