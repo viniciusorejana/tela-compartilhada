@@ -143,12 +143,58 @@ function lerOuCriarChaves() {
   return chaves;
 }
 
+// Anunciar o IP interno só vale se alguém puder alcançá-lo -- e quem pode depende de onde
+// esta máquina está, não de uma preferência.
+//
+// Em casa vale: quem está na mesma rede conecta direto, sem sair e voltar pela internet. Num
+// servidor alugado não vale nada, e custa duas coisas. O endereço privado de lá (172.31.x.x
+// na AWS, 10.128.x.x no GCP) não é alcançável por ninguém de fora, então cada cliente gasta
+// tempo de checagem ICE num candidato que nunca vai responder; e o servidor passa a ter DOIS
+// candidatos TCP no mesmo listener da 7881, que o ICE trata como dois pares válidos do mesmo
+// fio e fica alternando entre eles para sempre -- o log enche de "ice reconnected or switched
+// pair" sem que nada tenha acontecido de verdade.
+//
+// A pergunta "estou num servidor alugado?" tem uma resposta objetiva: o endereço de metadados
+// das nuvens. AWS, GCP, Azure, Oracle, DigitalOcean, Hetzner e Vultr respondem nele; fora de
+// nuvem ele não é roteável, e a tentativa falha em milissegundos em vez de esperar o prazo --
+// então perguntar é barato mesmo na máquina de casa, onde a resposta é sempre "não".
+const ENDERECO_DE_METADADOS = '169.254.169.254';
+const MS_PARA_METADADOS = 400;
+
+function estaNaNuvem() {
+  return new Promise(resolve => {
+    let respondido = false;
+    const responder = valor => { if (!respondido) { respondido = true; try { socket.destroy(); } catch (_) {} resolve(valor); } };
+    const socket = net.connect({ host: ENDERECO_DE_METADADOS, port: 80 });
+    socket.setTimeout(MS_PARA_METADADOS);
+    socket.on('connect', () => responder(true));
+    socket.on('timeout', () => responder(false));
+    socket.on('error', () => responder(false));
+  });
+}
+
 // O YAML e gerado a cada inicializacao a partir do ambiente. Um arquivo editado a mao
 // viraria uma configuracao fantasma: valeria o que esta no disco, nao o que foi pedido.
 async function escreverConfig() {
   const { apiKey, apiSecret } = lerOuCriarChaves();
   // Configurado tem precedência; senão perguntamos por STUN, uma vez, antes de subir.
   const ipPublico = (process.env.NEXO_IP_PUBLICO || '').trim() || (await ipPublicoDescoberto()) || '';
+
+  // Uma lista fechada de endereços é mais segura que uma lista de exclusões: o que aparecer
+  // depois (uma VPN que alguém instalar amanhã) fica de fora sozinho.
+  const escutar = process.env.SFU_IPS
+    ? process.env.SFU_IPS.split(',').map(v => v.trim()).filter(Boolean)
+    : enderecosParaEscutar().map(item => item.ip);
+
+  // Quando o IP público JÁ é um dos endereços desta máquina -- o caso do VPS com IP direto --
+  // não há nada a decidir: os dois candidatos seriam o mesmo endereço, e o problema não
+  // existe. Fora isso, estamos atrás de NAT, e aí a nuvem decide.
+  const publicoEhDaMaquina = Boolean(ipPublico) && escutar.includes(ipPublico);
+  const escolhaManual = (process.env.NEXO_ANUNCIAR_LAN || '').trim();
+  const anunciarLan = escolhaManual
+    ? escolhaManual !== '0'
+    : publicoEhDaMaquina || !(await estaNaNuvem());
+
   const linhas = [
     `port: ${PORTA_LOCAL}`,
     // O 7880 so escuta em localhost: quem chega de fora passa obrigatoriamente pelo proxy
@@ -159,18 +205,13 @@ async function escreverConfig() {
     'rtc:',
     `  udp_port: ${PORTAS_UDP}`,
     `  tcp_port: ${PORTA_TCP}`,
-    // Quem esta na mesma rede local conecta pelo IP interno, sem sair e voltar pela internet.
-    '  advertise_internal_ip: true',
-    // ICE lite so vale para servidor com IP proprio na interface. Este esta atras do
-    // roteador de casa; ligado, a negociacao falharia para quem vem de fora.
-    '  use_ice_lite: false'
+    `  advertise_internal_ip: ${anunciarLan}`,
+    // ICE lite deixaria o servidor só RESPONDER, sem fazer checagem de conectividade. Num
+    // servidor com IP próprio na interface isso é válido e conecta um pouco mais rápido --
+    // mas quando falha, falha de um jeito difícil de diagnosticar, e o ganho é pequeno
+    // demais para ser ligado sozinho. Fica atrás de uma variável, para quem quiser medir.
+    `  use_ice_lite: ${process.env.NEXO_ICE_LITE === '1' && publicoEhDaMaquina}`
   ];
-
-  // Uma lista fechada de endereços é mais segura que uma lista de exclusões: o que aparecer
-  // depois (uma VPN que alguém instalar amanhã) fica de fora sozinho.
-  const escutar = process.env.SFU_IPS
-    ? process.env.SFU_IPS.split(',').map(v => v.trim()).filter(Boolean)
-    : enderecosParaEscutar().map(item => item.ip);
   if (escutar.length) {
     linhas.push('  ips:', '    includes:', ...escutar.map(ip => `      - ${ip}/32`));
   }
@@ -188,7 +229,7 @@ async function escreverConfig() {
   linhas.push('turn:', '  enabled: false', 'keys:', `  ${apiKey}: ${apiSecret}`, '');
   fs.mkdirSync(PASTA, { recursive: true });
   fs.writeFileSync(ARQUIVO_DE_CONFIG, linhas.join('\n'), 'utf8');
-  return { ipPublico };
+  return { ipPublico, anunciarLan, publicoEhDaMaquina };
 }
 
 // Se o Node for encerrado à força (Ctrl+C não chega, o Gerenciador de Tarefas mata, a
@@ -222,7 +263,7 @@ async function iniciarSfu() {
   // Só na primeira subida: num reinício supervisionado o processo anterior já morreu, e
   // varrer de novo só atrasaria a volta.
   if (!tentativasSeguidas) encerrarOrfaos(binario);
-  const { ipPublico } = await escreverConfig();
+  const { ipPublico, anunciarLan, publicoEhDaMaquina } = await escreverConfig();
   if (encerrando) return estado;
   horaDoUltimoInicio = Date.now();
   processo = spawn(binario, ['--config', ARQUIVO_DE_CONFIG], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -264,6 +305,13 @@ async function iniciarSfu() {
   const escutando = enderecosParaEscutar().map(item => `${item.ip} (${item.interface})`).join(', ') || 'nenhuma placa de rede utilizável';
   console.log(`Servidor de mídia ${VERSAO}: UDP ${PORTAS_UDP}, TCP ${PORTA_TCP}${ipPublico ? `, anunciando ${ipPublico}` : ', descobrindo o IP público'}`);
   console.log(`  escutando em: ${escutando}`);
+  // Dizer a decisão em vez de deixá-la implícita: quem migrar para um servidor alugado
+  // precisa poder confirmar, numa linha, que o endereço inútil parou de ser anunciado.
+  console.log(`  rede local: ${publicoEhDaMaquina
+    ? 'o IP público é desta máquina, então há um candidato só'
+    : anunciarLan
+      ? 'anunciada (quem estiver na mesma rede conecta direto)'
+      : 'não anunciada (servidor em nuvem: ninguém alcançaria o endereço interno)'}`);
   return estado;
 }
 
