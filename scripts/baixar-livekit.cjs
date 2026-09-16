@@ -4,24 +4,62 @@
 // A versao e o hash sao FIXOS aqui. Buscar "a ultima versao" trocaria o binario que roda
 // no seu computador sem aviso e sem revisao -- e um binario e a coisa menos indicada para
 // se atualizar sozinha.
+//
+// Ha DUAS versoes declaradas, e continua nao havendo nenhuma buscada. A 1.13.7 e a primeira
+// que sabe receber VP9 e AV1 como simulcast de verdade -- varias resolucoes independentes em
+// vez de uma faixa com as camadas dentro. Sem ela, esses dois codecs sobem sem o degrau
+// barato de 360p que a grade e a rede ruim usam (o porque esta em public/sala.js, em
+// ESCADA_SVC), e e por isso que a troca interessa.
+//
+// O padrao continua sendo a 1.13.6 porque a validacao que falta nao e de codigo: e ligar uma
+// sala com gente de verdade, em rede de verdade, e conferir que o degrau de 360p aparece e
+// nao congela. Trocar o padrao antes disso seria trocar um problema conhecido por um
+// desconhecido. Quem for validar escolhe assim:
+//
+//   $env:NEXO_LIVEKIT = '1.13.7'; npm run build:sfu; npm start
+//
+// Voltar e apagar a variavel e rodar `build:sfu` de novo. A pasta e UMA, e a troca re-baixa
+// por cima: nao ha pasta por versao de proposito. O encerrador de orfaos em sfu.js casa pelo
+// caminho exato do executavel, entao duas pastas deixariam o processo da outra versao vivo
+// segurando a porta -- e o proximo `npm start` cairia no ciclo de "nao consigo abrir a
+// porta" que aquele encerrador existe para evitar. Um download a mais e mais barato do que
+// isso.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const VERSAO = '1.13.6';
-const PACOTES = {
-  win32: {
-    arquivo: `livekit_${VERSAO}_windows_amd64.zip`,
-    sha256: '9df299b6c6c32f1be88d3d106a9a63f8f921b424b353cc59f57d6b84532a4475',
-    binario: 'livekit-server.exe'
+const VERSAO_PADRAO = '1.13.6';
+
+// Hash de cada arquivo que pode entrar nesta maquina. O do Linux da 1.13.7 esta ausente de
+// proposito: nao foi conferido aqui, e um `null` faz o download recusar -- que e o que deve
+// acontecer. Inventar um hash, ou aceitar sem conferir, e pior do que nao ter a versao.
+const VERSOES = {
+  '1.13.6': {
+    win32: '9df299b6c6c32f1be88d3d106a9a63f8f921b424b353cc59f57d6b84532a4475',
+    linux: '2b61abef2b9ba14b4b8ca38b37de9a37ffc682b9931d5fc03ceca2f0b77d3e33'
   },
-  linux: {
-    arquivo: `livekit_${VERSAO}_linux_amd64.tar.gz`,
-    sha256: '2b61abef2b9ba14b4b8ca38b37de9a37ffc682b9931d5fc03ceca2f0b77d3e33',
-    binario: 'livekit-server'
+  '1.13.7': {
+    win32: 'e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f',
+    linux: null
   }
 };
+
+const VERSAO = (() => {
+  const pedida = (process.env.NEXO_LIVEKIT || '').trim();
+  if (!pedida) return VERSAO_PADRAO;
+  if (!VERSOES[pedida]) {
+    throw new Error(`NEXO_LIVEKIT=${pedida} não é uma versão declarada. Declaradas: ${Object.keys(VERSOES).join(', ')}.`);
+  }
+  return pedida;
+})();
+
+const ARQUIVOS = {
+  win32: { arquivo: `livekit_${VERSAO}_windows_amd64.zip`, binario: 'livekit-server.exe' },
+  linux: { arquivo: `livekit_${VERSAO}_linux_amd64.tar.gz`, binario: 'livekit-server' }
+};
+const PACOTES = Object.fromEntries(Object.entries(ARQUIVOS)
+  .map(([plataforma, dados]) => [plataforma, { ...dados, sha256: VERSOES[VERSAO][plataforma] }]));
 
 const PASTA = path.join(__dirname, '..', 'native', 'livekit');
 
@@ -29,6 +67,13 @@ function pacoteDestaMaquina() {
   const pacote = PACOTES[process.platform];
   if (!pacote) throw new Error(`Sem pacote do LiveKit para ${process.platform}. Baixe manualmente em https://github.com/livekit/livekit/releases/tag/v${VERSAO}`);
   if (process.arch !== 'x64') throw new Error(`Sem pacote do LiveKit para ${process.arch}. Baixe manualmente em https://github.com/livekit/livekit/releases/tag/v${VERSAO}`);
+  // Sem hash declarado, o download para aqui. A alternativa seria instalar um executável sem
+  // conferir o que chegou, e é justamente isso que a conferência existe para impedir -- a
+  // regra não pode ter exceção só porque a versão é experimental.
+  if (!pacote.sha256) {
+    throw new Error(`O LiveKit ${VERSAO} para ${process.platform} não tem hash conferido neste repositório.`
+      + ` Confira o SHA-256 do release, declare-o em VERSOES e rode de novo.`);
+  }
   return pacote;
 }
 
