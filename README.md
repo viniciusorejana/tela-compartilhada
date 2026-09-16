@@ -108,6 +108,14 @@ processo a excluir e descoberto sozinho: o servidor identifica a familia do nave
 pai nao e do mesmo navegador). Como a exclusao vale para a arvore inteira, todas as abas saem
 junto -- inclusive a desta chamada. E o mesmo efeito de "todo o som menos o Discord".
 
+O helper manda o som como PCM sem compressao -- 44.100 Hz, estereo, 16 bits, cerca de
+**1,41 Mbps em cada sentido** e cem mensagens por segundo. Isso nao passa pela internet: o
+helper so e oferecido quando a pagina esta aberta nesta mesma maquina (o servidor confere o
+endereco e recusa quem vem de fora ou de tras de um proxy), entao a viagem e loopback. Mesmo
+assim custa processador, e por isso o caminho do **agente** -- que vai do programa nativo
+direto para a pagina, sem passar pelo processo do servidor -- e o preferido quando existe. O
+Diagnostico mostra qual dos dois esta no ar, na linha "Audio do sistema".
+
 Participantes em **outros computadores** nao usam esse helper: ele roda na maquina do servidor
 e capturaria o audio do host, nao o deles. Eles usam o caminho do navegador, que captura o
 audio do **proprio computador** deles normalmente -- basta marcar a caixa de compartilhar audio
@@ -850,6 +858,7 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
 | `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
 | `NEXO_BINARIO_SFU` | dentro de `NEXO_PASTA_SFU` | Caminho do executavel do servidor de midia. Separado da pasta de configuracao porque a regra de firewall do Windows e por caminho: binario em pasta nova pede permissao de novo |
+| `NEXO_LIVEKIT` | `1.13.6` | Versao do servidor de midia a baixar, entre as DECLARADAS no `scripts/baixar-livekit.cjs` (hoje `1.13.6` e `1.13.7`) -- nunca "a mais recente", e sempre com SHA-256 conferido. A `1.13.7` e a primeira que recebe VP9 e AV1 como simulcast de verdade, ou seja, com o degrau leve de 360p que a grade e a rede ruim usam; ela ainda nao e o padrao porque falta validar numa sala real. Trocar re-baixa por cima: a pasta e uma so, de proposito (ver o comentario no script) |
 | `NEXO_MAXIMO_DE_BOTS` | `8` | Salas com musica tocando ao mesmo tempo |
 | `NEXO_DURACAO_MAXIMA` | `10800` | Segundos que uma faixa pode ter |
 | `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
@@ -970,8 +979,18 @@ redes liberam a 443 por causa do QUIC.
 
 ### O que conferir quando a mídia não passa
 
-Abra **Diagnóstico** na sala. Ele mostra o estado da conexão com o servidor de mídia, a rota
-escolhida, o codec e — quando o navegador informa — se a placa de vídeo está codificando.
+Abra **Diagnóstico** na sala. Ele abre em cartões, um por área — a conexão, o que você envia,
+o que chega de cada pessoa, e o que é desta máquina — com uma linha por fato e a cor dizendo
+onde olhar. O **Relatório técnico**, no fim, continua trazendo tudo em texto: é ele que serve
+para colar num chat e pedir ajuda.
+
+O cartão do que você envia traz a comparação que responde à pergunta mais difícil de
+diagnosticar, "por que o FPS caiu?": a taxa que a **fonte** está capturando ao lado da que o
+**codificador** está produzindo. Se as duas caíram, o problema está na captura e nenhum
+ajuste de qualidade resolve; se só a codificada caiu, é processador ou banda. O painel de
+qualidade, em **Dispositivos**, mostra a mesma comparação ao vivo, junto do custo em
+milissegundos de cada quadro e de um diagnóstico da queda em português, comparando o
+momento atual com o melhor da sessão.
 
 O servidor de mídia precisa de um endereço alcançável de fora. Sem `NEXO_IP_PUBLICO` ele descobre o
 próprio IP sozinho; com a variável definida, anuncia exatamente esse. **Atrás de CGNAT nada disso
@@ -1095,33 +1114,55 @@ O ícone Windows é derivado de `public/mark.svg`; `npm run build:icon` o regene
 Chromium do Playwright quando a marca for alterada.
 
 
-## Perfis de qualidade (30 fps)
+## Qualidade da transmissão: três escolhas independentes
 
-Em **Compartilhar tela** ou **Dispositivos**, escolha 720p (até 2 Mbps), 1080p (até
-4 Mbps, padrão) ou 1440p (até 6 Mbps). Esses são tetos por destinatário, não consumo
-constante nem garantia de resolução/fps. Uma fonte menor não ganha detalhes por escolher
-um perfil maior. O perfil pode mudar durante a transmissão; se a fonte recusar as novas
-restrições, a interface orienta usar **Atualizar tela**.
+Em **Compartilhar tela** ou **Dispositivos**, o painel de qualidade faz três perguntas
+separadas, e cada uma responde uma coisa só:
 
-O teto é orçamento, não meta: o codificador gasta o que receber, e cada Mbps a mais é
-multiplicado pelo número de espectadores. Quanto isso custa de verdade, o que já foi feito
-para reduzir e o que fazer quando a sala crescer estão em
-[`docs/banda-e-escala.md`](docs/banda-e-escala.md) — que também explica como medir
+| escolha | opções | o que decide |
+|---|---|---|
+| **Resolução** | 720p · 1080p (padrão) · 1440p | quantos pixels capturar |
+| **Quadros por segundo** | 30 (padrão) · 60 | quantos quadros pedir à fonte |
+| **O que proteger quando apertar** | movimento (padrão) · nitidez | o que CEDE quando não couber |
+
+As seis combinações de resolução e taxa existem. A terceira escolha não mexe mais na taxa de
+quadros — ela governa só a dica de conteúdo e a preferência de degradação (nitidez segura os
+detalhes e derruba os quadros; movimento faz o contrário). Elas eram uma só, e a junção tirava
+combinações legítimas: 1440p a 30 com os quadros protegidos não era pedível.
+
+Havia um terceiro modo, **"Automático"**, que era o padrão e saiu por ser o pior de todos:
+ele diferia de "Movimento" apenas por deixar o `contentHint` vazio, o que faz o navegador
+favorecer detalhe em captura de tela. Medido no mesmo jogo em 720p, isso custou **21,8 ms por
+quadro contra 6,6 ms**, ou 16 quadros por segundo contra 57. Os números estão em
+[`docs/banda-e-escala.md`](docs/banda-e-escala.md).
+
+**Compartilhar a tela inteira em vez de uma janela quase dobra os quadros** (30 contra 57, na
+mesma medição). O Windows redesenha a janela só para a captura; a tela inteira aproveita o
+quadro que a placa de vídeo já compôs. O aviso na escolha de captura diz isso, e no
+aplicativo a tela inteira não traz eco, porque o agente exclui o navegador do som.
+
+**O teto de envio é calculado, não escolhido.** Ele sai dos pixels que a captura está
+realmente entregando, da taxa pedida e do codec ativo — cerca de 0,064 bit por pixel a 30
+quadros, com meia potência na taxa (60 quadros custam ~1,4 vez 30, não o dobro) e um teto
+absoluto de 6 Mbps. Por isso cada opção do seletor mostra o que ela custaria **agora**, com
+esta fonte: compartilhar uma janela de 1280×720 no perfil 1440p pede 1,8 Mbps, não 6.
+
+O teto é orçamento, não meta nem garantia: o codificador gasta o que receber, uma fonte menor
+não ganha detalhes por escolher um perfil maior, e cada Mbps a mais é multiplicado pelo
+número de espectadores. Em 1440p as duas taxas batem no teto de 6 Mbps, então ali 60 quadros
+não ganham banda — dividem a mesma, com menos definição por quadro; o painel avisa. Quanto
+isso custa de verdade, o que já foi feito para reduzir e o que fazer quando a sala crescer
+estão em [`docs/banda-e-escala.md`](docs/banda-e-escala.md), que também explica como medir
 (`npm run banda`).
 
-O limite total de upload, em Dispositivos, oferece 10/20/40/80 Mbps; o padrão é 40 Mbps,
-com 15% reservado para áudio e tráfego adicional. Escolha um valor abaixo da sua subida
-real disponível. Na malha P2P, três espectadores em 1080p podem consumir até 24 Mbps de
-vídeo, além de câmera/voz e overhead. Não se trata de uma medição automática do seu plano.
-
-Cada conexão tem seu próprio orçamento e resolução. Uma conexão fraca não reduz o
-orçamento das demais por si só; o limite total do remetente continua compartilhado.
-O controle do WebRTC continua ativo. A resolução baixa quando necessário e pode voltar
-a subir; margens entre as mudanças evitam alternância por pequenas oscilações. O alvo é
-30 fps, sem oferecer 60 fps, mas rede e CPU podem reduzir o valor real. Em Dispositivos,
-as estatísticas mostram resolução, fps e bitrate efetivamente enviados a cada pessoa.
-Não há buffer adicional para melhorar a imagem: em vez de acumular atraso, reduz-se a
-qualidade. Não é possível garantir imagem sem perda e atraso zero em qualquer internet.
+O perfil pode mudar durante a transmissão; se a fonte recusar as novas restrições, a
+interface orienta usar **Atualizar tela**. Cada pessoa recebe a camada que a conexão dela
+aguenta, decidida pelo servidor de mídia — uma conexão fraca não derruba a imagem das outras.
+O controle de congestionamento do WebRTC continua ativo dos dois lados: a resolução baixa
+quando necessário e volta a subir. Em Dispositivos, as medições mostram o upload **total**
+(todas as camadas e o codec de reserva), a resolução e a taxa de cada camada, e quanto cada
+quadro custa de processador. Não há buffer adicional para melhorar a imagem: em vez de
+acumular atraso, reduz-se a qualidade.
 
 Controles de zoom/tela cheia desaparecem após 2,5 segundos sem interação, inclusive
 quando o mouse fica parado sobre um botão que foi clicado. Mouse/toque os revela novamente;

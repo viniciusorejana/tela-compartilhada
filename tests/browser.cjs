@@ -295,16 +295,102 @@ async function esperarCodec(page, fonte, esperado) {
   await host.locator('#devicesBtn').click();
   // Qualidade e codec moraram numa lista unica e rolante ate virarem aba propria.
   await host.locator('#abaQualidade').click();
+  // Uma troca de qualidade termina quando o handler reabilita e sincroniza os dois
+  // seletores. Esperar pelo TETO, como este teste fazia, deixou de ser um sinal de
+  // conclusao -- e isso e consequencia direta da mudanca que o bloco abaixo afirma: sobre
+  // uma captura de 1080p, "1440p Maxima" e "1080p Alta" orcam o MESMO teto, porque o
+  // orcamento acompanha os pixels que existem e nao os que o perfil pediu.
+  const trocaDeQualidadeTerminou = (pagina, perfil) => pagina.waitForFunction(esperado => {
+    const seletor = document.getElementById('shareQuality');
+    return !seletor.disabled && seletor.value === esperado && perfilDeQualidade === esperado;
+  }, perfil, { timeout: 30000 });
+
   await host.locator('#videoQuality').selectOption('ultra');
-  await host.waitForFunction(() => perfilDeQualidade === 'ultra');
-  // A fonte deste teste e um canvas de tamanho fixo, entao applyConstraints nao muda a
-  // captura. O que da para afirmar -- e o que importa -- e que o perfil novo chegou as
-  // opcoes de publicacao. O bitrate por espectador quem decide e o servidor de midia.
-  await host.waitForFunction(() => publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate === 6_000_000, null, { timeout: 30000 });
-  assert.equal(await host.locator('#shareQuality').inputValue(), 'ultra');
+  await trocaDeQualidadeTerminou(host, 'ultra');
+  // A fonte deste teste e um canvas de 1920x1080, entao applyConstraints nao muda a captura
+  // -- e agora e exatamente isso que se afirma aqui.
+  //
+  // Escolher "1440p Maxima" sobre uma captura de 1080p nao pode orcar 6 Mbps para uma imagem
+  // de 1080p: cada Mbps a mais e multiplicado por espectador, porque o servidor manda uma
+  // copia para cada um. Este numero era 6.000.000, e o que ele media era o desperdicio.
+  const TETO_1080P30 = 3_981_312;   // 0,064 bit/pixel x 1920 x 1080 x 30; ver quality-utils.js
+  assert.equal(
+    await host.evaluate(() => publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate),
+    TETO_1080P30,
+    'o teto deveria acompanhar os pixels capturados, não a resolução que o perfil pediu');
   await waitForDecodedVideos(viewer);
   await host.screenshot({ path: path.join(output, 'qualidade.png') });
+
+  // Pedir 60 quadros e DEPOIS trocar de resolucao nao pode desfazer o pedido.
+  //
+  // Havia um 30 escrito a mao na troca de perfil. Quem pedia 60 para jogar e depois mexia na
+  // resolucao perdia metade dos quadros sem aviso nenhum: a captura caia para 30 e ficava la,
+  // enquanto o botao e a publicacao continuavam anunciando 60. A ordem aqui reproduz isso --
+  // primeiro a taxa, DEPOIS a resolucao.
+  await host.locator('#videoFps').selectOption('60');
+  await host.waitForFunction(() => quadrosDaTela === 60
+    && publicacoesLocais.screen?.options?.screenShareEncoding?.maxFramerate === 60, null, { timeout: 30000 });
   await host.locator('#videoQuality').selectOption('high');
+  await trocaDeQualidadeTerminou(host, 'high');
+  const emFluidez = await host.evaluate(() => ({
+    fps: publicacoesLocais.screen?.options?.screenShareEncoding?.maxFramerate,
+    teto: publicacoesLocais.screen?.options?.screenShareEncoding?.maxBitrate,
+    // O que foi PEDIDO a fonte. Um canvas pode nao honrar a taxa, mas o pedido registra a
+    // intencao -- e era o pedido que estava errado.
+    pedido: screenStream?.getVideoTracks()[0]?.getConstraints()?.frameRate?.max
+  }));
+  assert.equal(emFluidez.fps, 60, `trocar de resolução não pode derrubar a taxa pedida: veio ${emFluidez.fps}`);
+  assert.notEqual(emFluidez.pedido, 30, 'a captura voltou a ser fixada em 30 quadros ao trocar de resolução');
+  // O teto acompanha a taxa: 30 e 60 quadros dividiam o mesmo orcamento, o que dava metade
+  // dos bits por pixel justamente a quem escolheu jogo. Mais que 30, e bem menos que o dobro.
+  assert.ok(emFluidez.teto > TETO_1080P30 * 1.2 && emFluidez.teto < TETO_1080P30 * 1.6,
+    `60 fps deveria custar mais que 30 e menos que o dobro; veio ${emFluidez.teto} contra ${TETO_1080P30}`);
+  await host.locator('#videoFps').selectOption('30');
+  await host.waitForFunction(() => quadrosDaTela === 30
+    && publicacoesLocais.screen?.options?.screenShareEncoding?.maxFramerate === 30, null, { timeout: 30000 });
+  await waitForDecodedVideos(viewer);
+  console.log(`PASS: teto de envio acompanha os pixels capturados e a taxa pedida (${TETO_1080P30} a 30 fps, ${emFluidez.teto} a 60)`);
+
+  // A medicao da FONTE, que e o que separa as duas causas possiveis de uma queda de quadros.
+  //
+  // Sem ela, "o FPS caiu" tinha duas explicacoes opostas e nenhuma forma de escolher entre
+  // elas: a captura parou de entregar (e nada nesta pagina resolve) ou o codificador nao
+  // acompanha (e baixar resolucao resolve). O painel media so o lado do codificador, onde as
+  // duas aparecem como o mesmo numero caindo.
+  await host.waitForFunction(() => qualidadeDoEnvio?.capturaFps != null, null, { timeout: 30000 });
+  // O custo por quadro é um DELTA entre duas leituras do mesmo fluxo, então ele só existe a
+  // partir da segunda medição -- e republicar começa fluxos novos, o que as trocas de taxa e
+  // de resolução acima acabaram de fazer. Esperar pela condição é o certo; afirmar de
+  // imediato é apostar contra o intervalo de dois segundos da medição.
+  await host.waitForFunction(() => qualidadeDoEnvio?.camadas?.[0]?.msPorQuadro > 0, null, { timeout: 30000 });
+  const medido = await host.evaluate(() => ({
+    capturaFps: qualidadeDoEnvio.capturaFps,
+    fpsCodificado: qualidadeDoEnvio.camadas[0].fps,
+    emEspera: qualidadeDoEnvio.emEspera,
+    ativas: qualidadeDoEnvio.camadas.map(c => c.ativo),
+    // O total soma todas as camadas, e nao so a de cima.
+    totalAcimaDaCamada: qualidadeDoEnvio.bitrate >= qualidadeDoEnvio.bitrateDoPalco,
+    custoPorQuadro: qualidadeDoEnvio.camadas[0].msPorQuadro
+  }));
+  assert.ok(medido.capturaFps > 0, `a fonte deveria reportar quadros capturados, veio ${medido.capturaFps}`);
+  assert.equal(medido.emEspera, false, 'com alguém assistindo, o envio não pode estar em espera');
+  assert.ok(medido.ativas.every(Boolean), `todas as camadas deveriam estar ativas com espectador: ${JSON.stringify(medido.ativas)}`);
+  assert.ok(medido.totalAcimaDaCamada, 'o total precisa somar todas as camadas, não só a do palco');
+  assert.ok(medido.custoPorQuadro > 0, `o custo de codificar cada quadro deveria ser medido, veio ${medido.custoPorQuadro}`);
+  // O historico e o que permite comparar o agora com dez minutos atras. Uma amostra ja prova
+  // que ele grava; o intervalo entre amostras e longo de proposito.
+  await host.waitForFunction(() => window.verHistoricoDoEnvio?.().length >= 1, null, { timeout: 30000 });
+  // E o painel precisa DESENHAR isso, nao so guardar: a comparacao lado a lado e o motivo de
+  // a medicao existir. O painel de qualidade ja esta aberto neste ponto do teste, e continua
+  // aberto depois -- o bloco seguinte conta com isso.
+  const painel = await host.evaluate(() => {
+    atualizarBotaoDeQualidade();
+    const caixa = document.getElementById('qualityLive');
+    return { fluxo: caixa.querySelector('.medicao-fluxo')?.textContent || '', grade: caixa.querySelectorAll('.medicao-linha').length };
+  });
+  assert.match(painel.fluxo, /capturados/, `o painel deveria comparar captura e codificação: "${painel.fluxo}"`);
+  assert.equal(painel.grade, 2, 'as duas camadas deveriam aparecer como linhas na grade');
+  console.log(`PASS: a fonte é medida junto com o codificador (${medido.capturaFps} capturados, ${medido.fpsCodificado} codificados, ${medido.custoPorQuadro.toFixed(1)} ms/quadro)`);
 
   // O servidor de midia nao transcodifica: trocar o codec exige republicar a faixa, e quem
   // ja esta assistindo precisa passar a receber o fluxo novo.
@@ -425,8 +511,8 @@ async function esperarCodec(page, fonte, esperado) {
   // chegar de verdade às opções de publicação, senão o seletor é enfeite.
   assert.equal(opcoesPorFonte.screen.degradationPreference, 'maintain-framerate');
   const porPrioridade = await host.evaluate(async () => {
-    const saida = {};
-    for (const escolha of ['nitidez', 'fluidez', 'automatico']) {
+    const saida = { opcoes: [...document.getElementById('videoPriority').options].map(o => o.value), padrao: PRIORIDADE_PADRAO };
+    for (const escolha of ['nitidez', 'fluidez']) {
       await definirPrioridadeDaTela(escolha);
       const o = opcoesDePublicacao('screen');
       saida[escolha] = { degradacao: o.degradationPreference, fps: o.screenShareEncoding.maxFramerate, pista: screenStream.getVideoTracks()[0].contentHint };
@@ -436,12 +522,45 @@ async function esperarCodec(page, fonte, esperado) {
   assert.equal(porPrioridade.nitidez.degradacao, 'maintain-resolution');
   assert.equal(porPrioridade.nitidez.pista, 'detail');
   assert.equal(porPrioridade.fluidez.degradacao, 'maintain-framerate');
-  assert.equal(porPrioridade.fluidez.pista, 'motion');
-  assert.equal(porPrioridade.fluidez.fps, 60);
-  // O padrão segura os quadros e deixa a resolução ceder: é o que evita a imagem ficar
-  // nítida e travar logo depois.
-  assert.equal(porPrioridade.automatico.degradacao, 'maintain-framerate');
-  assert.equal(porPrioridade.automatico.fps, 30);
+  // A PISTA é o que importa aqui, e é o que não estava sendo verificado.
+  //
+  // Existia um terceiro modo, "Automático", que era o padrão e diferia de "Fluidez" apenas
+  // por deixar o `contentHint` vazio -- a preferência de degradação era idêntica, então
+  // nenhum teste que olhasse só `degradationPreference` notaria a diferença. E a diferença
+  // era enorme: com o hint vazio, a especificação manda o navegador favorecer detalhe em
+  // captura de tela, o que em 720p custou 21,8 ms por quadro contra 6,6 ms com `motion` --
+  // 16 quadros por segundo contra 57, no mesmo jogo e na mesma captura.
+  assert.equal(porPrioridade.fluidez.pista, 'motion', 'sem a dica de movimento o codificador entra em modo detalhe');
+  assert.ok(!porPrioridade.opcoes.includes('automatico'), 'o modo "automático" deixava o contentHint vazio e custava 3x: não deve voltar');
+  assert.equal(porPrioridade.padrao, 'fluidez', 'o padrão precisa proteger o movimento: travar estraga mais que perder definição');
+  // A prioridade NÃO mexe mais na taxa de quadros -- são escolhas separadas. Enquanto eram
+  // uma só, "Fluidez máxima" era o único jeito de pedir 60, e por isso quem queria os
+  // quadros protegidos a 30 não tinha como pedir.
+  for (const escolha of ['nitidez', 'fluidez']) {
+    assert.equal(porPrioridade[escolha].fps, 30, `${escolha} não deveria mudar a taxa de quadros`);
+  }
+  // E as seis combinações existem: cada taxa vale em cada resolução, e o teto acompanha.
+  const porTaxa = await host.evaluate(async () => {
+    const saida = {};
+    for (const quadros of [60, 30]) {
+      await definirQuadrosDaTela(quadros);
+      const o = opcoesDePublicacao('screen');
+      saida[quadros] = {
+        fps: o.screenShareEncoding.maxFramerate,
+        teto: o.screenShareEncoding.maxBitrate,
+        pedido: screenStream.getVideoTracks()[0].getConstraints()?.frameRate?.max,
+        // O degrau barato não pode subir de taxa junto: 15 quadros ali são de propósito.
+        degrauBaixo: o.screenShareSimulcastLayers.map(p => p.encoding.maxFramerate)
+      };
+    }
+    return saida;
+  });
+  assert.equal(porTaxa[60].fps, 60);
+  assert.equal(porTaxa[30].fps, 30);
+  assert.equal(porTaxa[60].pedido, 60, 'pedir 60 quadros tem de chegar à captura, não só à publicação');
+  assert.ok(porTaxa[60].teto > porTaxa[30].teto * 1.2 && porTaxa[60].teto < porTaxa[30].teto * 1.6,
+    `o teto deveria acompanhar a taxa: ${porTaxa[30].teto} a 30 contra ${porTaxa[60].teto} a 60`);
+  assert.deepEqual(porTaxa[60].degrauBaixo, [15], 'o degrau barato continua a 15 quadros em qualquer taxa');
   // A câmera é movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
   assert.equal(await host.evaluate(() => opcoesDePublicacao('camera').degradationPreference), 'maintain-framerate');
   console.log('PASS: screen audio is published without DTX or RED, while voice keeps the defaults');
@@ -533,6 +652,21 @@ async function esperarCodec(page, fonte, esperado) {
   const diagnostic = await viewer.locator('#diagnosticsReport').textContent();
   assert.ok(!diagnostic.includes('credential') && !diagnostic.includes('127.0.0.1') && !diagnostic.includes('squad-teste'));
   fs.writeFileSync(path.join(output, 'diagnostic.txt'), diagnostic);
+
+  // O relatorio tecnico continua existindo para colar num chat, mas nao e a forma de
+  // responder "esta funcionando?" -- para isso ha os cartoes, que e o que a pessoa le
+  // primeiro. Sem esta verificacao, uma exceção no desenho deles passaria em silencio: o
+  // painel ficaria vazio e o teste continuaria verde por causa do <pre> escondido.
+  const cartoes = await viewer.evaluate(() => [...document.querySelectorAll('#diagnosticsCards .diag-cartao')]
+    .map(c => ({ titulo: c.querySelector('h3').textContent, linhas: [...c.querySelectorAll('.diag-linha')].map(l => l.textContent) })));
+  assert.ok(cartoes.length >= 2, `esperava cartões de diagnóstico, veio ${JSON.stringify(cartoes)}`);
+  assert.ok(cartoes.some(c => /Conexão/i.test(c.titulo)), 'falta o cartão de conexão');
+  assert.ok(cartoes.some(c => /Recebendo a tela/i.test(c.titulo)), `falta o cartão de recepção: ${cartoes.map(c => c.titulo).join(' | ')}`);
+  // Os rotulos sao lidos por quem nao esta depurando nada: nem estado de biblioteca em
+  // ingles, nem nome de rid de protocolo.
+  const todasAsLinhas = cartoes.flatMap(c => c.linhas).join(' ');
+  assert.ok(!/\bconnected\b/.test(todasAsLinhas), `estado da sala apareceu em inglês: ${todasAsLinhas}`);
+  assert.ok(!/Camada [qhf]\b/.test(todasAsLinhas), `rid de protocolo apareceu como rótulo: ${todasAsLinhas}`);
   await viewer.keyboard.press('Escape');
   await viewer.locator('#sidebarToggle').click();
   await viewer.keyboard.press('Escape');

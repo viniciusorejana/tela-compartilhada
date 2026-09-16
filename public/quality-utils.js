@@ -45,22 +45,69 @@
 // O que se perde: em multi-view, a tela dos outros vem no degrau de baixo em vez de um
 // intermediário. É uma troca deliberada -- multi-view é para acompanhar de canto de olho,
 // e quem quer LER a tela põe ela no palco, onde a camada de cima continua inteira.
+//
+// ---------- O teto deixou de ser um número escrito por perfil ----------
+//
+// Era um valor fixo em cada perfil, e o MESMO valor para 30 e para 60 quadros. Esse detalhe
+// cobrava dois preços diferentes pelo mesmo erro.
+//
+// Em "Fluidez máxima" a 1080p, os 4 Mbps tinham de cobrir o dobro dos quadros: 0,032 bit por
+// pixel contra 0,064 a 30 quadros. Metade do orçamento por pixel -- e jogo em movimento é
+// exatamente onde faltar bit aparece, como borrão em volta do que se move. Quem escolhia
+// fluidez para jogar recebia menos bits justamente na cena que mais precisava deles.
+//
+// Do outro lado, uma captura ultrawide de 1920x810 recebia o orçamento inteiro de 1080p,
+// pagando por 25% de pixels que não existem -- e pagando isso multiplicado por espectador.
+//
+// Agora o teto sai dos pixels que estão REALMENTE sendo capturados, na taxa que está
+// realmente sendo pedida. Ninguém escreve um número por combinação, e não há combinação sem
+// resposta.
 (function(root) {
+  // Bits por pixel a 30 quadros. A âncora é o caso central do Nexo, tela 1080p a 30, que
+  // rendia 4 Mbps e continua rendendo isso: 0,064 x 1920 x 1080 x 30 = 3,98 Mbps. A escolha
+  // de não mudar o caso central é deliberada -- ele é o que já foi visto funcionando em
+  // sala, e o que se quer corrigir são as OUTRAS combinações.
+  const BITS_POR_PIXEL = 0.064;
+  // Dobrar os quadros não dobra o custo, e tratar como se dobrasse foi o erro anterior em
+  // sentido contrário. Quadros vizinhos são parecidos, e é dessa semelhança que a compressão
+  // vive: o codificador guarda a diferença, não a imagem. Meia potência é a aproximação que
+  // a prática de codificação usa -- 60 quadros custam cerca de 1,4 vez o que custam 30.
+  const EXPOENTE_DE_QUADROS = 0.5;
+  // Onde estava o maior perfil. Não é um limite de qualidade, é um limite de CONTA: o
+  // servidor envia UMA cópia por espectador, então cada Mbps aqui é multiplicado pelo
+  // tamanho da sala. A 6 Mbps, dez pessoas assistindo são 60 Mbps de saída e 27 GB por hora.
+  const TETO_ABSOLUTO = 6_000_000;
+  // Abaixo disto a imagem deixa de servir para o que as pessoas de fato usam a tela: ler
+  // texto e código. Uma captura minúscula não deve arrastar o teto para um valor que
+  // inviabiliza a própria tarefa.
+  const PISO = 1_200_000;
+
+  // Ex.: (1920, 1080, 30) = 3,98 Mbps · (1920, 1080, 60) = 5,63 · (2560, 1440, 30) = 6,00
+  // (no teto) · (1280, 720, 30) = 1,77 · (1920, 810, 30) = 2,99.
+  function tetoDeEnvio(largura, altura, fps) {
+    const pixels = Math.max(1, (largura || 0) * (altura || 0));
+    const quadros = Math.max(1, fps || 30);
+    const bits = BITS_POR_PIXEL * pixels * 30 * Math.pow(quadros / 30, EXPOENTE_DE_QUADROS);
+    return Math.round(Math.min(TETO_ABSOLUTO, Math.max(PISO, bits)));
+  }
+
+  // Os perfis só declaram o que a pessoa escolhe: quanta resolução capturar. O teto é
+  // consequência disso e da taxa de quadros, não uma terceira escolha independente.
   const profiles = {
     economical: {
-      label: '720p · Econômica', width: 1280, height: 720, bitrate: 2_000_000,
+      label: '720p · Econômica', width: 1280, height: 720,
       camadas: [[640, 360, 300_000, 15]]
     },
     high: {
-      label: '1080p · Alta', width: 1920, height: 1080, bitrate: 4_000_000,
+      label: '1080p · Alta', width: 1920, height: 1080,
       camadas: [[640, 360, 300_000, 15]]
     },
     ultra: {
-      label: '1440p · Máxima', width: 2560, height: 1440, bitrate: 6_000_000,
+      label: '1440p · Máxima', width: 2560, height: 1440,
       camadas: [[640, 360, 300_000, 15]]
     }
   };
-  const api = { profiles };
+  const api = { profiles, tetoDeEnvio, TETO_ABSOLUTO, PISO };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RoomQuality = api;
 })(typeof window === 'undefined' ? globalThis : window);

@@ -456,10 +456,25 @@ function enviarEstado() {
   document.dispatchEvent(new Event('room-update'));
 }
 
-// Escolha de codec de video. "auto" prioriza H.264 baseline: no iPhone e o unico decodificado
-// por hardware, e no Windows e o que tem mais chance de sair pelo encoder da GPU. As demais
-// opcoes existem para comparar em campo; nenhuma delas REMOVE codec da lista, entao quem nao
-// suporta a escolha cai no melhor comum em vez de ficar sem imagem.
+// Escolha de codec de video. "auto" prioriza H.264 baseline: e o que tem decodificacao por
+// hardware em todo aparelho que entra na sala, e no Windows e o que tem mais chance de sair
+// pelo encoder da GPU. As demais opcoes existem para comparar em campo; nenhuma delas REMOVE
+// codec da lista, entao quem nao suporta a escolha cai no melhor comum em vez de ficar sem
+// imagem.
+//
+// "Todo aparelho" e mais forte do que "o unico que o iPhone decodifica por hardware", que era
+// o que estava escrito aqui e ja nao e verdade: do iPhone 15 Pro em diante o Safari tambem
+// decodifica AV1 por hardware. A razao de H.264 continuar sendo o automatico nao e essa, e
+// sao outras duas, que valem para a sala inteira e nao para um aparelho: e o unico que esta
+// maquina codifica em hardware (medido em docs/captura-de-tela.md), e -- enquanto o servidor
+// de midia for a 1.13.6 -- e um dos dois que sobem com o degrau barato de 360p, o degrau que
+// segura na sala quem tem a rede ruim.
+//
+// Um automatico que ESCOLHA o codec, em vez de fixar um, depende de saber tres coisas que
+// hoje nao se sabem: o custo de codificar aqui, a capacidade de decodificar de cada
+// espectador, e se o degrau barato existe naquele servidor. As duas primeiras passaram a ser
+// medidas agora (ver medirEnvio); a terceira depende da 1.13.7. Escolher antes disso seria
+// adivinhar -- e o erro de adivinhar aqui nao e imagem feia, e gente caindo da sala.
 let codecDeVideo = (() => { try { return localStorage.getItem('nexoCodec') || 'auto'; } catch (_) { return 'auto'; } })();
 if (!RoomMedia.CODEC_PREFERENCES.includes(codecDeVideo)) codecDeVideo = 'auto';
 const seletoresDeCodec = [...document.querySelectorAll('[data-video-codec]')];
@@ -471,19 +486,55 @@ function codecDeVideoEscolhido() { return codecDeVideo; }
 function definirCodecDeVideo(escolha) {
   if (!RoomMedia.CODEC_PREFERENCES.includes(escolha) || escolha === codecDeVideo) return;
   codecDeVideo = escolha;
+  // Outro codec tem outro custo por quadro: comparar o antes com o depois seria comparar
+  // duas coisas diferentes.
+  esquecerHistoricoDoEnvio();
   try { localStorage.setItem('nexoCodec', escolha); } catch (_) { /* Vale so nesta sessão. */ }
   seletoresDeCodec.forEach(select => { select.value = escolha; });
   status.textContent = escolha === 'auto'
-    ? 'Codec automático: H.264, o único que o iPhone decodifica por hardware.'
-    : `Codec preferido: ${escolha.toUpperCase()}. Quem não suportar recebe pelo melhor codec em comum.`;
-  republicarVideo();
+    ? 'Codec automático: H.264 na tela, o que todo aparelho da sala decodifica por hardware.'
+    : `Codec da tela: ${escolha.toUpperCase()}. Quem não suportar recebe pelo melhor codec em comum.`;
+  republicarTela();
 }
 
 // "auto" e H.264: e o unico codec decodificado por hardware no iPhone e o que tem mais
 // chance de sair pelo encoder da placa de video no Windows.
-function codecDePublicacao() {
+//
+// A escolha vale para a TELA, e a camera fica fixa aqui. São duas razões.
+//
+// A primeira é custo no lugar errado. A câmera é 720p e desaparece no orçamento ao lado de
+// uma tela 1080p, mas cobra uma codificação inteira do processador de quem transmite -- e
+// numa sala de seis são seis câmeras subindo ao mesmo tempo, contra uma ou duas telas. Os
+// kbps que VP9 ou AV1 economizariam nela não pagam esse processador.
+//
+// A segunda é que trocar o codec da tela deixa de republicar a câmera. Cada republicação
+// renegocia com o servidor de mídia, e cada renegociação é uma chance de a faixa não voltar
+// -- foi assim que a câmera sumiu do lado de quem assistia na auditoria.
+const CODEC_DA_CAMERA = 'h264';
+function codecDePublicacao(fonte) {
+  if (fonte === 'camera') return CODEC_DA_CAMERA;
   return codecDeVideo === 'auto' ? 'h264' : codecDeVideo;
 }
+
+// VP9 e AV1 codificam em camadas dentro do mesmo fluxo (SVC), e o cliente do servidor de
+// mídia trata isso de um jeito que exige esta escolha declarada no pedido.
+//
+// Sem `scalabilityMode` o cliente decide sozinho -- e decide em duas etapas que discordam
+// entre si. Ele avisa o servidor primeiro ("recebe UMA faixa com as resoluções dentro") e
+// só depois injeta `L1T3` nas opções; o cálculo dos fluxos, que roda por último, já vê o
+// `L1T3` e monta DUAS faixas independentes, de 360p e 1080p. O servidor então trata a faixa
+// pequena como se ela trouxesse a imagem inteira, e o orçamento vai todo para o lado errado:
+// medido aqui, a camada de 1080p ficou em 0,25 quadro por segundo -- um quadro a cada quatro
+// segundos -- enquanto quem assistia recebia 360p e três congelamentos em oito segundos.
+//
+// Declarando `L1T3` desde o pedido, as duas etapas concordam. Onde o servidor de mídia sabe
+// fazer simulcast destes codecs (depois da 1.13.6) sobem as duas faixas de verdade; onde não
+// sabe, o cliente desliga o simulcast e sobe uma faixa SVC só -- imagem inteira no palco,
+// mas sem o degrau barato que a grade e a rede ruim usam. É por isso que estes codecs
+// continuam fora do automático: ver AVISO_SEM_DEGRAU_BARATO.
+const ESCADA_SVC = 'L1T3';
+const CODECS_SVC = ['vp9', 'av1'];
+const ehCodecSVC = codec => CODECS_SVC.includes(codec);
 
 // Quanto do orçamento de H.264 cada codec precisa para a MESMA qualidade percebida.
 //
@@ -499,16 +550,78 @@ function codecDePublicacao() {
 // Entre os dois erros, este é o barato.
 const ORCAMENTO_POR_CODEC = { h264: 1, vp8: 1, vp9: 0.7, av1: 0.6 };
 
-function tetoParaOCodec(bitrate) {
-  return Math.round(bitrate * (ORCAMENTO_POR_CODEC[codecDePublicacao()] ?? 1));
+function tetoParaOCodec(bitrate, codec) {
+  return Math.round(bitrate * (ORCAMENTO_POR_CODEC[codec] ?? 1));
 }
 
-async function republicarVideo() {
-  if (!transporte?.conectada) return;
-  const camera = cameraStream?.getVideoTracks()[0] || null;
+// O teto da tela sai dos pixels que a captura está REALMENTE entregando, e não dos pixels
+// que o perfil pediu.
+//
+// Os dois divergem sempre que a fonte não é um monitor 16:9 inteiro: uma janela, um monitor
+// ultrawide, uma tela de notebook com escala. O perfil é o máximo que se pede; o que chega é
+// o que a fonte tem para dar. Cobrar o orçamento do que foi pedido era pagar por pixels
+// inexistentes -- multiplicado por espectador, porque o servidor manda uma cópia para cada.
+//
+// As medidas do perfil ficam como reserva: `getSettings` pode vir vazio antes do primeiro
+// quadro, e um teto de reserva é melhor do que um teto zerado.
+// A faixa vem por parâmetro, e não de `screenStream`, porque na hora de publicar as duas
+// podem discordar: quem troca a fonte chama a publicação com a faixa NOVA, e ler a antiga
+// daria um teto calculado sobre pixels que já não existem. Sem faixa -- o botão desenhando
+// o rótulo antes de a captura existir -- vale a que está no ar.
+function tetoDaTela(perfil, faixa) {
+  const medidas = (faixa || screenStream?.getVideoTracks()[0])?.getSettings?.() || {};
+  const largura = medidas.width || perfil.width;
+  const altura = medidas.height || perfil.height;
+  // A taxa vem da escolha, não de `getSettings`: é o teto que a publicação vai declarar, e a
+  // fonte pode estar entregando menos neste instante sem que isso mude o combinado.
+  return RoomQuality.tetoDeEnvio(
+    Math.min(largura, perfil.width), Math.min(altura, perfil.height), quadrosDaTela);
+}
+
+// Trocar o codec republica a TELA, e só ela: a câmera tem codec fixo (ver CODEC_DA_CAMERA).
+//
+// A sequência inteira entra na fila de uma vez. Despublicar e publicar de novo eram duas
+// tarefas separadas nela, e qualquer outra mudança -- parar a tela, trocar de câmera, voltar
+// de uma queda -- conseguia se encaixar no meio. O resultado observado foi a faixa ficando
+// despublicada: o "publique de novo" rodava antes do "despublique", que então apagava o que
+// tinha acabado de subir.
+async function republicarTela() {
   const tela = screenStream?.getVideoTracks()[0] || null;
-  if (camera) { await publicarFonte('camera', null); await publicarFonte('camera', camera); }
-  if (tela) { await publicarFonte('screen', null); await publicarFonte('screen', tela); }
+  if (!tela) return;
+  const ok = await sequenciaDePublicacao('screen', async () => {
+    await aplicarPublicacao('screen', null);
+    await aplicarPublicacao('screen', tela);
+  });
+  if (ok) avisarSeFaltaDegrauBarato();
+}
+
+// VP9 e AV1 podem subir sem o degrau barato, e quem escolheu precisa saber disso na hora.
+//
+// Depende do servidor de mídia: antes da 1.13.7 ele não sabe receber estes codecs como
+// faixas independentes, e o cliente então desliga o simulcast e sobe uma faixa só (ver
+// ESCADA_SVC). A imagem no palco fica inteira -- é a grade, a plateia e quem está com a rede
+// apertada que perdem o degrau de 360p. E perder aquele degrau não deixa a pessoa com imagem
+// ruim: deixa a pessoa fora da sala, porque a sinalização viaja no mesmo transporte que
+// afoga. O motivo completo está em quality-utils.js.
+//
+// A conferência é por MEDIÇÃO, não pela versão que o servidor anuncia. O que importa é
+// quantas camadas o navegador de fato criou, e isso não depende só do servidor: todo Safari
+// e todo navegador no iOS sobem estes codecs em camada única de qualquer maneira, com
+// qualquer versão do outro lado.
+const AVISO_SEM_DEGRAU_BARATO = codec => `Neste servidor, ${codec} sobe em camada única: quem está`
+  + ' com a rede apertada e as telas fora do palco perdem o degrau leve de 360p. H.264 e VP8 têm'
+  + ' esse degrau — se houver gente com internet ruim na sala, prefira um deles.';
+
+function avisarSeFaltaDegrauBarato() {
+  const codec = codecDePublicacao('screen');
+  if (!ehCodecSVC(codec)) return;
+  const remetente = publicacoesLocais.screen?.track?.sender;
+  let camadas = 0;
+  try { camadas = remetente?.getParameters?.().encodings?.length || 0; } catch (_) { return; }
+  // Zero é "ainda não sei", e não é motivo para assustar ninguém.
+  if (camadas !== 1) return;
+  status.textContent = AVISO_SEM_DEGRAU_BARATO(codec.toUpperCase());
+  registrarDiagnostico('midia.camadaUnica', `${codec} subiu sem o degrau de 360p`);
 }
 
 // Os perfis definem a QUALIDADE DE CAPTURA e o teto de envio. Repartir banda entre
@@ -541,36 +654,116 @@ const FONTE_DO_SERVIDOR = {
 // "maintain-framerate" e o unico que entrega quadros constantes: quando o custo aperta, ele
 // baixa a resolucao e a devolve quando sobra folga. "balanced" cede dos dois lados, e o que
 // se ve e a imagem ficando nitida e travando logo em seguida -- que era o padrao anterior.
+// A prioridade decide o que CEDE quando aperta. Quantos quadros se pede é outra escolha, e
+// por isso ela saiu daqui.
+//
+// Estavam juntas, e a junção tirava combinações legítimas das pessoas: "Fluidez máxima" era
+// o único jeito de pedir 60 quadros, então quem queria 1440p a 30 com os quadros protegidos
+// não tinha como, e quem queria 60 quadros em texto era obrigado a aceitar que a resolução
+// cedesse primeiro. Pior: a interface anunciava "30 fps" num rótulo fixo, que passava a
+// mentir no instante em que alguém escolhia fluidez.
+//
+// Separadas, cada seletor responde uma pergunta só -- quantos quadros eu quero, e o que
+// abandono quando não couber -- e as seis combinações de resolução e taxa ficam todas
+// disponíveis.
+// O "Automático" saiu, e ele era o padrão.
+//
+// Ele parecia a escolha segura -- "deixe o Nexo decidir" -- e era, medido, a pior opção para
+// qualquer conteúdo em movimento. A razão é que ele não decidia nada: a única diferença dele
+// para "Fluidez" era deixar o `contentHint` VAZIO, e a preferência de degradação era a mesma.
+// Com o hint vazio, a especificação manda o navegador favorecer detalhe e resolução em faixas
+// de captura de tela -- ou seja, ele configurava o codificador em modo texto para quem estava
+// compartilhando jogo.
+//
+// O preço, medido em 720p com o mesmo jogo e a mesma captura: 6,6 ms por quadro com
+// `motion` contra 21,8 ms com o hint vazio, o que virou 57 quadros por segundo contra 16.
+// Três vezes o custo por escolher a opção que se anunciava como automática.
+//
+// Sobraram duas, e elas são escolhas de verdade -- pedem coisas opostas e nenhuma serve para
+// as duas tarefas. "Fluidez" é o padrão porque travar é o que estraga uma transmissão; a
+// nitidez de texto parado é uma preferência, o lag não é.
 const PRIORIDADES_DE_TELA = {
-  automatico: { rotulo: 'Automático', dica: 'quadros constantes, na melhor resolução que couber', pista: null, degradacao: 'maintain-framerate', fps: 30 },
-  nitidez: { rotulo: 'Nitidez', dica: 'código e texto parados; os quadros cedem primeiro', pista: 'detail', degradacao: 'maintain-resolution', fps: 30 },
-  fluidez: { rotulo: 'Fluidez máxima', dica: 'jogos e vídeo, até 60 quadros', pista: 'motion', degradacao: 'maintain-framerate', fps: 60 }
+  fluidez: { rotulo: 'Movimento', dica: 'jogos e vídeo; a resolução cede antes dos quadros', pista: 'motion', degradacao: 'maintain-framerate' },
+  nitidez: { rotulo: 'Nitidez', dica: 'código e texto parados; os quadros cedem antes da resolução', pista: 'detail', degradacao: 'maintain-resolution' }
 };
-let prioridadeDaTela = (() => { try { return localStorage.getItem('nexoPrioridade') || 'automatico'; } catch (_) { return 'automatico'; } })();
-if (!PRIORIDADES_DE_TELA[prioridadeDaTela]) prioridadeDaTela = 'automatico';
+const PRIORIDADE_PADRAO = 'fluidez';
+let prioridadeDaTela = (() => {
+  try {
+    const guardada = localStorage.getItem('nexoPrioridade');
+    // Quem tinha "automatico" salvo herda o padrão novo. Ele era o pior dos três, então
+    // migrar é devolver quadros a quem nunca soube que os estava perdendo.
+    if (guardada && PRIORIDADES_DE_TELA[guardada]) return guardada;
+  } catch (_) { /* Sem armazenamento: vale o padrão desta sessão. */ }
+  return PRIORIDADE_PADRAO;
+})();
 const seletoresDePrioridade = [...document.querySelectorAll('[data-screen-priority]')];
+
+// Quadros por segundo da tela, agora uma escolha própria.
+const QUADROS_DA_TELA = [30, 60];
+let quadrosDaTela = (() => {
+  try {
+    const guardado = Number(localStorage.getItem('nexoFps'));
+    if (QUADROS_DA_TELA.includes(guardado)) return guardado;
+    // Quem já tinha escolhido "Fluidez máxima" escolheu 60 quadros -- era o que aquela opção
+    // significava. Herdar isso é o que impede a separação de virar uma perda silenciosa de
+    // metade dos quadros para quem já usava o Nexo para jogar.
+    if (localStorage.getItem('nexoPrioridade') === 'fluidez') return 60;
+  } catch (_) { /* Sem armazenamento: vale o padrão desta sessão. */ }
+  return 30;
+})();
+const seletoresDeQuadros = [...document.querySelectorAll('[data-screen-fps]')];
 
 async function definirPrioridadeDaTela(escolha) {
   if (!PRIORIDADES_DE_TELA[escolha] || escolha === prioridadeDaTela) return;
   prioridadeDaTela = escolha;
+  // A prioridade decide se cede a resolução ou os quadros: depois de trocá-la, uma queda de
+  // quadros pode ser exatamente o que foi pedido.
+  esquecerHistoricoDoEnvio();
   try { localStorage.setItem('nexoPrioridade', escolha); } catch (_) { /* Vale so nesta sessão. */ }
   seletoresDePrioridade.forEach(select => { select.value = escolha; });
   const prioridade = PRIORIDADES_DE_TELA[escolha];
   const faixa = screenStream?.getVideoTracks()[0];
   if (faixa) {
     faixa.contentHint = prioridade.pista || '';
-    // A taxa pedida na captura é o teto do que o encoder pode enviar: sem mexer nela,
-    // escolher "fluidez" não teria de onde tirar quadros a mais.
-    try { await faixa.applyConstraints({ ...faixa.getConstraints(), frameRate: { ideal: prioridade.fps, max: prioridade.fps } }); }
-    catch (_) { /* A fonte manda na taxa; o resto da escolha continua valendo. */ }
-    await publicarFonte('screen', null);
-    await publicarFonte('screen', faixa);
+    // A prioridade já não mexe na taxa de quadros -- ela é escolha separada agora. O que
+    // muda aqui é a dica de conteúdo e a preferência de degradação, e as duas viajam nas
+    // opções de publicação.
+    await sequenciaDePublicacao('screen', async () => {
+      await aplicarPublicacao('screen', null);
+      await aplicarPublicacao('screen', faixa);
+    });
   }
   status.textContent = `Prioridade da tela: ${prioridade.rotulo.toLowerCase()} (${prioridade.dica}).`;
   atualizarBotaoDeQualidade();
 }
 
-function opcoesDePublicacao(fonte) {
+// Pedir mais quadros exige mexer na CAPTURA, e não só na publicação: a taxa que a fonte
+// entrega é o teto do que o codificador tem para enviar. Sem isto, escolher 60 não teria de
+// onde tirar quadros a mais -- e escolher 30 continuaria codificando 60 para jogar metade
+// fora, gastando processador de quem transmite em quadros que ninguém veria.
+async function definirQuadrosDaTela(escolha) {
+  const quadros = Number(escolha);
+  if (!QUADROS_DA_TELA.includes(quadros) || quadros === quadrosDaTela) return;
+  quadrosDaTela = quadros;
+  esquecerHistoricoDoEnvio();
+  try { localStorage.setItem('nexoFps', String(quadros)); } catch (_) { /* Vale so nesta sessão. */ }
+  seletoresDeQuadros.forEach(select => { select.value = String(quadros); });
+  const faixa = screenStream?.getVideoTracks()[0];
+  if (faixa) {
+    try { await faixa.applyConstraints({ ...faixa.getConstraints(), frameRate: { ideal: quadros, max: quadros } }); }
+    catch (_) { /* A fonte manda na taxa; o teto de publicação abaixo continua valendo. */ }
+    await sequenciaDePublicacao('screen', async () => {
+      await aplicarPublicacao('screen', null);
+      await aplicarPublicacao('screen', faixa);
+    });
+  }
+  status.textContent = `Tela a ${quadros} quadros por segundo. ${quadros === 60
+    ? 'Movimento mais macio, e cerca de 1,4 vez a banda de 30.'
+    : 'Metade dos quadros de 60, e bem menos processador de quem transmite.'}`;
+  atualizarBotaoDeQualidade();
+}
+
+function opcoesDePublicacao(fonte, faixa) {
   if (fonte === 'mic') return { source: FONTE_DO_SERVIDOR.mic };
   if (fonte === 'screenAudio') {
     // DTX corta a transmissao no silencio e RED duplica pacotes para voz. Os dois estragam
@@ -580,7 +773,7 @@ function opcoesDePublicacao(fonte) {
   const perfil = perfilAtual();
   if (fonte === 'camera') {
     // Camera e movimento: perder nitidez incomoda menos que ver a pessoa aos solavancos.
-    const opcoes = { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao(), simulcast: true, degradationPreference: 'maintain-framerate' };
+    const opcoes = { source: FONTE_DO_SERVIDOR.camera, videoCodec: codecDePublicacao('camera'), simulcast: true, degradationPreference: 'maintain-framerate' };
     // No celular, DUAS camadas em vez de tres.
     //
     // Simulcast codifica a mesma imagem varias vezes, uma por qualidade, para que cada
@@ -604,9 +797,11 @@ function opcoesDePublicacao(fonte) {
     return opcoes;
   }
   const prioridade = PRIORIDADES_DE_TELA[prioridadeDaTela];
-  return {
+  const codec = codecDePublicacao('screen');
+  const teto = tetoDaTela(perfil, faixa);
+  const opcoes = {
     source: FONTE_DO_SERVIDOR.screen,
-    videoCodec: codecDePublicacao(),
+    videoCodec: codec,
     simulcast: true,
     degradationPreference: prioridade.degradacao,
     // Sem esta linha o cliente monta a escada sozinho -- e monta o degrau de baixo custando
@@ -614,60 +809,193 @@ function opcoesDePublicacao(fonte) {
     // acaba empurrando mais do que o canal aguenta ate derrubar a pessoa. Declarada aqui, a
     // escada tem um degrau barato de verdade e NAO tem o do meio, que custava a quem
     // transmite quase o mesmo que a camada de cima. Os motivos estao em quality-utils.js.
-    screenShareSimulcastLayers: camadasDaTela(perfil, prioridade),
-    screenShareEncoding: { maxBitrate: tetoParaOCodec(perfil.bitrate), maxFramerate: prioridade.fps }
+    screenShareSimulcastLayers: camadasDaTela(perfil),
+    screenShareEncoding: { maxBitrate: tetoParaOCodec(teto, codec), maxFramerate: quadrosDaTela }
   };
+  // Ver ESCADA_SVC: sem isto, VP9 e AV1 sobem com o cliente e o servidor discordando sobre o
+  // que a faixa pequena contém, e o palco recebe 360p a 14 quadros em vez de 1080p a 30.
+  if (ehCodecSVC(codec)) opcoes.scalabilityMode = ESCADA_SVC;
+  return opcoes;
 }
 
 // A escada declarada no perfil vira presets do cliente. O degrau de baixo carrega a taxa de
 // quadros dele, baixa de proposito: numa conexao apertada, texto legivel a 15 quadros vale
-// mais do que borrao a 30. Nenhum degrau pede mais quadros do que a prioridade escolhida ja
-// permite -- "nitidez" a 30 nao deve virar 60 por causa da escada.
-// A escada inteira acompanha o codec, e não só o degrau de cima: encolher o topo sozinho
-// aproximaria as camadas até elas deixarem de ser escolhas distintas para quem assiste.
-function camadasDaTela(perfil, prioridade) {
+// mais do que borrao a 30. Nenhum degrau pede mais quadros do que a escolha ja permite -- a
+// 30 quadros, o degrau de 15 continua em 15, e nenhum deles vira 60 por causa da escada.
+//
+// O desconto por codec incide só no degrau de CIMA, e esta é a correção de um erro que
+// custava exatamente onde não se podia pagar. O degrau de baixo não é uma fração da captura:
+// ele é o piso de rede. Os 300 kbps a 640×360 foram escolhidos por caberem em quase qualquer
+// lugar, e é o único degrau que segura na sala quem está com a conexão ruim -- sem ele a
+// pessoa não fica com vídeo feio, ela CAI (o porquê está em quality-utils.js). Descontar 40%
+// dele em AV1 poupava 120 kbps num envio de megabits e enfraquecia justamente essa garantia.
+//
+// O topo continua acompanhando o codec, e a distância entre os degraus continua grande o
+// bastante para eles serem escolhas distintas para quem assiste: em AV1 são 2,4 Mbps contra
+// 0,3 -- oito vezes.
+function camadasDaTela(perfil) {
   return (perfil.camadas || []).map(([largura, altura, bitrate, fps]) =>
-    new LivekitClient.VideoPreset(largura, altura, tetoParaOCodec(bitrate), Math.min(fps, prioridade.fps)));
+    new LivekitClient.VideoPreset(largura, altura, bitrate, Math.min(fps, quadrosDaTela)));
+}
+
+// Uma tarefa da fila é uma OPERAÇÃO INTEIRA, não uma chamada.
+//
+// A diferença é o que consertou a faixa que não voltava. Cada publicação e cada remoção
+// entravam sozinhas na fila, e as sequências -- "despublique e publique de novo", que é o
+// que trocar codec, qualidade ou prioridade faz -- eram duas tarefas com uma fresta entre
+// elas. Qualquer outra mudança se encaixava nessa fresta, e a ordem que chegava ao servidor
+// de mídia deixava de ser a ordem em que a pessoa clicou: o "publique de novo" da tela
+// rodava antes do "despublique" da câmera, que então apagava o que tinha acabado de subir.
+// O sintoma era a captura viva aqui e ausente do outro lado, sem erro em lugar nenhum.
+//
+// Quem chama `naFila` com uma sequência garante que nada se intromete no meio dela. Dentro
+// dela usa-se `aplicarPublicacao`, que NÃO reentra na fila -- fazer isso travaria as duas.
+function naFila(tarefa) {
+  const proxima = filaDePublicacao.then(() => tarefa());
+  // A fila nunca carrega rejeição: uma operação que falha não pode cancelar as seguintes.
+  filaDePublicacao = proxima.catch(() => {});
+  return proxima;
+}
+
+function avisarFalhaDePublicacao(fonte, erro) {
+  console.warn('Falha ao publicar', fonte, erro);
+  status.textContent = `Não foi possível enviar ${fonte === 'camera' ? 'a câmera' : fonte === 'mic' ? 'o microfone' : 'a tela'}. Tente desligar e ligar essa fonte.`;
+}
+
+// Uma sequência de mudanças na publicação, com reconciliação garantida no fim. Devolve
+// `false` se alguma etapa falhou, para quem chamou não anunciar sucesso.
+//
+// O `finally` aqui não é zelo: a falha mais comum deste caminho é a publicação expirar sem
+// resposta do servidor de mídia, e é exatamente nesse caso que a reconciliação precisa
+// rodar, porque ela é quem traz a faixa de volta. Deixar a exceção abortar a sequência
+// jogava fora a única chance de consertar -- e o resultado era a captura viva aqui com
+// ninguém vendo do outro lado, que é o sintoma que esta fase toda existe para eliminar.
+function sequenciaDePublicacao(fonte, tarefa) {
+  return naFila(async () => {
+    let ok = true;
+    try {
+      await tarefa();
+    } catch (erro) {
+      ok = false;
+      avisarFalhaDePublicacao(fonte, erro);
+    } finally {
+      // A reconciliação também pode falhar, e nem por isso a sequência inteira deve
+      // estourar: ela roda de novo na mudança seguinte.
+      try { await reconciliarPublicacoes(); } catch (_) { ok = false; }
+    }
+    return ok;
+  });
+}
+
+// O que foi COMBINADO com o servidor de mídia na publicação, e que por isso `replaceTrack`
+// não consegue mudar depois. Fica de fora o que é ajustável no remetente com a faixa no ar
+// -- o teto por qualidade de rede, por exemplo, que muda a toda hora e de propósito não
+// republica nada.
+function assinaturaDePublicacao(opcoes) {
+  const escada = opcoes.screenShareSimulcastLayers || opcoes.videoSimulcastLayers || [];
+  return JSON.stringify([
+    opcoes.videoCodec ?? null,
+    opcoes.scalabilityMode ?? null,
+    opcoes.simulcast ?? null,
+    opcoes.degradationPreference ?? null,
+    opcoes.screenShareEncoding?.maxBitrate ?? null,
+    opcoes.screenShareEncoding?.maxFramerate ?? null,
+    escada.map(preset => [preset.width, preset.height, preset.encoding?.maxBitrate, preset.encoding?.maxFramerate])
+  ]);
+}
+
+// O que foi combinado com o servidor na última publicação de cada fonte.
+const assinaturasPublicadas = { mic: null, camera: null, screen: null, screenAudio: null };
+
+// O corpo de uma publicação, FORA da fila. Só deve ser chamado de dentro de `naFila`.
+async function aplicarPublicacao(fonte, faixa) {
+  if (!transporte?.conectada) return;
+  const local = transporte.sala.localParticipant;
+  const anterior = publicacoesLocais[fonte];
+
+  // "false" e essencial: por padrao o servidor de midia ENCERRA a faixa ao despublicar.
+  // Quem manda no ciclo de vida das capturas e esta pagina -- sem isto, trocar o perfil
+  // de qualidade (que despublica e publica de novo) matava a tela compartilhada.
+  const despublicar = async publicacao => {
+    await local.unpublishTrack(publicacao.track ?? publicacao, false).catch(() => {});
+    publicacoesLocais[fonte] = null;
+    assinaturasPublicadas[fonte] = null;
+  };
+
+  if (!faixa || faixa.readyState === 'ended') {
+    if (anterior) await despublicar(anterior);
+    return;
+  }
+
+  const opcoes = opcoesDePublicacao(fonte, faixa);
+  const assinatura = assinaturaDePublicacao(opcoes);
+
+  // Trocar de camera ou de tela nao precisa republicar: a faixa entra no lugar da atual,
+  // sem renegociar e sem piscar para quem esta assistindo.
+  //
+  // Só enquanto o que foi combinado continuar valendo, e essa condição faltava aqui.
+  // `replaceTrack` troca os quadros e nada mais: codec, teto, escada de camadas e taxa
+  // máxima ficam como foram publicados. Trocar de câmera depois de escolher outro codec
+  // mantinha o codec antigo no ar, calado, e o painel passava a anunciar uma configuração
+  // que não era a que estava sendo enviada.
+  if (anterior?.track && typeof anterior.track.replaceTrack === 'function' && assinaturasPublicadas[fonte] === assinatura) {
+    try { await anterior.track.replaceTrack(faixa); return; }
+    catch (_) { await despublicar(anterior); }
+  } else if (anterior) {
+    await despublicar(anterior);
+  }
+  publicacoesLocais[fonte] = await local.publishTrack(faixa, opcoes);
+  assinaturasPublicadas[fonte] = assinatura;
 }
 
 // Substitui o que "definirFaixaEmTodosOsPares" fazia na malha: agora ha um destino so.
 function publicarFonte(fonte, faixa) {
-  const tarefa = filaDePublicacao.catch(() => {}).then(async () => {
-    if (!transporte?.conectada) return;
-    const local = transporte.sala.localParticipant;
-    const anterior = publicacoesLocais[fonte];
+  return naFila(() => aplicarPublicacao(fonte, faixa)).catch(erro => avisarFalhaDePublicacao(fonte, erro));
+}
 
-    // "false" e essencial: por padrao o servidor de midia ENCERRA a faixa ao despublicar.
-    // Quem manda no ciclo de vida das capturas e esta pagina -- sem isto, trocar o perfil
-    // de qualidade (que despublica e publica de novo) matava a tela compartilhada.
-    const despublicar = publicacao => local.unpublishTrack(publicacao.track ?? publicacao, false).catch(() => {});
-
-    if (!faixa || faixa.readyState === 'ended') {
-      if (anterior) { await despublicar(anterior); publicacoesLocais[fonte] = null; }
-      return;
-    }
-    // Trocar de camera ou de tela nao precisa republicar: a faixa entra no lugar da atual,
-    // sem renegociar e sem piscar para quem esta assistindo.
-    if (anterior?.track && typeof anterior.track.replaceTrack === 'function') {
-      try { await anterior.track.replaceTrack(faixa); return; }
-      catch (_) { await despublicar(anterior); publicacoesLocais[fonte] = null; }
-    }
-    publicacoesLocais[fonte] = await local.publishTrack(faixa, opcoesDePublicacao(fonte));
-  }).catch(erro => {
-    console.warn('Falha ao publicar', fonte, erro);
-    status.textContent = `Não foi possível enviar ${fonte === 'camera' ? 'a câmera' : fonte === 'mic' ? 'o microfone' : 'a tela'}. Tente desligar e ligar essa fonte.`;
-  });
-  filaDePublicacao = tarefa;
-  return tarefa;
+// Confere o que o servidor de mídia realmente tem contra o que esta página acha que publicou.
+//
+// Existe porque as duas listas divergem sem ninguém errar de forma visível: uma renegociação
+// que expira, uma queda no meio de um `unpublishTrack`, um `publishTrack` que resolve depois
+// de a sala já ter sido substituída. O sintoma é sempre o mesmo e sempre calado -- a captura
+// viva aqui, e do outro lado ninguém vendo nada. Rodar isto depois de cada sequência de
+// mudanças é mais barato do que descobrir qual das três aconteceu.
+async function reconciliarPublicacoes() {
+  if (!transporte?.conectada) return;
+  const local = transporte.sala.localParticipant;
+  const capturas = {
+    mic: faixaEnviadaDoMic,
+    camera: cameraStream?.getVideoTracks()[0],
+    screen: screenStream?.getVideoTracks()[0],
+    screenAudio: appAudioTrack?.readyState === 'live' ? appAudioTrack : screenStream?.getAudioTracks()[0]
+  };
+  for (const [fonte, faixa] of Object.entries(capturas)) {
+    if (!faixa || faixa.readyState !== 'live') continue;
+    const publicada = publicacoesLocais[fonte];
+    // `trackSid` só existe depois de o servidor confirmar. Sem ele, ou com um sid que o
+    // participante local não reconhece mais, o que está guardado aqui é um fantasma.
+    const viva = publicada?.trackSid && local.trackPublications.has(publicada.trackSid);
+    if (viva) continue;
+    registrarDiagnostico('midia.reconciliar', `${fonte} estava fora do ar; republicando`);
+    publicacoesLocais[fonte] = null;
+    assinaturasPublicadas[fonte] = null;
+    try { await aplicarPublicacao(fonte, faixa); }
+    catch (erro) { avisarFalhaDePublicacao(fonte, erro); }
+  }
 }
 
 // Nome preservado da malha: a interface inteira chama por aqui e nao precisa saber que
 // agora existe um destino so.
 function definirFaixaEmTodosOsPares(source, track) {
-  const publicacao = publicarFonte(source, track);
   // Faixa de microfone recem-publicada nasce ANUNCIADA como ativa, mesmo que a pessoa
-  // esteja muda: o anuncio precisa ser refeito por cima dela.
-  return source === 'mic' ? publicacao.then(anunciarMudoDoMic) : publicacao;
+  // esteja muda: o anuncio precisa ser refeito por cima dela. Os dois passos vão na MESMA
+  // tarefa -- entre publicar e anunciar não pode entrar outra mudança, ou o anúncio chega
+  // a uma faixa que já não é a que subiu.
+  if (source !== 'mic') return publicarFonte(source, track);
+  return naFila(async () => {
+    await aplicarPublicacao('mic', track);
+    await aplicarMudoDoMic();
+  }).catch(erro => avisarFalhaDePublicacao('mic', erro));
 }
 
 // `faixa.enabled = false` cala o som de verdade, mas e uma decisao que morre neste
@@ -677,17 +1005,17 @@ function definirFaixaEmTodosOsPares(source, track) {
 //
 // Vai pela mesma fila das publicacoes porque a ordem importa: anunciar o mudo de uma faixa
 // que ainda esta subindo nao chega a lugar nenhum.
+async function aplicarMudoDoMic() {
+  const faixa = publicacoesLocais.mic?.track;
+  if (typeof faixa?.mute !== 'function') return;
+  // micMuted e lido aqui, e nao no agendamento: entre um e outro a pessoa pode ter
+  // clicado no botao de novo, e quem vale e o ultimo clique.
+  if (faixa.isMuted === micMuted) return;
+  await (micMuted ? faixa.mute() : faixa.unmute());
+}
+
 function anunciarMudoDoMic() {
-  const tarefa = filaDePublicacao.catch(() => {}).then(async () => {
-    const faixa = publicacoesLocais.mic?.track;
-    if (typeof faixa?.mute !== 'function') return;
-    // micMuted e lido aqui, e nao no agendamento: entre um e outro a pessoa pode ter
-    // clicado no botao de novo, e quem vale e o ultimo clique.
-    if (faixa.isMuted === micMuted) return;
-    await (micMuted ? faixa.mute() : faixa.unmute());
-  }).catch(() => { /* sala caiu no meio; o proximo anuncio corrige */ });
-  filaDePublicacao = tarefa;
-  return tarefa;
+  return naFila(aplicarMudoDoMic).catch(() => { /* sala caiu no meio; o proximo anuncio corrige */ });
 }
 
 // ---------- Voltar ao ar depois de uma queda ----------
@@ -701,25 +1029,37 @@ function anunciarMudoDoMic() {
 // encerre (stopLocalTrackOnUnpublish, em room-transport.js). Sem isso a tela nao voltaria:
 // pedi-la de novo exige um gesto da pessoa, e ninguem clica em "compartilhar tela" no meio
 // de uma oscilacao de rede que nem percebeu.
-async function republicarTudo() {
-  Object.keys(publicacoesLocais).forEach(fonte => { publicacoesLocais[fonte] = null; });
-  tetoDeEnvioAplicado = 1;
+// Volta ao ar como UMA operação na fila, do começo ao fim. Voltar de uma queda é justamente
+// o momento em que mais coisas acontecem ao mesmo tempo -- a pessoa clicando, o vigia de
+// conexão reagindo, o servidor confirmando faixas antigas -- e era aqui que a intercalação
+// mais doía: a sessão nova subia meia.
+function republicarTudo() {
+  return naFila(async () => {
+    Object.keys(publicacoesLocais).forEach(fonte => { publicacoesLocais[fonte] = null; });
+    Object.keys(assinaturasPublicadas).forEach(fonte => { assinaturasPublicadas[fonte] = null; });
 
-  const viva = faixa => Boolean(faixa) && faixa.readyState === 'live';
-  if (viva(faixaEnviadaDoMic)) {
-    await publicarFonte('mic', faixaEnviadaDoMic);
-    await anunciarMudoDoMic();
-  }
-  const camera = cameraStream?.getVideoTracks()[0];
-  if (viva(camera)) await publicarFonte('camera', camera);
-  const tela = screenStream?.getVideoTracks()[0];
-  if (viva(tela)) await publicarFonte('screen', tela);
-  const somDaTela = viva(appAudioTrack) ? appAudioTrack : screenStream?.getAudioTracks()[0];
-  if (viva(somDaTela)) await publicarFonte('screenAudio', somDaTela);
+    const viva = faixa => Boolean(faixa) && faixa.readyState === 'live';
+    // Cada fonte sobe por conta própria, e uma que falhe não impede as seguintes. Numa volta
+    // de queda isso é o que decide se a pessoa reaparece inteira ou pela metade: um
+    // microfone que não voltou não é razão para a tela também não voltar.
+    const fontes = [['mic', faixaEnviadaDoMic],
+      ['camera', cameraStream?.getVideoTracks()[0]],
+      ['screen', screenStream?.getVideoTracks()[0]],
+      ['screenAudio', viva(appAudioTrack) ? appAudioTrack : screenStream?.getAudioTracks()[0]]];
+    for (const [fonte, faixa] of fontes) {
+      if (!viva(faixa)) continue;
+      try {
+        await aplicarPublicacao(fonte, faixa);
+        if (fonte === 'mic') await aplicarMudoDoMic();
+      } catch (erro) { console.warn('Não voltou ao ar', fonte, erro); }
+    }
+    // E o que não voltou tem uma segunda chance aqui, antes de qualquer aviso à pessoa.
+    try { await reconciliarPublicacoes(); } catch (_) { /* a próxima mudança tenta de novo */ }
 
-  // A qualidade so gera aviso quando MUDA. Quem volta com a rede ainda ruim nao receberia
-  // aviso nenhum, e subiria no teto cheio -- direto para a queda seguinte.
-  await ajustarEnvioPelaQualidade(transporte?.qualidade);
+    // A qualidade so gera aviso quando MUDA. Quem volta com a rede ainda ruim nao receberia
+    // aviso nenhum, e subiria no teto cheio -- direto para a queda seguinte.
+    await ajustarEnvioPelaQualidade(transporte?.qualidade);
+  }).catch(erro => avisarFalhaDePublicacao('screen', erro));
 }
 
 // ---------- Ceder banda quando a rede aperta, do lado de quem ENVIA ----------
@@ -735,40 +1075,72 @@ async function republicarTudo() {
 // os outros campos ficam como estao, porque um deles e o "active" com que o servidor
 // desliga as camadas que ninguem esta consumindo.
 const TETOS_POR_QUALIDADE = { poor: 0.25, lost: 0.25, good: 0.6, excellent: 1 };
-let tetoDeEnvioAplicado = 1;
 // Os tetos de origem de cada camada, guardados na primeira vez que mexemos no remetente.
 // Sem eles, aplicar 60% duas vezes daria 36%: o fator tem de incidir sempre sobre o valor
 // original, nunca sobre o que ja foi reduzido.
 const tetosOriginais = new WeakMap();
+// O fator vigente é de CADA remetente, não da página.
+//
+// Era uma variável só, e o "se o fator não mudou, não faça nada" que ela guardava mentia
+// justamente quando importava. Republicar a tela ou trocar de câmera cria um remetente NOVO,
+// no teto cheio, e esta função voltava sem tocar nele porque a página "já estava" em 60% --
+// numa rede que continuava ruim. Era também por isso que o codec de reserva nunca era
+// ajustado: ele tem remetente próprio, e nunca coube na variável única.
+//
+// Isso não é só teoria: na auditoria de codecs, H.264 e VP8 foram medidos com o teto cheio
+// enquanto VP9 e AV1 ficaram presos em 60% do que já era um orçamento menor -- 1,68 e 1,44
+// Mbps contra 4. A tabela que comparava os quatro estava comparando orçamentos diferentes.
+const fatorAplicado = new WeakMap();
+// O último fator que chegou a ser aplicado, só para a interface poder dizer "o teto está em
+// 60% porque a sua conexão foi classificada como instável". Um bitrate que cai pela metade
+// sem explicação parece defeito; com a frase, é uma decisão que a pessoa entende.
+let ultimoFatorDeQualidade = 1;
+
+// Todos os remetentes de uma faixa: o principal e os dos codecs de reserva.
+//
+// O de reserva existe quando alguém na sala não decodifica o codec escolhido -- o cliente
+// então codifica a imagem DE NOVO, em VP8, e esse segundo fluxo tem remetente próprio. Ele
+// custa processador de quem transmite e banda de upload como qualquer outro, e ficava de
+// fora de todo controle daqui.
+function remetentesDaFaixa(faixa) {
+  const lista = [];
+  if (typeof faixa?.sender?.getParameters === 'function') lista.push(faixa.sender);
+  faixa?.simulcastCodecs?.forEach(info => {
+    if (typeof info?.sender?.getParameters === 'function') lista.push(info.sender);
+  });
+  return lista;
+}
 
 async function ajustarEnvioPelaQualidade(qualidade) {
   const fator = TETOS_POR_QUALIDADE[qualidade];
-  if (!fator || fator === tetoDeEnvioAplicado) return;
+  if (!fator) return;
   const aplicado = [];
   for (const fonte of ['screen', 'camera']) {
-    const remetente = publicacoesLocais[fonte]?.track?.sender;
-    if (typeof remetente?.getParameters !== 'function') continue;
-    try {
-      const parametros = remetente.getParameters();
-      if (!parametros.encodings?.length) continue;
-      let originais = tetosOriginais.get(remetente);
-      if (!originais) {
-        originais = parametros.encodings.map(encoding => encoding.maxBitrate || 0);
-        tetosOriginais.set(remetente, originais);
-      }
-      parametros.encodings.forEach((encoding, indice) => {
-        const base = originais[indice];
-        // Nunca abaixo do degrau mais baixo util: cortar alem disso nao economiza nada que
-        // importe e so transforma a imagem em pasta.
-        if (base) encoding.maxBitrate = Math.max(120_000, Math.round(base * fator));
-      });
-      await remetente.setParameters(parametros);
-      aplicado.push(fonte);
-    } catch (_) { /* O proximo aviso de qualidade tenta de novo. */ }
+    for (const remetente of remetentesDaFaixa(publicacoesLocais[fonte]?.track)) {
+      if (fatorAplicado.get(remetente) === fator) continue;
+      try {
+        const parametros = remetente.getParameters();
+        if (!parametros.encodings?.length) continue;
+        let originais = tetosOriginais.get(remetente);
+        if (!originais) {
+          originais = parametros.encodings.map(encoding => encoding.maxBitrate || 0);
+          tetosOriginais.set(remetente, originais);
+        }
+        parametros.encodings.forEach((encoding, indice) => {
+          const base = originais[indice];
+          // Nunca abaixo do degrau mais baixo util: cortar alem disso nao economiza nada que
+          // importe e so transforma a imagem em pasta.
+          if (base) encoding.maxBitrate = Math.max(120_000, Math.round(base * fator));
+        });
+        await remetente.setParameters(parametros);
+        fatorAplicado.set(remetente, fator);
+        aplicado.push(fonte);
+      } catch (_) { /* O proximo aviso de qualidade tenta de novo. */ }
+    }
   }
   if (!aplicado.length) return;
-  tetoDeEnvioAplicado = fator;
-  registrarDiagnostico('midia.tetoDeEnvio', `${Math.round(fator * 100)}% em ${aplicado.join(' e ')}`);
+  ultimoFatorDeQualidade = fator;
+  registrarDiagnostico('midia.tetoDeEnvio', `${Math.round(fator * 100)}% em ${[...new Set(aplicado)].join(' e ')}`);
 }
 
 function paraCadaPar(fn) { peers.forEach(fn); }
@@ -1414,63 +1786,534 @@ const MOTIVOS_DE_LIMITE = {
   other: 'O navegador está limitando o envio por outro motivo.'
 };
 
+// O teto de uma combinação, já com tudo que o envio vai mesmo carregar: os pixels da captura
+// em vez dos do perfil, a taxa escolhida e o desconto do codec.
+function tetoAnunciado(perfil) {
+  return tetoParaOCodec(tetoDaTela(perfil), codecDePublicacao('screen'));
+}
+
+// Cada rótulo é calculado, e nenhum é escrito à mão.
+//
+// Os que eram fixos no HTML mentiam os três: o título anunciava "· 30 fps" mesmo com fluidez
+// escolhida, e cada opção de resolução prometia um teto ("até 2 / 4 / 6 Mbps") que deixou de
+// ser verdade quando o orçamento passou a acompanhar a captura. Agora a opção diz o que
+// aquela escolha custaria AGORA, com esta fonte, esta taxa e este codec -- e escolher entre
+// elas é comparar números reais em vez de rótulos.
+function atualizarRotulosDeQualidade() {
+  seletoresDeQualidade.forEach(select => {
+    [...select.options].forEach(opcao => {
+      const perfil = RoomQuality.profiles[opcao.value];
+      if (perfil) opcao.textContent = `${perfil.label} · até ${emMegabits(tetoAnunciado(perfil))}`;
+    });
+  });
+  const dica = document.getElementById('fpsDica');
+  const dicaDoEnvio = document.getElementById('shareFpsDica');
+  // Os dois tetos da MESMA resolução, lado a lado: é a comparação que decide a escolha, e
+  // ela não é óbvia -- dobrar os quadros não dobra a banda, porque quadros vizinhos se
+  // parecem e a compressão vive disso.
+  const perfil = perfilAtual();
+  const medidas = screenStream?.getVideoTracks()[0]?.getSettings?.() || {};
+  const largura = Math.min(medidas.width || perfil.width, perfil.width);
+  const altura = Math.min(medidas.height || perfil.height, perfil.height);
+  const codec = codecDePublicacao('screen');
+  const em = fps => emMegabits(tetoParaOCodec(RoomQuality.tetoDeEnvio(largura, altura, fps), codec));
+  // Quando a resolução já bate no teto de conta, mais quadros deixam de ganhar banda e
+  // passam a DIVIDIR a mesma -- e aí a definição de cada quadro cai. É o problema que esta
+  // separação corrigiu em 1080p reaparecendo em 1440p, agora por um motivo diferente e
+  // legítimo (o custo por espectador), e calar sobre isso seria deixar a pessoa escolher
+  // "mais" acreditando que é melhor.
+  const noTeto = RoomQuality.tetoDeEnvio(largura, altura, 60) >= RoomQuality.TETO_ABSOLUTO
+    && RoomQuality.tetoDeEnvio(largura, altura, 30) >= RoomQuality.TETO_ABSOLUTO;
+  const texto = `Nesta resolução: 30 quadros até ${em(30)}, 60 quadros até ${em(60)}.`
+    + (noTeto
+      ? ` Os dois batem no teto de ${emMegabits(RoomQuality.TETO_ABSOLUTO)}, que existe porque o servidor manda uma cópia por espectador.`
+        + ' Aqui 60 quadros não ganham banda, dividem a mesma: mais movimento, menos definição em cada quadro.'
+        + ' Para 60 quadros com imagem cheia, uma resolução abaixo entrega mais.'
+      : ' Dobrar os quadros não dobra a banda, mas dobra o trabalho do seu processador.');
+  if (dica) dica.textContent = texto;
+  if (dicaDoEnvio) dicaDoEnvio.textContent = texto;
+}
+
+// ---------- As medições, desenhadas em vez de despejadas ----------
+//
+// Isto era um parágrafo de texto monoespaçado com tudo dentro: resolução, quadros, bitrate,
+// codec, camadas, codec de reserva e o motivo do limite, separados por pontos e quebras de
+// linha. Cada informação que a instrumentação ganhou tornava o parágrafo mais completo e
+// menos legível, até chegar ao ponto em que quem abre o painel para entender um problema
+// precisa LER tudo para descobrir se há um problema.
+//
+// Agora a hierarquia está na tela e não na frase. Os três números que respondem "como está
+// agora" aparecem grandes; o que responde "está piorando, e por quê" aparece como um aviso
+// com cor; e os detalhes por camada ficam numa grade, que é a forma natural de comparar
+// linhas. Nada foi removido -- o relatório técnico completo continua no Diagnóstico.
+// Número com vírgula, como se escreve em português. `toFixed` devolve ponto decimal, e um
+// "5.3 ms" no meio de uma interface em português é um detalhe que denuncia descuido.
+const comVirgula = (valor, casas = 1) => valor.toFixed(casas).replace('.', ',');
+// "video/H264" é o que o navegador devolve; "H.264" é como o codec se chama.
+const nomeDoCodec = mime => (mime || '').replace(/^video\//i, '')
+  .replace(/^H264$/i, 'H.264').replace(/^H265$/i, 'H.265').replace(/^AV1$/i, 'AV1');
+
+const elemento = (tag, classe, texto) => {
+  const el = document.createElement(tag);
+  if (classe) el.className = classe;
+  // Sempre `textContent`: aqui entram nomes de codec e implementações de codificador, que
+  // vêm do navegador, e nenhum deles tem motivo para virar HTML.
+  if (texto != null) el.textContent = texto;
+  return el;
+};
+
+function blocoDeNumero(valor, rotulo) {
+  const bloco = elemento('div', 'medicao-numero');
+  bloco.append(elemento('strong', null, valor), elemento('span', null, rotulo));
+  return bloco;
+}
+
+function linhaDeCamada(c, principal) {
+  const linha = elemento('div', 'medicao-linha');
+  linha.append(
+    elemento('span', 'medicao-camada-nome', `${c.altura || '?'}p`),
+    elemento('span', null, `${c.fps} fps`),
+    elemento('span', null, emMegabits(c.kbps * 1000)),
+    // O custo de codificar cada quadro é o que separa "minha internet não dá conta" de "meu
+    // processador não dá conta". Sem ele, trocar de codec é fé.
+    elemento('span', 'medicao-custo', c.msPorQuadro ? `${comVirgula(c.msPorQuadro)} ms/quadro` : '—')
+  );
+  if (!principal) linha.classList.add('medicao-linha-secundaria');
+  return linha;
+}
+
+function renderizarMedicaoDoEnvio(ao_vivo, q) {
+  ao_vivo.textContent = '';
+  // Ninguém assistindo é o caso mais comum de tela compartilhada, e ele não é um problema.
+  //
+  // O servidor desliga as camadas que ninguém consome, então o envio vai a zero -- que é a
+  // maior economia que o Nexo faz. Mostrar aquilo como "0 quadros, 0,0 Mbps" ao lado de um
+  // aviso laranja transformava a economia em susto, e acusava o codificador de não dar conta
+  // exatamente quando ele estava de folga.
+  if (q.emEspera) {
+    const espera = elemento('div', 'medicao-veredito ok');
+    espera.append(elemento('strong', null, 'Em espera: ninguém abriu a sua tela ainda.'));
+    espera.append(elemento('span', null, 'A tela está publicada, mas o servidor desligou as camadas'
+      + ' porque não há quem as receba — então nada está sendo codificado nem subindo. As medições'
+      + ' aparecem quando alguém clicar em Assistir.'));
+    ao_vivo.append(espera);
+    return;
+  }
+  const codec = nomeDoCodec(q.codec);
+  // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
+  const ondeCodifica = q.hardware === true ? 'em hardware' : q.hardware === false ? 'em software' : '';
+
+  const destaque = elemento('div', 'medicao-destaque');
+  destaque.append(
+    blocoDeNumero(`${q.width || '?'}×${q.height || '?'}`, 'imagem'),
+    blocoDeNumero(String(Math.round(q.fps || 0)), 'quadros/s'),
+    // O TOTAL, e não só a camada de cima: é este número que multiplica por espectador.
+    blocoDeNumero(emMegabits(q.bitrate), 'subindo no total')
+  );
+  ao_vivo.append(destaque);
+
+  if (codec || ondeCodifica) {
+    ao_vivo.append(elemento('div', 'medicao-sub', [codec, ondeCodifica].filter(Boolean).join(' · ')));
+  }
+
+  // Os TRÊS degraus do caminho, lado a lado: o que foi pedido, o que a fonte entregou, o que
+  // saiu codificado.
+  //
+  // Eram dois, e faltava justamente o primeiro. Com "48 capturados → 49 codificados" o
+  // painel dizia que o codificador estava acompanhando, o que era verdade, e deixava sem
+  // resposta a pergunta de quem pediu 60: onde foram os outros 12? O degrau estava antes da
+  // captura, e não havia como ver isso.
+  //
+  // A comparação de saída é só com a camada de MAIOR resolução, e só quando ela está ativa.
+  // O degrau de baixo é 15 quadros de propósito -- numa conexão apertada, texto legível a 15
+  // vale mais que borrão a 30 -- então incluí-lo aqui faria o painel acusar o codificador de
+  // não acompanhar por estar funcionando exatamente como foi projetado.
+  const principal = q.camadas?.[0];
+  if (q.capturaFps != null && principal?.ativo) {
+    const fluxo = elemento('div', 'medicao-fluxo');
+    const captura = Math.round(q.capturaFps);
+    const codificado = principal.fps;
+    fluxo.append(
+      elemento('span', 'medicao-fluxo-ponta medicao-fluxo-pedido', `${quadrosDaTela} pedidos`),
+      elemento('span', 'medicao-seta', '→'),
+      elemento('span', 'medicao-fluxo-ponta', `${captura} capturados`),
+      elemento('span', 'medicao-seta', '→'),
+      elemento('span', 'medicao-fluxo-ponta', `${codificado} codificados`)
+    );
+    // Um quarto de diferença é folga para arredondamento e para o codificador respirar. Além
+    // disso, alguém ficou para trás -- e QUAL dos dois muda completamente o que fazer a
+    // respeito, que é a razão de os três números estarem aqui.
+    const fonteEntrega = captura >= quadrosDaTela * 0.75;
+    const codificadorAcompanha = codificado >= captura * 0.75;
+    const selo = !codificadorAcompanha ? { classe: 'alerta', texto: 'o codificador não acompanha a fonte' }
+      : !fonteEntrega ? { classe: 'alerta', texto: 'a fonte entrega menos do que você pediu' }
+      : { classe: 'ok', texto: 'o caminho inteiro acompanha o que você pediu' };
+    fluxo.append(elemento('span', `medicao-selo ${selo.classe}`, selo.texto));
+    ao_vivo.append(fluxo);
+    // Quando o degrau está entre o pedido e a captura, dizer o que isso significa: é o
+    // ponto em que nenhum ajuste desta página tem efeito, e saber disso evita a pessoa
+    // ficar trocando resolução e codec atrás de quadros que nunca existiram.
+    if (fonteEntrega === false && codificadorAcompanha) {
+      ao_vivo.append(elemento('div', 'medicao-nota', 'A fonte não tem mais quadros para dar:'
+        + ' a captura de tela só produz quadro quando a imagem muda, e não passa da taxa em que o'
+        + ' programa capturado está desenhando. Se o jogo está a ' + captura + ' quadros, é isso que'
+        + ' sobe — e a placa de vídeo ocupada também afeta a captura, mesmo com o processador folgado.'));
+    }
+  }
+
+  if (q.camadas?.length) {
+    ao_vivo.append(elemento('div', 'medicao-titulo', q.camadas.length > 1 ? 'Camadas que sobem' : 'Camada única'));
+    const grade = elemento('div', 'medicao-grade');
+    q.camadas.forEach((c, i) => grade.append(linhaDeCamada(c, i === 0)));
+    ao_vivo.append(grade);
+    // O custo SOMADO, que é o número que decide se a taxa pedida cabe. As camadas sobem pelo
+    // mesmo adaptador, em sequência, na mesma thread: o painel mostrava "17,4 ms" e "5,4 ms"
+    // lado a lado e deixava a soma — a única conta que importa — para quem estivesse
+    // disposto a fazê-la de cabeça.
+    const custo = custoDeCodificacao(q);
+    if (custo) {
+      const cabe = custo.projetado <= 900;
+      const linha = elemento('div', `medicao-custo-total ${cabe ? '' : 'aperta'}`);
+      linha.append(elemento('strong', null, `${Math.round(custo.agora)} ms`));
+      linha.append(elemento('span', null, `de codificação por segundo, de 1000 disponíveis.`
+        + (cabe ? '' : ` Os ${quadrosDaTela} quadros pedidos precisariam de ${Math.round(custo.projetado)} ms — não cabe.`)));
+      ao_vivo.append(linha);
+    }
+    // Uma camada sozinha desligada continua sendo economia, e continua merecendo explicação:
+    // é o degrau que ninguém está usando, não um degrau que falhou.
+    const dormindo = q.camadas.filter(c => !c.ativo);
+    if (dormindo.length) {
+      ao_vivo.append(elemento('div', 'medicao-nota',
+        `${dormindo.length === 1 ? 'Uma camada está' : `${dormindo.length} camadas estão`} desligada${dormindo.length === 1 ? '' : 's'}`
+        + ' porque ninguém a está recebendo. O servidor religa quando alguém precisar dela.'));
+    }
+  }
+
+  // O de reserva é uma codificação inteira a mais, paga por quem transmite, e nada na tela
+  // contava isso.
+  if (q.reserva) {
+    ao_vivo.append(elemento('div', 'medicao-nota',
+      `Codec de reserva ${nomeDoCodec(q.reserva.codec)} também subindo: ${emMegabits(q.reserva.kbps * 1000)}. `
+      + 'Alguém na sala não decodifica sua escolha, então a imagem sobe duas vezes.'));
+  }
+
+  // O veredito fecha o painel porque é a conclusão, não a introdução: quem chega aqui já viu
+  // os números que a sustentam.
+  const queda = diagnosticoDaQueda(q);
+  if (queda) {
+    // A queda por captura não é laranja: na maioria das vezes ela é a tela parada, que é
+    // economia. Alarmar nesse caso ensina a pessoa a ignorar o aviso quando ele importar.
+    const nivel = queda.nivel === 'ok' ? 'ok'
+      : queda.nivel === 'indefinido' || queda.nivel === 'fonte' ? 'neutro' : 'alerta';
+    const caixa = elemento('div', `medicao-veredito ${nivel}`);
+    caixa.append(elemento('strong', null, queda.titulo));
+    if (queda.texto) caixa.append(elemento('span', null, queda.texto));
+    ao_vivo.append(caixa);
+  } else if (MOTIVOS_DE_LIMITE[q.reason]) {
+    ao_vivo.append(elemento('div', 'medicao-veredito alerta', MOTIVOS_DE_LIMITE[q.reason]));
+  }
+}
+
 function atualizarBotaoDeQualidade() {
   const prioridade = PRIORIDADES_DE_TELA[prioridadeDaTela];
-  qualidadeBtn.textContent = `${perfilAtual().label} · ${prioridade.rotulo.toLowerCase()} · até ${prioridade.fps} fps e ${emMegabits(perfilAtual().bitrate)}`;
+  atualizarRotulosDeQualidade();
+  qualidadeBtn.textContent = `${perfilAtual().label} · ${quadrosDaTela} fps · ${prioridade.rotulo.toLowerCase()} · até ${emMegabits(tetoAnunciado(perfilAtual()))}`;
   const q = qualidadeDoEnvio;
   const ao_vivo = document.getElementById('qualityLive');
   if (!screenStream) { ao_vivo.textContent = 'As medições aparecem durante a transmissão.'; return; }
-  if (!q) { ao_vivo.textContent = 'Aguardando medições de envio…'; return; }
-  const codec = q.codec ? ` · ${q.codec.replace(/^video\//i, '')}` : '';
-  // Só afirma hardware quando o navegador informa; caso contrário, silêncio.
-  const encoder = q.hardware === true ? ' · em hardware' : q.hardware === false ? ' · em software' : '';
-  const motivo = MOTIVOS_DE_LIMITE[q.reason];
-  const camadas = q.camadas?.length > 1
-    ? `\nCamadas: ${q.camadas.map(c => `${c.altura || '?'}p a ${c.fps} fps`).join(' · ')}`
-    : '';
-  ao_vivo.textContent = `Enviando ${q.width || '?'} × ${q.height || '?'} · ${Math.round(q.fps || 0)} fps · ${emMegabits(q.bitrate)}${codec}${encoder}`
-    + camadas
-    // A frase sobre a camada de cada espectador já está no parágrafo logo acima do painel;
-    // repeti-la aqui só empurrava as medições para baixo.
-    + (motivo ? `\n${motivo}` : '\nNada está limitando o envio.');
+  if (!q) { ao_vivo.textContent = 'Aguardando as primeiras medições…'; return; }
+  renderizarMedicaoDoEnvio(ao_vivo, q);
 }
 
 // Uma leitura periodica do envio, so para a interface. Ela nao decide mais nada: ajustar
 // resolucao e bitrate por espectador e tarefa do servidor de midia.
+//
+// O que ela mede mudou, e essa é a diferença entre um número decorativo e um número que
+// serve para decidir. Antes olhava só a camada de maior altura e chamava aquilo de "o
+// envio": numa publicação de duas camadas mais um codec de reserva, isso podia ser um terço
+// do que a máquina estava realmente subindo. Qualquer conversa sobre economia de banda
+// partindo daquele número estava partindo de um número errado -- e é por isso que somar
+// tudo vem ANTES de calibrar orçamento por codec ou por conteúdo.
 let medindoEnvio = false;
 async function medirEnvio() {
   const faixa = publicacoesLocais.screen?.track;
-  if (!faixa?.getRTCStatsReport || medindoEnvio) return;
+  const remetentes = remetentesDaFaixa(faixa);
+  if (!remetentes.length || medindoEnvio) return;
   medindoEnvio = true;
   try {
-    const stats = await faixa.getRTCStatsReport();
-    if (!stats) return;
-    // Sua tela sobe repartida em camadas, e cada uma tem os proprios quadros. Olhar so a
-    // maior esconde justamente o que se ve na tela: uma camada travando enquanto a outra
-    // vai bem. Por isso as duas aparecem.
-    const camadas = [...stats.values()]
-      .filter(i => i.type === 'outbound-rtp' && i.kind === 'video')
-      .sort((a, b) => (b.frameHeight || 0) - (a.frameHeight || 0));
-    const video = camadas[0];
-    if (!video) return;
-    const anterior = qualidadeDoEnvio?.bruto;
-    const intervalo = anterior && video.timestamp - anterior.timestamp;
+    // Um relatório por remetente: o principal e os dos codecs de reserva. `getStats` da
+    // faixa só alcança o principal, e o de reserva é exatamente o que ninguém estava vendo.
+    const relatorios = await Promise.all(remetentes.map(r => r.getStats().catch(() => null)));
+    const fluxos = [];
+    relatorios.forEach((stats, indice) => {
+      if (!stats) return;
+      stats.forEach(item => {
+        if (item.type !== 'outbound-rtp' || item.kind !== 'video') return;
+        fluxos.push({
+          // Os ids são únicos dentro de um relatório, não entre relatórios.
+          chave: `${indice}:${item.id}`,
+          item,
+          codec: stats.get(item.codecId)?.mimeType || ''
+        });
+      });
+    });
+    if (!fluxos.length) return;
+    fluxos.sort((a, b) => (b.item.frameHeight || 0) - (a.item.frameHeight || 0));
+
+    // O FPS da FONTE, antes de qualquer codificação. É a medida que faltava, e sem ela uma
+    // queda de quadros não tinha como ser explicada.
+    //
+    // Quando os quadros caem, há duas histórias possíveis e elas pedem coisas opostas. Ou a
+    // captura parou de entregar -- o jogo entrou em tela cheia exclusiva, o compositor do
+    // Windows mudou de modo, a fonte engasgou -- e então não há ajuste de qualidade nesta
+    // página que resolva, porque não existe quadro para codificar. Ou a captura continua
+    // entregando 60 e é o codificador que não acompanha, e aí baixar resolução ou codec
+    // resolve. Olhando só o lado do codificador, as duas são o mesmo número caindo.
+    let fonte = null;
+    relatorios.forEach(stats => {
+      if (!stats) return;
+      stats.forEach(item => {
+        if (item.type === 'media-source' && item.kind === 'video') fonte = item;
+      });
+    });
+
+    const anteriores = qualidadeDoEnvio?.bruto || {};
+    const bruto = {};
+    let bitsPorSegundo = 0;
+    const porFluxo = fluxos.map(({ chave, item, codec }) => {
+      const antes = anteriores[chave];
+      const intervalo = antes && item.timestamp - antes.timestamp;
+      const kbps = intervalo > 0 ? Math.max(0, (item.bytesSent - antes.bytes) * 8 / intervalo) : 0;
+      // Quanto custou codificar CADA quadro desta camada, em milissegundos. É a medida que
+      // separa "minha internet não dá conta" de "meu processador não dá conta", e a única
+      // que mostra o preço real de trocar de codec.
+      const quadros = antes ? item.framesEncoded - antes.framesEncoded : 0;
+      const segundos = antes ? item.totalEncodeTime - antes.totalEncodeTime : 0;
+      bruto[chave] = { bytes: item.bytesSent, timestamp: item.timestamp, framesEncoded: item.framesEncoded, totalEncodeTime: item.totalEncodeTime };
+      bitsPorSegundo += kbps * 1000;
+      return {
+        altura: item.frameHeight, fps: Math.round(item.framesPerSecond || 0), kbps, codec,
+        msPorQuadro: quadros > 0 ? (segundos * 1000) / quadros : null,
+        // Camada desligada pelo servidor porque ninguém a consome (dynacast). Zero aqui é
+        // economia, não defeito -- e sem distinguir as duas coisas a interface acusava o
+        // codificador de não dar conta justamente quando ele estava de folga.
+        ativo: item.active !== false
+      };
+    });
+
+    const palco = fluxos[0].item;
+    const codecPrincipal = codecDePublicacao('screen');
+    // O de reserva é o que sobe num codec que não é o pedido: o cliente codifica a imagem
+    // DE NOVO para quem não decodifica a escolha. Custa processador e upload, e some da
+    // conta de quem só olha a camada de cima.
+    const reserva = porFluxo.filter(f => f.codec && !f.codec.toLowerCase().includes(codecPrincipal));
     qualidadeDoEnvio = {
-      width: video.frameWidth, height: video.frameHeight, fps: video.framesPerSecond,
-      bitrate: intervalo > 0 ? Math.max(0, (video.bytesSent - anterior.bytes) * 8000 / intervalo) : 0,
-      reason: video.qualityLimitationReason,
-      codec: stats.get(video.codecId)?.mimeType || '',
+      width: palco.frameWidth, height: palco.frameHeight, fps: palco.framesPerSecond,
+      // O total: todas as camadas, de todos os codecs. É este o número que multiplica por
+      // espectador na conta de quem hospeda.
+      bitrate: bitsPorSegundo,
+      bitrateDoPalco: porFluxo[0].kbps * 1000,
+      reason: palco.qualityLimitationReason,
+      // Quanto tempo o envio passou limitado, e por quê: um "bandwidth" que aparece num
+      // instante e some não é o mesmo problema que um que dura a transmissão inteira.
+      duracoesDoLimite: palco.qualityLimitationDurations || null,
+      codec: fluxos[0].codec,
       // Unica evidencia objetiva de que a placa de video esta sendo usada.
-      encoder: video.encoderImplementation || '',
-      hardware: video.powerEfficientEncoder,
-      camadas: camadas.map(c => ({ altura: c.frameHeight, fps: Math.round(c.framesPerSecond || 0) })),
-      bruto: { bytes: video.bytesSent, timestamp: video.timestamp }
+      encoder: palco.encoderImplementation || '',
+      hardware: palco.powerEfficientEncoder,
+      msPorQuadro: porFluxo[0].msPorQuadro,
+      camadas: porFluxo,
+      reserva: reserva.length ? { codec: reserva[0].codec, kbps: reserva.reduce((soma, f) => soma + f.kbps, 0) } : null,
+      // O que a FONTE está produzindo, para comparar com o que saiu codificado.
+      capturaFps: fonte?.framesPerSecond ?? null,
+      capturaWidth: fonte?.width ?? null,
+      capturaHeight: fonte?.height ?? null,
+      // O corte que a qualidade da rede impôs, se impôs. Sem isto, um teto reduzido a 60%
+      // parece uma queda inexplicável de bitrate.
+      fatorDeRede: ultimoFatorDeQualidade,
+      // Sem nenhuma camada ativa, a tela está publicada e não está sendo codificada: é o
+      // servidor economizando porque ninguém abriu sua tela ainda.
+      emEspera: porFluxo.every(f => !f.ativo),
+      bruto
     };
+    registrarAmostraDoEnvio(qualidadeDoEnvio);
     atualizarBotaoDeQualidade();
   } catch (_) { /* Sem estatísticas, a medição some da tela e a transmissão segue. */ }
   finally { medindoEnvio = false; }
 }
 setInterval(medirEnvio, 2000);
+
+// ---------- O histórico do envio, e o que ele conclui ----------
+//
+// "Por que o FPS cai depois de vários minutos compartilhando?" é uma pergunta que uma
+// medição instantânea não responde, por mais completa que ela seja. O painel mostrava o
+// agora; a pergunta é sobre a diferença entre o agora e dez minutos atrás.
+//
+// Uma amostra a cada quinze segundos dá uma hora de sessão em sessenta entradas. A medição
+// continua rodando a cada dois segundos para a interface -- guardar tudo seria ruído, porque
+// oscilação de dois segundos não é degradação.
+const SEGUNDOS_ENTRE_AMOSTRAS = 15;
+const AMOSTRAS_GUARDADAS = 240;
+const historicoDoEnvio = [];
+let ultimaAmostra = 0;
+
+function registrarAmostraDoEnvio(q) {
+  // Tempo de espera não entra no histórico, e essa guarda é o que impede o diagnóstico de
+  // mentir. Enquanto ninguém assiste, o servidor desliga as camadas e o envio é zero de
+  // propósito; guardar esses zeros faria a comparação com o melhor momento acusar "os
+  // quadros caíram de 30 para 0" em toda sessão em que alguém fechasse a sua tela.
+  if (q.emEspera) return;
+  const agora = Date.now();
+  if (agora - ultimaAmostra < SEGUNDOS_ENTRE_AMOSTRAS * 1000) return;
+  ultimaAmostra = agora;
+  historicoDoEnvio.push({
+    em: agora,
+    fps: Math.round(q.fps || 0),
+    capturaFps: q.capturaFps == null ? null : Math.round(q.capturaFps),
+    altura: q.height || 0,
+    mbps: q.bitrate / 1e6,
+    msPorQuadro: q.msPorQuadro,
+    motivo: q.reason || 'nada',
+    fatorDeRede: q.fatorDeRede
+  });
+  while (historicoDoEnvio.length > AMOSTRAS_GUARDADAS) historicoDoEnvio.shift();
+}
+window.verHistoricoDoEnvio = () => historicoDoEnvio.slice();
+
+// O histórico compara uma configuração consigo mesma, e por isso ele é zerado quando a
+// configuração muda.
+//
+// Sem isto, baixar a taxa de 60 para 30 de propósito -- ou trocar para uma resolução menor,
+// ou mudar de fonte -- fazia o diagnóstico anunciar "os quadros caíram de 60 para 30 nos
+// últimos 2 min", acusando degradação onde houve escolha. Uma queda só é queda se nada foi
+// pedido de diferente.
+function esquecerHistoricoDoEnvio() {
+  historicoDoEnvio.length = 0;
+  ultimaAmostra = 0;
+}
+
+// Quanto trabalho de codificação existe por segundo, e quanto existiria na taxa pedida.
+//
+// Esta conta virou necessária porque o navegador não sempre denuncia a saturação. Medido em
+// campo: as duas camadas a `limitado por=none`, a fonte entregando 44 quadros e a saída em
+// 24 -- o codificador claramente derrubando quadros, e o `qualityLimitationReason` calado.
+// A suspeita é que o `scaleResolutionDownBy` declarado na escada trave o adaptador de
+// resolução: sem poder encolher a imagem, ele não marca "cpu", só descarta quadros.
+//
+// A aritmética não fica calada. Um `SimulcastEncoderAdapter` codifica as camadas em
+// sequência, então o que importa é a SOMA: cada camada custa o seu tempo por quadro vezes a
+// sua taxa, e o total disputa os mesmos 1000 ms de cada segundo. O painel mostrava 17,4 e
+// 5,4 ms lado a lado sem nunca somar, e a soma é o número que decide.
+function custoDeCodificacao(q) {
+  const camadas = (q.camadas || []).filter(c => c.ativo && c.msPorQuadro > 0);
+  if (!camadas.length) return null;
+  const agora = camadas.reduce((soma, c) => soma + c.msPorQuadro * c.fps, 0);
+  // O que a taxa pedida custaria mantendo o preço por quadro de agora. A camada de cima
+  // acompanharia o pedido; as de baixo têm taxa própria e de propósito (15 quadros no degrau
+  // barato), então elas entram como estão.
+  const projetado = camadas.reduce((soma, c, i) =>
+    soma + c.msPorQuadro * (i === 0 ? quadrosDaTela : c.fps), 0);
+  return { agora, projetado };
+}
+
+// Quanto o envio piorou desde o melhor momento da sessão, e por quê.
+//
+// A comparação é contra o MELHOR e não contra o primeiro: os primeiros segundos de uma
+// transmissão são de acomodação -- o codificador ainda está subindo, a estimativa de banda
+// ainda não existe -- e usar aquilo como referência acusaria degradação em toda sessão.
+//
+// Cada resposta aqui manda a pessoa para um lugar diferente, e é por isso que vale a pena
+// distinguir em vez de dizer "sua conexão ou seu PC". A fonte parar não tem remédio nesta
+// página; o processador saturar tem (resolução, taxa, codec); o teto cair por rede tem outro
+// (esperar, ou aceitar menos).
+const QUEDA_QUE_IMPORTA = 0.75;      // abaixo de três quartos do melhor já se nota
+const QUADROS_MINIMOS_PARA_COMPARAR = 5;
+
+// O "agora" vem da medição corrente, não da última amostra do histórico.
+//
+// Ler o histórico para as duas pontas parecia natural e produzia uma contradição dentro da
+// mesma caixa: as amostras são de quinze em quinze segundos, então o veredito ficava até
+// quinze segundos atrasado em relação aos números logo acima dele. Numa tela que ficou
+// parada e voltou a se mover, o topo já mostrava 50 quadros enquanto o veredito ainda
+// acusava 9. O histórico serve para saber qual foi o MELHOR momento; o agora é o agora.
+function diagnosticoDaQueda(medicao) {
+  if (historicoDoEnvio.length < 3 || !medicao) return null;
+  const melhor = historicoDoEnvio.reduce((a, b) => (b.fps > a.fps ? b : a));
+  if (melhor.fps < QUADROS_MINIMOS_PARA_COMPARAR) return null;
+  const atual = {
+    fps: Math.round(medicao.fps || 0),
+    capturaFps: medicao.capturaFps == null ? null : Math.round(medicao.capturaFps),
+    motivo: medicao.reason || 'nada',
+    msPorQuadro: medicao.msPorQuadro,
+    fatorDeRede: medicao.fatorDeRede
+  };
+  if (atual.fps >= melhor.fps * QUEDA_QUE_IMPORTA) {
+    return { nivel: 'ok', titulo: `Estável: ${atual.fps} quadros por segundo, contra ${melhor.fps} no melhor momento.` };
+  }
+  const minutos = Math.max(1, Math.round((Date.now() - melhor.em) / 60000));
+  const abertura = `Os quadros caíram de ${melhor.fps} para ${atual.fps} desde o melhor momento, ${minutos} min atrás.`;
+
+  // O que o NAVEGADOR afirma vem antes do que se pode inferir, e essa ordem foi aprendida
+  // errando.
+  //
+  // A inferência pela captura estava sendo testada primeiro, e ganhava de um
+  // `qualityLimitationReason: cpu` explícito. O erro não é só de precedência: quando o
+  // codificador não dá conta, o libwebrtc aplica contrapressão e DERRUBA quadros antes de
+  // codificar -- então a captura cai *por causa* da CPU. As duas coisas ficam verdadeiras ao
+  // mesmo tempo, e a inferência apontava a consequência em vez da causa. Visto em campo:
+  // 1080p a 60 pedidos, 43 capturados, 11,7 ms por quadro (60 x 11,7 = 702 ms de
+  // codificação por segundo, que não cabe numa thread) -- e o painel dizia "a fonte não tem
+  // mais quadros para dar", mandando a pessoa procurar no lugar errado.
+  if (atual.motivo === 'cpu') {
+    // O custo por quadro vira o argumento: a conta mostra por que a taxa pedida não cabe, em
+    // vez de pedir que se acredite.
+    const custo = atual.msPorQuadro
+      ? ` Cada quadro custa ${comVirgula(atual.msPorQuadro)} ms para codificar, então os ${quadrosDaTela} que você pediu`
+        + ` precisariam de ${Math.round(atual.msPorQuadro * quadrosDaTela)} ms de codificação por segundo — e só existem 1000.`
+      : '';
+    return { nivel: 'cpu', titulo: abertura, texto: `É o processador que não acompanha.${custo}`
+      + ' Baixe a resolução ou a taxa de quadros. Se a codificação estiver em software (o Diagnóstico diz), ela'
+      + ' está saindo no processador, e o limite é uma thread de codificação — não os seus núcleos todos, que é'
+      + ' por que o uso total de CPU pode parecer folgado.' };
+  }
+  if (atual.motivo === 'bandwidth') {
+    const corte = atual.fatorDeRede < 1 ? ` O teto de envio está reduzido a ${Math.round(atual.fatorDeRede * 100)}% porque a sua conexão foi classificada como instável.` : '';
+    return { nivel: 'rede', titulo: abertura, texto: 'O limite é a sua banda de subida.'
+      + `${corte} Baixar a resolução ajuda; nada aqui contorna o limite do link.` };
+  }
+  // O navegador calado não significa que não há causa. Quando a conta de codificação não
+  // cabe em um segundo, ela é a causa -- e dizê-la é melhor do que oferecer "não tem causa
+  // óbvia" a quem está olhando os números que a provam.
+  const custo = custoDeCodificacao(medicao);
+  if (custo && custo.projetado > 900) {
+    const camadas = medicao.camadas.filter(c => c.ativo && c.msPorQuadro > 0);
+    const detalhe = camadas.length > 1
+      ? ` Somando as camadas (${camadas.map(c => `${c.altura}p a ${comVirgula(c.msPorQuadro)} ms`).join(' e ')}),`
+      : ` A ${comVirgula(camadas[0].msPorQuadro)} ms por quadro,`;
+    return { nivel: 'cpu', titulo: abertura, texto: 'O codificador não tem tempo para a taxa que você pediu.'
+      + `${detalhe} os ${quadrosDaTela} quadros pedidos precisariam de ${Math.round(custo.projetado)} ms de codificação`
+      + ' por segundo — e um segundo tem 1000. As camadas são codificadas em sequência, na mesma thread, então o que'
+      + ' conta é a soma; o uso total do processador pode parecer folgado e ainda assim não caber.'
+      + ' Baixe a resolução ou a taxa: menos pixels custam menos por quadro.' };
+  }
+  // Só quando nem o navegador nem a conta apontam limite é que vale inferir pela captura.
+  // Aqui há duas explicações com a mesma assinatura, e a mais comum não é problema nenhum: a
+  // captura de tela só produz quadro quando algo muda, então tela parada é captura parada --
+  // a maior economia que existe. A outra é a fonte não conseguir acompanhar.
+  if (atual.capturaFps != null && atual.capturaFps < melhor.fps * QUEDA_QUE_IMPORTA) {
+    return { nivel: 'fonte', titulo: abertura, texto: `A captura está entregando ${atual.capturaFps} quadros e o`
+      + ' codificador está acompanhando — os quadros não estão sendo perdidos, eles não estão chegando a existir.'
+      + ' Três coisas fazem isso. Se a tela ficou parada, é o esperado e não gasta banda de ninguém. Se havia'
+      + ' movimento, ou a fonte travou (jogo em tela cheia exclusiva, janela minimizada) ou a própria captura de'
+      + ` tela não sustenta ${quadrosDaTela} quadros nesta resolução — copiar a imagem da placa de vídeo para o`
+      + ' navegador tem um custo por quadro, e ele cresce com os pixels. Nos três casos, mexer em codec não ajuda;'
+      + ' no último, uma resolução menor ajuda, porque há menos para copiar.' };
+  }
+  // Caiu, a fonte entrega, e o navegador não diz estar limitando nada. Não inventar causa.
+  return { nivel: 'indefinido', titulo: abertura, texto: 'A captura continua entregando e o navegador não aponta'
+    + ' limite de processador nem de banda. Vale abrir o Diagnóstico e copiar o relatório: esta combinação não tem'
+    + ' causa óbvia, e o histórico completo é o que permite achá-la.' };
+}
 
 // ---------- Quanto a sala custou ----------
 //
@@ -1505,16 +2348,46 @@ seletoresDeQualidade.forEach(select => {
     try {
       const perfil = RoomQuality.profiles[novo];
       const track = screenStream?.getVideoTracks()[0];
-      if (track) await track.applyConstraints({ ...track.getConstraints(), width: { ideal: perfil.width, max: perfil.width },
-        height: { ideal: perfil.height, max: perfil.height }, frameRate: { ideal: 30, max: 30 } });
+      // A taxa de quadros vem da escolha ATIVA, e é isto que corrige um 30 escrito à mão que
+      // estava aqui. Quem tinha pedido 60 quadros e trocava a resolução perdia metade deles
+      // sem aviso: a captura caía para 30 e ficava lá, enquanto o botão e a publicação
+      // continuavam anunciando 60. Trocar de resolução não é uma opinião sobre a taxa.
+      const fps = quadrosDaTela;
+      // Duas falhas muito diferentes moravam no mesmo `catch`, com a mesma frase -- e para
+      // uma delas a frase era falsa.
+      //
+      // Aqui, a fonte recusar a resolução: a escolha não se aplica, e a frase sobre a fonte
+      // é verdadeira.
+      if (track) {
+        try {
+          await track.applyConstraints({ ...track.getConstraints(), width: { ideal: perfil.width, max: perfil.width },
+            height: { ideal: perfil.height, max: perfil.height }, frameRate: { ideal: fps, max: fps } });
+        } catch (erro) {
+          console.warn('A fonte não aceitou a nova resolução', erro);
+          status.textContent = 'Esta fonte não aceitou a nova resolução. Use Atualizar tela para selecionar novamente.';
+          return;   // o `finally` devolve os seletores ao perfil que continua valendo
+        }
+      }
       perfilDeQualidade = novo;
+      esquecerHistoricoDoEnvio();
       try { localStorage.setItem('nexoQuality', novo); } catch (_) {}
       // O teto de envio entra nas opcoes de publicacao, entao a faixa precisa subir de novo.
-      if (track) await publicarFonte('screen', null).then(() => publicarFonte('screen', track));
-      status.textContent = `Qualidade ${perfil.label}. Cada pessoa recebe a camada que a conexão dela aguenta.`;
-    } catch (_) {
+      // Despublicar e publicar vão na MESMA tarefa da fila: eram duas, e a fresta entre elas
+      // deixava outra mudança entrar e apagar a faixa que acabara de subir.
+      //
+      // A outra falha é a republicação não voltar -- e ela NÃO desfaz a escolha. A resolução
+      // já foi aplicada na captura, e desfazer o perfil deixaria a página anunciando um
+      // número e enviando outro. Quem conserta é a reconciliação, que `sequenciaDePublicacao`
+      // garante rodar justamente quando a publicação falha.
+      const publicou = track ? await sequenciaDePublicacao('screen', async () => {
+        await aplicarPublicacao('screen', null);
+        await aplicarPublicacao('screen', track);
+      }) : true;
+      if (publicou) status.textContent = `Qualidade ${perfil.label}. Cada pessoa recebe a camada que a conexão dela aguenta.`;
+    } catch (erro) {
       perfilDeQualidade = anterior;
-      status.textContent = 'Esta fonte não aceitou a nova resolução. Use Atualizar tela para selecionar novamente.';
+      console.warn('Falha inesperada ao trocar a qualidade', erro);
+      status.textContent = 'Não foi possível aplicar esta qualidade. Use Atualizar tela para selecionar a fonte novamente.';
     } finally {
       seletoresDeQualidade.forEach(el => { el.disabled = false; el.value = perfilDeQualidade; });
       atualizarBotaoDeQualidade();
@@ -1528,6 +2401,10 @@ seletoresDeCodec.forEach(select => {
 seletoresDePrioridade.forEach(select => {
   select.value = prioridadeDaTela;
   select.onchange = () => definirPrioridadeDaTela(select.value);
+});
+seletoresDeQuadros.forEach(select => {
+  select.value = String(quadrosDaTela);
+  select.onchange = () => definirQuadrosDaTela(select.value);
 });
 atualizarBotaoDeQualidade();
 
@@ -1703,10 +2580,14 @@ function atualizarAvisoDeCaptura() {
   const mostrar = ehWindows && captureMode.value === 'window';
   capturaAviso.hidden = !mostrar;
   if (!mostrar) return;
-  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quadros dentro do jogo — o '
-    + 'Windows precisa desenhá-la de novo só para a captura — e é daí que vem a tarja amarela em '
-    + 'volta. A tela inteira lê o quadro que a placa de vídeo já fez: mesma imagem, sem tarja e '
-    + 'sem tirar quadros do jogo.';
+  // O custo era descrito e não medido. Agora é medido, e o número é grande o bastante para
+  // mudar a decisão de quem lê: mesmo jogo, mesma resolução, mesma prioridade, trocando só
+  // janela por tela inteira, os quadros que chegaram ao outro lado foram de 30 para 57.
+  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quase metade dos quadros: medido '
+    + 'aqui, o mesmo jogo em 720p entregou 30 quadros por segundo por janela e 57 pela tela inteira. '
+    + 'O Windows precisa desenhar a janela de novo só para a captura, e é daí que vem também a tarja '
+    + 'amarela em volta. A tela inteira lê o quadro que a placa de vídeo já fez: mesma imagem, sem '
+    + 'tarja, com o dobro da fluidez — e o som do jogo continua saindo sem eco pelo agente.';
 }
 
 // Mostra o estado do agente e, quando ele nao esta rodando, oferece o download ja
@@ -2153,7 +3034,7 @@ async function capturarTela() {
       cursor: 'always',
       width: { ideal: perfilAtual().width, max: perfilAtual().width },
       height: { ideal: perfilAtual().height, max: perfilAtual().height },
-      frameRate: { ideal: PRIORIDADES_DE_TELA[prioridadeDaTela].fps, max: PRIORIDADES_DE_TELA[prioridadeDaTela].fps }
+      frameRate: { ideal: quadrosDaTela, max: quadrosDaTela }
     },
     audio: audioPeloNavegador ? {
       echoCancellation: false,
@@ -2235,6 +3116,9 @@ confirmScreenBtn.onclick = async () => {
     const novaTela = await capturarTela();
     const telaAntiga = screenStream;
     screenStream = novaTela;
+    // Fonte nova, histórico novo: uma janela pequena depois de um monitor inteiro entrega
+    // outros números, e compará-los acusaria uma queda que é só outra fonte.
+    esquecerHistoricoDoEnvio();
     const faixaDaTela = screenStream.getVideoTracks()[0];
     faixaDaTela.onended = pararTela;
     // O navegador encerra a faixa quando a fonte some -- aba fechada, janela fechada, botão

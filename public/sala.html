@@ -213,14 +213,15 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
-        <div class="field"><label for="videoQuality">Qualidade da transmissão · 30 fps</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica · até 2 Mbps</option><option value="high">1080p · Alta · até 4 Mbps</option><option value="ultra">1440p · Máxima · até 6 Mbps</option></select><small id="qualidadeBtn"></small></div>
-        <div class="field"><label for="videoPriority">Quando faltar banda ou processador</label><select id="videoPriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Para ler código, nitidez. Para jogo, fluidez.</small></div>
+        <div class="field"><label for="videoQuality">Resolução da transmissão</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="qualidadeBtn"></small></div>
+        <div class="field"><label for="videoFps">Quadros por segundo</label><select id="videoFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="fpsDica"></small></div>
+        <div class="field"><label for="videoPriority">O que proteger quando apertar</label><select id="videoPriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>O padrão protege o movimento, porque travar estraga mais uma transmissão do que perder um pouco de definição. Escolha Nitidez só para ler código ou texto parado: ela mantém a imagem afiada e deixa os quadros caírem.</small></div>
         <details class="avancado">
           <summary>Codec de vídeo</summary>
-          <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">H.264 é o mais compatível e o único que o iPhone decodifica por hardware. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
+          <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">Vale para a tela; a câmera vai sempre em H.264. H.264 é o mais compatível e o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
         </details>
         <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
-        <small id="qualityLive" class="medicao" style="white-space:pre-line" aria-live="off"></small>
+        <div id="qualityLive" class="medicao" aria-live="off"></div>
       </div>
     </div>
 
@@ -289,11 +290,12 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelEnvio" aria-labelledby="abaEnvio" hidden>
-    <div class="field"><label for="shareQuality">Qualidade · 30 fps</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica · até 2 Mbps</option><option value="high">1080p · Alta · até 4 Mbps</option><option value="ultra">1440p · Máxima · até 6 Mbps</option></select><small>Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
-    <div class="field"><label for="sharePriority">Quando faltar banda ou processador</label><select id="sharePriority" data-screen-priority><option value="automatico">Automático · quadros constantes</option><option value="nitidez">Nitidez · código e texto</option><option value="fluidez">Fluidez máxima · jogos</option></select><small>Nitidez segura os detalhes e derruba os quadros; fluidez faz o contrário.</small></div>
+    <div class="field"><label for="shareQuality">Resolução</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="shareQualidadeDica">Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
+    <div class="field"><label for="shareFps">Quadros por segundo</label><select id="shareFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="shareFpsDica"></small></div>
+    <div class="field"><label for="sharePriority">O que proteger quando apertar</label><select id="sharePriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Nitidez segura os detalhes e derruba os quadros; movimento faz o contrário, e é o padrão. Quantos quadros você pede é a escolha de cima.</small></div>
     <details class="avancado">
       <summary>Codec de vídeo</summary>
-      <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>H.264 costuma usar a placa de vídeo e é o único que o iPhone decodifica por hardware. O codificador em uso aparece no Diagnóstico.</small></div>
+      <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>Vale para a tela; a câmera vai sempre em H.264. Ele costuma usar a placa de vídeo e é o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. O codificador em uso aparece no Diagnóstico.</small></div>
     </details>
       </div>
 
@@ -337,7 +339,7 @@
 </div>
 
 <div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">Envie este link para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
-<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><details class="avancado"><summary>Relatório técnico</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><div id="diagnosticsCards"></div><details class="avancado"><summary>Relatório técnico (para colar num chat)</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="modal-actions"><button type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/livekit-client.js"></script>
 <script src="/preferencias.js"></script>

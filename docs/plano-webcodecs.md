@@ -22,9 +22,29 @@ qualquer uma delas pode tornar o resto desnecessário.
 
 | # | Pergunta | Como responder | Se a resposta for "sim" |
 | --- | --- | --- | --- |
-| 0.1 | O Chromium do **Electron** entrega hardware ao WebRTC? | `npm i -D electron`, abrir o Diagnóstico dentro do aplicativo | Projeto cancelado: basta usar o aplicativo. O Electron traz outra compilação do Chromium, e isso nunca foi testado |
+| 0.1 | ~~O Chromium do **Electron** entrega hardware ao WebRTC?~~ | **RESPONDIDA: não.** Ver abaixo | ~~Projeto cancelado~~ |
 | 0.2 | Outra máquina do grupo tem hardware no WebRTC? | Pedir a um amigo o Diagnóstico | O defeito é local, e o custo da reescrita passa a ser desproporcional |
 | 0.3 | O Windows 11 24H2 resolve? | O workaround do Chrome é literalmente "versões anteriores a 11 24H2" | Atualizar o sistema é ordens de grandeza mais barato |
+
+### 0.1 está respondida, e a resposta não cancela o projeto
+
+Diagnóstico coletado dentro do aplicativo em 16/09/2026, com
+`sala-compartilhada-app/1.0.0 Chrome/152.0.7977.76 Electron/44.2.0`:
+
+> Sem codificação eficiente em 1080p/30 para: H.264, VP8, VP9, AV1.
+
+Ou seja: **o Chromium do Electron não alcança a NVENC pelo caminho do `RTCPeerConnection`,
+igual ao Chrome**. A hipótese de que outra compilação do Chromium resolveria está eliminada,
+e com ela a saída mais barata que existia. Usar o aplicativo não substitui o encoder nativo.
+
+A mesma sessão também mediu o custo, que é o argumento que faltava para dimensionar o
+problema: compartilhando um jogo em 1080p a 60 quadros pedidos, a camada alta custou
+**11,7 ms para codificar cada quadro**. Sessenta quadros exigiriam 702 ms de codificação por
+segundo, mais 37 ms da camada de 360p — perto de 740 ms de trabalho a cada 1000, e isso não
+cabe numa thread de codificação. O resultado observado foram 43 quadros por segundo, com uso
+total de processador folgado e a placa de vídeo longe de saturar. **1080p a 60 quadros não é
+alcançável em software nesta máquina**, e nenhum ajuste de resolução, codec ou taxa dentro do
+navegador muda isso — só um encoder que use a placa.
 
 Há ainda uma pergunta de valor, e ela é a mais importante das quatro:
 

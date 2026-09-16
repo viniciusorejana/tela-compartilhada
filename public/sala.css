@@ -388,7 +388,66 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .avancado > summary:hover { background:#ffffff07; }
 .avancado > *:not(summary) { margin:13px; }
 .avancado .field:last-child { margin-bottom:13px; }
-.medicao { display:block; margin-top:12px; padding:10px 12px; border-radius:9px; background:#b4a1dd09; border:1px solid #b4a1dd1c; font:11px/1.7 ui-monospace,Consolas,monospace; color:#b7aecb; }
+/* ---------- Medições do envio ----------
+   Era um bloco monoespaçado com tudo numa frase só: resolução, quadros, bitrate, codec,
+   camadas e o motivo do limite. Cada informação nova o deixava mais completo e menos
+   legível, até quem abria o painel para entender um problema ter de ler tudo só para saber
+   se havia um. A hierarquia mudou de lugar: ela está no tamanho e na cor, não na pontuação.
+   A fonte monoespaçada fica apenas nos números, onde alinhar colunas importa. */
+.medicao { display:block; margin-top:12px; padding:13px; border-radius:11px; background:#b4a1dd09; border:1px solid #b4a1dd1c; font-size:11px; line-height:1.6; color:#b7aecb; }
+/* Os três números que respondem "como está agora". Grandes porque são a resposta; o resto
+   da caixa existe para explicá-los. */
+.medicao-destaque { display:flex; gap:20px; flex-wrap:wrap; }
+.medicao-numero { display:flex; flex-direction:column; gap:1px; }
+.medicao-numero strong { font:600 17px/1.2 ui-monospace,Consolas,monospace; color:var(--text); }
+.medicao-numero span { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#8d86a5; }
+.medicao-sub { margin-top:7px; color:#a99fba; }
+/* Captura contra codificação. A comparação que diz de quem é a culpa quando os quadros
+   caem -- se a fonte parou de entregar, mexer na qualidade não resolve nada. */
+.medicao-fluxo { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:12px; padding:9px 11px; border-radius:9px; background:#ffffff06; }
+.medicao-fluxo-ponta { font:600 11px/1 ui-monospace,Consolas,monospace; color:#ded7ef; }
+/* O pedido é a referência, não uma medição: ele fica mais apagado para que os dois números
+   medidos ao lado sejam os que o olho compara. */
+.medicao-fluxo-pedido { color:#8d86a5; font-weight:400; }
+.medicao-seta { color:#8d86a5; }
+.medicao-selo { font-size:10px; padding:3px 8px; border-radius:999px; }
+.medicao-selo.ok { background:#90dfb31f; color:var(--online); }
+.medicao-selo.alerta { background:#f0a87528; color:#f0b98a; }
+.medicao-titulo { margin:14px 0 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#8d86a5; }
+/* Grade em vez de frase: comparar camadas é comparar linhas, e para isso as colunas
+   precisam se alinhar. */
+.medicao-grade { display:flex; flex-direction:column; gap:1px; }
+.medicao-linha { display:grid; grid-template-columns:52px 62px 1fr auto; gap:8px; align-items:baseline; padding:6px 9px; border-radius:7px; background:#ffffff06; font:11px/1.5 ui-monospace,Consolas,monospace; color:#c6bdd8; }
+.medicao-linha-secundaria { color:#9a92ad; background:#ffffff03; }
+.medicao-camada-nome { font-weight:600; color:var(--text); }
+.medicao-linha-secundaria .medicao-camada-nome { color:#b0a7c4; }
+.medicao-custo { color:#8d86a5; }
+.medicao-nota { margin-top:10px; padding:8px 10px; border-radius:8px; background:#ffffff06; color:#a99fba; }
+/* O custo somado das camadas contra o segundo que existe. Fica logo abaixo da grade porque
+   é a conclusão dela: as camadas sobem em sequência, na mesma thread, e é a soma que decide
+   se a taxa pedida cabe. */
+.medicao-custo-total { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:8px; padding:7px 10px; border-radius:8px; background:#ffffff06; color:#a99fba; }
+.medicao-custo-total strong { font:600 13px/1 ui-monospace,Consolas,monospace; color:#ded7ef; }
+.medicao-custo-total.aperta { background:#f0a8751a; color:#f0cdaf; }
+.medicao-custo-total.aperta strong { color:#f0b98a; }
+/* O veredito fecha a caixa porque é conclusão, não introdução: quem chega aqui já viu os
+   números que a sustentam. */
+.medicao-veredito { display:flex; flex-direction:column; gap:4px; margin-top:12px; padding:10px 12px; border-radius:9px; border-left:3px solid; }
+.medicao-veredito strong { font-size:11.5px; font-weight:600; }
+.medicao-veredito.ok { border-color:var(--online); background:#90dfb312; color:#bfe6d0; }
+.medicao-veredito.alerta { border-color:#f0b98a; background:#f0a8751a; color:#f0cdaf; }
+.medicao-veredito.neutro { border-color:#8d86a5; background:#ffffff08; color:#bcb2cf; }
+/* No celular a caixa tem uns 280px, e quatro colunas de números não cabem nisso: "1,1 Mbps"
+   e "4,9 ms/quadro" quebravam no meio, cada uma em duas linhas, e a grade deixava de ser
+   grade. Em duas colunas os mesmos quatro valores viram dois pares alinhados, que é a forma
+   de ler isso numa tela estreita. A seta do fluxo gira junto: empilhada, ela aponta para
+   baixo, porque uma seta para a direita no fim de uma linha não aponta para nada. */
+@media(max-width:430px) {
+  .medicao-linha { grid-template-columns:1fr 1fr; row-gap:2px; }
+  .medicao-fluxo { flex-direction:column; align-items:flex-start; gap:5px; }
+  .medicao-seta { transform:rotate(90deg); }
+  .medicao-destaque { gap:14px; }
+}
 .field { margin-bottom:16px; }
 .field label { display:block; font-size:11px; font-weight:600; color:#bcb2cf; margin-bottom:7px; }
 /* Rótulo de caixa de seleção: o texto acompanha a caixa e o alvo de toque cobre os dois. */
@@ -418,6 +477,27 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .campo-excluir { margin-top:15px; }
 .campo-excluir select+label { margin-top:15px; }
 .diagnostics-card { width:min(100%,560px); }
+/* ---------- Diagnóstico em cartões ----------
+   O relatório técnico continua existindo e continua completo -- ele serve para colar num
+   chat e pedir ajuda. O que ele não serve é para responder "está funcionando?", porque
+   obriga a ler sessenta linhas de números para achar a que importa. Os cartões respondem
+   isso antes: uma área por cartão, uma linha por fato, e a cor dizendo onde olhar. */
+#diagnosticsCards { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+.diag-cartao { padding:11px 13px; border-radius:11px; background:#ffffff05; border:1px solid var(--line); }
+.diag-cartao h3 { margin:0 0 8px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
+.diag-linha { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:4px 0; font-size:12px; border-top:1px solid #ffffff08; }
+.diag-cartao .diag-linha:first-of-type { border-top:0; }
+.diag-rotulo { color:#a29bae; flex:none; }
+.diag-valor { text-align:right; color:#ded7ef; font-family:ui-monospace,Consolas,monospace; font-size:11.5px; }
+/* A cor fica no VALOR, não na linha inteira: o olho procura o dado, não o rótulo. Um ponto
+   antes do valor dá o estado a quem não distingue as cores. */
+.diag-linha.diag-ok .diag-valor { color:var(--online); }
+.diag-linha.diag-alerta .diag-valor { color:#f0b98a; }
+.diag-linha.diag-problema .diag-valor { color:var(--danger); }
+.diag-linha.diag-neutro .diag-valor { color:#a29bae; }
+.diag-linha.diag-ok .diag-valor::before,
+.diag-linha.diag-alerta .diag-valor::before,
+.diag-linha.diag-problema .diag-valor::before { content:'● '; font-size:9px; }
 #diagnosticsSummary { font-size:12px; color:#d4cbe2; border:1px solid #b4a1dd22; background:#b4a1dd09; padding:12px; border-radius:9px; line-height:1.7; margin-bottom:14px; }
 #diagnosticsReport { white-space:pre-wrap; word-break:break-word; font:11px/1.8 ui-monospace,Consolas,monospace; color:#beb3ce; max-height:230px; overflow:auto; }
 .lightbox { position:fixed; inset:0; z-index:95; padding:55px 20px 40px; display:grid; place-items:center; overflow:auto; background:#090910f7; }
