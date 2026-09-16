@@ -180,19 +180,75 @@
     VP8: 'video/VP8', VP9: 'video/VP9', AV1: 'video/AV1'
   };
 
+  // Três respostas, não duas.
+  //
+  // A lista era só de quem tinha hardware, e tudo o que sobrava virava uma frase única:
+  // "NENHUM codec". Isso juntava três situações diferentes -- o navegador dizer que aquela
+  // configuração não é eficiente, o navegador não saber responder, e a consulta estourar --
+  // numa afirmação categórica sobre a máquina inteira. Nesta máquina a conclusão estava
+  // certa (a medição está em docs/captura-de-tela.md), e é justamente por isso que ela
+  // precisa ser dita com o alcance certo: o que foi perguntado foi UMA configuração, 1080p
+  // a 30 quadros, e uma resposta "não eficiente" nela não é uma resposta sobre 720p, sobre
+  // outro perfil ou sobre o WebCodecs -- que nesta mesma máquina aceita H.264 por hardware.
+  // A resposta é guardada porque a pergunta não muda.
+  //
+  // O painel se redesenha a cada quatro segundos enquanto está aberto, e cada redesenho
+  // refazia as quatro sondagens -- e sondar capacidade de codificação instancia
+  // codificadores de teste. Quem abre o painel justamente para observar uma queda de
+  // desempenho estava participando dela. A placa de vídeo da máquina não muda no meio da
+  // transmissão; perguntar uma vez basta.
+  let hardwareConhecido;
   async function codificadoresPorHardware() {
+    if (hardwareConhecido !== undefined) return hardwareConhecido;
+    hardwareConhecido = await sondarCodificadores();
+    return hardwareConhecido;
+  }
+
+  async function sondarCodificadores() {
     if (!navigator.mediaCapabilities?.encodingInfo) return null;
-    const comHardware = [];
+    const porEstado = { hardware: [], software: [], desconhecido: [] };
     for (const [nome, contentType] of Object.entries(CODECS_PARA_SONDAR)) {
       try {
         const r = await navigator.mediaCapabilities.encodingInfo({
           type: 'webrtc',
           video: { contentType, width: 1920, height: 1080, bitrate: 4_000_000, framerate: 30 }
         });
-        if (r.supported && r.powerEfficient) comHardware.push(nome);
-      } catch (_) { /* Navegador sem suporte a esta consulta: some da lista, sem chute. */ }
+        if (!r.supported) porEstado.software.push(nome);
+        // `powerEfficient` ausente é desconhecido, não negativo: há navegador que suporta a
+        // consulta e não preenche o campo.
+        else if (r.powerEfficient === undefined) porEstado.desconhecido.push(nome);
+        else if (r.powerEfficient) porEstado.hardware.push(nome);
+        else porEstado.software.push(nome);
+      } catch (_) { porEstado.desconhecido.push(nome); }
     }
-    return comHardware;
+    return porEstado;
+  }
+
+  // O texto do relatório, separado da coleta: a sondagem responde três coisas e a redação
+  // precisa dizer as três sem virar um encadeado de `if` dentro do montador do relatório.
+  function frasesDeHardware(porEstado, transmitindo) {
+    if (porEstado === null) return ['Codificação por hardware: este navegador não sabe informar.'];
+    const { hardware, software, desconhecido } = porEstado;
+    const linhas = [];
+    if (hardware.length) linhas.push(`Codificação por hardware disponível para: ${hardware.join(', ')}.`);
+    if (software.length) {
+      // O parágrafo sobre o custo de codificar só interessa a quem está codificando. Para
+      // quem só assiste, ele era três linhas explicando um problema que não é dele -- e
+      // ruído num painel é o que faz a informação que importa passar batida.
+      linhas.push(`Sem codificação eficiente em 1080p/30 para: ${software.join(', ')}.`
+        + (hardware.length || !transmitindo ? '' : ' Quem codifica é o processador, e isso pesa no computador de'
+          + ' quem transmite — inclusive nos jogos. Não é ajustável por aqui: confira'
+          + ' "Video Encode" em chrome://gpu, o driver de vídeo e adaptadores de vídeo'
+          + ' virtuais (Parsec, monitores USB) que possam estar no caminho.'));
+    }
+    if (desconhecido.length) linhas.push(`Sem resposta do navegador para: ${desconhecido.join(', ')}.`);
+    // A pergunta é sobre UMA configuração. Dizer isso evita que a resposta seja lida como
+    // um veredito sobre a máquina.
+    if (software.length || desconhecido.length) {
+      linhas.push('A consulta foi de 1080p a 30 quadros em WebRTC: outra resolução, outro'
+        + ' perfil ou outro caminho de codificação podem responder diferente.');
+    }
+    return linhas;
   }
 
   function abrirDiagnostico() {
@@ -206,18 +262,79 @@
     if ($('diagnosticsPanel').classList.contains('hidden')) abrirDiagnostico();
   });
 
+  // ---------- O relatório, agora em duas formas ----------
+  //
+  // Era uma forma só: um `<pre>` com tudo, dentro de um `<details>` fechado. Aquilo serve
+  // muito bem para COLAR num chat e pedir ajuda, e continua existindo para isso. Mas é a
+  // forma errada para a pergunta que traz alguém aqui -- "está funcionando? se não, o que
+  // está errado?" -- porque obriga a ler sessenta linhas de números para descobrir qual
+  // delas é a que importa.
+  //
+  // Os cartões respondem essa pergunta primeiro: cada um é uma área (a conexão, o seu
+  // envio, o que chega de cada pessoa, esta máquina), e cada linha tem um estado com cor.
+  // Quem quer o detalhe abre o relatório; quem quer saber se pode jogar, não precisa.
+  const ESTADOS_DA_SALA = {
+    connected: 'conectado', connecting: 'conectando', disconnected: 'desconectado',
+    reconnecting: 'reconectando', signalReconnecting: 'restabelecendo a sinalização'
+  };
+  const cartoes = [];
+  const cartao = titulo => { const c = { titulo, linhas: [] }; cartoes.push(c); return c; };
+  const anotar = (c, rotulo, valor, estado) => { c.linhas.push({ rotulo, valor: String(valor), estado }); };
+
+  function desenharCartoes() {
+    const alvo = $('diagnosticsCards');
+    alvo.textContent = '';
+    for (const c of cartoes) {
+      if (!c.linhas.length) continue;
+      const caixa = document.createElement('section');
+      caixa.className = 'diag-cartao';
+      const titulo = document.createElement('h3');
+      titulo.textContent = c.titulo;
+      caixa.append(titulo);
+      for (const linha of c.linhas) {
+        const el = document.createElement('div');
+        el.className = 'diag-linha' + (linha.estado ? ` diag-${linha.estado}` : '');
+        const rotulo = document.createElement('span');
+        rotulo.className = 'diag-rotulo';
+        rotulo.textContent = linha.rotulo;
+        const valor = document.createElement('span');
+        valor.className = 'diag-valor';
+        // `textContent` em tudo: aqui entram nomes de participantes, que são texto de quem
+        // entrou na sala e nunca devem virar marcação.
+        valor.textContent = linha.valor;
+        el.append(rotulo, valor);
+        caixa.append(el);
+      }
+      alvo.append(caixa);
+    }
+  }
+
   async function collectDiagnostics() {
     if (collecting) return;
     collecting = true;
+    cartoes.length = 0;
     try {
       const sala = transporte?.sala;
       const estado = sala?.state || 'sem conexão';
+      const conexao = cartao('Conexão');
+      anotar(conexao, 'Sinalização', socket?.connected ? 'conectada' : 'desconectada', socket?.connected ? 'ok' : 'problema');
+      // O estado vem em inglês da biblioteca, e este painel é lido por quem não está
+      // depurando nada -- "signalReconnecting" não diz a ninguém que a sala está voltando.
+      anotar(conexao, 'Servidor de mídia', ESTADOS_DA_SALA[estado] || estado, estado === 'connected' ? 'ok' : estado === 'connecting' || estado === 'reconnecting' ? 'alerta' : 'problema');
+      if (!window.isSecureContext) anotar(conexao, 'Contexto seguro', 'não', 'problema');
       const lines = ['Nexo · diagnóstico de mídia',
         `Navegador: ${navigator.userAgent}`,
         `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`,
         `Sinalização: ${socket?.connected ? 'conectada' : 'desconectada'}`,
         `Servidor de mídia: ${estado}`,
-        `Codec de vídeo escolhido: ${codecDeVideoEscolhido()}`,
+        `Codec de vídeo escolhido: ${codecDeVideoEscolhido()} (a câmera vai sempre em H.264)`,
+        // Por onde o áudio do sistema está vindo, quando está. Pelo "agente" ele vai do
+        // programa nativo direto para esta página; pelo "helper" ele passa pelo processo do
+        // servidor -- que só é oferecido quando a página está aberta nesta mesma máquina,
+        // então é tráfego de loopback, não de internet. Mesmo assim são ~1,4 Mbps de PCM sem
+        // compressão em cada sentido, mais cem mensagens por segundo, e nada na tela dizia
+        // qual dos dois estava no ar.
+        `Áudio do sistema: ${typeof planoDeAudio === 'function' ? planoDeAudio() : 'desconhecido'}`,
         `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`,
         `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
         'Revisão de mídia: sfu-1'];
@@ -230,36 +347,41 @@
       const segundoPlano = (window.verDiagnosticoSegundoPlano?.() || '').trim().split('\n').slice(-25);
       if (segundoPlano[0]) lines.push('', 'Eventos em segundo plano:', ...segundoPlano);
 
-      const comHardware = await codificadoresPorHardware();
-      if (comHardware === null) {
-        lines.push('Codificação por hardware: este navegador não sabe informar.');
-      } else if (comHardware.length) {
-        lines.push(`Codificação por hardware disponível para: ${comHardware.join(', ')}.`);
-      } else {
-        lines.push('Codificação por hardware: NENHUM codec. Quem codifica é o processador,'
-          + ' e isso pesa no computador de quem transmite — inclusive nos jogos. Não é'
-          + ' ajustável por aqui: confira "Video Encode" em chrome://gpu, o driver de vídeo'
-          + ' e adaptadores de vídeo virtuais (Parsec, monitores USB) que possam estar no'
-          + ' caminho.');
-      }
+      // Quem está com tela ou câmera no ar é quem codifica, e só para ele o custo importa.
+      const transmitindo = Boolean(publicacoesLocais.screen || publicacoesLocais.camera);
+      lines.push(...frasesDeHardware(await codificadoresPorHardware(), transmitindo));
 
       let recebidos = 0, index = 0;
       const conectado = estado === 'connected';
 
       // Estatisticas vem por faixa, pela API publica do cliente: o que esta SENDO enviado
       // daqui e o que esta chegando de cada participante.
+      // Os rótulos dos cartões saem em português; os do relatório técnico continuam com os
+      // nomes internos, que é o que ajuda quem for ler o código depois de receber um colado
+      // num chat.
+      const NOME_DA_FONTE = { screen: 'sua tela', camera: 'sua câmera', mic: 'seu microfone', screenAudio: 'o som da sua tela' };
       const faixasLocais = Object.entries(publicacoesLocais)
         .filter(([, publicacao]) => publicacao?.track?.getRTCStatsReport)
-        .map(([fonte, publicacao]) => [`enviando ${fonte}`, publicacao.track]);
+        .map(([fonte, publicacao]) => [`enviando ${fonte}`, publicacao.track, `Enviando ${NOME_DA_FONTE[fonte] || fonte}`]);
       const faixasRemotas = [];
       for (const par of peers.values()) {
         par.publicacoes.forEach(publicacao => {
-          if (publicacao.track?.getRTCStatsReport) faixasRemotas.push([`recebendo ${RoomTransport.fonteDaPublicacao(publicacao) || '?'} de ${par.name}`, publicacao.track]);
+          if (!publicacao.track?.getRTCStatsReport) return;
+          const fonte = RoomTransport.fonteDaPublicacao(publicacao) || '?';
+          const humano = { screen: 'a tela', camera: 'a câmera', micAudio: 'a voz', screenAudio: 'o som da tela' }[fonte] || fonte;
+          faixasRemotas.push([`recebendo ${fonte} de ${par.name}`, publicacao.track, `Recebendo ${humano} de ${par.name}`]);
         });
       }
 
       let rotaImpressa = false;
-      for (const [rotulo, faixa] of [...faixasLocais, ...faixasRemotas]) {
+      // Um cartão por origem, criado só quando há o que pôr nele: um painel com seções
+      // vazias é pior do que um painel curto.
+      const cartoesPorRotulo = new Map();
+      const cartaoDe = rotulo => {
+        if (!cartoesPorRotulo.has(rotulo)) cartoesPorRotulo.set(rotulo, cartao(rotulo));
+        return cartoesPorRotulo.get(rotulo);
+      };
+      for (const [rotulo, faixa, titulo] of [...faixasLocais, ...faixasRemotas]) {
         let stats;
         try { stats = await faixa.getRTCStatsReport(); } catch (_) { continue; }
         if (!stats) continue;
@@ -270,6 +392,11 @@
             const local = stats.get(item.localCandidateId);
             lines.push(`  Rota: ${local?.candidateType || 'não informada'} por ${local?.protocol || '?'}; latência: ${item.currentRoundTripTime != null ? Math.round(item.currentRoundTripTime * 1000) + ' ms' : 'não informada'}`);
             rotaImpressa = true;
+            anotar(conexao, 'Rota', `${local?.candidateType || 'não informada'} por ${local?.protocol || '?'}`);
+            const ms = item.currentRoundTripTime != null ? Math.round(item.currentRoundTripTime * 1000) : null;
+            // Acima de 150 ms a conversa já fica com aquele atraso que faz todo mundo
+            // falar junto; é onde vale avisar, não em qualquer número.
+            if (ms != null) anotar(conexao, 'Latência', `${ms} ms`, ms > 150 ? 'alerta' : 'ok');
           }
           if (item.type === 'inbound-rtp' && item.kind === 'video') {
             recebidos += item.framesDecoded || 0;
@@ -281,6 +408,19 @@
             // chega picotado (quadros descartados), que têm causas diferentes.
             lines.push(`  congelamentos=${item.freezeCount ?? '?'} (${item.totalFreezesDuration != null ? item.totalFreezesDuration.toFixed(2) + ' s no total' : 'duração não informada'}); pausas=${item.pauseCount ?? '?'}`);
             lines.push(`  atraso do buffer=${item.jitterBufferDelay != null && item.jitterBufferEmittedCount ? Math.round(item.jitterBufferDelay / item.jitterBufferEmittedCount * 1000) + ' ms' : '?'}; jitter=${item.jitter != null ? Math.round(item.jitter * 1000) + ' ms' : '?'}; perdidos=${item.packetsLost ?? '?'}`);
+            const c = cartaoDe(titulo);
+            anotar(c, 'Imagem', `${item.frameWidth || '?'}×${item.frameHeight || '?'} · ${Math.round(item.framesPerSecond || 0)} fps`,
+              item.frameHeight ? 'ok' : 'alerta');
+            const mime = stats.get(item.codecId)?.mimeType || '?';
+            anotar(c, 'Codec', (typeof nomeDoCodec === 'function' ? nomeDoCodec(mime) : mime.replace(/^video\//i, ''))
+              + (item.powerEfficientDecoder === true ? ' · decodificado em hardware' : item.powerEfficientDecoder === false ? ' · decodificado em software' : ''));
+            // Congelamento é a "travadinha" com nome de relatório. Um é normal ao entrar;
+            // uma dúzia é o que a pessoa está sentindo e não sabia nomear.
+            const congela = item.freezeCount || 0;
+            anotar(c, 'Congelamentos', congela + (item.totalFreezesDuration ? ` · ${item.totalFreezesDuration.toFixed(1)} s no total` : ''),
+              congela > 3 ? 'alerta' : congela ? 'neutro' : 'ok');
+            const perdidos = item.packetsLost || 0;
+            anotar(c, 'Pacotes perdidos', perdidos, perdidos > 50 ? 'alerta' : 'ok');
           }
           // Música e voz sofrem de coisas diferentes na mesma rede, e o áudio é onde um
           // engasgo aparece primeiro: a imagem tem quadros para descartar, o som não.
@@ -293,6 +433,33 @@
           if (item.type === 'outbound-rtp' && item.kind === 'video') {
             lines.push(`  Camada ${item.rid || 'única'}: ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}`);
             lines.push(`  codificador=${item.encoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientEncoder)}`);
+            const c = cartaoDe(titulo);
+            // O rid ("q", "h", "f") é nome de protocolo e não diz nada a quem lê. A altura
+            // diz: "camada 360p" é a pequena, e quem abriu o painel sabe o que isso significa
+            // depois de ler uma vez. O rid continua no relatório técnico.
+            anotar(c, item.frameHeight ? `Camada ${item.frameHeight}p` : `Camada ${item.rid || 'única'}`,
+              `${item.frameWidth || '?'}×${item.frameHeight || '?'} · ${Math.round(item.framesPerSecond || 0)} fps`
+              + (item.active === false ? ' · desligada' : ''),
+              item.active === false ? 'neutro' : undefined);
+            // O motivo do limite, em português e só quando existe. "nada" não merece linha:
+            // a ausência de problema não é informação que precise de espaço.
+            const motivo = item.qualityLimitationReason;
+            if (motivo && motivo !== 'none') {
+              anotar(c, 'Limitado por', motivo === 'cpu' ? 'processador' : motivo === 'bandwidth' ? 'banda de subida' : motivo, 'alerta');
+            }
+            // Onde a codificação está acontecendo é a pergunta que decide se vale mexer em
+            // resolução ou se o problema está fora do Nexo.
+            if (item.powerEfficientEncoder !== undefined) {
+              anotar(c, 'Codificação', item.powerEfficientEncoder ? 'em hardware' : 'em software (pesa no processador)',
+                item.powerEfficientEncoder ? 'ok' : 'alerta');
+            }
+          }
+          // A fonte, antes de qualquer codificação. Comparada com a camada acima, ela diz se
+          // uma queda de quadros começou na captura ou na codificação -- e as duas pedem
+          // coisas opostas de quem está tentando resolver.
+          if (item.type === 'media-source' && item.kind === 'video') {
+            lines.push(`  Fonte: ${item.width || '?'}×${item.height || '?'}; FPS capturado=${item.framesPerSecond ?? '?'}`);
+            anotar(cartaoDe(titulo), 'Fonte capturando', `${item.width || '?'}×${item.height || '?'} · ${Math.round(item.framesPerSecond || 0)} fps`);
           }
         });
       }
@@ -305,6 +472,22 @@
           lines.push(`  Faixa ${publicacao.kind}: ${RoomTransport.fonteDaPublicacao(publicacao) || 'fonte desconhecida'}; ${faixa ? faixa.readyState : 'sem faixa'}; muda=${publicacao.isMuted}; inscrita=${publicacao.isSubscribed}`);
         });
       }
+
+      // Um cartão para o que é desta máquina e não muda com a rede. Vem por último porque é
+      // o que menos muda -- e o que a pessoa consulta uma vez, não a cada quatro segundos.
+      const maquina = cartao('Este computador');
+      const hw = await codificadoresPorHardware();
+      if (hw === null) anotar(maquina, 'Codificação por hardware', 'o navegador não sabe informar', 'neutro');
+      else {
+        anotar(maquina, 'Com hardware', hw.hardware.length ? hw.hardware.join(', ') : 'nenhum em 1080p/30',
+          hw.hardware.length ? 'ok' : 'alerta');
+        if (hw.software.length) anotar(maquina, 'No processador', hw.software.join(', '), 'neutro');
+        if (hw.desconhecido.length) anotar(maquina, 'Sem resposta', hw.desconhecido.join(', '), 'neutro');
+      }
+      anotar(maquina, 'Codec escolhido', `${codecDeVideoEscolhido()} na tela · H.264 na câmera`);
+      if (typeof planoDeAudio === 'function') anotar(maquina, 'Áudio do sistema', planoDeAudio());
+      if (midiasBloqueadas.size) anotar(maquina, 'Reprodução bloqueada', `${midiasBloqueadas.size} elemento(s)`, 'problema');
+      desenharCartoes();
 
       let summary = !socket?.connected ? 'O servidor está desconectado. Confira o endereço e se ele está ligado.'
         : !conectado ? 'A sala não alcança o servidor de mídia: o chat funciona, mas ninguém vê nem ouve ninguém.'
