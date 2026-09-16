@@ -409,16 +409,21 @@ decide → celular em 4G ruim junto de um desktop bom.
 
 ---
 
-## Uma alternativa que custa cem vezes menos, e que deveria ser tentada primeiro
+## A alternativa que custa cem vezes menos já está no ar
 
-Antes de qualquer etapa acima, há uma hipótese aberta no projeto que entrega **parte** do
-mesmo resultado por algumas linhas: a escada de simulcast declarada em `camadasDaTela`
-fixa `scaleResolutionDownBy`, e isso pode estar impedindo o *quality scaler* do libwebrtc
-de baixar a resolução sozinho. Seria a explicação de `limitado por=none` com os quadros
-caindo.
+Havia uma hipótese aberta: a escada declarada em `camadasDaTela` fixa
+`scaleResolutionDownBy`, e isso pode estar impedindo o adaptador de resolução do libwebrtc
+de agir — o que explicaria `limitado por=none` com os quadros caindo.
 
-Se destravá-lo entregar 60 quadros constantes com a resolução flutuando, o efeito prático
-pedido — **nunca travar** — chega sem transporte novo, sem segundo caminho para manter e
-sem risco para o iPhone. Não substitui este plano, porque não devolve a placa de vídeo a
-quem transmite. Mas é o teste mais barato com a maior chance de tornar este documento
-desnecessário, e por isso ele vem antes.
+**Ela foi implementada, e não como destravamento do adaptador do navegador: a escala passou
+a ser nossa.** Sob custo de codificação a camada de cima encolhe um degrau e volta quando
+sobra folga, com o degrau de 360p intacto. Os detalhes estão em
+[`banda-e-escala.md`](banda-e-escala.md), na seção "A imagem encolhe em vez de os quadros
+serem perdidos".
+
+Isso entrega o efeito prático que motivou este plano — **nunca travar** — sem transporte
+novo, sem segundo caminho para manter e sem risco para o iPhone. O que ele **não** entrega é
+a placa de vídeo: a codificação continua no processador, disputando com o jogo.
+
+E por isso ele muda o peso da pergunta **0.4**, sem responder por ela. Medir agora, com a
+escala no ar, é o que diz se ainda existe problema para este plano resolver.

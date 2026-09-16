@@ -1111,7 +1111,24 @@ function remetentesDaFaixa(faixa) {
   return lista;
 }
 
-async function ajustarEnvioPelaQualidade(qualidade) {
+// Duas coisas mexem nos parâmetros do MESMO remetente -- o teto por qualidade de rede e a
+// escala por custo de codificação --, e cada uma faz o ciclo ler-alterar-escrever inteiro.
+// Sem fila, a que lesse primeiro e escrevesse depois gravaria os parâmetros de ANTES da
+// outra mudança, desfazendo-a. O sintoma seria um ajuste que "não pegou" de vez em quando,
+// que é a forma mais calada possível de errar.
+let filaDeParametros = Promise.resolve();
+
+function naFilaDeParametros(tarefa) {
+  const proxima = filaDeParametros.then(() => tarefa());
+  filaDeParametros = proxima.catch(() => {});
+  return proxima;
+}
+
+function ajustarEnvioPelaQualidade(qualidade) {
+  return naFilaDeParametros(() => aplicarTetoDeQualidade(qualidade));
+}
+
+async function aplicarTetoDeQualidade(qualidade) {
   const fator = TETOS_POR_QUALIDADE[qualidade];
   if (!fator) return;
   const aplicado = [];
@@ -1141,6 +1158,118 @@ async function ajustarEnvioPelaQualidade(qualidade) {
   if (!aplicado.length) return;
   ultimoFatorDeQualidade = fator;
   registrarDiagnostico('midia.tetoDeEnvio', `${Math.round(fator * 100)}% em ${[...new Set(aplicado)].join(' e ')}`);
+}
+
+// ---------- Encolher a imagem em vez de perder quadros ----------
+//
+// O libwebrtc TEM um adaptador que faz exatamente isto: quando o codificador não dá conta,
+// ele reduz a resolução da fonte e preserva a taxa de quadros. Ele não está agindo aqui, e
+// a medição de campo é a evidência -- as duas camadas em `limitado por=none`, a fonte
+// entregando 44 quadros e a saída em 24. Um adaptador ativo teria encolhido a imagem; o que
+// se viu foi quadro descartado com a resolução intacta.
+//
+// A explicação mais provável é a escada de simulcast: declarar `scaleResolutionDownBy` por
+// camada fixa a resolução de cada degrau, e o adaptador não tem por onde encolher sem
+// quebrar o que foi combinado com o servidor. Seja essa a causa ou outra, o efeito é o que
+// importa, e ele é o pior dos dois males numa transmissão: quadro perdido é o que produz o
+// travamento que se nota. Resolução menor, quase ninguém repara.
+//
+// Então a escala passa a ser nossa. O sinal já estava medido e não precisou de nada novo:
+// `custoDeCodificacao` soma o tempo de codificação de todas as camadas -- elas sobem em
+// sequência, pelo mesmo adaptador, na mesma thread -- e compara com os 1000 ms de um
+// segundo. Passando do teto, a camada de cima encolhe um degrau; sobrando folga para o
+// degrau anterior caber, ela volta.
+//
+// Só a camada de CIMA encolhe. A de baixo é o piso de rede -- 640x360 a 300 kbps, o único
+// degrau que segura na sala quem está com a conexão ruim (o porquê está em
+// quality-utils.js) --, e encolhê-la não pouparia codificação que importe.
+//
+// O `maxBitrate` fica intacto, e isso é decisão e não esquecimento. Ele já sai dos pixels
+// que a CAPTURA entrega, é teto e não piso, e mexer nas duas coisas de uma vez tornaria
+// impossível dizer qual delas produziu o efeito na primeira sessão em que isto rodar. Se a
+// medição mostrar banda gasta numa imagem que encolheu, o passo seguinte é fazer o teto
+// acompanhar os pixels.
+
+// A decisão -- qual degrau, e quando mudar de degrau -- mora em quality-utils.js, onde ela é
+// uma função pura e testável sem navegador. Aqui fica o que depende do navegador: os
+// remetentes, os parâmetros e o estado da sessão.
+const { CUSTO_QUE_APERTA, ESCADA_DE_ESCALA } = RoomQuality;
+
+let apertosSeguidos = 0;
+let folgasSeguidas = 0;
+// A escala vigente é de CADA remetente, pela mesma razão que o fator de rede é: republicar a
+// tela cria remetentes novos, na escala cheia, e um estado de página mentiria sobre eles.
+const escalaExtra = new WeakMap();
+const escalasOriginais = new WeakMap();
+// Só para a interface poder DIZER que a imagem encolheu. Uma resolução menor que a pedida,
+// sem explicação, parece defeito -- e a conclusão seria razoável.
+let ultimaEscalaDaTela = 1;
+// "1,25" e não "1,3": `comVirgula` arredonda para uma casa, e aqui o número é um degrau da
+// escada, não uma medição. Arredondá-lo faria a interface anunciar uma escala que não existe.
+const escalaEmTexto = escala => String(escala).replace('.', ',');
+
+// Sem seletor na interface, de propósito: escolher entre resolução e quadros foi justamente
+// o que se retirou, porque é uma decisão que a medição toma melhor do que quem está jogando.
+// Isto existe para diagnóstico -- `nexoEscalaAutomatica = false` no console congela a escala
+// onde ela está, o que permite comparar dois minutos com e sem.
+let escalaAutomatica = true;
+Object.defineProperty(window, 'nexoEscalaAutomatica', {
+  get: () => escalaAutomatica,
+  set: valor => { escalaAutomatica = Boolean(valor); }
+});
+
+// A camada de cima é a de MENOR `scaleResolutionDownBy`, e procurá-la assim não é
+// preciosismo: o cliente monta a escada do degrau pequeno para o grande, e a medição a
+// ordena ao contrário. Usar índice fixo aqui encolheria exatamente o degrau que não pode.
+function indiceDaCamadaAlta(escalas) {
+  let alvo = 0;
+  escalas.forEach((escala, i) => { if (escala < escalas[alvo]) alvo = i; });
+  return alvo;
+}
+
+async function aplicarEscalaPeloCusto(q) {
+  if (!escalaAutomatica) return;
+  const remetentes = remetentesDaFaixa(publicacoesLocais.screen?.track);
+  if (!remetentes.length) return;
+  // Em espera não se decide nada: sem ninguém assistindo, o servidor desliga as camadas e
+  // não há custo de codificação para medir. Reagir a esse zero devolveria a escala cheia
+  // logo antes de alguém abrir a tela, justamente na hora em que ela vai custar.
+  const custo = q && !q.emEspera ? custoDeCodificacao(q) : null;
+  if (!custo) return;
+  const decidido = RoomQuality.proximaEscala({
+    escala: ultimaEscalaDaTela, custoProjetado: custo.projetado,
+    apertos: apertosSeguidos, folgas: folgasSeguidas
+  });
+  apertosSeguidos = decidido.apertos;
+  folgasSeguidas = decidido.folgas;
+  const desejada = decidido.escala;
+  const anterior = ultimaEscalaDaTela;
+  ultimaEscalaDaTela = desejada;
+  for (const remetente of remetentes) {
+    // Um remetente que a página nunca tocou entra aqui mesmo que a escala não tenha mudado:
+    // republicar cria remetentes novos, na escala cheia, e o de codec de reserva nasce depois
+    // dos outros. Foi exatamente assim que o fator de rede deixava o codec de reserva de fora.
+    if (escalaExtra.get(remetente) === desejada) continue;
+    try {
+      const parametros = remetente.getParameters();
+      if (!parametros.encodings?.length) continue;
+      let originais = escalasOriginais.get(remetente);
+      if (!originais) {
+        originais = parametros.encodings.map(encoding => encoding.scaleResolutionDownBy || 1);
+        escalasOriginais.set(remetente, originais);
+      }
+      // Sempre sobre o ORIGINAL, nunca sobre o que já foi reduzido: aplicar 1,25 duas vezes
+      // daria 1,5625, um degrau que não está na escada e do qual não há como voltar.
+      const alta = indiceDaCamadaAlta(originais);
+      parametros.encodings[alta].scaleResolutionDownBy = originais[alta] * desejada;
+      await remetente.setParameters(parametros);
+      escalaExtra.set(remetente, desejada);
+    } catch (_) { /* A medição seguinte tenta de novo. */ }
+  }
+  if (anterior === desejada) return;
+  registrarDiagnostico('midia.escalaDaTela', desejada === 1
+    ? 'imagem de volta ao tamanho cheio'
+    : `imagem encolhida ${escalaEmTexto(desejada)}x para os quadros caberem`);
 }
 
 function paraCadaPar(fn) { peers.forEach(fn); }
@@ -1972,12 +2101,24 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
     // disposto a fazê-la de cabeça.
     const custo = custoDeCodificacao(q);
     if (custo) {
-      const cabe = custo.projetado <= 900;
+      // O limite mostrado é o que a página USA para decidir encolher, não os 1000 ms do
+      // segundo. Dizer "cabe" até 900 e agir em 700 deixaria o painel contradizendo a
+      // decisão que ele mesmo está explicando duas linhas abaixo.
+      const cabe = custo.projetado <= CUSTO_QUE_APERTA;
       const linha = elemento('div', `medicao-custo-total ${cabe ? '' : 'aperta'}`);
       linha.append(elemento('strong', null, `${Math.round(custo.agora)} ms`));
-      linha.append(elemento('span', null, `de codificação por segundo, de 1000 disponíveis.`
+      linha.append(elemento('span', null, `de codificação por segundo, de ${CUSTO_QUE_APERTA} que cabem com folga.`
         + (cabe ? '' : ` Os ${quadrosDaTela} quadros pedidos precisariam de ${Math.round(custo.projetado)} ms — não cabe.`)));
       ao_vivo.append(linha);
+    }
+    // A imagem encolhida precisa ser DITA, e esta é a mesma lição do teto reduzido por rede:
+    // quem pediu 1080p e vê 810p no painel conclui defeito, e a conclusão é razoável se nada
+    // na tela explicar. Sem a frase, o ajuste que protege os quadros pareceria o problema.
+    if (q.escalaDaTela > 1) {
+      ao_vivo.append(elemento('div', 'medicao-nota', `A imagem foi encolhida ${escalaEmTexto(q.escalaDaTela)}x`
+        + ` para os ${quadrosDaTela} quadros caberem na codificação — menos pixels custam menos por quadro.`
+        + ' É a troca deliberada desta sala: resolução menor quase ninguém repara, quadro perdido trava a'
+        + ' imagem e todo mundo repara. Ela volta ao tamanho cheio sozinha quando sobrar folga.'));
     }
     // Uma camada sozinha desligada continua sendo economia, e continua merecendo explicação:
     // é o degrau que ninguém está usando, não um degrau que falhou.
@@ -2131,6 +2272,13 @@ async function medirEnvio() {
       // O corte que a qualidade da rede impôs, se impôs. Sem isto, um teto reduzido a 60%
       // parece uma queda inexplicável de bitrate.
       fatorDeRede: ultimoFatorDeQualidade,
+      // O quanto ESTA página encolheu a imagem para os quadros caberem na codificação.
+      escalaDaTela: ultimaEscalaDaTela,
+      // Quantas vezes o NAVEGADOR mudou a resolução por limitação. É a medida que decide a
+      // suspeita registrada acima: zero durante uma queda de quadros é a assinatura do
+      // adaptador dele desligado, e é o que justifica a escala ter vindo para cá. Se este
+      // número subir, os dois estão agindo e há uma briga a resolver.
+      mudancasDeResolucao: palco.qualityLimitationResolutionChanges ?? null,
       // Sem nenhuma camada ativa, a tela está publicada e não está sendo codificada: é o
       // servidor economizando porque ninguém abriu sua tela ainda.
       emEspera: porFluxo.every(f => !f.ativo),
@@ -2138,6 +2286,9 @@ async function medirEnvio() {
     };
     registrarAmostraDoEnvio(qualidadeDoEnvio);
     atualizarBotaoDeQualidade();
+    // Fora do `await` da medição e dentro da fila dos parâmetros: a decisão de escala não
+    // pode atrasar a leitura seguinte, e não pode correr com o teto por qualidade de rede.
+    naFilaDeParametros(() => aplicarEscalaPeloCusto(qualidadeDoEnvio)).catch(() => {});
   } catch (_) { /* Sem estatísticas, a medição some da tela e a transmissão segue. */ }
   finally { medindoEnvio = false; }
 }
@@ -2190,6 +2341,14 @@ window.verHistoricoDoEnvio = () => historicoDoEnvio.slice();
 function esquecerHistoricoDoEnvio() {
   historicoDoEnvio.length = 0;
   ultimaAmostra = 0;
+  // A escala volta ao tamanho cheio pelo mesmo motivo. Todas as mudanças que chegam aqui
+  // republicam a tela, e os remetentes novos nascem na escada original -- manter a escala
+  // antiga faria a imagem encolher no instante seguinte, por causa de um aperto que era de
+  // outra configuração. Quem pede 720p depois de 1080p merece ver 720p antes de qualquer
+  // desconto, e se o aperto continuar a medição o descobre em quatro segundos.
+  apertosSeguidos = 0;
+  folgasSeguidas = 0;
+  ultimaEscalaDaTela = 1;
 }
 
 // Quanto trabalho de codificação existe por segundo, e quanto existiria na taxa pedida.
@@ -2245,8 +2404,21 @@ function diagnosticoDaQueda(medicao) {
     capturaFps: medicao.capturaFps == null ? null : Math.round(medicao.capturaFps),
     motivo: medicao.reason || 'nada',
     msPorQuadro: medicao.msPorQuadro,
-    fatorDeRede: medicao.fatorDeRede
+    fatorDeRede: medicao.fatorDeRede,
+    escala: medicao.escalaDaTela || 1
   };
+  // Mandar "baixe a resolução" a quem já está com a imagem encolhida ao máximo é o pior tipo
+  // de conselho: ele é obsoleto e dá a entender que a pessoa não fez o óbvio. Estas duas
+  // frases entram em lugar disso, e elas dizem coisas diferentes -- uma é "já estamos
+  // cuidando", a outra é "cuidamos até o fim e não bastou".
+  const noLimite = atual.escala >= ESCADA_DE_ESCALA[ESCADA_DE_ESCALA.length - 1];
+  const sobreEscala = atual.escala <= 1 ? ''
+    : noLimite
+      ? ` A imagem já está encolhida ${escalaEmTexto(atual.escala)}x, que é o limite: daqui em diante ela chegaria`
+        + ' no degrau de 360p e as duas camadas viriam do mesmo tamanho. Baixar a taxa de quadros ou a resolução'
+        + ' escolhida é o que ainda sobra.'
+      : ` A imagem já foi encolhida ${escalaEmTexto(atual.escala)}x para proteger os quadros, e ela continua`
+        + ' encolhendo sozinha enquanto não couber.';
   if (atual.fps >= melhor.fps * QUEDA_QUE_IMPORTA) {
     return { nivel: 'ok', titulo: `Estável: ${atual.fps} quadros por segundo, contra ${melhor.fps} no melhor momento.` };
   }
@@ -2271,8 +2443,9 @@ function diagnosticoDaQueda(medicao) {
       ? ` Cada quadro custa ${comVirgula(atual.msPorQuadro)} ms para codificar, então os ${quadrosDaTela} que você pediu`
         + ` precisariam de ${Math.round(atual.msPorQuadro * quadrosDaTela)} ms de codificação por segundo — e só existem 1000.`
       : '';
-    return { nivel: 'cpu', titulo: abertura, texto: `É o processador que não acompanha.${custo}`
-      + ' Baixe a resolução ou a taxa de quadros. Se a codificação estiver em software (o Diagnóstico diz), ela'
+    return { nivel: 'cpu', titulo: abertura, texto: `É o processador que não acompanha.${custo}${sobreEscala}`
+      + (atual.escala > 1 ? '' : ' Baixe a resolução ou a taxa de quadros.')
+      + ' Se a codificação estiver em software (o Diagnóstico diz), ela'
       + ' está saindo no processador, e o limite é uma thread de codificação — não os seus núcleos todos, que é'
       + ' por que o uso total de CPU pode parecer folgado.' };
   }
@@ -2294,7 +2467,7 @@ function diagnosticoDaQueda(medicao) {
       + `${detalhe} os ${quadrosDaTela} quadros pedidos precisariam de ${Math.round(custo.projetado)} ms de codificação`
       + ' por segundo — e um segundo tem 1000. As camadas são codificadas em sequência, na mesma thread, então o que'
       + ' conta é a soma; o uso total do processador pode parecer folgado e ainda assim não caber.'
-      + ' Baixe a resolução ou a taxa: menos pixels custam menos por quadro.' };
+      + (atual.escala > 1 ? sobreEscala : ' Baixe a resolução ou a taxa: menos pixels custam menos por quadro.') };
   }
   // Só quando nem o navegador nem a conta apontam limite é que vale inferir pela captura.
   // Aqui há duas explicações com a mesma assinatura, e a mais comum não é problema nenhum: a

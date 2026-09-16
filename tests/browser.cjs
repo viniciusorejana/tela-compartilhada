@@ -286,6 +286,44 @@ async function esperarCodec(page, fonte, esperado) {
   assert.ok(degrauDeBaixo <= 400_000,
     `o degrau mais baixo precisa caber numa rede ruim, veio ${degrauDeBaixo} bps em ${JSON.stringify(escada)}`);
   console.log(`Escada de simulcast declarada: ${JSON.stringify(escada)}`);
+
+  // A escala que protege os quadros. A DECISAO -- qual degrau, e quando mudar -- e testada
+  // por unidade em tests/qualidade.test.js; o que so o navegador responde e o resto: qual dos
+  // encodings e a camada de cima, que o degrau de baixo nao e tocado, e que o valor original
+  // sobrevive para a imagem poder voltar ao tamanho cheio.
+  //
+  // O indice nao serve para achar a camada de cima, e e por isso que este bloco existe: o
+  // cliente monta a escada do degrau pequeno para o grande, e a medicao a ordena ao
+  // contrario. Uma troca de ordem silenciosa encolheria justamente o degrau de 360p, que e o
+  // unico que segura na sala quem esta com a conexao ruim.
+  const escalaDaTela = await host.evaluate(async () => {
+    const leia = () => publicacoesLocais.screen.track.sender.getParameters().encodings
+      .map(e => e.scaleResolutionDownBy || 1);
+    const medicao = msPorQuadro => ({ emEspera: false, camadas: [
+      { ativo: true, msPorQuadro, fps: 30, altura: 1080 },
+      { ativo: true, msPorQuadro: 1, fps: 15, altura: 360 }
+    ] });
+    const antes = leia();
+    // 30 ms por quadro na camada de cima nao cabe em nenhuma taxa pedida. Duas medicoes: a
+    // primeira e consumida pela histerese, a segunda encolhe.
+    await aplicarEscalaPeloCusto(medicao(30));
+    await aplicarEscalaPeloCusto(medicao(30));
+    const encolhida = leia();
+    // E agora a volta, que e a metade que mais importa: uma imagem que encolhe e nao volta
+    // deixaria a transmissao pior para sempre depois de um unico engasgo.
+    for (let n = 0; n < 12; n++) await aplicarEscalaPeloCusto(medicao(1));
+    return { antes, encolhida, devolvida: leia(), escala: ultimaEscalaDaTela };
+  });
+  const alta = escalaDaTela.antes.indexOf(Math.min(...escalaDaTela.antes));
+  const baixa = escalaDaTela.antes.indexOf(Math.max(...escalaDaTela.antes));
+  assert.ok(escalaDaTela.encolhida[alta] > escalaDaTela.antes[alta],
+    `a camada de cima deveria ter encolhido, veio ${JSON.stringify(escalaDaTela)}`);
+  assert.equal(escalaDaTela.encolhida[baixa], escalaDaTela.antes[baixa],
+    `o degrau de 360p e o piso de rede e nao pode encolher, veio ${JSON.stringify(escalaDaTela)}`);
+  assert.deepEqual(escalaDaTela.devolvida, escalaDaTela.antes,
+    `a imagem deveria voltar ao tamanho cheio quando sobra folga, veio ${JSON.stringify(escalaDaTela)}`);
+  assert.equal(escalaDaTela.escala, 1);
+  console.log(`PASS: a camada de cima encolhe sob custo de codificação e volta com folga (${JSON.stringify(escalaDaTela.antes)} -> ${JSON.stringify(escalaDaTela.encolhida)} -> ${JSON.stringify(escalaDaTela.devolvida)})`);
   // Uma copia so sai daqui, por mais gente que entre: e isso que tira o upload do gargalo.
   const publicacoesDeTela = await host.evaluate(() =>
     [...transporte.sala.localParticipant.trackPublications.values()].filter(p => p.source === 'screen_share').length);

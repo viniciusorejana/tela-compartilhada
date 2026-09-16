@@ -280,6 +280,55 @@ justamente quando ele estava de folga. Hoje `emEspera` reconhece o caso e explic
 comparação com o melhor momento anunciar "os quadros caíram de 30 para 0" em qualquer sessão
 em que alguém fechasse a sua tela. `registrarAmostraDoEnvio` descarta amostras em espera.
 
+## A imagem encolhe em vez de os quadros serem perdidos
+
+O libwebrtc **tem** um adaptador para isto: quando o codificador não dá conta, ele reduz a
+resolução da fonte e preserva a taxa de quadros. Ele não estava agindo, e a medição de campo
+é a evidência — as duas camadas em `limitado por=none`, a fonte entregando 44 quadros e a
+saída em 24. Um adaptador ativo teria encolhido a imagem; o que se viu foi quadro descartado
+com a resolução intacta.
+
+A explicação mais provável é a própria escada de simulcast: declarar `scaleResolutionDownBy`
+por camada fixa a resolução de cada degrau, e o adaptador não tem por onde encolher sem
+quebrar o que foi combinado com o servidor. Seja essa a causa ou outra, o efeito é o que
+importa — e ele é o pior dos dois males. **Quadro perdido é o que produz o travamento que se
+nota; resolução menor, quase ninguém repara.**
+
+Então a escala passou a ser nossa, e ela não precisou de nenhuma medição nova. O sinal já
+existia: `custoDeCodificacao` soma o tempo de codificação de todas as camadas — elas sobem em
+sequência, pelo mesmo adaptador, na mesma thread — e compara com os 1000 ms de um segundo.
+
+| Regra | Valor | Por quê |
+|---|---|---|
+| Teto de custo | **700 ms/s** | Não são 1000: a mesma thread empacota, e a captura precisa de tempo para entregar o quadro seguinte. Passando de uns 70%, o atraso de um quadro vira quadro perdido |
+| Degraus | **1 · 1,25 · 1,5 · 2** | Além de 2 a camada de cima chegaria ao tamanho da de baixo, e duas camadas iguais não poupam codificação nenhuma |
+| Encolher | 2 amostras (~4 s) | |
+| Crescer | 8 amostras (~16 s), e só se o degrau de cima **couber** | Um piso fixo erraria: a distância entre degraus não é constante, e voltar para estourar dois segundos depois é a resolução pulsando à vista |
+
+Duas restrições que não são detalhe:
+
+**Só a camada de cima encolhe.** A de baixo é o piso de rede — 640×360 a 300 kbps, o único
+degrau que segura na sala quem está com a conexão ruim — e encolhê-la não pouparia
+codificação que importe. Achá-la pelo índice não funciona: o cliente monta a escada do degrau
+pequeno para o grande e a medição a ordena ao contrário, então a camada de cima é a de
+**menor** `scaleResolutionDownBy`.
+
+**O `maxBitrate` fica intacto**, e isso é decisão. Ele já sai dos pixels que a captura
+entrega, é teto e não piso, e mexer nas duas coisas de uma vez tornaria impossível atribuir o
+efeito na primeira sessão em que isto rodar. Se a medição mostrar banda gasta numa imagem que
+encolheu, o passo seguinte é fazer o teto acompanhar os pixels.
+
+Não há seletor: escolher entre resolução e quadros foi justamente o que se retirou, porque é
+uma decisão que a medição toma melhor do que quem está jogando. Para diagnóstico,
+`nexoEscalaAutomatica = false` no console congela a escala onde ela está, o que permite
+comparar dois minutos com e sem. E o painel **diz** quando a imagem encolheu — sem a frase, o
+ajuste que protege os quadros pareceria o defeito.
+
+A medição também passou a guardar `qualityLimitationResolutionChanges`, que é quantas vezes o
+**navegador** mudou a resolução por limitação. Zero durante uma queda de quadros é a
+assinatura do adaptador dele desligado, e é o número que confirma ou derruba a suspeita acima.
+Se ele começar a subir, os dois estão agindo e há uma briga a resolver.
+
 ## O que falta
 
 Nada da lista original. O próximo passo é **medir**: `npm run banda`, depois de alguns dias de

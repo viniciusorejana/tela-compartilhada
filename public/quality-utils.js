@@ -107,7 +107,65 @@
       camadas: [[640, 360, 300_000, 15]]
     }
   };
-  const api = { profiles, tetoDeEnvio, TETO_ABSOLUTO, PISO };
+  // ---------- Encolher a imagem em vez de perder quadros ----------
+  //
+  // O porquê está em sala.js, junto de quem aplica isto nos remetentes. Aqui fica só a
+  // DECISÃO, e ela mora neste arquivo por dois motivos: é onde as escolhas de qualidade são
+  // tomadas, e assim ela pode ser testada sem navegador -- histerese é exatamente o tipo de
+  // lógica que passa a oscilar em silêncio depois de um ajuste aparentemente inofensivo.
+  //
+  // A função é pura: recebe o estado inteiro e devolve o estado novo. Quem chama guarda os
+  // contadores.
+
+  // De 1000 ms de cada segundo, quanto a codificação pode ocupar antes de a imagem encolher.
+  // Não são 1000: a mesma thread empacota, e a captura precisa de tempo para entregar o
+  // quadro seguinte. Passando de uns 70%, a folga acaba e o atraso de um quadro vira quadro
+  // perdido.
+  const CUSTO_QUE_APERTA = 700;
+  // Cada degrau divide largura e altura por este fator. Dois é o limite: além dele a camada
+  // de cima chegaria perto da de baixo, e duas camadas do mesmo tamanho não servem para nada.
+  const ESCADA_DE_ESCALA = [1, 1.25, 1.5, 2];
+  // Encolher é rápido; crescer espera. Uma tela tem rajadas -- uma troca de cena custa mais
+  // que o resto --, e reagir a cada rajada faria a resolução oscilar à vista, que é pior do
+  // que ficar um degrau abaixo. A medição que alimenta isto roda a cada dois segundos.
+  const AMOSTRAS_PARA_ENCOLHER = 2;
+  const AMOSTRAS_PARA_CRESCER = 8;
+  // Margem exigida para crescer. Voltar ao degrau de cima e estourar o teto no instante
+  // seguinte é o ciclo que a histerese existe para evitar.
+  const FOLGA_PARA_CRESCER = 0.9;
+
+  function proximaEscala(estado) {
+    const atual = ESCADA_DE_ESCALA.includes(estado.escala) ? estado.escala : 1;
+    const posicao = ESCADA_DE_ESCALA.indexOf(atual);
+    const custo = Number(estado.custoProjetado) || 0;
+    let apertos = Number(estado.apertos) || 0;
+    let folgas = Number(estado.folgas) || 0;
+
+    if (custo > CUSTO_QUE_APERTA) {
+      folgas = 0;
+      apertos += 1;
+      if (apertos < AMOSTRAS_PARA_ENCOLHER) return { escala: atual, apertos, folgas };
+      return { escala: ESCADA_DE_ESCALA[Math.min(posicao + 1, ESCADA_DE_ESCALA.length - 1)], apertos: 0, folgas: 0 };
+    }
+
+    apertos = 0;
+    if (posicao === 0) return { escala: atual, apertos, folgas: 0 };
+    // Crescer só quando o degrau de cima CABE, e a conta é de pixels: voltar de 1,5 para 1,25
+    // multiplica a área por (1,5/1,25)². Um piso fixo erraria nos dois sentidos, porque a
+    // distância entre os degraus não é constante.
+    const acima = ESCADA_DE_ESCALA[posicao - 1];
+    if (custo * Math.pow(atual / acima, 2) > CUSTO_QUE_APERTA * FOLGA_PARA_CRESCER) {
+      return { escala: atual, apertos, folgas: 0 };
+    }
+    folgas += 1;
+    if (folgas < AMOSTRAS_PARA_CRESCER) return { escala: atual, apertos, folgas };
+    return { escala: acima, apertos, folgas: 0 };
+  }
+
+  const api = {
+    profiles, tetoDeEnvio, TETO_ABSOLUTO, PISO,
+    proximaEscala, CUSTO_QUE_APERTA, ESCADA_DE_ESCALA, AMOSTRAS_PARA_ENCOLHER, AMOSTRAS_PARA_CRESCER
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RoomQuality = api;
 })(typeof window === 'undefined' ? globalThis : window);

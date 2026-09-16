@@ -1155,11 +1155,23 @@ isso custa de verdade, o que já foi feito para reduzir e o que fazer quando a s
 estão em [`docs/banda-e-escala.md`](docs/banda-e-escala.md), que também explica como medir
 (`npm run banda`).
 
+**A imagem encolhe antes de os quadros serem perdidos.** Quando a conta de codificação não
+cabe num segundo, a camada de cima é reduzida um degrau (1,25×, 1,5× ou 2×) e volta ao
+tamanho cheio quando sobra folga; o degrau de 360p, que é o que segura na sala quem está com
+a conexão ruim, nunca encolhe. É uma troca deliberada: resolução menor quase ninguém repara,
+quadro perdido trava a imagem e todo mundo repara.
+
+Isto é feito pelo Nexo, e não pelo navegador — o adaptador de resolução do libwebrtc não
+estava agindo aqui, com as camadas relatando `limitado por=none` enquanto os quadros caíam de
+44 para 24. Não há seletor, porque é uma decisão que a medição toma melhor do que quem está
+jogando, e o painel **diz** quando a imagem encolheu. O raciocínio, os limiares e a medição
+que sustenta isso estão em [`docs/banda-e-escala.md`](docs/banda-e-escala.md).
+
 O perfil pode mudar durante a transmissão; se a fonte recusar as novas restrições, a
 interface orienta usar **Atualizar tela**. Cada pessoa recebe a camada que a conexão dela
 aguenta, decidida pelo servidor de mídia — uma conexão fraca não derruba a imagem das outras.
-O controle de congestionamento do WebRTC continua ativo dos dois lados: a resolução baixa
-quando necessário e volta a subir. Em Dispositivos, as medições mostram o upload **total**
+O controle de congestionamento do WebRTC continua ativo para a BANDA, dos dois lados. Em
+Dispositivos, as medições mostram o upload **total**
 (todas as camadas e o codec de reserva), a resolução e a taxa de cada camada, e quanto cada
 quadro custa de processador. Não há buffer adicional para melhorar a imagem: em vez de
 acumular atraso, reduz-se a qualidade.
