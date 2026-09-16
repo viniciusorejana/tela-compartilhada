@@ -155,3 +155,6 @@ o `RTCPeerConnection` usa.
 
 **A decodificação já está resolvida:** `decodingInfo` do WebRTC responde `powerEfficient:
 true` para H.264, VP9 e AV1. Quem assiste já usa a placa. O problema é só de quem envia.
+
+O que fazer com essa abertura está em [`plano-webcodecs.md`](plano-webcodecs.md): usar o
+WebCodecs exige sair do `RTCPeerConnection`, e portanto um transporte próprio para a tela.
