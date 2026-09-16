@@ -496,24 +496,54 @@ function pararCapturaAudio(socketId) {
   audioCaptureProcesses.delete(socketId);
 }
 
+// Junta as capturas num fluxo só, quadro a quadro.
+//
+// A mistura esperava um quadro de TODAS as fontes antes de emitir qualquer coisa, e era ali
+// que estava o problema: uma fonte que deixasse de produzir -- o aplicativo fechou, o
+// processo morreu, o dispositivo sumiu -- travava a condição para sempre. As outras
+// continuavam entregando 176 KB por segundo cada uma, e nada consumia: a fila crescia até o
+// processo do servidor doer. Em dez minutos são mais de 100 MB de PCM que ninguém vai ouvir,
+// porque tudo aquilo só seria tocado em tempo real.
+//
+// Agora uma fonte parada não cala as outras. Esperar continua sendo o certo por um instante
+// -- um engasgo de 20 ms não é uma fonte morta, e emitir sem ela introduziria um buraco no
+// som por nada. Passado o teto, quem continua produzindo segue sozinho e quem parou entra
+// como silêncio. É a mesma escolha que o reprodutor do lado do navegador já fazia com o
+// atraso dele: um pulo curto agora é melhor do que atraso permanente depois.
 function misturarAudio(socket, captures) {
-  const frameBytes = 441 * 2 * 2;
+  const frameBytes = 441 * 2 * 2;   // 10 ms a 44.100 Hz, estéreo, 16 bits
+  // 200 ms. Curto o bastante para a fila não virar memória, e longo o bastante para não
+  // confundir engasgo com fonte morta.
+  const teto = frameBytes * 20;
   const buffers = captures.map(() => Buffer.alloc(0));
+  let avisouDeFonteParada = false;
 
   captures.forEach((capture, index) => {
     capture.stdout.on('data', chunk => {
       buffers[index] = Buffer.concat([buffers[index], chunk]);
-      while (buffers.every(buffer => buffer.length >= frameBytes)) {
+      for (;;) {
+        const prontos = [];
+        let estourou = false;
+        buffers.forEach((buffer, i) => {
+          if (buffer.length >= frameBytes) prontos.push(i);
+          if (buffer.length > teto) estourou = true;
+        });
+        if (!prontos.length) break;
+        // Com todos prontos, mistura todos. Faltando alguém, só segue depois que a fila de
+        // quem continua produzindo passou do teto.
+        if (prontos.length < buffers.length && !estourou) break;
+        if (prontos.length < buffers.length && !avisouDeFonteParada) {
+          avisouDeFonteParada = true;
+          console.warn(`Áudio nativo: ${buffers.length - prontos.length} de ${buffers.length} capturas pararam de produzir; misturando sem elas.`);
+        }
         const mixed = Buffer.alloc(frameBytes);
         for (let offset = 0; offset < frameBytes; offset += 2) {
           let sample = 0;
-          buffers.forEach(buffer => { sample += buffer.readInt16LE(offset); });
+          for (const i of prontos) sample += buffers[i].readInt16LE(offset);
           sample = Math.max(-32768, Math.min(32767, sample));
           mixed.writeInt16LE(sample, offset);
         }
-        buffers.forEach((buffer, bufferIndex) => {
-          buffers[bufferIndex] = buffer.subarray(frameBytes);
-        });
+        for (const i of prontos) buffers[i] = buffers[i].subarray(frameBytes);
         socket.emit('audio-data', mixed);
       }
     });
