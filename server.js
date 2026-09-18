@@ -60,7 +60,15 @@ const io = new Server(server, {
   pingTimeout: 25000
 });
 const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
-require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'), { permitir: req => telemetria.limitarOrigem(req) });
+// Um build por sistema, todos opcionais: o Windows é compilado aqui, e os outros dois vêm de
+// onde houver macOS e Linux para compilá-los (o electron-builder não gera .dmg no Windows).
+// Quem só tem o .exe na pasta continua servindo só o .exe, e a página mostra o que existe.
+const pastaDosBuilds = path.join(__dirname, 'app', 'dist');
+require('./desktop-download')(app, {
+  windows: path.join(pastaDosBuilds, 'SalaCompartilhada.exe'),
+  linux: path.join(pastaDosBuilds, 'Nexo.AppImage'),
+  mac: path.join(pastaDosBuilds, 'Nexo.dmg')
+}, { permitir: req => telemetria.limitarOrigem(req) });
 app.use('/api/soundboard', telemetria.soundboardHttp);
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));

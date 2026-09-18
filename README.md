@@ -1183,14 +1183,31 @@ o foco por teclado mantém os controles acessíveis enquanto você os utiliza.
 
 ## Download público do aplicativo portátil
 
-A página inicial contém **Baixar para Windows (.exe)**, com o tamanho e a data do arquivo
-atualmente disponível. O endereço direto é `/downloads/SalaCompartilhada.exe`, no mesmo
-domínio do site, inclusive pelo Tailscale Funnel. O servidor entrega somente
-`app/dist/SalaCompartilhada.exe`; a pasta `app/dist` não fica exposta para navegação.
+A página inicial lista **o que existe no servidor**, um botão por sistema, com tamanho e data
+de cada build. Os nomes e as rotas são fixos, declarados em `desktop-download.js`:
 
-Gere a próxima build com `npm --prefix app run empacotar`. O nome fixo do artefato já está
-configurado no Electron Builder: depois de concluída a geração, o botão entrega essa
-versão sem mudar o link ou reiniciar o servidor. O agente de áudio vai dentro do portátil.
+| sistema | arquivo | rota | build |
+|---|---|---|---|
+| Windows x64 | `SalaCompartilhada.exe` | `/downloads/SalaCompartilhada.exe` | `npm --prefix app run empacotar` |
+| Linux x64 | `Nexo.AppImage` | `/downloads/Nexo.AppImage` | `npm --prefix app run empacotar:linux` |
+| macOS | `Nexo.dmg` | `/downloads/Nexo.dmg` | `npm --prefix app run empacotar:mac` |
+
+Cada um é **opcional**: quem compila só o Windows serve só o Windows, e os botões dos outros
+não aparecem — um link de download que responde 503 é pior do que um link ausente. A página
+põe em primeiro lugar o sistema provável de quem está lendo e deixa os outros discretos.
+
+**Os três não saem da mesma máquina.** O `electron-builder` não gera `.dmg` no Windows, e o
+AppImage precisa de ferramentas de Linux; cada um é construído no seu sistema (ou em CI) e o
+arquivo copiado para `app/dist`. O servidor entrega somente esses três caminhos; a pasta
+`app/dist` não fica exposta para navegação.
+
+**O agente de áudio existe só no Windows, e é ele o diferencial do aplicativo.** Ele é o
+programa que sabe excluir uma árvore de processos da captura — é essa exclusão que impede a
+voz da sala de voltar para a sala como eco, e é o que nenhum navegador faz. No Linux e no
+macOS o aplicativo captura o som do sistema pelo `loopback` do próprio Electron: vai tudo,
+inclusive o Nexo, então a sala avisa para usar fones antes de compartilhar. Um agente nativo
+para esses dois sistemas (PipeWire no Linux, ScreenCaptureKit no macOS) é melhoria futura,
+não bloqueio.
 O download não altera o executável nem insere configurações nele. Na primeira abertura,
 a pessoa informa o endereço do site no aplicativo.
 

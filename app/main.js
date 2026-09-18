@@ -249,11 +249,21 @@ function instalarSeletorDeTela() {
       // Só janela é vigiada. Uma tela inteira não tem dono que possa fechar, e o monitor
       // sumir (cabo, projetor desligado) já vira fim de faixa por conta própria.
       if (ultimaCaptura?.tipo === 'window') vigiarProcessoDaCaptura(ultimaCaptura.pid);
-      // Sem áudio de propósito. O Electron sabe capturar o som do sistema aqui
-      // ('audio: loopback'), mas seria TODO o som, sem forma de tirar este aplicativo de
-      // dentro -- ou seja, exatamente o eco que o aplicativo existe para evitar. Quem
-      // captura som continua sendo o agente, que sabe excluir uma árvore de processos.
-      responder(escolhida ? { video: escolhida } : undefined);
+      // O áudio depende de haver agente, e a escolha aqui é entre dois defeitos.
+      //
+      // Onde o agente EXISTE (Windows, hoje), ele é quem captura: só ele sabe excluir uma
+      // árvore de processos, e é essa exclusão que evita o eco -- o som da sala voltando para
+      // a sala. Pedir `loopback` ali seria capturar tudo, inclusive este aplicativo, e trocar
+      // uma solução boa por uma ruim.
+      //
+      // Onde ele NÃO existe (Linux e macOS, até haver um agente nativo para eles), a escolha
+      // passa a ser entre `loopback` com risco de eco e nenhum som. E som com ressalva vale
+      // mais do que silêncio: quem usa fone não tem eco nenhum, e quem usa caixa é avisado
+      // pela própria sala antes de compartilhar.
+      const comAgente = Boolean(caminhoDoAgente());
+      responder(escolhida
+        ? (comAgente ? { video: escolhida } : { video: escolhida, audio: 'loopback' })
+        : undefined);
     } catch (erro) {
       console.error('Falha ao listar as telas:', erro.message);
       responder(undefined);
@@ -308,7 +318,12 @@ ipcMain.handle('agente:iniciar', (evento, url) => {
 
 ipcMain.handle('agente:estado', () => ({
   rodando: Boolean(agente && !agente.killed),
-  disponivel: Boolean(caminhoDoAgente())
+  disponivel: Boolean(caminhoDoAgente()),
+  // Sem agente, o som da tela vem pelo loopback do próprio Electron -- e a sala precisa saber
+  // disso para avisar do eco ANTES de a pessoa compartilhar. O aviso depois não serve: o eco
+  // aparece no ouvido dos outros, não no de quem transmite.
+  loopback: !caminhoDoAgente(),
+  plataforma: process.platform
 }));
 
 ipcMain.handle('endereco:definir', (evento, endereco) => {

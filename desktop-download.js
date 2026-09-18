@@ -1,12 +1,22 @@
 const fs = require('node:fs/promises');
 const { ipDoPedido } = require('./telemetria/origem');
 
-// O executavel do Windows. Um arquivo so, fixo: nada que venha de um pedido vira caminho.
+// Os executáveis do aplicativo. Um arquivo fixo por sistema, declarado aqui: nada que venha
+// de um pedido vira caminho.
 //
-// Ele e grande -- um Electron empacotado carrega o Chromium inteiro -- e sai pela conexao
-// de quem hospeda, que costuma ter upload bem menor que download. Por isso as tres regras
-// abaixo: quem ja baixou nao rebaixa, quem retoma continua de onde parou, e ninguem
+// Eles são grandes -- um Electron empacotado carrega o Chromium inteiro -- e saem pela
+// conexão de quem hospeda, que costuma ter upload bem menor que download. Por isso as três
+// regras abaixo: quem já baixou não rebaixa, quem retoma continua de onde parou, e ninguém
 // sozinho ocupa a subida da casa inteira.
+//
+// As chaves são fechadas, e os nomes de arquivo também. Um mapa aberto -- "sirva o que a
+// pessoa pedir dentro desta pasta" -- transformaria este módulo num leitor de arquivos
+// arbitrários, que é exatamente o que uma rota de download não pode ser.
+const SISTEMAS = Object.freeze({
+  windows: { arquivo: 'SalaCompartilhada.exe', nome: 'Windows x64', tipo: '.exe portátil' },
+  linux: { arquivo: 'Nexo.AppImage', nome: 'Linux x64', tipo: '.AppImage' },
+  mac: { arquivo: 'Nexo.dmg', nome: 'macOS', tipo: '.dmg' }
+});
 
 // Quantos downloads a MESMA pessoa pode ter em curso. Um navegador as vezes abre duas
 // conexoes para o mesmo arquivo; mais do que isso e alguem tentando espremer banda com
@@ -59,12 +69,18 @@ function esquecerAntigos() {
   }
 }
 
-module.exports = function desktopDownload(app, file, { permitir = () => true, identificar = quemEsta } = {}) {
-  const url = '/downloads/SalaCompartilhada.exe';
+// `arquivos` é o caminho do executável do Windows (forma antiga, mantida) ou um mapa
+// `{ windows, linux, mac }` com os caminhos de cada build. Cada sistema é opcional: quem
+// compila só o Windows continua servindo só o Windows, e a página mostra o que existe.
+module.exports = function desktopDownload(app, arquivos, { permitir = () => true, identificar = quemEsta } = {}) {
+  const caminhos = typeof arquivos === 'string' ? { windows: arquivos } : (arquivos || {});
+  const url = chave => `/downloads/${SISTEMAS[chave].arquivo}`;
   const faxina = setInterval(esquecerAntigos, MINUTOS_DA_JANELA * 60_000);
   faxina.unref?.();
 
-  async function artifact() {
+  async function artifact(chave = 'windows') {
+    const file = caminhos[chave];
+    if (!file) return null;
     try {
       const info = await fs.stat(file);
       return info.isFile() && info.size > 0 ? info : null;
@@ -76,12 +92,24 @@ module.exports = function desktopDownload(app, file, { permitir = () => true, id
   app.get('/api/desktop-app', async (_req, res, next) => {
     res.set('Cache-Control', 'no-store');
     try {
-      const info = await artifact();
-      res.json(info ? { available: true, url, size: info.size, builtAt: info.mtime.toISOString(), platform: 'Windows x64' }
-        : { available: false });
+      const encontrados = await Promise.all(Object.keys(SISTEMAS).map(async chave => {
+        const info = await artifact(chave);
+        return info && { chave, ...SISTEMAS[chave], url: url(chave), size: info.size, builtAt: info.mtime.toISOString() };
+      }));
+      const sistemas = encontrados.filter(Boolean);
+      const windows = sistemas.find(s => s.chave === 'windows');
+      // Os campos soltos são do Windows e continuam onde estavam. A página nova lê
+      // `sistemas`; uma página antiga em cache continua funcionando com os campos de sempre,
+      // e uma troca de formato que quebrasse isso apareceria como "o download desapareceu".
+      res.json(windows
+        ? { available: true, url: windows.url, size: windows.size, builtAt: windows.builtAt, platform: windows.nome, sistemas }
+        : { available: false, sistemas });
     } catch (error) { next(error); }
   });
-  app.get(url, async (req, res, next) => {
+  for (const chave of Object.keys(SISTEMAS)) app.get(url(chave), (req, res, next) => servir(chave, req, res, next));
+
+  async function servir(chave, req, res, next) {
+    const { arquivo, nome } = SISTEMAS[chave];
     if (!permitir(req)) return res.status(429).set('Retry-After', '60').end();
     res.set({
       // Antes era "no-store", o que mandava o navegador esquecer o arquivo assim que ele
@@ -95,7 +123,7 @@ module.exports = function desktopDownload(app, file, { permitir = () => true, id
       'Accept-Ranges': 'bytes'
     });
     try {
-      if (!await artifact()) return res.status(503).type('text').send('O aplicativo para Windows ainda não está disponível. Você pode entrar na sala pelo navegador.');
+      if (!await artifact(chave)) return res.status(503).type('text').send(`O aplicativo para ${nome} ainda não está disponível. Você pode entrar na sala pelo navegador.`);
 
       const cliente = identificar(req);
       const permissao = dentroDoLimite(cliente);
@@ -120,12 +148,13 @@ module.exports = function desktopDownload(app, file, { permitir = () => true, id
       // vaga ocupada para sempre e a pessoa ficaria trancada fora do proprio download.
       res.on('close', devolverVaga);
 
-      res.download(file, 'SalaCompartilhada.exe', { cacheControl: false }, error => {
+      res.download(caminhos[chave], arquivo, { cacheControl: false }, error => {
         devolverVaga();
         if (!error || res.headersSent || error.code === 'ECONNABORTED') return;
         if (error.code === 'ENOENT') res.status(503).send('Download temporariamente indisponível. Tente novamente.');
         else next(error);
       });
     } catch (error) { next(error); }
-  });
+  }
 };
+module.exports.SISTEMAS = SISTEMAS;

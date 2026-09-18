@@ -2769,6 +2769,9 @@ function planoDeAudio() {
   if (audioPolicy.value === 'none') return 'nenhum';
   if (captureMode.value === 'browser') return 'aba';
   if (captureMode.value === 'window' && !aplicativoNativo) return 'janela-navegador';
+  // Sem agente NESTE sistema, o aplicativo ainda entrega som -- pelo loopback do Electron, e
+  // com eco se a pessoa não estiver de fone. É melhor que silêncio, e a sala avisa.
+  if (aplicativoNativo && agenteAusenteNesteSistema) return 'loopback';
   if (aplicativoNativo && !audioCapabilities.agenteConectado) return 'nenhum';
   if (audioCapabilities.agenteConectado) return 'agente';
   if (audioCapabilities.podeUsarHelper && paginaAbertaLocalmente()) return 'helper';
@@ -2820,6 +2823,11 @@ function atualizarExplicacaoDeAudio() {
     'janela-navegador': 'Vai só o som da janela escolhida, quando o navegador oferece essa opção — nunca o som do resto do sistema. Se não oferecer, a tela vai sem áudio.',
     agente: textoDaCaptura('agente'),
     helper: textoDaCaptura('helper'),
+    // Este sistema ainda não tem o agente nativo, então o som vem inteiro -- e o Nexo vai
+    // dentro dele. Dizer isso ANTES é o que permite a pessoa pôr o fone: o eco aparece no
+    // ouvido dos outros, não no dela, e ela seria a última a descobrir.
+    loopback: 'O som deste computador vai junto, inteiro. Use fones: sem eles, a voz dos outros'
+      + ' volta para a sala como eco. Neste sistema o Nexo ainda não consegue tirar a si mesmo da captura.',
     'navegador-sistema': 'Marque "Compartilhar áudio do sistema" na janela que abrir. Sem isso o navegador não envia som nenhum.'
   };
   echoHint.textContent = textos[plano];
@@ -2837,9 +2845,13 @@ function atualizarExplicacaoDeAudio() {
   excluirAppCampo.hidden = !capturaNativa || captureMode.value === 'window';
   if (capturaNativa && !aplicativosDoAgente.length) pedirAplicativos();
 
-  const riscoDeEco = plano === 'navegador-sistema';
+  const riscoDeEco = plano === 'navegador-sistema' || plano === 'loopback';
   echoWarning.hidden = !riscoDeEco;
-  if (riscoDeEco) {
+  if (plano === 'loopback') {
+    echoWarningText.textContent = 'Neste sistema o aplicativo ainda não tem o agente de áudio, que é o'
+      + ' programa capaz de excluir o Nexo da captura. Sem ele o som vai inteiro: de fone, ninguém nota;'
+      + ' em caixas de som, a voz dos outros volta como eco. Compartilhar uma aba do navegador não tem esse risco.';
+  } else if (riscoDeEco) {
     const explicacoes = {
       'helper-ausente': 'Sem o helper nativo não dá para tirar esta chamada da captura, e a voz dos outros pode voltar como eco. Rode "npm start" para compilá-lo, ou compartilhe uma aba.',
       'atras-de-proxy': 'Por um endereço público a captura nativa fica desativada: ela rodaria na máquina do servidor e enviaria o áudio de lá. O navegador captura o som daqui, mas a voz dos outros pode voltar como eco. Se você hospeda a sala, abra-a por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador.',
@@ -2924,6 +2936,17 @@ let audioDaJanela = null;
 // disso existe e o erro nao aparece; dentro do aplicativo, a sala parava de funcionar por
 // completo, sem socket e sem nenhum botao respondendo.
 const aplicativoNativo = (typeof window !== 'undefined' && window.appNativo) || null;
+// O aplicativo em Linux e macOS ainda não tem o agente nativo -- ele é o programa que sabe
+// excluir uma árvore de processos da captura, e é essa exclusão que evita o eco. Lá o som da
+// tela vem pelo loopback do próprio Electron, que captura TUDO, inclusive o Nexo.
+//
+// Isto é descoberto ao abrir e guardado: `planoDeAudio` roda a cada mudança do seletor, e
+// perguntar ao processo principal a cada chamada seria um ida-e-volta por tecla digitada.
+let agenteAusenteNesteSistema = false;
+aplicativoNativo?.estadoDoAgente?.().then(estado => {
+  agenteAusenteNesteSistema = Boolean(estado?.loopback);
+  atualizarExplicacaoDeAudio();
+}).catch(() => { /* Aplicativo antigo: segue como antes, sem som de sistema. */ });
 if (aplicativoNativo) {
   captureMode.querySelector('option[value="browser"]').remove();
   // Tela inteira, e nao a janela. No Windows a captura de UMA janela passa pelo Windows
@@ -3304,7 +3327,10 @@ async function capturarTela() {
   }
   // Com o agente/helper o audio vem do sistema (fora do navegador), entao aqui pedimos
   // video sem audio para nao capturar a mesma coisa duas vezes.
-  const audioPeloNavegador = ['aba', 'navegador-sistema', 'janela-navegador'].includes(plano);
+  // `loopback` entra aqui porque quem entrega a faixa é o próprio `getDisplayMedia`: o
+  // processo principal do Electron responde ao pedido com a fonte de áudio do sistema. Sem
+  // pedir áudio na chamada, não há faixa para ele preencher.
+  const audioPeloNavegador = ['aba', 'navegador-sistema', 'janela-navegador', 'loopback'].includes(plano);
 
   // As chaves fora de "video"/"audio" (systemAudio, selfBrowserSurface...) so existem no
   // Chrome/Edge. Firefox e Safari as ignoram, o que e o comportamento desejado.
@@ -3433,6 +3459,7 @@ confirmScreenBtn.onclick = async () => {
         ? 'Compartilhando a tela, mas sem som: a captura de áudio não iniciou.'
         : 'Compartilhando a tela sem som. Para levar o áudio junto, compartilhe uma aba e marque a caixa de áudio do navegador.';
     }
+    else if (plano === 'loopback') status.textContent = 'Compartilhando tela + som deste computador. Use fones para não gerar eco.';
     else if (audioDaJanela) status.textContent = `Compartilhando janela + áudio do programa ${audioDaJanela.nome}.`;
     else if (plano === 'agente') status.textContent = 'Compartilhando tela + áudio conforme a seleção do sistema.';
     else if (plano === 'helper') status.textContent = 'Compartilhando tela + áudio deste computador (exceto o navegador).';

@@ -2,15 +2,17 @@
   "name": "sala-compartilhada-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Aplicativo de mesa da sala compartilhada: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
+  "description": "Aplicativo de mesa do Nexo: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
   "main": "main.js",
   "scripts": {
     "start": "node lancar.js",
-    "empacotar": "electron-builder --win portable"
+    "empacotar": "electron-builder --win portable",
+    "empacotar:linux": "electron-builder --linux AppImage",
+    "empacotar:mac": "electron-builder --mac dmg"
   },
   "build": {
     "appId": "com.telacompartilhada.app",
-    "productName": "Sala compartilhada",
+    "productName": "Nexo",
     "files": [
       "main.js",
       "preload.js",
@@ -20,20 +22,37 @@
       "lancar.js",
       "icon.ico"
     ],
-    "extraResources": [
-      {
-        "from": "../native/audio-agent/x64/Release/AgenteAudio.exe",
-        "to": "AgenteAudio.exe"
-      }
-    ],
     "win": {
       "icon": "icon.ico",
       "target": [
         "portable"
+      ],
+      "extraResources": [
+        {
+          "from": "../native/audio-agent/x64/Release/AgenteAudio.exe",
+          "to": "AgenteAudio.exe"
+        }
       ]
     },
     "portable": {
       "artifactName": "SalaCompartilhada.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network",
+      "artifactName": "Nexo.AppImage"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking",
+      "artifactName": "Nexo.dmg"
+    },
+    "dmg": {
+      "artifactName": "Nexo.dmg"
     }
   },
   "devDependencies": {

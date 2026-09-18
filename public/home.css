@@ -81,6 +81,11 @@ footer b { color:#b9a17d; margin-left:8px; }
 .download-button svg { width:19px; height:19px; flex:none; }
 .download-button>span { opacity:.7; }
 .download-button:hover { background:#c4b3ff; }
+/* O sistema provável vem primeiro e cheio; os outros ficam discretos. Três botões iguais
+   fariam a pessoa ler os três para achar o dela. */
+.download-button.secundario { background:#ffffff0f; color:#d8ceff; font-weight:550; padding:10px 16px; }
+.download-button.secundario:hover { background:#ffffff1c; }
+.download-button[aria-disabled="true"] { opacity:.5; pointer-events:none; }
 .download-button:focus-visible { outline:2px solid #d8ceff; outline-offset:4px; }
 .download-button[aria-disabled="true"] { opacity:.5; cursor:default; }
 @media(max-width:760px) { .entry-orbit { display:none; } }

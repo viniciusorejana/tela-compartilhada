@@ -38,8 +38,15 @@ test('portable download reports availability, streams exact bytes/ranges and pic
     await fs.rmdir(dir);
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
-  assert.deepEqual(await (await fetch(origin + '/api/desktop-app')).json(), { available: false });
+  // Sem build nenhuma: `available` continua falso -- é o campo que a página antiga lê -- e a
+  // lista de sistemas vem vazia, que é o que a página nova lê. As duas formas convivem de
+  // propósito: uma página em cache não pode parar de funcionar por causa do formato novo.
+  assert.deepEqual(await (await fetch(origin + '/api/desktop-app')).json(), { available: false, sistemas: [] });
   assert.equal((await fetch(origin + '/downloads/SalaCompartilhada.exe')).status, 503);
+  // Os outros sistemas ganharam rota própria, e sem arquivo elas respondem o mesmo 503 --
+  // nunca 404, porque a rota existe: é o BUILD que ainda não foi feito.
+  assert.equal((await fetch(origin + '/downloads/Nexo.AppImage')).status, 503);
+  assert.equal((await fetch(origin + '/downloads/Nexo.dmg')).status, 503);
   const bytes = Buffer.from('MZ-portable-test-fixture');
   await fs.writeFile(file, bytes);
   const metadata = await fetch(origin + '/api/desktop-app');
@@ -48,6 +55,10 @@ test('portable download reports availability, streams exact bytes/ranges and pic
   assert.equal(info.size, bytes.length);
   assert.equal(info.available, true);
   assert.ok(Number.isFinite(Date.parse(info.builtAt)));
+  // Só o Windows foi construído aqui, então só ele entra na lista. Anunciar um sistema cujo
+  // build não existe daria à página um botão que responde 503 -- pior do que um botão ausente.
+  assert.deepEqual(info.sistemas.map(s => s.chave), ['windows']);
+  assert.equal(info.sistemas[0].url, '/downloads/SalaCompartilhada.exe');
   const response = await fetch(origin + info.url);
   assert.match(response.headers.get('content-disposition'), /attachment; filename="SalaCompartilhada.exe"/);
   // Era "no-store", que mandava o navegador esquecer o arquivo assim que ele chegava:
@@ -110,4 +121,49 @@ test('o download tem teto por endereço, e um endereço não gasta a cota do out
   const outroAmigo = await baixar('198.51.100.20');
   assert.equal(outroAmigo.status, 200, 'quem nunca baixou não pode pagar pelo excesso alheio');
   assert.equal(outroAmigo.corpo.toString(), 'MZ-fixture');
+});
+
+// Cada sistema é compilado num lugar diferente -- o Windows aqui, o macOS e o Linux onde
+// houver macOS e Linux --, então a página precisa mostrar o que EXISTE em vez de um botão
+// fixo. Um link de download que responde 503 é pior do que um link que não aparece.
+test('cada sistema tem rota própria, e a lista traz só as builds que existem', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexo-download-multi-'));
+  const caminhos = {
+    windows: path.join(dir, 'SalaCompartilhada.exe'),
+    linux: path.join(dir, 'Nexo.AppImage'),
+    mac: path.join(dir, 'Nexo.dmg')
+  };
+  await fs.writeFile(caminhos.linux, Buffer.from('AppImage-fixture'));
+  await fs.writeFile(caminhos.mac, Buffer.from('dmg-fixture-maior'));
+
+  const app = express();
+  require('../desktop-download')(app, caminhos);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(async () => {
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+
+  const info = await (await fetch(origin + '/api/desktop-app')).json();
+  // O Windows não foi construído, e é dele que vêm os campos soltos: sem ele, `available` é
+  // falso mesmo havendo dois outros sistemas prontos. Isso é deliberado -- os campos antigos
+  // descrevem o Windows, e mentir sobre eles quebraria a página que os lê.
+  assert.equal(info.available, false);
+  assert.deepEqual(info.sistemas.map(s => s.chave).sort(), ['linux', 'mac']);
+  assert.equal(info.sistemas.find(s => s.chave === 'linux').url, '/downloads/Nexo.AppImage');
+  assert.ok(info.sistemas.every(s => s.nome && s.tipo && s.size > 0 && Number.isFinite(Date.parse(s.builtAt))));
+
+  // O arquivo servido é o do sistema pedido, e não o primeiro que houver: trocar os dois
+  // entregaria um .dmg a quem clicou em Linux, e o erro só apareceria ao tentar executar.
+  const linux = await fetch(origin + '/downloads/Nexo.AppImage');
+  assert.equal(linux.status, 200);
+  assert.equal(await linux.text(), 'AppImage-fixture');
+  const mac = await fetch(origin + '/downloads/Nexo.dmg');
+  assert.equal(await mac.text(), 'dmg-fixture-maior');
+  // O que não foi construído recusa com 503, e a mensagem nomeia o sistema.
+  const windows = await fetch(origin + '/downloads/SalaCompartilhada.exe');
+  assert.equal(windows.status, 503);
+  assert.match(await windows.text(), /Windows/);
 });
