@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('node:path');
 const { origemDoPainel } = require('./origem');
 
-function instalarRotas(app, { auth, consultar, instante, pasta = path.join(__dirname, '..', 'painel') }) {
+function instalarRotas(app, { auth, consultar, instante, relatos, pasta = path.join(__dirname, '..', 'painel') }) {
   const clientes = new Set();
   const periodos = ['hoje', '7d', '30d', 'tudo'];
   // A porta fecha antes de tudo: antes da chave, antes do cookie, antes de servir a própria
@@ -36,6 +36,14 @@ function instalarRotas(app, { auth, consultar, instante, pasta = path.join(__dir
     const periodo = req.query.periodo || '7d';
     if (!periodos.includes(periodo)) return res.status(400).json({ erro: 'Período inválido.' });
     try { res.json(await consultar(periodo)); } catch (erro) { next(erro); }
+  });
+  // Os relatos ficam FORA do resumo periódico, e isso é de propósito: o resumo viaja a cada
+  // dez segundos para cada painel aberto, e carregar até cem relatórios técnicos nele
+  // multiplicaria por dez o custo de manter o painel na tela. Aqui é uma busca própria, de
+  // quem abriu a aba.
+  app.get('/painel/api/relatos', async (_req, res, next) => {
+    if (!relatos) return res.json({ relatos: [], ausente: true, total: 0 });
+    try { res.json(await relatos.listar()); } catch (erro) { next(erro); }
   });
   app.get('/painel/api/eventos', (req, res) => {
     if (clientes.size >= 10 || [...clientes].filter(c => c.id === req.sessaoPainel.id).length >= 3) return res.status(429).json({ erro: 'Há painéis demais abertos.' });

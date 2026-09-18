@@ -171,6 +171,79 @@ componente('nexo-salas', ({ atual: a, contabilidade: c }) => [
   e('details', {}, e('summary', {}, 'Telas em 1440p no período'), serie('Telas publicadas em 1440p ou mais', c?.telas1440 || [], 'quantidade', v => numero(v, 0)), e('p', { class: 'nota' }, 'Maior quantidade observada em cada janela, sem nomes. A publicação informa o perfil; não prova qual camada foi recebida. Compartilhamentos breves entre coletas podem não aparecer.')),
   e('p', { class: 'nota' }, `Última reconciliação com o SFU: ${quando(a?.sfu.reconciliadoEm)}. A resolução é a informada na publicação; 1440p é uso legítimo, sem bloqueio por resolução.`)
 ]);
+// ---------- O que as pessoas relataram ----------
+//
+// Este componente busca por conta própria, e é o único do painel que faz isso. O motivo é
+// custo: o resumo ao vivo viaja a cada dez segundos para cada painel aberto, e carregar até
+// cem relatórios técnicos dentro dele multiplicaria por dez o preço de manter a aba na tela
+// -- para um dado que ninguém precisa ver segundo a segundo.
+//
+// Todo texto entra por `e()`, que cria nós de texto. O relato vem de quem quiser escrever
+// nele, e nada aqui vira HTML.
+class Relatos extends HTMLElement {
+  connectedCallback() {
+    this.dados = null;
+    this.falhou = '';
+    this.pintar();
+    this.buscar();
+  }
+  async buscar() {
+    this.carregando = true;
+    this.pintar();
+    try {
+      const resposta = await fetch('/painel/api/relatos');
+      if (resposta.status === 401) { location.assign('/painel/entrar'); return; }
+      if (!resposta.ok) throw new Error();
+      this.dados = await resposta.json();
+      this.falhou = '';
+    } catch (_) {
+      this.falhou = 'Não foi possível ler os relatos. Os anteriores continuam gravados no servidor.';
+    } finally {
+      this.carregando = false;
+      this.pintar();
+    }
+  }
+  pintar() {
+    // Mesma disciplina dos outros: redesenhar não pode tirar o foco de quem está lendo.
+    if (this.contains(document.activeElement)) return;
+    const abertos = [...this.querySelectorAll('details')].map(d => d.open);
+    this.replaceChildren(...this.desenhar().flat(Infinity).filter(n => n != null));
+    this.querySelectorAll('details').forEach((d, i) => { d.open = abertos[i] || false; });
+  }
+  desenhar() {
+    const atualizar = e('button', { class: 'discreto', type: 'button' }, this.carregando ? 'Atualizando…' : 'Atualizar');
+    atualizar.addEventListener('click', () => this.buscar());
+    if (this.carregando) atualizar.setAttribute('disabled', '');
+    const cabeca = [
+      ...titulo('O que as pessoas relataram', 'Enviado pelo botão do Diagnóstico, dentro da sala. Sem IPs; a sala e o nome vêm da sessão.'),
+      atualizar
+    ];
+    if (this.falhou) return [...cabeca, e('p', { class: 'aviso' }, this.falhou)];
+    const lista = this.dados?.relatos || [];
+    if (!lista.length) {
+      return [...cabeca, vazio('Nenhum relato ainda',
+        this.dados?.ausente
+          ? 'O arquivo aparece no primeiro envio. Ausência de relatos não é prova de que está tudo bem — pode ser que ninguém tenha encontrado o botão.'
+          : 'Ausência de relatos não é prova de que está tudo bem: pode ser que ninguém tenha encontrado o botão.')];
+    }
+    return [
+      ...cabeca,
+      e('div', { class: 'lista-relatos' }, lista.map(r => e('article', { class: 'relato-item' },
+        e('header', {},
+          e('code', {}, r.protocolo || '—'),
+          e('span', {}, quando(Date.parse(r.t))),
+          e('span', {}, r.sala ? `sala ${r.sala}` : 'sem sala'),
+          e('span', {}, r.nome || 'sem nome')),
+        e('p', { class: 'relato-mensagem' }, r.mensagem || '(sem descrição)'),
+        r.navegador ? e('p', { class: 'nota' }, r.navegador) : null,
+        r.relatorio ? e('details', {}, e('summary', {}, 'Relatório técnico'), e('pre', {}, r.relatorio)) : null))),
+      e('p', { class: 'nota' }, `${numero(this.dados.total, 0)} relato(s) guardado(s); mostrando os ${lista.length} mais recentes.`
+        + ' O arquivo gira quando enche, como o resto da telemetria — o mais antigo é o primeiro a sair.')
+    ];
+  }
+}
+customElements.define('nexo-relatos', Relatos);
+
 componente('nexo-recursos', ({ atual: a }) => {
   const r = a?.recursos, s = a?.sfu;
   return [...titulo('A máquina por trás da sala', 'CPU de cada processo: 100% representa um núcleo. RAM inclui os buffers do processo.'),

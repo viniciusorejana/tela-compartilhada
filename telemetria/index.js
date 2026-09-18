@@ -12,6 +12,7 @@ const { criarObservador } = require('./livekit');
 const { criarRecursos } = require('./recursos');
 const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
+const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
 function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard }) {
   const auth = criarAutenticacao();
@@ -58,9 +59,45 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard }) {
   const recursos = criarRecursos({ pid: () => sfu.diagnostico().pid });
   function vivo() {
     const ativos = [...salas()].slice(0, 512).map(([sala, membros]) => ({ sala, pessoas: membros.size, membros: [...membros.values()].map(m => ({ nome: m.name, estadoDeclarado: m.state })) }));
-    return { em: Date.now(), revisao, salas: ativos, abuso: abuso.resumo(), origens: origens.resumo(), limites: abuso.regras, alertas: alertas.listar(), sfu: { ...sfu.diagnostico(), ...observador.resumo() }, eventosSfu, recursos: recursos.resumo(), soundboard: soundboard.usoGlobal(), coleta: { banda: medicao.estado(), uso: gravadorUso.estado(), alertas: alertas.estado() } };
+    return { em: Date.now(), revisao, salas: ativos, abuso: abuso.resumo(), origens: origens.resumo(), limites: abuso.regras, alertas: alertas.listar(), sfu: { ...sfu.diagnostico(), ...observador.resumo() }, eventosSfu, recursos: recursos.resumo(), soundboard: soundboard.usoGlobal(), coleta: { banda: medicao.estado(), uso: gravadorUso.estado(), alertas: alertas.estado(), relatos: relatos.estado() } };
   }
-  const rotas = instalarRotas(app, { auth, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
+  const relatos = criarRelatos();
+  const rotas = instalarRotas(app, { auth, relatos, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
+
+  // ---------- "Não está funcionando" chegando até aqui ----------
+  //
+  // Exige sessão, e isso não é burocracia: a sessão é o que dá sala e nome ao relato sem
+  // pedi-los ao cliente, e é o que faz o limite por pessoa existir. Quem não está numa sala
+  // não tem o que relatar sobre uma sala.
+  //
+  // O corpo é pequeno de propósito. Um relato é texto, e um limite generoso aqui
+  // transformaria a rota no único lugar do servidor onde qualquer pessoa escreve em disco
+  // sem cota de bytes.
+  app.post('/api/relato', (req, res, next) => {
+    if (!limitarOrigem(req, 'origem-http')) return res.status(429).set('Retry-After', '60').json({ error: 'Muitos pedidos. Aguarde um minuto.' });
+    next();
+  }, express.json({ limit: MAXIMO_DO_RELATORIO + MAXIMO_DA_MENSAGEM + 2048, strict: true }), (req, res) => {
+    const sessao = sessoes.obter(req.headers['x-nexo-sessao']);
+    if (!sessao) return res.status(403).json({ error: 'Entre numa sala antes de enviar um relato.' });
+    if (!abuso.verificar(sessao.id, 'relato', contexto(sessao)).ok) {
+      return res.status(429).set('Retry-After', '60').json({ error: 'Você já enviou um relato agora. Aguarde um minuto.' });
+    }
+    const corpo = req.body;
+    if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) return res.status(400).json({ error: 'Relato inválido.' });
+    // Sem mensagem E sem relatório não há relato: seria uma linha em branco no disco.
+    if (!String(corpo.mensagem || '').trim() && !String(corpo.relatorio || '').trim()) {
+      return res.status(400).json({ error: 'Escreva o que aconteceu antes de enviar.' });
+    }
+    const protocolo = relatos.registrar({
+      mensagem: corpo.mensagem,
+      relatorio: corpo.relatorio,
+      agenteDoNavegador: req.headers['user-agent'],
+      sala: sessao.sala,
+      nome: sessao.nome
+    });
+    res.json({ ok: true, protocolo });
+  });
+  app.use('/api/relato', (_erro, _req, res, _next) => { if (!res.headersSent) res.status(400).json({ error: 'Não foi possível enviar o relato.' }); });
 
   app.post('/api/telemetria/livekit', (req, res, next) => {
     // O endereço local não substitui a assinatura: um proxy também chega de localhost.
@@ -229,7 +266,7 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard }) {
   repetir(observador.reconciliar, 30000); repetir(recursos.disco, 300000); repetir(fecharJanela, 60000);
   recursos.coletar().catch(() => {}); recursos.disco().catch(() => {});
   return { prepararSessao, instalarSocket, entrou, saiu, soundboardHttp, downloadPermitido, agentePermitido, comecarBusca, limitarOrigem, sessoes,
-    async encerrar() { timers.forEach(clearInterval); rotas.encerrar(); await leitor.encerrar(); await Promise.all([medicao.encerrar(), fecharJanela()]); await gravadorUso.concluir(); },
+    async encerrar() { timers.forEach(clearInterval); rotas.encerrar(); await leitor.encerrar(); await Promise.all([medicao.encerrar(), fecharJanela()]); await Promise.all([gravadorUso.concluir(), relatos.concluir()]); },
     estado: vivo };
 }
 module.exports = { iniciarTelemetria };

@@ -30,6 +30,10 @@ const REGRAS = Object.freeze({
   'agente-controle': { sessao: 120 },
   'agente-pacotes': { sessao: 12000 },
   'agente-bytes': { sessao: 32 * MiB },
+  // Um relato é um gesto deliberado de quem está com problema, então o teto é baixo de
+  // propósito: quem manda três num minuto está testando o campo, não relatando. E cada um
+  // carrega até 16 KB de relatório técnico, o que faz deste o evento mais caro por unidade.
+  'relato': { sessao: 3, sala: 12, longa: [10, 10 * MINUTO] },
   'sala-token': { sessao: 20, sala: 300 },
   'conexao': { sessao: 60 },
   'origem-token': { sessao: 120 },

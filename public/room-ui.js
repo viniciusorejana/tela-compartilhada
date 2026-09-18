@@ -502,6 +502,56 @@
     } finally { collecting = false; }
   }
   setInterval(() => { if (!$('diagnosticsPanel').classList.contains('hidden')) collectDiagnostics(); }, 4000);
+  // ---------- Mandar o relato, em vez de copiar e procurar onde colar ----------
+  //
+  // O botão de copiar FICA. Ele continua sendo o caminho de quem quer pedir ajuda num chat, e
+  // é o único que funciona quando o próprio servidor é o problema -- que é justamente o caso
+  // em que um POST não chegaria a lugar nenhum.
+  //
+  // O protocolo devolvido é mostrado e não some: sem ele a pessoa não tem como falar do
+  // relato depois, e quem recebe não tem como ligar uma conversa a um registro.
+  const relatoStatus = $('relatoStatus');
+  const relatoTexto = $('relatoTexto');
+  const relatoBtn = $('sendRelatoBtn');
+
+  function dizerDoRelato(texto, estado) {
+    relatoStatus.textContent = texto;
+    relatoStatus.className = `relato-status${estado ? ` ${estado}` : ''}`;
+  }
+
+  relatoBtn.onclick = async () => {
+    const mensagem = relatoTexto.value.trim();
+    // O relatório sozinho já é um relato útil -- "não funciona e não sei dizer mais" é uma
+    // informação legítima --, mas pedir a frase primeiro é o que transforma sessenta linhas
+    // de números em algo que se consegue investigar.
+    if (!mensagem) {
+      dizerDoRelato('Escreva em uma linha o que aconteceu. Sem isso, o relatório é só números.', 'alerta');
+      relatoTexto.focus();
+      return;
+    }
+    relatoBtn.disabled = true;
+    dizerDoRelato('Enviando…');
+    try {
+      const resposta = await fetch('/api/relato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(window.NexoSessao?.cabecalhos() || {}) },
+        body: JSON.stringify({ mensagem, relatorio: report })
+      });
+      const dados = await resposta.json().catch(() => ({}));
+      if (!resposta.ok || !dados.ok) throw new Error(dados.error || `O servidor respondeu ${resposta.status}.`);
+      // O campo é limpo para não reenviar o mesmo texto por engano, e o protocolo fica na
+      // tela até o painel ser fechado.
+      relatoTexto.value = '';
+      dizerDoRelato(`Enviado. Seu protocolo é ${dados.protocolo} — anote para poder falar deste relato depois.`, 'ok');
+    } catch (erro) {
+      // Aqui a alternativa importa mais do que a mensagem de erro: se o envio falhou, é bem
+      // possível que o problema seja exatamente o servidor, e o caminho que sobra é copiar.
+      dizerDoRelato(`Não foi possível enviar: ${erro.message} Use "Copiar diagnóstico" e mande por outro caminho.`, 'problema');
+    } finally {
+      relatoBtn.disabled = false;
+    }
+  };
+
   $('copyDiagnosticsBtn').onclick = async () => {
     try {
       await navigator.clipboard.writeText(report);

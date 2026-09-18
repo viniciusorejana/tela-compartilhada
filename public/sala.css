@@ -500,6 +500,21 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .diag-linha.diag-problema .diag-valor::before { content:'● '; font-size:9px; }
 #diagnosticsSummary { font-size:12px; color:#d4cbe2; border:1px solid #b4a1dd22; background:#b4a1dd09; padding:12px; border-radius:9px; line-height:1.7; margin-bottom:14px; }
 #diagnosticsReport { white-space:pre-wrap; word-break:break-word; font:11px/1.8 ui-monospace,Consolas,monospace; color:#beb3ce; max-height:230px; overflow:auto; }
+/* O relato fica depois dos cartões e antes dos botões: quem chegou até aqui já viu o que o
+   painel tinha a dizer, e é nesse ponto que "continua errado" é a próxima frase honesta. */
+.relato { margin-top:14px; padding-top:13px; border-top:1px solid var(--line); }
+.relato-titulo { display:block; font-size:12px; font-weight:600; color:#d4cbe2; margin-bottom:7px; }
+.relato textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:58px; padding:9px 11px; border-radius:9px; border:1px solid var(--line); background:#ffffff08; color:var(--text); font:inherit; font-size:12.5px; line-height:1.6; }
+.relato textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+/* O que vai junto precisa estar À VISTA, não escondido num "saiba mais". Pedir diagnóstico
+   sem dizer o que ele carrega é o tipo de coisa que queima confiança de graça. */
+.relato-aviso { margin:8px 0 0; font-size:11px; line-height:1.65; color:#a29bae; }
+.relato-aviso strong { color:#c9c0d8; font-weight:600; }
+.relato-status:empty { display:none; }
+.relato-status { margin-top:9px; font-size:11.5px; line-height:1.6; color:#a29bae; }
+.relato-status.ok { color:var(--online); }
+.relato-status.alerta { color:#f0b98a; }
+.relato-status.problema { color:var(--danger); }
 .lightbox { position:fixed; inset:0; z-index:95; padding:55px 20px 40px; display:grid; place-items:center; overflow:auto; background:#090910f7; }
 #lightboxImg { max-width:94vw; max-height:84vh; object-fit:contain; border-radius:10px; cursor:zoom-in; display:block; margin:auto; }
 #lightboxImg.real { max-width:none; max-height:none; cursor:zoom-out; }

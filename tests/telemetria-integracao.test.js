@@ -30,6 +30,69 @@ test('servidor real protege painel, vincula sessões e limita handlers Socket.IO
   assert.ok(resumo.atual.limites['chat-message']);
   const saida = await a.pedir('leave-room'); assert.equal(saida.ok, true);
 });
+// O relato é o único caminho pelo qual um problema de quem usa chega até quem mantém. O que
+// se afirma aqui é o que não pode falhar em silêncio: que ele exige sessão, que a sala e o
+// nome vêm DA SESSÃO e não do corpo (senão qualquer um assina relato como outra pessoa), que
+// o protocolo volta para quem enviou, e que o painel mostra o que chegou.
+test('relato exige sessão, carimba sala e nome pela sessão, e aparece no painel', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const cred = await servidor.credencial('Ana');
+  const enviar = (corpo, cabecalhos = {}) => fetch(servidor.origem + '/api/relato', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...cabecalhos }, body: JSON.stringify(corpo)
+  });
+
+  // Sem sessão não há relato: é a sessão que diz de que sala ele fala.
+  assert.equal((await enviar({ mensagem: 'sem sessão' })).status, 403);
+  const comSessao = { 'X-Nexo-Sessao': cred.credencialSessao };
+  // Uma linha em branco no disco não é um relato.
+  assert.equal((await enviar({ mensagem: '   ', relatorio: '' }, comSessao)).status, 400);
+
+  // O corpo TENTA se passar por outra pessoa em outra sala. Os dois campos precisam ser
+  // ignorados -- é a sessão que responde por eles.
+  const resposta = await enviar({
+    mensagem: 'A tela do Fulano ficou preta no celular.',
+    relatorio: 'codec=H.264\nlimitado por=cpu',
+    sala: 'sala-forjada', nome: 'Nome forjado', protocolo: 'NX-FORJADO'
+  }, comSessao);
+  assert.equal(resposta.status, 200, servidor.erros());
+  const { ok, protocolo } = await resposta.json();
+  assert.equal(ok, true);
+  assert.match(protocolo, /^NX-[A-Z2-9]{6}$/, `protocolo inesperado: ${protocolo}`);
+
+  const login = await fetch(servidor.origem + '/painel/entrar', { method: 'POST', headers: { Origin: servidor.origem, 'Content-Type': 'application/json' }, body: JSON.stringify({ segredo: await servidor.chave() }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const lidos = await (await fetch(servidor.origem + '/painel/api/relatos', { headers: { Cookie: cookie } })).json();
+  assert.equal(lidos.relatos.length, 1);
+  const relato = lidos.relatos[0];
+  assert.equal(relato.protocolo, protocolo, 'o painel precisa mostrar o mesmo protocolo que voltou para quem enviou');
+  assert.equal(relato.sala, 'squad-teste', `a sala veio do corpo em vez da sessão: ${relato.sala}`);
+  assert.equal(relato.nome, 'Ana', `o nome veio do corpo em vez da sessão: ${relato.nome}`);
+  assert.match(relato.mensagem, /tela do Fulano/);
+  assert.match(relato.relatorio, /limitado por=cpu/);
+
+  // O painel é protegido pela mesma porta que o resto dele. Sem cookie, nada.
+  assert.equal((await fetch(servidor.origem + '/painel/api/relatos')).status, 401);
+});
+
+// Três por minuto é um gesto; o quarto é alguém testando o campo. Cada relato carrega até
+// 16 KB de relatório, o que faz desta a rota mais cara por unidade no servidor inteiro.
+test('relatos em excesso são recusados sem derrubar a sessão', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const cred = await servidor.credencial('Insistente');
+  const cabecalhos = { 'Content-Type': 'application/json', 'X-Nexo-Sessao': cred.credencialSessao };
+  const situacoes = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await fetch(servidor.origem + '/api/relato', { method: 'POST', headers: cabecalhos, body: JSON.stringify({ mensagem: `relato ${i}` }) });
+    situacoes.push(r.status);
+  }
+  assert.deepEqual(situacoes.slice(0, 3), [200, 200, 200], `os três primeiros deveriam passar: ${situacoes}`);
+  assert.ok(situacoes.slice(3).every(s => s === 429), `o excesso deveria ser recusado com 429: ${situacoes}`);
+  // A sessão continua válida: recusar um relato não pode custar o lugar na sala. Aqui se
+  // confere a credencial, e não o token de mídia -- este servidor de teste sobe sem SFU.
+  const depois = await servidor.credencial('Insistente', 'squad-teste', cred.credencialSessao);
+  assert.ok(depois.credencialSessao, 'a sessão deveria continuar servindo depois de um relato recusado');
+});
+
 test('bytes de upload abortado continuam no contador do servidor', async t => {
   const servidor = await iniciarServidor({ ambiente: { NEXO_LIMITES: JSON.stringify({ 'soundboard-bytes': { sessao: 150000, sala: 1000000 } }) } }); t.after(servidor.encerrar);
   const cred = await servidor.credencial('Upload'); const a = await conectarSocket(servidor.origem, cred.credencialSessao); t.after(a.fechar);
