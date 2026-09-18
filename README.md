@@ -632,7 +632,7 @@ de menu fica escondida; `Alt` mostra).
 ### Gerar o executavel
 
 ```bash
-npm run build:helper   # na raiz: compila o helper e o AgenteAudio.exe
+npm run build:helper   # na raiz: compila o helper e o AgenteAudio.exe (só Windows)
 cd app
 npm install            # so na primeira vez
 npm run empacotar
@@ -647,6 +647,31 @@ O tamanho e do Chromium, que vai inteiro no pacote. E o preco de a sala rodar fo
 > Compile o agente **antes** de empacotar. O empacotamento le
 > `native/audio-agent/x64/Release/AgenteAudio.exe`; se ele nao existir, o pacote sai sem o agente
 > e o som do sistema nao e capturado.
+
+#### Linux e macOS
+
+Cada um é construído **no próprio sistema**: o `electron-builder` não gera `.dmg` fora do macOS,
+e o AppImage precisa de ferramentas de Linux.
+
+```bash
+npm --prefix app run empacotar:linux   # app/dist/Nexo.AppImage
+npm --prefix app run empacotar:mac     # app/dist/Nexo.dmg
+```
+
+Três armadilhas, todas já encontradas na prática:
+
+- **`electron-builder: Permission denied`.** O `node_modules` foi copiado de outra máquina e os
+  arquivos perderam o bit de execução. Apague `app/node_modules` e rode `npm install` ali — não
+  é só o modo do arquivo: o Electron instalado é o binário da plataforma em que se instalou.
+- **`Unsupported input format ".ico"`.** O Linux e o macOS não aceitam `.ico`. O ícone deles é
+  `app/icon.png`, gerado junto do `.ico` por `npm run build:icon` (na raiz) a partir do mesmo
+  `public/mark.svg`. Os dois estão versionados; regere-os se a marca mudar.
+- **O `.AppImage` não abre em distribuição recente.** Ele precisa de FUSE 2, que saiu do padrão
+  em Ubuntu 22.04+ (`sudo apt install libfuse2`). É requisito do formato, não do Nexo.
+
+O agente de áudio **não vai nesses pacotes**, porque ele é um executável do Windows. Lá o som do
+sistema vem pelo `loopback` do Electron: vai tudo, inclusive o Nexo, então a sala pede fones
+antes de compartilhar. Ver "Download público do aplicativo portátil".
 
 ### Distribuir para outras pessoas
 

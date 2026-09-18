@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Aplicativo de mesa do Nexo: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
+  "author": "Nexo",
   "main": "main.js",
+  "_comentario_desktopName": "Nível raiz de propósito: é daqui que o electron-builder lê o nome do arquivo .desktop quando linux.syncDesktopName está ligado. Sem ele, os ambientes de mesa do Linux não ligam a janela aberta ao ícone do aplicativo, e o Nexo aparece na barra de tarefas como um genérico sem nome.",
+  "desktopName": "nexo.desktop",
   "scripts": {
     "start": "node lancar.js",
     "empacotar": "electron-builder --win portable",
@@ -20,7 +23,8 @@
       "escolher.html",
       "package.json",
       "lancar.js",
-      "icon.ico"
+      "icon.ico",
+      "icon.png"
     ],
     "win": {
       "icon": "icon.ico",
@@ -38,13 +42,17 @@
       "artifactName": "SalaCompartilhada.exe"
     },
     "linux": {
+      "icon": "icon.png",
       "target": [
         "AppImage"
       ],
       "category": "Network",
-      "artifactName": "Nexo.AppImage"
+      "artifactName": "Nexo.AppImage",
+      "syncDesktopName": true,
+      "synopsis": "Sala de voz, câmera e tela com o seu squad"
     },
     "mac": {
+      "icon": "icon.png",
       "target": [
         "dmg"
       ],

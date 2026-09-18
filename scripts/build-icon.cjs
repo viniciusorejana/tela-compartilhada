@@ -1,18 +1,33 @@
-// Rasterize the repository SVG at native Windows icon sizes; no external artwork.
+// Rasteriza o SVG do repositório nos tamanhos que cada sistema pede. Nenhuma arte externa: a
+// marca é a mesma em todos os lugares, e nasce do mesmo arquivo.
+//
+// Dois formatos, e o segundo não é luxo. O `.ico` é do Windows; no LINUX o electron-builder
+// recusa `.ico` de saída ("Unsupported input format .ico. Supported: .png, .svg, .icns") e o
+// build do AppImage morre no fim, depois de já ter baixado o Electron. O `.png` de 512
+// atende Linux e também macOS, onde o builder converte para `.icns` sozinho.
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
+
+// 512 é o maior tamanho que os ambientes de mesa do Linux usam de fato, e o mínimo que o
+// electron-builder aceita para derivar o ícone do macOS.
+const LADO_DO_PNG = 512;
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     const svg = fs.readFileSync(path.join(__dirname, '../public/mark.svg'), 'utf8');
+    const estilo = '<style>html,body{margin:0;background:transparent}svg{width:100%;height:100%;display:block}</style>';
     const entries = [];
     for (const size of [16, 32, 48, 256]) {
       await page.setViewportSize({ width: size, height: size });
-      await page.setContent('<style>html,body{margin:0;background:transparent}svg{width:100%;height:100%;display:block}</style>' + svg);
+      await page.setContent(estilo + svg);
       entries.push({ size, png: await page.screenshot({ omitBackground: true }) });
     }
+    await page.setViewportSize({ width: LADO_DO_PNG, height: LADO_DO_PNG });
+    await page.setContent(estilo + svg);
+    fs.writeFileSync(path.join(__dirname, '../app/icon.png'), await page.screenshot({ omitBackground: true }));
     const header = Buffer.alloc(6 + 16 * entries.length);
     header.writeUInt16LE(1, 2);
     header.writeUInt16LE(entries.length, 4);
