@@ -529,6 +529,12 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .moderar-acoes { display:grid; gap:8px; margin:14px 0; }
 .moderar-acoes button { width:100%; }
 #moderarNome { color:var(--accent-hi); }
+/* O estado da codificação desta máquina, dito ANTES da escolha. Fica abaixo da dica de
+   banda, e só aparece quando há algo a dizer -- um aviso que aparece sempre é um aviso que
+   ninguém lê. */
+.codec-estado:empty { display:none; }
+.codec-estado { display:block; margin-top:6px; padding-top:6px; border-top:1px solid var(--line); color:#a29bae; }
+.codec-estado.aviso-aperta { color:#f0b98a; }
 /* Um link com cara de botão: ser removido não tem "fechar", tem "ir para outro lugar". Herda
    a aparência dos botões do projeto em vez de inventar outra. */
 .botao-link { display:inline-flex; align-items:center; justify-content:center; padding:9px 18px; border-radius:9px; background:var(--accent); color:#fff; font-size:13px; font-weight:600; text-decoration:none; }

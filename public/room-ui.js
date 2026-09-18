@@ -204,6 +204,11 @@
     return hardwareConhecido;
   }
 
+  // O painel de qualidade também precisa desta resposta, e ela não pode ser sondada duas
+  // vezes: cada sondagem instancia codificadores de teste. Uma função só, memoizada, servindo
+  // os dois lugares.
+  window.NexoHardware = { codificadores: codificadoresPorHardware };
+
   async function sondarCodificadores() {
     if (!navigator.mediaCapabilities?.encodingInfo) return null;
     const porEstado = { hardware: [], software: [], desconhecido: [] };

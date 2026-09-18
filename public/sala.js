@@ -2032,6 +2032,42 @@ function atualizarRotulosDeQualidade() {
       : ' Dobrar os quadros não dobra a banda, mas dobra o trabalho do seu processador.');
   if (dica) dica.textContent = texto;
   if (dicaDoEnvio) dicaDoEnvio.textContent = texto;
+  atualizarAvisoDeCodificacao();
+}
+
+// ---------- Dizer, ANTES da escolha, o que esta máquina entrega ----------
+//
+// O painel já diz quando a imagem encolheu (ver `escalaDaTela`, na medição). Mas isso é
+// depois: quem escolhe 1440p a 60 quadros descobre no meio da transmissão que está enviando
+// 810p, e a conclusão razoável é que o Nexo está com defeito.
+//
+// Sem codificação por hardware, o limite não é opinião: a 1080p medimos 11,7 ms por quadro
+// nesta classe de máquina, e 60 quadros pediriam 702 ms de codificação por segundo -- de 700
+// que cabem com folga. 720p a 60 e 1080p a 30 cabem; 1080p a 60 e 1440p não.
+//
+// O aviso só aparece quando ele é verdade. Numa máquina cuja placa codifica, a frase seria
+// falsa -- e um aviso que aparece sempre é um aviso que ninguém lê.
+const COMBINACOES_QUE_NAO_CABEM = perfil => perfil.height >= 1440 || (perfil.height >= 1080 && quadrosDaTela >= 60);
+
+async function atualizarAvisoDeCodificacao() {
+  const alvos = [document.getElementById('codecEstado'), document.getElementById('shareCodecEstado')].filter(Boolean);
+  if (!alvos.length) return;
+  let porEstado = null;
+  try { porEstado = await window.NexoHardware?.codificadores(); } catch (_) { /* sem resposta: ver abaixo */ }
+  // `null` é "o navegador não respondeu", e não "não tem hardware". Afirmar o segundo a
+  // partir do primeiro seria inventar um diagnóstico.
+  const semHardware = porEstado && !porEstado.hardware.length && porEstado.software.length;
+  const aperta = COMBINACOES_QUE_NAO_CABEM(perfilAtual());
+  const frase = !semHardware ? ''
+    : aperta
+      ? `Esta máquina comprime vídeo no processador, e ${perfilAtual().label.split(' · ')[0]} a ${quadrosDaTela} quadros`
+        + ' não cabe nele. A resolução vai cair sozinha durante a transmissão para os quadros não travarem —'
+        + ' o painel de medições mostra quando isso acontece. 720p a 60 e 1080p a 30 cabem com folga.'
+      : 'Esta máquina comprime vídeo no processador, e esta combinação cabe nele.';
+  for (const alvo of alvos) {
+    alvo.textContent = frase;
+    alvo.classList.toggle('aviso-aperta', Boolean(semHardware && aperta));
+  }
 }
 
 // ---------- As medições, desenhadas em vez de despejadas ----------

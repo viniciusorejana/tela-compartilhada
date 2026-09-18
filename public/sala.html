@@ -214,7 +214,7 @@
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
         <div class="field"><label for="videoQuality">Resolução da transmissão</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="qualidadeBtn"></small></div>
-        <div class="field"><label for="videoFps">Quadros por segundo</label><select id="videoFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="fpsDica"></small></div>
+        <div class="field"><label for="videoFps">Quadros por segundo</label><select id="videoFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="fpsDica"></small><small id="codecEstado" class="codec-estado"></small></div>
         <div class="field"><label for="videoPriority">O que proteger quando apertar</label><select id="videoPriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>O padrão protege o movimento, porque travar estraga mais uma transmissão do que perder um pouco de definição. Escolha Nitidez só para ler código ou texto parado: ela mantém a imagem afiada e deixa os quadros caírem.</small></div>
         <details class="avancado">
           <summary>Codec de vídeo</summary>
@@ -291,7 +291,7 @@
 
       <div class="aba-painel" role="tabpanel" id="painelEnvio" aria-labelledby="abaEnvio" hidden>
     <div class="field"><label for="shareQuality">Resolução</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="shareQualidadeDica">Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
-    <div class="field"><label for="shareFps">Quadros por segundo</label><select id="shareFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="shareFpsDica"></small></div>
+    <div class="field"><label for="shareFps">Quadros por segundo</label><select id="shareFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="shareFpsDica"></small><small id="shareCodecEstado" class="codec-estado"></small></div>
     <div class="field"><label for="sharePriority">O que proteger quando apertar</label><select id="sharePriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Nitidez segura os detalhes e derruba os quadros; movimento faz o contrário, e é o padrão. Quantos quadros você pede é a escolha de cima.</small></div>
     <details class="avancado">
       <summary>Codec de vídeo</summary>
