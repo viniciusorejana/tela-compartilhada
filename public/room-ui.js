@@ -71,6 +71,7 @@
     if (['chat', 'room', 'musica'].includes(action)) window.NexoMusica?.marcarSidebar();
     if (action === 'devices') devicesBtn.click();
     if (action === 'diagnostics') abrirDiagnostico();
+    if (action === 'sugestao') { closeSidebar(); $('sugestaoPanel').classList.remove('hidden'); $('sugestaoTexto').focus(); }
     const close = event.target.closest('[data-close]')?.dataset.close;
     if (close) $(close)?.classList.add('hidden');
     if (appRoot.classList.contains('sidebar-open') && !event.target.closest('#roomSidebar, #sidebarToggle')) closeSidebar();
@@ -520,47 +521,59 @@
   //
   // O protocolo devolvido é mostrado e não some: sem ele a pessoa não tem como falar do
   // relato depois, e quem recebe não tem como ligar uma conversa a um registro.
-  const relatoStatus = $('relatoStatus');
-  const relatoTexto = $('relatoTexto');
-  const relatoBtn = $('sendRelatoBtn');
-
-  function dizerDoRelato(texto, estado) {
-    relatoStatus.textContent = texto;
-    relatoStatus.className = `relato-status${estado ? ` ${estado}` : ''}`;
+  // Um caminho de envio, dois formulários. O que muda entre eles é o tipo, se o relatório
+  // técnico vai anexado, e o que dizer quando o campo está vazio -- o resto (cota, protocolo,
+  // erro, limpar o campo) é idêntico, e duplicá-lo garantiria que um dos dois envelhecesse.
+  function ligarEnvio({ campo, botao, aviso, tipo, comRelatorio, faltouTexto, aoFalhar }) {
+    const dizer = (texto, estado) => {
+      aviso.textContent = texto;
+      aviso.className = `relato-status${estado ? ` ${estado}` : ''}`;
+    };
+    botao.onclick = async () => {
+      const mensagem = campo.value.trim();
+      if (!mensagem) { dizer(faltouTexto, 'alerta'); campo.focus(); return; }
+      botao.disabled = true;
+      dizer('Enviando…');
+      try {
+        const resposta = await fetch('/api/relato', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(window.NexoSessao?.cabecalhos() || {}) },
+          body: JSON.stringify({ tipo, mensagem, relatorio: comRelatorio ? report : '' })
+        });
+        const dados = await resposta.json().catch(() => ({}));
+        if (!resposta.ok || !dados.ok) throw new Error(dados.error || `O servidor respondeu ${resposta.status}.`);
+        // O campo é limpo para não reenviar o mesmo texto por engano, e o protocolo fica na
+        // tela até o painel ser fechado.
+        campo.value = '';
+        dizer(`Enviado. Seu protocolo é ${dados.protocolo} — anote para poder falar disto depois.`, 'ok');
+      } catch (erro) {
+        dizer(`Não foi possível enviar: ${erro.message}${aoFalhar}`, 'problema');
+      } finally {
+        botao.disabled = false;
+      }
+    };
   }
 
-  relatoBtn.onclick = async () => {
-    const mensagem = relatoTexto.value.trim();
-    // O relatório sozinho já é um relato útil -- "não funciona e não sei dizer mais" é uma
-    // informação legítima --, mas pedir a frase primeiro é o que transforma sessenta linhas
-    // de números em algo que se consegue investigar.
-    if (!mensagem) {
-      dizerDoRelato('Escreva em uma linha o que aconteceu. Sem isso, o relatório é só números.', 'alerta');
-      relatoTexto.focus();
-      return;
-    }
-    relatoBtn.disabled = true;
-    dizerDoRelato('Enviando…');
-    try {
-      const resposta = await fetch('/api/relato', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(window.NexoSessao?.cabecalhos() || {}) },
-        body: JSON.stringify({ mensagem, relatorio: report })
-      });
-      const dados = await resposta.json().catch(() => ({}));
-      if (!resposta.ok || !dados.ok) throw new Error(dados.error || `O servidor respondeu ${resposta.status}.`);
-      // O campo é limpo para não reenviar o mesmo texto por engano, e o protocolo fica na
-      // tela até o painel ser fechado.
-      relatoTexto.value = '';
-      dizerDoRelato(`Enviado. Seu protocolo é ${dados.protocolo} — anote para poder falar deste relato depois.`, 'ok');
-    } catch (erro) {
-      // Aqui a alternativa importa mais do que a mensagem de erro: se o envio falhou, é bem
-      // possível que o problema seja exatamente o servidor, e o caminho que sobra é copiar.
-      dizerDoRelato(`Não foi possível enviar: ${erro.message} Use "Copiar diagnóstico" e mande por outro caminho.`, 'problema');
-    } finally {
-      relatoBtn.disabled = false;
-    }
-  };
+  ligarEnvio({
+    campo: $('relatoTexto'), botao: $('sendRelatoBtn'), aviso: $('relatoStatus'),
+    tipo: 'problema', comRelatorio: true,
+    // O relatório sozinho já seria um relato útil -- "não funciona e não sei dizer mais" é
+    // informação legítima --, mas pedir a frase é o que transforma sessenta linhas de números
+    // em algo que se consegue investigar.
+    faltouTexto: 'Escreva em uma linha o que aconteceu. Sem isso, o relatório é só números.',
+    // Aqui a alternativa importa mais do que o erro: se o envio falhou, é bem possível que o
+    // problema seja exatamente o servidor, e o caminho que sobra é copiar.
+    aoFalhar: ' Use "Copiar diagnóstico" e mande por outro caminho.'
+  });
+
+  ligarEnvio({
+    campo: $('sugestaoTexto'), botao: $('sendSugestaoBtn'), aviso: $('sugestaoStatus'),
+    // Sem relatório: uma sugestão não tem diagnóstico, e anexar sessenta linhas de medições a
+    // "seria bom poder voltar na mesma sala" só encheria o arquivo.
+    tipo: 'sugestao', comRelatorio: false,
+    faltouTexto: 'Escreva o que você queria que existisse, ou o que incomodou.',
+    aoFalhar: ' Tente de novo em instantes.'
+  });
 
   $('copyDiagnosticsBtn').onclick = async () => {
     try {

@@ -141,6 +141,43 @@ test('a lista de banidos tem teto', () => {
   assert.equal(m.banir('sala', 'dono#0', 'pessoa0#outro').ok, true);
 });
 
+// Desbanir existe porque errar é o caso comum: o clique foi na linha errada, a discussão
+// acabou, a pessoa pediu desculpa. Sem isto, a única saída era esperar uma hora -- e quem
+// removeu alguém por engano não tinha como consertar o próprio erro.
+test('o dono libera quem bloqueou, e só ele', () => {
+  const { moderacao: m } = comRelogio();
+  m.entrou('sala', 'ana#1');
+  m.entrou('sala', 'bia#2');
+  m.entrou('sala', 'chato#3');
+  m.banir('sala', 'ana#1', 'chato#3');
+  assert.equal(m.listarBanidos('sala').length, 1);
+  assert.equal(m.desbanir('sala', 'bia#2', 'chato').motivo, 'sem-permissao');
+  assert.equal(m.desbanir('sala', 'ana#1', 'chato').ok, true);
+  assert.equal(m.banido('sala', 'chato#outro'), null, 'liberado deveria poder voltar na hora');
+  assert.equal(m.listarBanidos('sala').length, 0);
+  // Liberar duas vezes não é erro do sistema, é do dedo -- mas a resposta precisa dizer que
+  // não havia nada a fazer, em vez de fingir que fez.
+  assert.equal(m.desbanir('sala', 'ana#1', 'chato').motivo, 'nao-estava-banido');
+});
+
+// A lista é o que o dono lê para decidir, então ela tem de trazer o prazo -- sem ele não há
+// como saber se o bloqueio ainda está valendo.
+test('a lista de bloqueados traz o prazo e esquece os vencidos', () => {
+  const { moderacao: m, avancarMinutos } = comRelogio();
+  m.entrou('sala', 'ana#1');
+  m.entrou('sala', 'um#a');
+  m.entrou('sala', 'dois#b');
+  m.banir('sala', 'ana#1', 'um#a');
+  avancarMinutos(59);
+  m.banir('sala', 'ana#1', 'dois#b');
+  const antes = m.listarBanidos('sala');
+  assert.equal(antes.length, 2);
+  assert.ok(antes.every(b => b.minutos > 0 && b.minutos <= 60), JSON.stringify(antes));
+  avancarMinutos(2);
+  const depois = m.listarBanidos('sala');
+  assert.deepEqual(depois.map(b => b.nome), ['dois'], 'o vencido deveria ter saído da lista');
+});
+
 // ESTE é o teste que justifica a chave do banimento ser o nome. Foi encontrado testando no
 // navegador: a credencial vive só na memória da aba, então recarregar a página sorteia um
 // sufixo novo -- e um banimento por identidade seria derrotado por um F5. Pior do que não

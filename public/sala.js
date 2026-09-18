@@ -3907,6 +3907,9 @@ const BOTAO_DE_MODERAR = '<button class="moderar-btn" type="button" hidden aria-
 // de dono e em toda entrada: são os dois momentos em que a resposta pode ter mudado, e
 // recalcular tudo é barato numa sala de dezenas.
 function atualizarSelosDeDono() {
+  // O acesso à moderação da SALA -- a lista de bloqueados -- só existe para quem pode usá-la.
+  const botaoDaSala = document.getElementById('moderarSalaBtn');
+  if (botaoDaSala) botaoDaSala.hidden = !podeModerar;
   tiles.forEach((refs, id) => {
     const identidade = id === 'self' ? myId : id;
     refs.donoSelo?.classList.toggle('hidden', !donoDaSala || identidade !== donoDaSala);
@@ -3920,18 +3923,59 @@ function atualizarSelosDeDono() {
 // um clique em "remover" depois de trocar de pessoa agiria sobre a anterior.
 let alvoDaModeracao = null;
 
+// `id` nulo abre o painel SEM alvo: só a lista de bloqueados. É o caminho de que o dono
+// precisa justamente quando não há mais ninguém para moderar -- liberar alguém acontece
+// depois de a sala ter se acalmado, e exigir um clique sobre um participante presente faria
+// dessa hora a única em que a ação é impossível.
 function abrirModeracao(id) {
-  const par = peers.get(id);
-  if (!par || !podeModerar) return;
-  alvoDaModeracao = id;
-  document.getElementById('moderarNome').textContent = par.name || 'Participante';
+  if (!podeModerar) return;
+  const par = id ? peers.get(id) : null;
+  if (id && !par) return;
+  alvoDaModeracao = id || null;
+  document.getElementById('moderarNome').textContent = par ? (par.name || 'Participante') : 'esta sala';
+  document.getElementById('moderarAcoes').hidden = !par;
+  document.getElementById('moderarRessalva').hidden = !par;
   document.getElementById('moderarStatus').textContent = '';
   document.getElementById('moderarPanel').classList.remove('hidden');
+  carregarRemovidos();
 }
 
 function fecharModeracao() {
   alvoDaModeracao = null;
   document.getElementById('moderarPanel').classList.add('hidden');
+}
+
+// A lista vem do servidor a cada abertura, e não de um cache: o prazo de cada bloqueio corre,
+// e mostrar "faltam 58 min" de dez minutos atrás seria pior do que não mostrar nada.
+function carregarRemovidos() {
+  socket.emit('moderar', { acao: 'removidos' }, resposta => desenharRemovidos(resposta));
+}
+
+function desenharRemovidos(resposta) {
+  const caixa = document.getElementById('moderarListaRemovidos');
+  caixa.textContent = '';
+  if (!resposta?.ok) { caixa.append(elemento('span', 'moderar-vazio', resposta?.error || 'Não foi possível ler a lista.')); return; }
+  const lista = resposta.removidos || [];
+  if (!lista.length) { caixa.append(elemento('span', 'moderar-vazio', 'Ninguém bloqueado nesta sala.')); return; }
+  for (const item of lista) {
+    const linha = elemento('div', 'moderar-removido');
+    // O nome entra como TEXTO, como todo nome nesta interface: ele foi escolhido por quem
+    // entrou na sala.
+    linha.append(elemento('span', 'moderar-removido-nome', item.nome));
+    linha.append(elemento('span', 'moderar-removido-prazo', `${item.minutos} min`));
+    const liberar = elemento('button', 'secondary', 'Liberar');
+    liberar.type = 'button';
+    liberar.addEventListener('click', () => {
+      liberar.disabled = true;
+      socket.emit('moderar', { acao: 'desbanir', nome: item.nome }, resposta => {
+        if (!resposta?.ok) { liberar.disabled = false; document.getElementById('moderarStatus').textContent = resposta?.error || 'Não foi possível liberar.'; return; }
+        document.getElementById('moderarStatus').textContent = `${item.nome} pode voltar à sala.`;
+        desenharRemovidos(resposta);
+      });
+    });
+    linha.append(liberar);
+    caixa.append(linha);
+  }
 }
 
 function pedirModeracao(acao) {
@@ -3949,6 +3993,7 @@ function pedirModeracao(acao) {
   });
 }
 
+document.getElementById('moderarSalaBtn').onclick = () => abrirModeracao(null);
 document.getElementById('moderarRemover').onclick = () => pedirModeracao('expulsar');
 document.getElementById('moderarBanir').onclick = () => pedirModeracao('banir');
 document.getElementById('moderarTransferir').onclick = () => pedirModeracao('transferir');

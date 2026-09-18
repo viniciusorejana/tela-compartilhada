@@ -89,6 +89,7 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
       return res.status(400).json({ error: 'Escreva o que aconteceu antes de enviar.' });
     }
     const protocolo = relatos.registrar({
+      tipo: corpo.tipo,
       mensagem: corpo.mensagem,
       relatorio: corpo.relatorio,
       agenteDoNavegador: req.headers['user-agent'],

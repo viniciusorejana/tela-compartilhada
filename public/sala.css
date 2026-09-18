@@ -528,6 +528,17 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .moderar-btn[hidden] { display:none; }
 .moderar-acoes { display:grid; gap:8px; margin:14px 0; }
 .moderar-acoes button { width:100%; }
+.moderar-acoes[hidden] { display:none; }
+.moderar-removidos { margin-top:14px; padding-top:13px; border-top:1px solid var(--line); }
+.moderar-removidos>strong { display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; margin-bottom:8px; }
+.moderar-removido { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:12.5px; border-top:1px solid #ffffff08; }
+.moderar-removidos .moderar-removido:first-of-type { border-top:0; }
+/* O nome ocupa o espaço que sobra e quebra se precisar: ele foi escolhido por quem entrou, e
+   pode ser tão longo quanto o limite permitir. */
+.moderar-removido-nome { flex:1; overflow-wrap:anywhere; }
+.moderar-removido-prazo { flex:none; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.moderar-removido button { flex:none; padding:5px 12px; font-size:11.5px; }
+.moderar-vazio { color:var(--muted); font-size:11.5px; line-height:1.6; }
 #moderarNome { color:var(--accent-hi); }
 /* O estado da codificação desta máquina, dito ANTES da escolha. Fica abaixo da dica de
    banda, e só aparece quando há algo a dizer -- um aviso que aparece sempre é um aviso que

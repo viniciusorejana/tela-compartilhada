@@ -165,6 +165,31 @@ function criarModeracao({ agora = Date.now, maximoDeSalas = 512 } = {}) {
     return { ok: true };
   }
 
+  // Desbanir existe porque errar é o caso comum: o clique foi na linha errada, a discussão
+  // acabou, a pessoa pediu desculpa. Sem isto, a única saída era esperar uma hora -- e o dono
+  // que removeu alguém por engano não tinha como consertar o próprio erro.
+  function desbanir(sala, quemPede, nome) {
+    if (!salas.has(sala)) return { ok: false, motivo: 'sala-desconhecida' };
+    if (!pode(sala, quemPede, 'banir')) return { ok: false, motivo: 'sem-permissao' };
+    const item = salas.get(sala);
+    limparBanidos(item);
+    const chave = String(nome || '').trim().toLowerCase();
+    if (!item.banidos.delete(chave)) return { ok: false, motivo: 'nao-estava-banido' };
+    // A sala pode ter ficado sem nada: sem gente e agora sem banimento. Mesma regra da saída.
+    if (!item.ordem.length && !item.banidos.size) salas.delete(sala);
+    return { ok: true };
+  }
+
+  // A lista para quem pode agir sobre ela. Devolve o nome tal como foi banido (minúsculo,
+  // porque é a chave) e quanto falta -- sem isso o dono não tem como saber quem removeu nem
+  // se ainda está valendo.
+  function listarBanidos(sala) {
+    const item = salas.get(sala);
+    if (!item) return [];
+    limparBanidos(item);
+    return [...item.banidos].map(([nome, dados]) => ({ nome, minutos: Math.max(1, Math.ceil((dados.ate - agora()) / 60000)) }));
+  }
+
   function banido(sala, identidade) {
     const item = salas.get(sala);
     if (!item || !identidade) return null;
@@ -180,7 +205,7 @@ function criarModeracao({ agora = Date.now, maximoDeSalas = 512 } = {}) {
     return [...salas].map(([sala, item]) => ({ sala, dono: item.ordem[0] || null, pessoas: item.ordem.length, banidos: item.banidos.size }));
   }
 
-  return { entrou, saiu, dono, papel, pode, expulsar, banir, transferir, banido, esquecer, resumo, PERMISSOES, MINUTOS_DE_BANIMENTO };
+  return { entrou, saiu, dono, papel, pode, expulsar, banir, desbanir, listarBanidos, transferir, banido, esquecer, resumo, PERMISSOES, MINUTOS_DE_BANIMENTO };
 }
 
 module.exports = { criarModeracao, nomeDaIdentidade, PERMISSOES, MINUTOS_DE_BANIMENTO, MAXIMO_DE_BANIDOS };

@@ -184,6 +184,11 @@ class Relatos extends HTMLElement {
   connectedCallback() {
     this.dados = null;
     this.falhou = '';
+    // Qual lista este elemento mostra. "Não está funcionando" e "seria bom se" pedem coisas
+    // opostas de quem recebe -- o primeiro é urgente e traz diagnóstico; o segundo é para ler
+    // com calma. Misturá-los faria a sugestão atrapalhar o problema e o problema enterrar a
+    // sugestão. Uma busca só serve as duas, porque a rota devolve as duas.
+    this.lista = this.getAttribute('lista') === 'sugestoes' ? 'sugestoes' : 'relatos';
     this.pintar();
     this.buscar();
   }
@@ -214,17 +219,22 @@ class Relatos extends HTMLElement {
     const atualizar = e('button', { class: 'discreto', type: 'button' }, this.carregando ? 'Atualizando…' : 'Atualizar');
     atualizar.addEventListener('click', () => this.buscar());
     if (this.carregando) atualizar.setAttribute('disabled', '');
+    const ehSugestao = this.lista === 'sugestoes';
     const cabeca = [
-      ...titulo('O que as pessoas relataram', 'Enviado pelo botão do Diagnóstico, dentro da sala. Sem IPs; a sala e o nome vêm da sessão.'),
+      ...titulo(
+        ehSugestao ? 'O que as pessoas pediram' : 'O que as pessoas relataram',
+        ehSugestao
+          ? 'Enviado pelo botão de sugestões, na barra lateral da sala. Sem relatório técnico: uma sugestão não tem diagnóstico.'
+          : 'Enviado pelo botão do Diagnóstico, dentro da sala. Sem IPs; a sala e o nome vêm da sessão.'),
       atualizar
     ];
     if (this.falhou) return [...cabeca, e('p', { class: 'aviso' }, this.falhou)];
-    const lista = this.dados?.relatos || [];
+    const lista = this.dados?.[this.lista] || [];
     if (!lista.length) {
-      return [...cabeca, vazio('Nenhum relato ainda',
+      return [...cabeca, vazio(ehSugestao ? 'Nenhuma sugestão ainda' : 'Nenhum relato ainda',
         this.dados?.ausente
-          ? 'O arquivo aparece no primeiro envio. Ausência de relatos não é prova de que está tudo bem — pode ser que ninguém tenha encontrado o botão.'
-          : 'Ausência de relatos não é prova de que está tudo bem: pode ser que ninguém tenha encontrado o botão.')];
+          ? 'O arquivo aparece no primeiro envio. Ausência não é prova de que está tudo bem — pode ser que ninguém tenha encontrado o botão.'
+          : 'Ausência não é prova de que está tudo bem: pode ser que ninguém tenha encontrado o botão.')];
     }
     return [
       ...cabeca,
@@ -237,7 +247,7 @@ class Relatos extends HTMLElement {
         e('p', { class: 'relato-mensagem' }, r.mensagem || '(sem descrição)'),
         r.navegador ? e('p', { class: 'nota' }, r.navegador) : null,
         r.relatorio ? e('details', {}, e('summary', {}, 'Relatório técnico'), e('pre', {}, r.relatorio)) : null))),
-      e('p', { class: 'nota' }, `${numero(this.dados.total, 0)} relato(s) guardado(s); mostrando os ${lista.length} mais recentes.`
+      e('p', { class: 'nota' }, `${lista.length} nesta lista, de ${numero(this.dados.total, 0)} envio(s) guardado(s) no total.`
         + ' O arquivo gira quando enche, como o resto da telemetria — o mais antigo é o primeiro a sair.')
     ];
   }

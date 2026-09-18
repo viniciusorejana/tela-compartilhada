@@ -74,6 +74,35 @@ test('relato exige sessão, carimba sala e nome pela sessão, e aparece no paine
   assert.equal((await fetch(servidor.origem + '/painel/api/relatos')).status, 401);
 });
 
+// "Não está funcionando" e "seria bom se" chegam pela mesma rota e pedem coisas opostas de
+// quem recebe: o primeiro é urgente e traz o relatório técnico; o segundo é para ler com
+// calma. Se eles se misturarem na leitura, a sugestão atrapalha o problema e o problema
+// enterra a sugestão.
+test('sugestões e problemas viajam pela mesma rota e chegam em listas separadas', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const cred = await servidor.credencial('Bia');
+  const cabecalhos = { 'Content-Type': 'application/json', 'X-Nexo-Sessao': cred.credencialSessao };
+  const enviar = corpo => fetch(servidor.origem + '/api/relato', { method: 'POST', headers: cabecalhos, body: JSON.stringify(corpo) });
+
+  assert.equal((await enviar({ tipo: 'problema', mensagem: 'a tela ficou preta', relatorio: 'limitado por=cpu' })).status, 200);
+  assert.equal((await enviar({ tipo: 'sugestao', mensagem: 'queria a sala aberta para voltar depois' })).status, 200);
+  // Um tipo inventado não perde o relato: ele cai na lista de problemas, porque entre perder
+  // o texto e guardá-lo na lista errada, guardar é melhor.
+  assert.equal((await enviar({ tipo: 'inventado', mensagem: 'tipo desconhecido' })).status, 200);
+
+  const login = await fetch(servidor.origem + '/painel/entrar', { method: 'POST', headers: { Origin: servidor.origem, 'Content-Type': 'application/json' }, body: JSON.stringify({ segredo: await servidor.chave() }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const lidos = await (await fetch(servidor.origem + '/painel/api/relatos', { headers: { Cookie: cookie } })).json();
+
+  assert.deepEqual(lidos.sugestoes.map(s => s.mensagem), ['queria a sala aberta para voltar depois']);
+  assert.deepEqual(lidos.relatos.map(r => r.mensagem), ['tipo desconhecido', 'a tela ficou preta']);
+  assert.equal(lidos.total, 3);
+  // A sugestão não carrega relatório técnico: anexar sessenta linhas de medições a "seria bom
+  // poder voltar na mesma sala" só encheria o arquivo.
+  assert.equal(lidos.sugestoes[0].relatorio, '');
+  assert.match(lidos.relatos[1].relatorio, /limitado por=cpu/);
+});
+
 // Três por minuto é um gesto; o quarto é alguém testando o campo. Cada relato carrega até
 // 16 KB de relatório, o que faz desta a rota mais cara por unidade no servidor inteiro.
 test('relatos em excesso são recusados sem derrubar a sessão', async t => {

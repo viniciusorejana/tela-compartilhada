@@ -869,9 +869,26 @@ io.on('connection', (socket) => {
     if (!roomCode) return responder({ ok: false, error: 'Você não está numa sala.' });
     const acao = String(pedido?.acao || '');
     const alvo = String(pedido?.identidade || '').slice(0, 120);
+    const quemPede = socket.data.identidadeDeMidia || null;
+
+    // Consultar a lista de removidos é a única ação que não age sobre ninguém, então ela sai
+    // antes do resto. Ela também é a única que o dono precisa fazer quando NÃO há mais quem
+    // moderar -- liberar alguém acontece depois de a sala ter se acalmado.
+    if (acao === 'removidos') {
+      if (!moderacao.pode(roomCode, quemPede, 'banir')) return responder({ ok: false, error: 'Só quem abriu a sala pode ver isso.' });
+      return responder({ ok: true, removidos: moderacao.listarBanidos(roomCode) });
+    }
+    if (acao === 'desbanir') {
+      const liberado = moderacao.desbanir(roomCode, quemPede, String(pedido?.nome || '').slice(0, 40));
+      if (!liberado.ok) {
+        return responder({ ok: false, error: liberado.motivo === 'sem-permissao' ? 'Só quem abriu a sala pode fazer isso.'
+          : liberado.motivo === 'nao-estava-banido' ? 'Essa pessoa já pode voltar.' : 'Não foi possível concluir.' });
+      }
+      return responder({ ok: true, removidos: moderacao.listarBanidos(roomCode) });
+    }
+
     if (!['expulsar', 'banir', 'transferir'].includes(acao)) return responder({ ok: false, error: 'Ação desconhecida.' });
 
-    const quemPede = socket.data.identidadeDeMidia || null;
     const resultado = acao === 'banir' ? moderacao.banir(roomCode, quemPede, alvo)
       : acao === 'transferir' ? moderacao.transferir(roomCode, quemPede, alvo)
       : moderacao.expulsar(roomCode, quemPede, alvo);
