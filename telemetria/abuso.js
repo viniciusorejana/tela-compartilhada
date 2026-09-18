@@ -20,6 +20,10 @@ const REGRAS = Object.freeze({
   'join-room': { sessao: 6, sala: 120, longa: [20, 10 * MINUTO] },
   'leave-room': { sessao: Infinity },
   'media-state': { sessao: 30, sala: 600 },
+  // Moderar é deliberado e raro. O teto baixo aqui protege menos o servidor do que a própria
+  // sala: um dono irritado clicando em expulsar dez vezes por segundo é o retrato de algo
+  // que precisa de um segundo de pausa.
+  'moderar': { sessao: 12, sala: 40 },
   'medicao-de-banda': { sessao: 3, sala: 1536 },
   'audio-start': { sessao: 12, sala: 60 },
   'audio-stop': { sessao: Infinity },

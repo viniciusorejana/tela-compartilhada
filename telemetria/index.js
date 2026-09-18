@@ -14,7 +14,7 @@ const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
 const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
-function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard }) {
+function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null }) {
   const auth = criarAutenticacao();
   const alertas = criarAlertas({ pasta: PASTA_PRIVADA });
   let regras = {};
@@ -244,7 +244,12 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard }) {
     let token; try { token = new URL(req.url, 'http://local').searchParams.get('access_token'); } catch (_) { return false; }
     const identidade = sfu.identidadeDoToken(token || String(req.headers.authorization || '').replace(/^Bearer /, ''));
     const sessao = identidade && sessoes.localizar(identidade.sala, identidade.identidade);
-    return Boolean(sessao && !(sessao.bloqueadaAte > Date.now()));
+    if (!sessao || sessao.bloqueadaAte > Date.now()) return false;
+    // Um token já emitido continua valendo por minutos, e ser removido da sala não pode
+    // esperar por isso. Esta é a terceira porta -- as outras duas são `/api/sala-config` e o
+    // `join-room` --, e é a única que fecha para quem já tinha o token na mão.
+    if (moderacao?.banido(sessao.sala, sessao.identidade)) return false;
+    return true;
   });
   medicao.iniciar();
   const timers = [];

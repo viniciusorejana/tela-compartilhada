@@ -765,7 +765,18 @@ async function esperarCodec(page, fonte, esperado) {
     Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Unavailable', 'SecurityError'); } });
   });
   const privatePage = await join(privateContext, 'Privado', 'sem-storage');
-  assert.equal(await privatePage.locator('.participant-name').textContent(), 'Privado (você)');
+  // O primeiro nó de TEXTO, e não o textContent do container: o selo de dono vive dentro
+  // desta linha (é um irmão do texto), e somá-lo aqui mediria a interface em vez do nome.
+  // O nome continua tendo de ser texto puro, que é o que este teste sempre guardou.
+  assert.equal(
+    await privatePage.locator('.participant-name').evaluate(el => el.firstChild.textContent),
+    'Privado (você)');
+  // Sozinha na sala, esta pessoa é a dona -- e quem abriu a sala vê isso sem depender de
+  // localStorage, que este contexto derruba de propósito.
+  await privatePage.waitForFunction(() => podeModerar === true, null, { timeout: 15000 });
+  assert.equal(
+    await privatePage.locator('.participant .dono-selo').evaluate(el => el.classList.contains('hidden')),
+    false, 'quem abriu a sala deveria ver o próprio selo');
   await privateContext.close();
 
   const desktopLimpo = await browser.newContext({ viewport: { width: 1440, height: 940 } });
@@ -988,6 +999,51 @@ async function esperarCodec(page, fonte, esperado) {
   assert.deepEqual(orfao, { restou: false, telaRestou: false });
   await palcoContext.close();
   console.log('PASS: leaving cleans the tile even when the peer is already out of the map');
+
+  // ---------- Moderação, de ponta a ponta ----------
+  //
+  // As regras são testadas por unidade em tests/moderacao.test.js. O que só este teste
+  // alcança são as DUAS portas que o banimento tem de fechar: a sinalização e a mídia.
+  // Recusar apenas no `join-room` deixava quem foi banido fora do chat e DENTRO do servidor
+  // de mídia -- um par sem nome na lista de todo mundo. Foi encontrado testando à mão, e é
+  // por isso que este bloco existe.
+  const ctxDono = await browser.newContext();
+  const ctxIntruso = await browser.newContext();
+  const dono = await join(ctxDono, 'Dona', 'moderar-teste');
+  await dono.waitForFunction(() => podeModerar === true, null, { timeout: 20000 });
+  const intruso = await join(ctxIntruso, 'Chato', 'moderar-teste');
+  await dono.waitForFunction(() => peers.size === 1, null, { timeout: 20000 });
+
+  // Quem não abriu a sala não vê as ações, e o servidor recusa se ele pedir de todo modo.
+  assert.equal(await intruso.evaluate(() => podeModerar), false);
+  assert.deepEqual(
+    await intruso.evaluate(() => new Promise(r => socket.emit('moderar',
+      { acao: 'expulsar', identidade: [...peers.keys()][0] }, r))),
+    { ok: false, error: 'Só quem abriu a sala pode fazer isso.' });
+
+  const bloqueio = await dono.evaluate(() => new Promise(r => socket.emit('moderar',
+    { acao: 'banir', identidade: [...peers.keys()][0] }, r)));
+  assert.equal(bloqueio.ok, true, `o banimento falhou: ${JSON.stringify(bloqueio)}`);
+  // O painel explica o motivo, com prazo. Sem ele a remoção pareceria queda de conexão, e a
+  // pessoa ficaria recarregando a página sem entender.
+  await intruso.waitForFunction(() => !document.getElementById('removidoPanel').classList.contains('hidden'), null, { timeout: 15000 });
+  assert.match(await intruso.locator('#removidoMotivo').textContent(), /removido desta sala/);
+  await dono.waitForFunction(() => peers.size === 0, null, { timeout: 20000 });
+
+  // E a volta: recarregar troca a identidade (a credencial vive só na memória da aba), então
+  // o banimento tem de prender o NOME -- senão um F5 o derrota inteiro.
+  const voltando = await ctxIntruso.newPage();
+  await voltando.goto(`${origin}/moderar-teste/sala`);
+  await voltando.locator('#nameInput').fill('Chato');
+  await voltando.locator('#nameConfirmBtn').click();
+  await voltando.waitForFunction(() => !document.getElementById('removidoPanel').classList.contains('hidden'), null, { timeout: 20000 });
+  assert.equal(await voltando.evaluate(() => Boolean(window.transporte)), false,
+    'quem está banido não pode chegar ao servidor de mídia');
+  assert.equal(await dono.evaluate(() => peers.size), 0,
+    'a sala de quem moderou não pode ganhar um par fantasma de quem foi banido');
+  await ctxDono.close();
+  await ctxIntruso.close();
+  console.log('PASS: só quem abriu a sala modera; o banimento fecha a sinalização e a mídia, e sobrevive a um F5');
 
   assert.deepEqual(errors, []);
   console.log(`PASS: responsive layout, dialogs, diagnostics. Engine: ${process.env.TEST_BROWSER || 'chromium'}`);

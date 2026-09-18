@@ -30,7 +30,11 @@ const sfu = require('./sfu');
 const musica = require('./musica');
 const soundboard = require('./soundboard');
 const medicao = require('./medicao');
+const { criarModeracao } = require('./moderacao');
 const { iniciarTelemetria } = require('./telemetria');
+
+// Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
+const moderacao = criarModeracao();
 
 const app = express();
 const server = http.createServer(app);
@@ -55,7 +59,7 @@ const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 25000
 });
-const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, salas: () => roomMembers });
+const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
 require('./desktop-download')(app, path.join(__dirname, 'app', 'dist', 'SalaCompartilhada.exe'), { permitir: req => telemetria.limitarOrigem(req) });
 app.use('/api/soundboard', telemetria.soundboardHttp);
 
@@ -94,6 +98,23 @@ app.get('/api/sala-config', (req, res) => {
     const configured = new URL(process.env.PUBLIC_URL);
     if (['https:', 'http:'].includes(configured.protocol)) publicUrl = configured.origin;
   } catch (_) { /* Without configuration, invite links use the browser's origin. */ }
+
+  // Banido não recebe credencial nem token, e esta é a metade que faltava.
+  //
+  // Recusar só no `join-room` deixava um furo que apareceu no teste: o cliente pede a
+  // configuração, entra no servidor de MÍDIA com o token que recebeu, e só então pede a
+  // entrada na sinalização -- que era recusada. O resultado era alguém fora do chat e
+  // DENTRO da mídia, aparecendo na lista de todo mundo como um par sem nome na sala.
+  //
+  // O nome basta aqui: o banimento é por nome (ver moderacao.js), e ele é conhecido antes de
+  // existir sessão ou identidade.
+  const castigo = moderacao.banido(sala, nome);
+  if (castigo) {
+    // O `motivo` existe para o cliente distinguir esta recusa das outras: sem ele a página
+    // cai no "não foi possível preparar a entrada, recarregue" -- que manda a pessoa fazer
+    // exatamente o que não vai funcionar, e esconde o único dado útil, o prazo.
+    return res.status(403).json({ error: `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.`, motivo: 'removido' });
+  }
 
   const preparada = telemetria.prepararSessao(req, res, sala, nome);
   if (!preparada) return;
@@ -439,6 +460,41 @@ function membrosDaSala(roomCode) {
   return roomMembers.get(roomCode);
 }
 
+// ---------- Anunciar quem manda ----------
+//
+// O dono precisa ser conhecido por TODA a sala, não só por ele mesmo: é a lista de
+// participantes que mostra o selo, e é ela que decide para quem aparecem as ações de
+// moderação. Quem entra recebe no `join-room`; a sala recebe por este aviso quando muda.
+//
+// A comparação com o anterior existe porque a sucessão dispara em toda saída. Sem ela, cada
+// pessoa que saísse da sala mandaria um aviso de dono idêntico ao que já valia.
+const donoAnunciado = new Map();
+
+// Quanto tempo o aviso de remoção tem para chegar antes de o socket ser fechado. Curto o
+// bastante para ninguém continuar na sala de verdade, longo o bastante para uma mensagem
+// atravessar a conexão -- ver o comentário no handler de `moderar`.
+const MS_ATE_FECHAR_O_SOCKET = 250;
+
+function anunciarDono(roomCode) {
+  const atual = moderacao.dono(roomCode);
+  if (donoAnunciado.get(roomCode) === atual) return;
+  if (atual === null) donoAnunciado.delete(roomCode);
+  else donoAnunciado.set(roomCode, atual);
+  io.to(roomName(roomCode)).emit('sala-dono', { identidade: atual });
+}
+
+// O socket de uma identidade, para poder tirá-la da sala. Uma identidade pode ter mais de um
+// socket por um instante durante uma reconexão -- todos precisam sair, ou a pessoa expulsa
+// continua ouvindo por um deles.
+function socketsDaIdentidade(roomCode, identidade) {
+  const encontrados = [];
+  for (const id of roomMembers.get(roomCode)?.keys() || []) {
+    const alvo = io.sockets.sockets.get(id);
+    if (alvo?.data.identidadeDeMidia === identidade) encontrados.push(alvo);
+  }
+  return encontrados;
+}
+
 // O helper nativo roda na maquina do servidor. So faz sentido oferece-lo a quem esta
 // nessa mesma maquina (o host); para os demais participantes ele capturaria o audio
 // errado -- o do host, e nao o deles.
@@ -707,8 +763,16 @@ io.on('connection', (socket) => {
         historicoDeMusicaPorSala.delete(roomCode);
         soundboard.limparSala(roomCode);
         musica.esquecerSala(roomCode);
+        donoAnunciado.delete(roomCode);
       }
     }
+    // A saída pode mudar quem manda: se quem saiu era o dono, o mais antigo entre os que
+    // ficaram assume. Isto vem ANTES do "peer-left" de propósito -- quem recebe os dois
+    // avisos aplica na ordem em que chegam, e anunciar o dono novo depois da saída faria a
+    // lista piscar o selo em quem já não está lá.
+    const identidadeQueSaiu = socket.data.identidadeDeMidia || null;
+    moderacao.saiu(roomCode, identidadeQueSaiu);
+    anunciarDono(roomCode);
     // A identidade da midia vai junto: e por ela que a sala reconhece quem saiu. O socket
     // percebe a saida em segundos; o servidor de midia guarda a pessoa por muito mais
     // tempo, esperando ela voltar, e ate la ela ficaria parada na lista.
@@ -738,6 +802,14 @@ io.on('connection', (socket) => {
     }
     const name = sessao.nome;
 
+    // Banido não entra, e a recusa diz por quanto tempo -- "aguarde" sem prazo é o tipo de
+    // mensagem que faz a pessoa tentar dez vezes seguidas.
+    const castigo = moderacao.banido(roomCode, sessao.identidade);
+    if (castigo) {
+      if (typeof callback === 'function') callback({ ok: false, error: `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.` });
+      return;
+    }
+
     // A saida da sala anterior tem de ser anunciada com a identidade ANTIGA. Gravar a nova
     // antes faria o aviso de "fulano saiu" carregar o nome de quem acabou de chegar: os
     // outros tirariam da lista a pessoa errada e deixariam a que saiu parada la.
@@ -747,8 +819,11 @@ io.on('connection', (socket) => {
     socket.join(roomName(roomCode));
     socketRoomCodes.set(socket.id, roomCode);
     const membros = membrosDaSala(roomCode);
-    const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state }));
-    membros.set(socket.id, { name, state: estadoPadrao() });
+    // A identidade vai em cada par porque é por ela que a moderação funciona: a lista da
+    // sala é desenhada a partir da mídia, que é chaveada por identidade, e não por socket.
+    const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null }));
+    membros.set(socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade });
+    moderacao.entrou(roomCode, sessao.identidade);
     telemetria.entrou(socket);
 
     if (typeof callback === 'function') {
@@ -758,6 +833,12 @@ io.on('connection', (socket) => {
       // faria parecer que aquilo nao e desta sala.
       callback({
         ok: true, roomCode, selfId: socket.id, peers,
+        // Quem manda na sala, e o que ESTA pessoa pode fazer. As duas coisas separadas: a
+        // primeira desenha o selo na lista, a segunda decide se as ações aparecem. Mandar só
+        // a primeira obrigaria o cliente a deduzir a segunda comparando identidades -- e a
+        // dedução do cliente deixaria de valer no dia em que existir "moderador".
+        dono: moderacao.dono(roomCode),
+        podeModerar: moderacao.pode(roomCode, sessao.identidade, 'expulsar'),
         historico: historicoPorSala.get(roomCode) || [],
         musica: { disponivel: musica.disponivel(), estado: musica.instantaneo(roomCode), historico: historicoDeMusicaPorSala.get(roomCode) || [] },
         soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM }
@@ -769,6 +850,69 @@ io.on('connection', (socket) => {
     // dispara o "peer-left", tira a pessoa da lista de todo mundo, e nada a traz de volta
     // ate o luto vencer, porque a sessao de midia continua sendo a mesma.
     socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null });
+    // Depois do "peer-joined": o primeiro a entrar numa sala vazia é o dono, e o aviso tem
+    // de chegar a ele também -- daí `io.to` dentro de anunciarDono, e não `socket.to`.
+    anunciarDono(roomCode);
+  });
+
+  // ---------- Moderação ----------
+  //
+  // Uma ação só, com o verbo dentro. Três handlers quase idênticos convidariam a que um deles
+  // esquecesse uma das conferências -- e a conferência que importa aqui é sempre a mesma:
+  // quem pede tem o papel que a ação exige (ver moderacao.js).
+  //
+  // A decisão é do SERVIDOR, sempre. O cliente esconde os botões de quem não pode usá-los,
+  // mas isso é conveniência de interface: um cliente modificado chega aqui do mesmo jeito.
+  socket.on('moderar', (pedido, callback) => {
+    const responder = resultado => { if (typeof callback === 'function') callback(resultado); };
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode) return responder({ ok: false, error: 'Você não está numa sala.' });
+    const acao = String(pedido?.acao || '');
+    const alvo = String(pedido?.identidade || '').slice(0, 120);
+    if (!['expulsar', 'banir', 'transferir'].includes(acao)) return responder({ ok: false, error: 'Ação desconhecida.' });
+
+    const quemPede = socket.data.identidadeDeMidia || null;
+    const resultado = acao === 'banir' ? moderacao.banir(roomCode, quemPede, alvo)
+      : acao === 'transferir' ? moderacao.transferir(roomCode, quemPede, alvo)
+      : moderacao.expulsar(roomCode, quemPede, alvo);
+    if (!resultado.ok) {
+      const razoes = {
+        'sem-permissao': 'Só quem abriu a sala pode fazer isso.',
+        'alvo-e-dono': 'Essa pessoa abriu a sala.',
+        'nao-em-si-mesmo': 'Essa ação não se aplica a você.',
+        'alvo-desconhecido': 'Não encontrei essa pessoa na sala.',
+        'alvo-fora-da-sala': 'Essa pessoa não está mais na sala.',
+        'banidos-demais': 'Já há remoções demais nesta sala.',
+        'sala-desconhecida': 'Esta sala não está mais ativa.'
+      };
+      return responder({ ok: false, error: razoes[resultado.motivo] || 'Não foi possível concluir.' });
+    }
+
+    if (acao === 'transferir') {
+      anunciarDono(roomCode);
+      return responder({ ok: true });
+    }
+
+    // Tirar da sala é preciso em DOIS lugares. O socket leva a sinalização -- a lista, o
+    // chat, a presença; o servidor de mídia leva a imagem e o som, e ele não sabe nada do
+    // socket. Sem a segunda metade, a pessoa expulsa sai da lista e continua vendo e ouvindo
+    // a sala, que é o oposto de ter sido removida.
+    const alvos = socketsDaIdentidade(roomCode, alvo);
+    for (const outro of alvos) {
+      // Sai da sala AGORA -- deixa de receber chat e presença no mesmo instante --, recebe o
+      // motivo, e só então o socket é fechado.
+      //
+      // A espera não é zelo: fechar na mesma volta do `emit` corta a mensagem antes de ela
+      // sair, e quem foi removido vê "a mídia caiu e não foi possível voltar" em vez do
+      // motivo. Medido durante a implementação, com exatamente esse sintoma.
+      outro.leave(roomName(roomCode));
+      outro.emit('removido-da-sala', { motivo: acao, minutos: resultado.minutos || null });
+      setTimeout(() => { try { outro.disconnect(true); } catch (_) { /* já saiu por conta própria */ } }, MS_ATE_FECHAR_O_SOCKET);
+    }
+    sfu.consultar('RemoveParticipant', { room: roomCode, identity: alvo }).catch(() => {
+      // A saída do socket já derruba a sessão de mídia por ausência; isto só encurta a espera.
+    });
+    responder({ ok: true, alcancados: alvos.length });
   });
 
   socket.on('media-state', (state) => {

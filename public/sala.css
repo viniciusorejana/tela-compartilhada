@@ -515,6 +515,24 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .relato-status.ok { color:var(--online); }
 .relato-status.alerta { color:#f0b98a; }
 .relato-status.problema { color:var(--danger); }
+/* ---------- Moderação ---------- */
+/* O selo do dono é discreto de propósito: ele informa quem responde pela sala, não distingue
+   uma categoria de pessoa. */
+.dono-selo { display:block; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--accent-hi); margin-top:2px; }
+.dono-selo.hidden { display:none; }
+/* Aparece no hover e no foco. O foco é o que torna o botão alcançável por teclado -- sem
+   ele, moderar seria uma ação só de quem usa mouse. */
+.moderar-btn { position:absolute; top:3px; right:3px; z-index:3; width:22px; height:22px; padding:0; border:0; border-radius:6px; background:#0b0b13cc; color:var(--text); font-size:14px; line-height:1; cursor:pointer; opacity:0; transition:opacity .15s; }
+.participant:hover .moderar-btn,
+.moderar-btn:focus-visible { opacity:1; }
+.moderar-btn[hidden] { display:none; }
+.moderar-acoes { display:grid; gap:8px; margin:14px 0; }
+.moderar-acoes button { width:100%; }
+#moderarNome { color:var(--accent-hi); }
+/* Um link com cara de botão: ser removido não tem "fechar", tem "ir para outro lugar". Herda
+   a aparência dos botões do projeto em vez de inventar outra. */
+.botao-link { display:inline-flex; align-items:center; justify-content:center; padding:9px 18px; border-radius:9px; background:var(--accent); color:#fff; font-size:13px; font-weight:600; text-decoration:none; }
+.botao-link:hover { background:var(--accent-hi); }
 .lightbox { position:fixed; inset:0; z-index:95; padding:55px 20px 40px; display:grid; place-items:center; overflow:auto; background:#090910f7; }
 #lightboxImg { max-width:94vw; max-height:84vh; object-fit:contain; border-radius:10px; cursor:zoom-in; display:block; margin:auto; }
 #lightboxImg.real { max-width:none; max-height:none; cursor:zoom-out; }

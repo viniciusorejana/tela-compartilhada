@@ -437,7 +437,12 @@
             // O rid ("q", "h", "f") é nome de protocolo e não diz nada a quem lê. A altura
             // diz: "camada 360p" é a pequena, e quem abriu o painel sabe o que isso significa
             // depois de ler uma vez. O rid continua no relatório técnico.
-            anotar(c, item.frameHeight ? `Camada ${item.frameHeight}p` : `Camada ${item.rid || 'única'}`,
+            //
+            // Sem altura, o rid NÃO é a saída -- e este era o furo. Uma camada desligada pelo
+            // dynacast, ou que ainda não produziu o primeiro quadro, não tem `frameHeight`, e
+            // ali o painel voltava a mostrar "Camada h". Quem não tem medida ainda é descrita
+            // pelo que se sabe dela: que ela existe e ainda não entregou nada.
+            anotar(c, item.frameHeight ? `Camada ${item.frameHeight}p` : 'Camada sem medida ainda',
               `${item.frameWidth || '?'}×${item.frameHeight || '?'} · ${Math.round(item.framesPerSecond || 0)} fps`
               + (item.active === false ? ' · desligada' : ''),
               item.active === false ? 'neutro' : undefined);

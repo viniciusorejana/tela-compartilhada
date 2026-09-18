@@ -113,6 +113,14 @@ window.NexoSessao = { cabecalhos: () => credencialSessao ? { 'X-Nexo-Sessao': cr
 let myId = null;
 let meuSocketId = null;
 let myName = '';
+// Quem abriu esta sala, pela identidade de mídia, e se EU posso moderar. As duas coisas vêm
+// do servidor separadas de propósito: a primeira desenha o selo na lista de todo mundo, a
+// segunda decide se as ações aparecem para mim. Ver moderacao.js.
+let donoDaSala = null;
+let podeModerar = false;
+// Fui retirado desta sala. Existe para uma coisa só: impedir que os avisos de conexão -- que
+// chegam logo depois, porque a conexão cai de fato -- apaguem o motivo real da tela.
+let fuiRemovido = false;
 let micStream = null;
 let micTrack = null;
 let cameraStream = null;
@@ -180,10 +188,20 @@ async function pedirConfigDaSala(nome) {
       if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
+      // Removido da sala não é falha de preparação: é uma resposta definitiva, com prazo, e
+      // insistir doze vezes só atrasaria a frase que explica o que aconteceu.
+      if (dados.motivo === 'removido') {
+        const recusa = new Error(dados.error || 'Você foi removido desta sala.');
+        recusa.removido = true;
+        throw recusa;
+      }
       ultimoMotivo = dados.error || 'sala-config';
       if (dados.motivo !== 'iniciando') break;
       status.textContent = 'O servidor de mídia está iniciando...';
-    } catch (_) {
+    } catch (erro) {
+      // A recusa por remoção é definitiva e precisa atravessar o laço. Sem este repasse ela
+      // seria tratada como "o servidor não respondeu" e viraria onze novas tentativas.
+      if (erro?.removido) { clearTimeout(prazo); throw erro; }
       ultimoMotivo = 'sem-resposta';
     } finally { clearTimeout(prazo); }
     if (saindoDaSala) break;
@@ -225,6 +243,15 @@ async function iniciarConexao() {
   try {
     salaConfig = await buscarConfigDaSala(myName);
   } catch (erro) {
+    // Removido tem painel próprio: a pessoa precisa ver o motivo e o prazo, não um conselho
+    // de recarregar a página que não vai mudar nada.
+    if (erro?.removido) {
+      fuiRemovido = true;
+      status.textContent = erro.message;
+      document.getElementById('removidoMotivo').textContent = erro.message;
+      document.getElementById('removidoPanel').classList.remove('hidden');
+      return;
+    }
     status.textContent = erro.message === 'servidor-de-midia-indisponivel'
       ? 'O servidor de mídia não está no ar. O chat funciona, mas ninguém vai ver nem ouvir ninguém.'
       : 'Não foi possível preparar a entrada na sala. Recarregue a página.';
@@ -274,6 +301,10 @@ async function iniciarConexao() {
       },
       aoReconectar: republicarTudo,
       aoMudarConexao: (estado, mensagem) => {
+        // Quem foi removido não recebe aviso de conexão em cima do motivo. Sem esta guarda o
+        // "a mídia caiu" chega um instante depois e apaga a única frase que explicava o que
+        // aconteceu -- e a pessoa fica recarregando a página sem saber que foi retirada.
+        if (fuiRemovido) return;
         if (mensagem) status.textContent = mensagem;
         else if (estado === 'failed') status.textContent = 'A mídia caiu e não foi possível voltar. O chat continua.';
         atualizarContador();
@@ -336,6 +367,9 @@ async function iniciarConexao() {
         return;
       }
       criarTileLocal();
+      donoDaSala = response.dono || null;
+      podeModerar = Boolean(response.podeModerar);
+      atualizarSelosDeDono();
       // Entrar na sala já liga a proteção contra throttling. Antes ela só aparecia no
       // primeiro clique no microfone ou na câmera -- quem entrava para assistir ficava sem
       // nenhuma, e era candidato a cair por ociosidade sem nunca ter feito nada.
@@ -427,6 +461,39 @@ async function iniciarConexao() {
     avaliarDestaque();
   });
 
+  // ---------- Quem manda na sala ----------
+  //
+  // Chega no `join-room` e é atualizado por este aviso, que dispara quando o dono muda --
+  // sucessão por saída ou passagem deliberada. O cliente não deduz nada disso: ele não teria
+  // como saber quem chegou primeiro, e no dia em que existir "moderador" a dedução por
+  // comparação de identidade deixaria de valer.
+  socket.on('sala-dono', ({ identidade }) => {
+    donoDaSala = identidade || null;
+    podeModerar = Boolean(donoDaSala) && donoDaSala === myId;
+    atualizarSelosDeDono();
+  });
+
+  // Ser removido não pode ser silencioso, e não pode parecer queda de conexão -- senão a
+  // pessoa fica recarregando a página sem entender, e a sala recebe dez tentativas de volta.
+  socket.on('removido-da-sala', ({ motivo, minutos }) => {
+    fuiRemovido = true;
+    const frase = motivo === 'banir'
+      ? `Você foi removido desta sala e não pode voltar por ${minutos || 60} min.`
+      : 'Você foi removido desta sala por quem a abriu.';
+    status.textContent = frase;
+    // `desconectar` e não só encerrar as capturas: ele marca a saída como deliberada, e sem
+    // isso o transporte trataria a queda como oscilação e tentaria voltar para a sala de que
+    // a pessoa acabou de ser removida -- de dois em dois segundos.
+    transporte?.desconectar();
+    encerrarMidiasDaSala();
+    // Um painel, e não um `alert`: a razão precisa ficar À VISTA, e não desaparecer no clique
+    // seguinte. Ele não tem botão de fechar de propósito -- a sala já não existe para esta
+    // pessoa, e a única saída honesta é ir para outro lugar.
+    document.getElementById('removidoMotivo').textContent = frase
+      + (motivo === 'banir' ? ' Se isso foi um engano, fale com quem abriu a sala.' : '');
+    document.getElementById('removidoPanel').classList.remove('hidden');
+  });
+
   socket.on('audio-data', (data) => receberPcm(data));
 
   socket.on('audio-error', (message) => { status.textContent = message; });
@@ -434,10 +501,14 @@ async function iniciarConexao() {
   socket.on('chat-mensagem', (msg) => mostrarMensagem(msg));
 
   socket.on('disconnect', () => {
-    status.textContent = 'Desconectado do servidor. Tentando reconectar...';
+    // A queda vem LOGO depois da remoção, porque é o servidor fechando o socket de propósito.
+    // Prometer reconexão a quem foi retirado é a mensagem errada duas vezes: ela não vai
+    // acontecer, e ela apaga a frase que explicava o motivo.
+    if (!fuiRemovido) status.textContent = 'Desconectado do servidor. Tentando reconectar...';
     registrarDiagnostico('socket.disconnect');
   });
   socket.on('connect_error', erro => {
+    if (fuiRemovido) return;
     if (!erro.message?.includes('Sessão inválida') && !erro.message?.includes('Aguarde')) status.textContent = 'Não foi possível alcançar o servidor. Tentando novamente...';
     registrarDiagnostico('socket.connect_error');
   });
@@ -3789,6 +3860,64 @@ const LINHA_DE_VOLUME = alvo => `
   <button class="mute-peer-btn" type="button" aria-pressed="false"></button>
 `;
 
+// ---------- Moderação ----------
+//
+// O botão nasce escondido e só aparece para quem pode usá-lo. Isso é conveniência de
+// interface e nada mais: quem manda é o servidor (ver o handler de `moderar`, em server.js),
+// e um cliente modificado chegaria lá do mesmo jeito para ser recusado.
+const BOTAO_DE_MODERAR = '<button class="moderar-btn" type="button" hidden aria-label="Moderar este participante">⋮</button>';
+
+// Percorre os quadradinhos aplicando o selo e a visibilidade do botão. Roda em toda mudança
+// de dono e em toda entrada: são os dois momentos em que a resposta pode ter mudado, e
+// recalcular tudo é barato numa sala de dezenas.
+function atualizarSelosDeDono() {
+  tiles.forEach((refs, id) => {
+    const identidade = id === 'self' ? myId : id;
+    refs.donoSelo?.classList.toggle('hidden', !donoDaSala || identidade !== donoDaSala);
+    // Nunca sobre o próprio dono: passar a sala existe no painel, mas "remover" não se
+    // aplica a quem abriu -- e o servidor recusaria de todo modo.
+    if (refs.moderarBtn) refs.moderarBtn.hidden = !podeModerar || id === 'self' || identidade === donoDaSala;
+  });
+}
+
+// Quem está no painel agora. Guardado porque o painel é um só, reaproveitado -- e sem isso
+// um clique em "remover" depois de trocar de pessoa agiria sobre a anterior.
+let alvoDaModeracao = null;
+
+function abrirModeracao(id) {
+  const par = peers.get(id);
+  if (!par || !podeModerar) return;
+  alvoDaModeracao = id;
+  document.getElementById('moderarNome').textContent = par.name || 'Participante';
+  document.getElementById('moderarStatus').textContent = '';
+  document.getElementById('moderarPanel').classList.remove('hidden');
+}
+
+function fecharModeracao() {
+  alvoDaModeracao = null;
+  document.getElementById('moderarPanel').classList.add('hidden');
+}
+
+function pedirModeracao(acao) {
+  const alvo = alvoDaModeracao;
+  if (!alvo) return;
+  const aviso = document.getElementById('moderarStatus');
+  aviso.textContent = 'Enviando…';
+  socket.emit('moderar', { acao, identidade: alvo }, resposta => {
+    if (!resposta?.ok) { aviso.textContent = resposta?.error || 'Não foi possível concluir.'; return; }
+    fecharModeracao();
+    const nome = peers.get(alvo)?.name || 'A pessoa';
+    status.textContent = acao === 'transferir' ? `${nome} agora é quem manda nesta sala.`
+      : acao === 'banir' ? `${nome} foi removida e não pode voltar por uma hora.`
+      : `${nome} foi removida da sala.`;
+  });
+}
+
+document.getElementById('moderarRemover').onclick = () => pedirModeracao('expulsar');
+document.getElementById('moderarBanir').onclick = () => pedirModeracao('banir');
+document.getElementById('moderarTransferir').onclick = () => pedirModeracao('transferir');
+document.querySelector('#moderarPanel [data-close]').addEventListener('click', fecharModeracao);
+
 // Este botao era invisivel ate o mouse passar por cima, e existia mesmo sem camera nenhuma
 // para ocultar: um alvo transparente que nao anunciava nada e, quando anunciava, nao servia
 // para nada. Agora ele tem rotulo, e quem decide se ele aparece e a existencia da fonte.
@@ -3834,14 +3963,19 @@ function criarTileBase(id, name, state, isSelf) {
       <div class="avatar-fallback"></div>
       <span class="mic-icon audio-icon" aria-hidden="true"></span>
       <span class="screen-badge hidden">Tela</span>
-      ${isSelf ? BOTAO_DE_OCULTAR('camera') : ''}
+      ${isSelf ? BOTAO_DE_OCULTAR('camera') : BOTAO_DE_MODERAR}
     </div>
     <div class="participant-name"></div>
     <div class="volume-row"></div>
     <audio class="peer-audio" autoplay></audio>
     <audio class="screen-audio" autoplay></audio>
   `;
-  el.querySelector('.participant-name').textContent = `${name}${isSelf ? ' (você)' : ''}`;
+  // O selo do dono é um elemento próprio, e não parte do texto do nome: o nome é escrito com
+  // `textContent` justamente porque vem de quem escolheu o nome, e concatenar um selo ali
+  // faria "Fulano · dono" ser um nome possível de escolher.
+  const linhaDoNome = el.querySelector('.participant-name');
+  linhaDoNome.textContent = `${name}${isSelf ? ' (você)' : ''}`;
+  linhaDoNome.append(elemento('span', 'dono-selo hidden', 'abriu a sala'));
   el.querySelector('.avatar-fallback').textContent = iniciais(name);
   el.querySelector('.avatar-fallback').style.background = corDoNome(name);
   const volumeRow = el.querySelector('.volume-row');
@@ -3858,6 +3992,8 @@ function criarTileBase(id, name, state, isSelf) {
     screenAudio: el.querySelector('.screen-audio'),
     volumeSlider: el.querySelector('.volume-slider'),
     muteBtn: el.querySelector('.mute-peer-btn'),
+    donoSelo: el.querySelector('.dono-selo'),
+    moderarBtn: el.querySelector('.moderar-btn'),
     hideBtn: el.querySelector('.hide-self-btn'),
     ocultoOverlay: el.querySelector('.oculto-overlay'),
     localMute: false,
@@ -3886,6 +4022,12 @@ function criarTileBase(id, name, state, isSelf) {
   if (!isSelf) {
     refs.volumeSlider.addEventListener('input', () => definirAudioDaVoz(id, { nivel: refs.volumeSlider.value / 100 }));
     refs.muteBtn.addEventListener('click', () => definirAudioDaVoz(id, { alternarMudo: true }));
+    refs.moderarBtn?.addEventListener('click', evento => {
+      // Sem isto o clique sobe para o avatar e põe a pessoa no palco -- abrir o painel de
+      // moderação de alguém não é o mesmo que querer olhar para ela.
+      evento.stopPropagation();
+      abrirModeracao(id);
+    });
     sincronizarControlesDeAudio(id);
   } else {
     refs.hideBtn.addEventListener('click', evento => {
@@ -3894,6 +4036,9 @@ function criarTileBase(id, name, state, isSelf) {
     });
   }
 
+  // Um quadradinho novo precisa nascer sabendo se aquela pessoa é a dona e se eu posso
+  // moderá-la: quem entra depois de mim chega sem selo nenhum se isto não for aplicado aqui.
+  atualizarSelosDeDono();
   atualizarTile(id);
 }
 
