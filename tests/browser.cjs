@@ -282,6 +282,10 @@ async function esperarCodec(page, fonte, esperado) {
     return { screen: peer.remoteStreams.screen.getVideoTracks().length, camera: peer.remoteStreams.camera.getVideoTracks().length, source: pinned.source, audio: stageVideo.srcObject.getAudioTracks().length, xss: window.xss || 0 };
   });
   assert.deepEqual(receiving, { screen: 1, camera: 1, source: 'screen', audio: 0, xss: 0 });
+  // Fechar a janela nativa de PiP pausa o <video> por um instante em Chromium. O palco
+  // precisa retomar em vez de ficar preso em "Recebendo vídeo".
+  await viewer.evaluate(() => { stageVideo.pause(); stageVideo.dispatchEvent(new Event('leavepictureinpicture')); });
+  await viewer.waitForFunction(() => !stageVideo.paused && !stage.classList.contains('is-waiting'), null, { timeout: 5000 });
   // H.264 leads by default: on an iPhone it is the only codec decoded in hardware.
   assert.equal(await codecRecebido(viewer, 'screen'), 'video/h264');
   assert.equal(await host.locator('.participant-name img').count(), 0);

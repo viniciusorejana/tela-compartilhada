@@ -124,6 +124,9 @@ let micAntesDeEnsurdecer = true;
 let pushToTalkAtivo = false;
 let pushToTalkPressionado = false;
 let presencaLocal = '';
+let economiaDeDadosAtiva = false;
+let aguardandoEntrada = false;
+const presencasPorIdentidade = new Map();
 // Fui retirado desta sala. Existe para uma coisa só: impedir que os avisos de conexão -- que
 // chegam logo depois, porque a conexão cai de fato -- apaguem o motivo real da tela.
 let fuiRemovido = false;
@@ -195,6 +198,7 @@ async function pedirConfigDaSala(nome) {
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
       if (dados.motivo === 'aguardando') {
+        aguardandoEntrada = true;
         document.getElementById('waitingPanel')?.classList.remove('hidden');
         status.textContent = 'Aguardando quem abriu a sala aprovar sua entrada…';
         ultimoMotivo = dados.error || 'aguardando-aprovacao';
@@ -202,6 +206,7 @@ async function pedirConfigDaSala(nome) {
         continue;
       }
       if (dados.motivo === 'recusado') {
+        aguardandoEntrada = false;
         const recusa = new Error(dados.error || 'Seu pedido de entrada não foi aceito.');
         recusa.removido = true;
         throw recusa;
@@ -227,6 +232,20 @@ async function pedirConfigDaSala(nome) {
   }
   throw new Error(ultimoMotivo);
 }
+
+async function cancelarPedidoDeEntrada(redirecionar = false) {
+  if (aguardandoEntrada && credencialSessao) {
+    aguardandoEntrada = false;
+    try {
+      await fetch(`/api/sala-pedido?sala=${encodeURIComponent(roomCode)}`, {
+        method: 'DELETE', headers: window.NexoSessao.cabecalhos(), keepalive: true
+      });
+    } catch (_) { /* A expiração do servidor remove pedidos cujo navegador sumiu. */ }
+  }
+  if (redirecionar) location.assign('/');
+}
+document.getElementById('waitingCancel').onclick = () => cancelarPedidoDeEntrada(true);
+window.addEventListener('pagehide', () => { if (aguardandoEntrada) cancelarPedidoDeEntrada(false); });
 
 function corDoNome(nome) {
   let hash = 0;
@@ -277,6 +296,7 @@ async function iniciarConexao() {
   }
   if (saindoDaSala) return;
   myId = salaConfig?.identidade || identidadeSessao || `local-${Math.random().toString(36).slice(2)}`;
+  aguardandoEntrada = false;
   document.getElementById('waitingPanel')?.classList.add('hidden');
 
   if (salaConfig && !suportaWebRTC) {
@@ -289,6 +309,7 @@ async function iniciarConexao() {
       peers,
       proximaOrdem: () => ++sequenciaDeCompartilhamento,
       aoEntrar: (par, info) => {
+        par.state.presenca = presencasPorIdentidade.get(par.id) || '';
         criarTile(par.id, par.name, par.state);
         atualizarContador();
         avaliarDestaque();
@@ -391,6 +412,13 @@ async function iniciarConexao() {
       podeModerar = Boolean(response.podeModerar);
       aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
       desenharPedidosDeEntrada(response.pedidosEntrada || []);
+      for (const participante of response.peers || []) {
+        if (!participante.identidade) continue;
+        presencasPorIdentidade.set(participante.identidade, participante.state?.presenca || '');
+        const par = peers.get(participante.identidade);
+        if (par) { par.state.presenca = participante.state?.presenca || ''; atualizarTile(par.id); }
+      }
+      if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
       atualizarSelosDeDono();
       // Entrar na sala já liga a proteção contra throttling. Antes ela só aparecia no
       // primeiro clique no microfone ou na câmera -- quem entrava para assistir ficava sem
@@ -499,12 +527,15 @@ async function iniciarConexao() {
     podeModerar = Boolean(donoDaSala) && donoDaSala === myId;
     atualizarSelosDeDono();
     aplicarConfiguracaoDaSala(configuracaoDaSala);
+    atualizarAvisoDeEntrada();
   });
 
   socket.on('sala-configuracao', aplicarConfiguracaoDaSala);
   socket.on('pedido-entrada', adicionarPedidoDeEntrada);
   socket.on('pedido-entrada-resolvido', ({ identidade }) => removerPedidoDeEntrada(identidade));
+  socket.on('pedido-entrada-cancelado', ({ identidade }) => removerPedidoDeEntrada(identidade));
   socket.on('presenca-atualizada', ({ identidade, presenca }) => {
+    presencasPorIdentidade.set(identidade, presenca || '');
     if (identidade === myId) presencaLocal = presenca || '';
     const par = identidade === myId ? peers.get('self') : peers.get(identidade);
     if (par) { par.state ||= {}; par.state.presenca = presenca || ''; atualizarTile(par.id); }
@@ -1241,8 +1272,9 @@ function ajustarEnvioPelaQualidade(qualidade) {
 }
 
 async function aplicarTetoDeQualidade(qualidade) {
-  const fator = TETOS_POR_QUALIDADE[qualidade];
-  if (!fator) return;
+  const fatorDaRede = TETOS_POR_QUALIDADE[qualidade];
+  if (!fatorDaRede) return;
+  const fator = economiaDeDadosAtiva ? Math.min(.4, fatorDaRede) : fatorDaRede;
   const aplicado = [];
   for (const fonte of ['screen', 'camera']) {
     for (const remetente of remetentesDaFaixa(publicacoesLocais[fonte]?.track)) {
@@ -1877,13 +1909,29 @@ function atualizarPresencaNaInterface(identidade, presenca) {
   document.dispatchEvent(new CustomEvent('room-update'));
   presenceMenu.querySelectorAll('[data-presence]').forEach(b => b.classList.toggle('ativo', b.dataset.presence === presenca && identidade === myId));
 }
-function mostrarReacaoDaSala({ nome, reacao }) {
+function mostrarReacaoDaSala({ identidade, nome, reacao }) {
   const caixa = document.getElementById('roomReactions');
-  const aviso = document.createElement('div');
+  const id = identidade === myId ? 'self' : identidade;
+  const quadradinho = tiles.get(id)?.root;
+  const plateiaVisivel = !document.querySelector('.app').classList.contains('plateia-oculta');
+  const origem = plateiaVisivel && quadradinho?.getClientRects().length
+    ? quadradinho.getBoundingClientRect()
+    : stage.getBoundingClientRect();
+  const aviso = document.createElement('span');
   aviso.className = 'room-reaction';
-  aviso.textContent = `${reacao} ${nome || ''}`;
-  caixa.replaceChildren(aviso);
-  setTimeout(() => aviso.remove(), 2500);
+  aviso.textContent = reacao;
+  aviso.setAttribute('role', 'img');
+  aviso.setAttribute('aria-label', `${nome || 'Alguém'} reagiu com ${reacao}`);
+  const x = quadradinho && plateiaVisivel && quadradinho.getClientRects().length
+    ? origem.left + origem.width / 2
+    : origem.left + origem.width / 2 + (Math.random() - .5) * Math.min(120, origem.width / 3);
+  const y = quadradinho && plateiaVisivel && quadradinho.getClientRects().length
+    ? origem.top + origem.height * .55
+    : origem.bottom - Math.min(70, origem.height * .18);
+  aviso.style.setProperty('--reaction-x', `${Math.round(x)}px`);
+  aviso.style.setProperty('--reaction-y', `${Math.round(y)}px`);
+  caixa.append(aviso);
+  setTimeout(() => aviso.remove(), 2300);
 }
 presenceBtn.onclick = evento => {
   evento.stopPropagation();
@@ -4112,18 +4160,60 @@ Object.entries(controlesDaConfiguracao).forEach(([id, chave]) => {
 });
 
 const pedidosPendentes = new Map();
+let temporizadorAvisoDeEntrada = null;
+function tocarAvisoDeEntrada() {
+  try {
+    const contexto = new AudioContextClass();
+    const ganho = contexto.createGain();
+    const oscilador = contexto.createOscillator();
+    oscilador.frequency.setValueAtTime(660, contexto.currentTime);
+    oscilador.frequency.exponentialRampToValueAtTime(880, contexto.currentTime + .12);
+    ganho.gain.setValueAtTime(.0001, contexto.currentTime);
+    ganho.gain.exponentialRampToValueAtTime(.09, contexto.currentTime + .02);
+    ganho.gain.exponentialRampToValueAtTime(.0001, contexto.currentTime + .22);
+    oscilador.connect(ganho).connect(contexto.destination);
+    oscilador.start(); oscilador.stop(contexto.currentTime + .24);
+    oscilador.onended = () => contexto.close().catch(() => {});
+  } catch (_) { /* O aviso visual continua disponível se o navegador bloquear áudio. */ }
+}
+function atualizarAvisoDeEntrada(nome) {
+  const total = podeModerar ? pedidosPendentes.size : 0;
+  const contador = document.getElementById('joinRequestCount');
+  contador.hidden = !total;
+  contador.textContent = total > 9 ? '9+' : String(total);
+  const aviso = document.getElementById('joinRequestNotice');
+  clearTimeout(temporizadorAvisoDeEntrada);
+  temporizadorAvisoDeEntrada = null;
+  aviso.hidden = !total;
+  if (!total) return;
+  document.getElementById('joinRequestNoticeTitle').textContent = total === 1
+    ? `${nome || [...pedidosPendentes.values()][0]?.nome || 'Alguém'} quer entrar`
+    : `${total} pessoas querem entrar`;
+  temporizadorAvisoDeEntrada = setTimeout(() => {
+    aviso.hidden = true;
+    temporizadorAvisoDeEntrada = null;
+  }, 7000);
+}
 function desenharPedidosDeEntrada(lista) {
   pedidosPendentes.clear();
   (lista || []).forEach(p => pedidosPendentes.set(p.identidade, p));
   renderizarPedidosDeEntrada();
+  atualizarAvisoDeEntrada();
 }
 function adicionarPedidoDeEntrada(pedido) {
   if (!podeModerar || !pedido?.identidade || pedido.estado === 'recusado') return;
+  const novo = !pedidosPendentes.has(pedido.identidade);
   pedidosPendentes.set(pedido.identidade, pedido);
+  if (!novo) return;
   renderizarPedidosDeEntrada();
+  atualizarAvisoDeEntrada(pedido.nome);
+  tocarAvisoDeEntrada();
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification(`${pedido.nome || 'Alguém'} quer entrar no Nexo`, { body: `Sala ${roomCode}`, tag: `entrada-${roomCode}` });
+  }
   status.textContent = `${pedido.nome || 'Alguém'} quer entrar na sala.`;
 }
-function removerPedidoDeEntrada(identidade) { pedidosPendentes.delete(identidade); renderizarPedidosDeEntrada(); }
+function removerPedidoDeEntrada(identidade) { pedidosPendentes.delete(identidade); renderizarPedidosDeEntrada(); atualizarAvisoDeEntrada(); }
 function renderizarPedidosDeEntrada() {
   const caixa = document.getElementById('joinRequests');
   if (!caixa) return;
@@ -4185,6 +4275,7 @@ function abrirModeracao(id) {
   document.getElementById('moderarNome').textContent = par ? (par.name || 'Participante') : 'esta sala';
   document.getElementById('moderarAcoes').hidden = !par;
   document.getElementById('moderarRessalva').hidden = !par;
+  document.getElementById('roomSecurity').hidden = Boolean(par);
   document.getElementById('moderarStatus').textContent = '';
   document.getElementById('moderarPanel').classList.remove('hidden');
   carregarRemovidos();
@@ -4244,6 +4335,12 @@ function pedirModeracao(acao) {
 }
 
 document.getElementById('moderarSalaBtn').onclick = () => abrirModeracao(null);
+document.getElementById('joinRequestNoticeOpen').onclick = () => {
+  clearTimeout(temporizadorAvisoDeEntrada);
+  temporizadorAvisoDeEntrada = null;
+  document.getElementById('joinRequestNotice').hidden = true;
+  abrirModeracao(null);
+};
 document.getElementById('moderarRemover').onclick = () => pedirModeracao('expulsar');
 document.getElementById('moderarBanir').onclick = () => pedirModeracao('banir');
 document.getElementById('moderarTransferir').onclick = () => pedirModeracao('transferir');
@@ -4791,9 +4888,12 @@ function atualizarTile(id) {
   refs.screenBadge.classList.add('hidden');
   refs.micIcon.classList.toggle('muted', Boolean(estado.micMuted));
   const simbolosDePresenca = { hand: '✋', brb: '☕', gaming: '🎮', quiet: '🔇' };
+  const nomesDePresenca = { hand: 'Quer falar', brb: 'Volto já', gaming: 'Em jogo', quiet: 'Sem falar' };
   if (refs.presenceBadge) {
     refs.presenceBadge.textContent = simbolosDePresenca[estado.presenca] || '';
     refs.presenceBadge.classList.toggle('hidden', !simbolosDePresenca[estado.presenca]);
+    refs.presenceBadge.title = nomesDePresenca[estado.presenca] || '';
+    refs.presenceBadge.setAttribute('aria-label', nomesDePresenca[estado.presenca] || 'Sem status');
   }
   // Quem está com a conexão perdida aparecia assim só na lista lateral -- que em modo
   // teatro nem existe. O quadradinho é onde se olha, então é nele que a queda precisa
@@ -5245,22 +5345,18 @@ connectionQualityBtn.onclick = () => abrirDiagnostico();
 setInterval(atualizarIndicadorDeConexao, 1500);
 
 const dataSaver = document.getElementById('dataSaver');
-try { dataSaver.checked = localStorage.getItem('sala.economiaDados') === '1'; } catch (_) {}
+const dataSaverField = document.getElementById('dataSaverField');
+dataSaverField.hidden = !ehCelular;
+try { dataSaver.checked = ehCelular && localStorage.getItem('sala.economiaDados') === '1'; } catch (_) {}
 function aplicarEconomiaDeDados() {
-  const ativa = dataSaver.checked;
+  const ativa = ehCelular && dataSaver.checked;
+  economiaDeDadosAtiva = ativa;
   document.querySelector('.app').classList.toggle('economia-dados', ativa);
   transporte?.definirEconomia?.(ativa);
-  for (const seletor of document.querySelectorAll('[data-quality-profile],[data-screen-fps]')) {
-    if (ativa) {
-      if (seletor.dataset.antesDaEconomia === undefined) seletor.dataset.antesDaEconomia = seletor.value;
-      const novo = seletor.hasAttribute('data-quality-profile') ? 'economical' : '30';
-      if (seletor.value !== novo) { seletor.value = novo; seletor.dispatchEvent(new Event('change', { bubbles: true })); }
-    } else if (seletor.dataset.antesDaEconomia !== undefined) {
-      const anterior = seletor.dataset.antesDaEconomia;
-      delete seletor.dataset.antesDaEconomia;
-      if (seletor.value !== anterior) { seletor.value = anterior; seletor.dispatchEvent(new Event('change', { bubbles: true })); }
-    }
-  }
+  // O modo econômico é um teto adicional, não uma escolha forçada no formulário. Assim a
+  // pessoa continua podendo preparar 1080p/60 para quando desligá-lo, sem o primeiro clique
+  // reescrever ou travar os selects.
+  ajustarEnvioPelaQualidade(transporte?.qualidade || 'excellent');
   try { localStorage.setItem('sala.economiaDados', ativa ? '1' : '0'); } catch (_) {}
   atualizarIndicadorDeConexao();
 }
@@ -5278,7 +5374,17 @@ compactBtn.onclick = async () => {
   compactBtn.title = ativo ? 'Sair do modo compacto' : 'Abrir vídeo compacto';
 };
 stageVideo.addEventListener('enterpictureinpicture', () => { compactBtn.setAttribute('aria-pressed', 'true'); compactBtn.title = 'Fechar vídeo compacto'; });
-stageVideo.addEventListener('leavepictureinpicture', () => { compactBtn.setAttribute('aria-pressed', 'false'); compactBtn.title = 'Abrir vídeo compacto'; });
+stageVideo.addEventListener('leavepictureinpicture', () => {
+  compactBtn.setAttribute('aria-pressed', 'false');
+  compactBtn.title = 'Abrir vídeo compacto';
+  // Chromium pausa o elemento por um instante quando o X da janela nativa é usado. O
+  // evento de `pause` pinta o palco como "Recebendo vídeo"; retomar na próxima pintura
+  // evita que esse estado transitório vire a tela permanente mostrada no relato.
+  requestAnimationFrame(() => {
+    if (!stageVideo.srcObject?.getVideoTracks().some(faixa => faixa.readyState === 'live')) return;
+    garantirReproducao(stageVideo).finally(atualizarEstadoDoVideo);
+  });
+});
 
 const LARGURA_MAXIMA_DA_IMAGEM = 1280;
 const BYTES_MAXIMOS_DA_IMAGEM = 700 * 1024;

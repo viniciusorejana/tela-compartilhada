@@ -146,7 +146,12 @@
         // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
         const presencas = { hand: '✋', brb: '☕', gaming: '🎮', quiet: '🔇' };
+        const nomesDePresenca = { hand: 'Quer falar', brb: 'Volto já', gaming: 'Em jogo', quiet: 'Sem falar' };
         state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : presencas[person.state.presenca] || (person.state.micMuted ? '' : 'voz');
+        if (nomesDePresenca[person.state.presenca]) {
+          state.title = nomesDePresenca[person.state.presenca];
+          state.setAttribute('aria-label', nomesDePresenca[person.state.presenca]);
+        }
         row.append(avatar, name, state);
         // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
         // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
@@ -616,6 +621,7 @@
   function syncDialog() {
     const next = visibleDialog();
     if (next === activeDialog) return;
+    const closingDialog = activeDialog;
     appRoot.inert = Boolean(next);
     if (next) {
       if (!activeDialog) previousFocus = document.activeElement;
@@ -623,7 +629,15 @@
       (next.querySelector('input:not([type="file"])') || focusable(next)[0])?.focus();
     } else {
       activeDialog = null;
-      if (previousFocus?.isConnected) previousFocus.focus();
+      const currentFocus = document.activeElement;
+      const focusWasReleased = !currentFocus
+        || currentFocus === document.body
+        || currentFocus === document.documentElement
+        || closingDialog?.contains(currentFocus);
+      // A observação da classe do modal é assíncrona. Se a pessoa já clicou no
+      // compositor enquanto o callback aguardava, não devolva o foco ao botão
+      // que abriu o painel — isso fazia o campo parecer se desselecionar sozinho.
+      if (focusWasReleased && previousFocus?.isConnected) previousFocus.focus();
     }
   }
   for (const dialog of dialogs) {

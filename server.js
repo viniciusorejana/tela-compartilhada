@@ -182,6 +182,21 @@ app.get('/api/sala-config', (req, res) => {
   res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl, credencialSessao });
 });
 
+// Quem desistiu na tela de espera precisa sumir da fila imediatamente. `keepalive` permite
+// que este DELETE termine inclusive quando o clique já está levando o navegador de volta
+// para a página inicial.
+app.delete('/api/sala-pedido', (req, res) => {
+  const sala = String(req.query.sala || '').toLowerCase();
+  const sessao = telemetria.sessoes.obter(req.headers['x-nexo-sessao']);
+  if (!/^[a-z0-9_-]{4,32}$/.test(sala) || !sessao || sessao.sala !== sala) return res.status(403).end();
+  const pedidos = pedidosDeEntradaPorSala.get(sala);
+  if (pedidos?.delete(sessao.identidade)) {
+    if (!pedidos.size) pedidosDeEntradaPorSala.delete(sala);
+    io.to(roomName(sala)).emit('pedido-entrada-cancelado', { identidade: sessao.identidade });
+  }
+  res.status(204).end();
+});
+
 // A identidade de midia e `nome#sufixo`, e a do bot de musica e `nexo-dj#sala`. Quem se
 // chamasse "nexo-dj" produziria uma identidade com o MESMO prefixo -- e a sala passaria a
 // tratar essa pessoa como o bot: sem controle de microfone, com cara de robo na lista e
