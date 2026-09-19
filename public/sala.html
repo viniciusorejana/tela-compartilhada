@@ -58,6 +58,7 @@
     <div class="topbar-actions">
       <button id="moderarSalaBtn" class="ghost" type="button" hidden title="Moderação desta sala" aria-label="Moderação desta sala">Moderação</button>
       <button id="copyLinkBtn" class="secondary" type="button" title="Copiar o link desta sala">Convidar amigos</button>
+      <button id="audienceToggle" class="ghost audience-toggle" type="button" aria-label="Ocultar plateia" aria-pressed="false" title="Ocultar plateia"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19M16 5.5a3 3 0 0 1 0 5.8M17 13a4.5 4.5 0 0 1 3.5 4.4V19"/></svg><span>Plateia</span></button>
       <button id="chatToggle" class="ghost" type="button" aria-label="Abrir chat" aria-controls="chatPanel">Chat<span id="chatBadge" class="badge hidden">0</span></button>
     </div>
   </header>
@@ -98,7 +99,7 @@
   <aside class="chat" id="chatPanel" aria-label="Chat da sala">
     <div class="chat-head">
       <strong><span aria-hidden="true">#</span> chat da sala</strong>
-      <button id="chatClose" class="ghost" type="button" title="Fechar chat">✕</button>
+      <div class="chat-head-actions"><button id="chatFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no chat" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="chatClose" class="ghost" type="button" title="Fechar chat" aria-label="Fechar chat">✕</button></div>
     </div>
     <div class="chat-msgs" id="chatMsgs" role="log" aria-label="Mensagens da sala" aria-live="polite"></div>
     <div class="chat-compose">
@@ -113,7 +114,7 @@
   <aside class="chat musica" id="musicaPanel" aria-label="Canal de música">
     <div class="chat-head">
       <strong><span aria-hidden="true">♪</span> música</strong>
-      <button id="musicaClose" class="ghost" type="button" title="Fechar canal de música">✕</button>
+      <div class="chat-head-actions"><button id="musicaFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no canal de música" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="musicaClose" class="ghost" type="button" title="Fechar canal de música" aria-label="Fechar canal de música">✕</button></div>
     </div>
 
     <div class="musica-corpo">

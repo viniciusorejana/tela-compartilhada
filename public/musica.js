@@ -30,6 +30,7 @@
     if (appRoot.classList.contains('teatro')) return false;
     if (!appRoot.classList.contains('painel-musica')) return false;
     if (appRoot.classList.contains('sem-chat')) return false;
+    if (appRoot.classList.contains('foco-chat')) return true;
     return window.matchMedia('(min-width: 1101px)').matches || painel.classList.contains('aberto');
   }
 
@@ -48,6 +49,7 @@
   }
 
   function fecharMusica() {
+    definirFocoChat(false);
     painel.classList.remove('aberto');
     appRoot.classList.remove('painel-musica');
     appRoot.classList.add('sem-chat');

@@ -156,6 +156,66 @@ async function esperarCodec(page, fonte, esperado) {
   await host.setViewportSize({ width: 1366, height: 768 });
   await host.screenshot({ path: path.join(output, 'sala-laptop.png') });
   await host.setViewportSize({ width: 1440, height: 940 });
+
+  // O painel responsivo continua automatico, enquanto o foco de texto e uma escolha
+  // explicita que sobrevive a atravessar desktop, tablet e celular.
+  assert.equal(await host.locator('#chatPanel').isVisible(), true);
+  await host.setViewportSize({ width: 900, height: 800 });
+  await host.locator('#chatPanel').waitFor({ state: 'hidden' });
+  assert.equal(await host.locator('#chatPanel').isVisible(), false);
+  await host.setViewportSize({ width: 1440, height: 940 });
+  assert.equal(await host.locator('#chatPanel').isVisible(), true);
+  await host.locator('#chatFocusBtn').click();
+  assert.equal(await host.locator('.app').evaluate(el => el.classList.contains('foco-chat')), true);
+  assert.equal(await host.locator('.palco-area').isVisible(), false);
+  for (const viewport of [{ width: 900, height: 800 }, { width: 390, height: 844 }, { width: 1440, height: 940 }]) {
+    await host.setViewportSize(viewport);
+    assert.equal(await host.locator('#chatPanel').isVisible(), true);
+    assert.equal(await host.locator('.palco-area').isVisible(), false);
+    assert.ok(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    if (viewport.width === 390) await host.screenshot({ path: path.join(output, 'chat-focus-mobile.png') });
+    if (viewport.width === 1440) await host.screenshot({ path: path.join(output, 'chat-focus-desktop.png') });
+  }
+  await host.setViewportSize({ width: 900, height: 800 });
+  await host.locator('#chatFocusBtn').click();
+  await host.locator('#chatPanel').waitFor({ state: 'hidden' });
+  assert.equal(await host.locator('.palco-area').isVisible(), true);
+  await host.setViewportSize({ width: 1440, height: 940 });
+  assert.equal(await host.locator('#chatPanel').isVisible(), true);
+
+  // O mesmo modo serve ao canal de musica e nao depende da plateia nem da barra lateral.
+  await host.locator('[data-action="musica"]').click();
+  await host.locator('#musicaFocusBtn').click();
+  assert.equal(await host.locator('#musicaPanel').isVisible(), true);
+  assert.equal(await host.locator('.palco-area').isVisible(), false);
+  await host.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await host.locator('#musicaPanel').isVisible(), true);
+  await host.screenshot({ path: path.join(output, 'musica-focus-mobile.png') });
+  await host.locator('#musicaFocusBtn').click();
+  await host.locator('#musicaClose').click();
+  await host.setViewportSize({ width: 1440, height: 940 });
+
+  await host.locator('#audienceToggle').click();
+  assert.equal(await host.locator('.participants-section').isVisible(), false);
+  assert.equal(await host.locator('#audienceToggle').getAttribute('aria-pressed'), 'true');
+  await host.locator('#sidebarToggle').click();
+  assert.equal(await host.locator('.app').evaluate(el => el.classList.contains('barra-recolhida') && el.classList.contains('plateia-oculta')), true);
+  await host.evaluate(() => definirModoTeatro(true));
+  assert.equal(await host.locator('.app').evaluate(el => el.classList.contains('teatro') && el.classList.contains('plateia-oculta')), true);
+  await host.evaluate(() => definirModoTeatro(false));
+  await host.locator('#sidebarToggle').click();
+  await host.locator('#audienceToggle').click();
+  assert.equal(await host.locator('.participants-section').isVisible(), true);
+  await host.locator('#chatToggle').click();
+  assert.equal(await host.locator('#chatPanel').isVisible(), true);
+
+  const recentHome = await desktop.newPage();
+  await recentHome.goto(origin);
+  assert.equal(await recentHome.locator('#recentRooms').isVisible(), true);
+  assert.ok(await recentHome.evaluate(() => document.getElementById('recentRooms').getBoundingClientRect().top < document.querySelector('.entry-card').getBoundingClientRect().top));
+  await recentHome.screenshot({ path: path.join(output, 'home-recentes.png'), fullPage: true });
+  await recentHome.close();
+
   const mediaSupported = await host.evaluate(() => Boolean(window.RTCPeerConnection && navigator.mediaDevices));
   if (!mediaSupported) {
     assert.equal(process.env.TEST_BROWSER, 'webkit', 'Chromium should support WebRTC');
@@ -177,6 +237,19 @@ async function esperarCodec(page, fonte, esperado) {
   }
   await host.locator('#cameraBtn').click();
   await share(host);
+  // A recuperacao pode aparecer junto dos controles. Os dois alvos ficam em regioes
+  // separadas do palco, e o container do aviso nao captura cliques fora dos botoes.
+  const recoveryLayout = await host.evaluate(() => {
+    playbackRecovery.hidden = false;
+    stageControls.classList.remove('hidden');
+    const aviso = playbackRecovery.getBoundingClientRect();
+    const controles = stageControls.getBoundingClientRect();
+    const sobrepoe = aviso.left < controles.right && aviso.right > controles.left && aviso.top < controles.bottom && aviso.bottom > controles.top;
+    const pointerEvents = getComputedStyle(playbackRecovery).pointerEvents;
+    playbackRecovery.hidden = true;
+    return { sobrepoe, pointerEvents };
+  });
+  assert.deepEqual(recoveryLayout, { sobrepoe: false, pointerEvents: 'none' });
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await syntheticCapture(mobile);

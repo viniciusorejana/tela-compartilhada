@@ -4996,18 +4996,49 @@ const chatSend = document.getElementById('chatSend');
 const chatToggle = document.getElementById('chatToggle');
 const chatClose = document.getElementById('chatClose');
 const chatBadge = document.getElementById('chatBadge');
+const chatFocusBtn = document.getElementById('chatFocusBtn');
+const musicaFocusBtn = document.getElementById('musicaFocusBtn');
 
 const LARGURA_MAXIMA_DA_IMAGEM = 1280;
 const BYTES_MAXIMOS_DA_IMAGEM = 700 * 1024;
 let naoLidas = 0;
 
+// Focar texto nao e o mesmo que abrir o painel. `aberto` continua registrando apenas a
+// gaveta responsiva; por isso uma pessoa pode entrar no foco em 1440px, diminuir para um
+// celular e aumentar de novo sem o resize reescrever a escolha. Ao sair, volta exatamente
+// ao comportamento automatico que existia antes.
+function definirFocoChat(ativo) {
+  const app = document.querySelector('.app');
+  if (ativo) {
+    definirModoTeatro(false);
+    app.classList.remove('sem-chat');
+  }
+  app.classList.toggle('foco-chat', ativo);
+  for (const [botao, canal] of [[chatFocusBtn, 'chat'], [musicaFocusBtn, 'canal de música']]) {
+    botao.setAttribute('aria-pressed', String(ativo));
+    botao.setAttribute('aria-label', ativo ? 'Mostrar palco e plateia' : `Focar somente no ${canal}`);
+    botao.title = ativo ? 'Mostrar palco e plateia' : 'Ocultar palco e plateia';
+    botao.textContent = ativo ? 'Mostrar palco' : 'Focar';
+  }
+  requestAnimationFrame(() => {
+    limitarPan();
+    aplicarTransformDoPalco();
+    const mensagens = app.classList.contains('painel-musica') ? document.getElementById('musicaMsgs') : chatMsgs;
+    if (ativo && mensagens) mensagens.scrollTop = mensagens.scrollHeight;
+  });
+}
+chatFocusBtn.onclick = () => definirFocoChat(!document.querySelector('.app').classList.contains('foco-chat'));
+musicaFocusBtn.onclick = chatFocusBtn.onclick;
+
 function chatVisivel() {
-  if (document.querySelector('.app').classList.contains('teatro')) return false;
-  if (document.querySelector('.app').classList.contains('sem-chat')) return false;
+  const app = document.querySelector('.app');
+  if (app.classList.contains('teatro')) return false;
+  if (app.classList.contains('sem-chat')) return false;
   // A coluna e uma so, e o canal de musica pode estar ocupando ela. Sem esta linha, uma
   // mensagem que chegasse com a musica aberta seria contada como lida -- o contador nao
   // apareceria, e ela passaria despercebida.
-  if (document.querySelector('.app').classList.contains('painel-musica')) return false;
+  if (app.classList.contains('painel-musica')) return false;
+  if (app.classList.contains('foco-chat')) return true;
   return window.matchMedia('(min-width: 1101px)').matches || chatPanel.classList.contains('aberto');
 }
 function abrirChat() {
@@ -5022,6 +5053,7 @@ function abrirChat() {
 // "aberto" vale na tela estreita, onde o chat e uma camada; "sem-chat" vale na tela larga,
 // onde ele e uma coluna. O X mexe nos dois, entao fechar funciona nas duas larguras.
 function fecharChat() {
+  definirFocoChat(false);
   chatPanel.classList.remove('aberto');
   document.querySelector('.app').classList.add('sem-chat');
 }

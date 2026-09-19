@@ -54,6 +54,24 @@
   // reescrever o rotulo deixaria "Recolher a barra lateral" num botao que abre uma gaveta.
   estreita.addEventListener('change', rotularToggle);
 
+  // A plateia e uma preferencia apenas desta pessoa. Ela nao altera publicacao, destaque ou
+  // o que os demais veem, e permanece independente de teatro, chat e barra lateral.
+  const CHAVE_DA_PLATEIA = 'nexoPlateiaOculta';
+  function definirPlateiaOculta(oculta, gravar = true) {
+    appRoot.classList.toggle('plateia-oculta', oculta);
+    const botao = $('audienceToggle');
+    botao.setAttribute('aria-pressed', String(oculta));
+    botao.title = oculta ? 'Mostrar plateia' : 'Ocultar plateia';
+    botao.setAttribute('aria-label', botao.title);
+    if (gravar) {
+      try { localStorage.setItem(CHAVE_DA_PLATEIA, oculta ? '1' : '0'); } catch (_) { /* Preferencia desta aba. */ }
+    }
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  try { definirPlateiaOculta(localStorage.getItem(CHAVE_DA_PLATEIA) === '1', false); }
+  catch (_) { definirPlateiaOculta(false, false); }
+  $('audienceToggle').onclick = () => definirPlateiaOculta(!appRoot.classList.contains('plateia-oculta'));
+
   $('sidebarToggle').onclick = () => {
     if (!telaEstreita()) { definirBarraRecolhida(!appRoot.classList.contains('barra-recolhida')); return; }
     const open = appRoot.classList.toggle('sidebar-open');
