@@ -118,6 +118,12 @@ let myName = '';
 // segunda decide se as ações aparecem para mim. Ver moderacao.js.
 let donoDaSala = null;
 let podeModerar = false;
+let configuracaoDaSala = { trancada: false, compartilharTela: true, soundboard: true, musica: true };
+let ensurdecido = false;
+let micAntesDeEnsurdecer = true;
+let pushToTalkAtivo = false;
+let pushToTalkPressionado = false;
+let presencaLocal = '';
 // Fui retirado desta sala. Existe para uma coisa só: impedir que os avisos de conexão -- que
 // chegam logo depois, porque a conexão cai de fato -- apaguem o motivo real da tela.
 let fuiRemovido = false;
@@ -179,7 +185,7 @@ function buscarConfigDaSala(nome) {
 }
 async function pedirConfigDaSala(nome) {
   let ultimoMotivo = 'sala-config';
-  for (let tentativa = 0; tentativa < 12; tentativa++) {
+  for (let tentativa = 0; tentativa < 150; tentativa++) {
     const controle = new AbortController();
     const prazo = setTimeout(() => controle.abort(), 8000);
     try {
@@ -188,6 +194,18 @@ async function pedirConfigDaSala(nome) {
       if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
+      if (dados.motivo === 'aguardando') {
+        document.getElementById('waitingPanel')?.classList.remove('hidden');
+        status.textContent = 'Aguardando quem abriu a sala aprovar sua entrada…';
+        ultimoMotivo = dados.error || 'aguardando-aprovacao';
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      if (dados.motivo === 'recusado') {
+        const recusa = new Error(dados.error || 'Seu pedido de entrada não foi aceito.');
+        recusa.removido = true;
+        throw recusa;
+      }
       // Removido da sala não é falha de preparação: é uma resposta definitiva, com prazo, e
       // insistir doze vezes só atrasaria a frase que explica o que aconteceu.
       if (dados.motivo === 'removido') {
@@ -259,6 +277,7 @@ async function iniciarConexao() {
   }
   if (saindoDaSala) return;
   myId = salaConfig?.identidade || identidadeSessao || `local-${Math.random().toString(36).slice(2)}`;
+  document.getElementById('waitingPanel')?.classList.add('hidden');
 
   if (salaConfig && !suportaWebRTC) {
     salaConfig = null;
@@ -313,6 +332,7 @@ async function iniciarConexao() {
       // congestionamento do servidor age sobre o que SAI dele, nao sobre o que entra.
       aoMudarQualidade: ajustarEnvioPelaQualidade
     });
+    transporte.definirEconomia?.(document.getElementById('dataSaver')?.checked);
     try {
       await transporte.conectar(salaConfig.url, salaConfig.token);
     } catch (erro) {
@@ -369,6 +389,8 @@ async function iniciarConexao() {
       criarTileLocal();
       donoDaSala = response.dono || null;
       podeModerar = Boolean(response.podeModerar);
+      aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
+      desenharPedidosDeEntrada(response.pedidosEntrada || []);
       atualizarSelosDeDono();
       // Entrar na sala já liga a proteção contra throttling. Antes ela só aparecia no
       // primeiro clique no microfone ou na câmera -- quem entrava para assistir ficava sem
@@ -383,7 +405,12 @@ async function iniciarConexao() {
       if (micStream) { acompanharVoz('self', micStream); montarFiltroDeRuido(); }
       if (Array.isArray(response.historico) && response.historico.length) {
         chatMsgs.innerHTML = '';
+        mensagensDoChat.clear();
+        carregandoHistorico = true;
         response.historico.forEach(mostrarMensagem);
+        carregandoHistorico = false;
+        divisorDeNaoLidas = false;
+        chatMsgs.querySelectorAll('.unread-divider').forEach(el => el.remove());
         naoLidas = 0;
         chatBadge.classList.add('hidden');
       }
@@ -471,7 +498,19 @@ async function iniciarConexao() {
     donoDaSala = identidade || null;
     podeModerar = Boolean(donoDaSala) && donoDaSala === myId;
     atualizarSelosDeDono();
+    aplicarConfiguracaoDaSala(configuracaoDaSala);
   });
+
+  socket.on('sala-configuracao', aplicarConfiguracaoDaSala);
+  socket.on('pedido-entrada', adicionarPedidoDeEntrada);
+  socket.on('pedido-entrada-resolvido', ({ identidade }) => removerPedidoDeEntrada(identidade));
+  socket.on('presenca-atualizada', ({ identidade, presenca }) => {
+    if (identidade === myId) presencaLocal = presenca || '';
+    const par = identidade === myId ? peers.get('self') : peers.get(identidade);
+    if (par) { par.state ||= {}; par.state.presenca = presenca || ''; atualizarTile(par.id); }
+    atualizarPresencaNaInterface(identidade, presenca || '');
+  });
+  socket.on('reacao-sala', mostrarReacaoDaSala);
 
   // Ser removido não pode ser silencioso, e não pode parecer queda de conexão -- senão a
   // pessoa fica recarregando a página sem entender, e a sala recebe dez tentativas de volta.
@@ -499,6 +538,8 @@ async function iniciarConexao() {
   socket.on('audio-error', (message) => { status.textContent = message; });
 
   socket.on('chat-mensagem', (msg) => mostrarMensagem(msg));
+  socket.on('chat-atualizada', atualizarMensagemDoChat);
+  socket.on('chat-removida', ({ id }) => removerMensagemDoChat(id));
 
   socket.on('disconnect', () => {
     // A queda vem LOGO depois da remoção, porque é o servidor fechando o socket de propósito.
@@ -517,7 +558,7 @@ async function iniciarConexao() {
 }
 
 function meuEstado() {
-  return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted };
+  return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted, presenca: presencaLocal };
 }
 
 // O estado das proprias fontes so importa para a interface local: para os outros, quem
@@ -1726,6 +1767,15 @@ async function ativarMicrofone() {
     status.textContent = 'Não foi possível acessar o microfone: ' + err.message;
   } finally {
     abrindoMicrofone = false;
+    // A permissão pode demorar mais que o toque. Se o Espaço já foi solto quando a faixa
+    // chega, ela nasce muda; sem isso um toque curto deixaria o microfone aberto.
+    if (pushToTalkAtivo && !pushToTalkPressionado && micTrack && !micMuted) {
+      micMuted = true;
+      micTrack.enabled = false;
+      if (faixaEnviadaDoMic && faixaEnviadaDoMic !== micTrack) faixaEnviadaDoMic.enabled = false;
+      escolherFaixaDoMic();
+      anunciarMudoDoMic();
+    }
     micBtn.disabled = false;
     micBtn.classList.remove('ocupado');
     atualizarBotaoDoMic();
@@ -1752,6 +1802,107 @@ function alternarMic() {
   atualizarModoSegundoPlano();
 }
 micBtn.onclick = alternarMic;
+
+// Ensurdecer é local: corta tudo que chega e, como no Discord, também fecha o microfone.
+// Cada elemento lembra o mudo anterior para não desfazer uma escolha individual ao voltar.
+const deafenBtn = document.getElementById('deafenBtn');
+function aplicarEnsurdecimento() {
+  document.querySelectorAll('audio,video').forEach(mid => {
+    if (mid === stageVideo || mid.muted) {
+      if (ensurdecido && mid.dataset.nexoDeafen === undefined) mid.dataset.nexoDeafen = mid.muted ? '1' : '0';
+    } else if (ensurdecido && mid.dataset.nexoDeafen === undefined) mid.dataset.nexoDeafen = '0';
+    if (ensurdecido) mid.muted = true;
+    else if (mid.dataset.nexoDeafen !== undefined) {
+      mid.muted = mid.dataset.nexoDeafen === '1';
+      delete mid.dataset.nexoDeafen;
+    }
+  });
+  window.NexoSoundboard?.definirMudoGlobal?.(ensurdecido);
+}
+function alternarEnsurdecimento() {
+  ensurdecido = !ensurdecido;
+  if (ensurdecido) {
+    micAntesDeEnsurdecer = micMuted;
+    if (!micMuted) alternarMic();
+  } else if (!micAntesDeEnsurdecer && micTrack && micMuted && !pushToTalkAtivo) alternarMic();
+  aplicarEnsurdecimento();
+  deafenBtn.setAttribute('aria-pressed', String(ensurdecido));
+  deafenBtn.classList.toggle('desligado', !ensurdecido);
+  deafenBtn.textContent = ensurdecido ? 'Surdo' : 'Ouvir';
+  deafenBtn.title = ensurdecido ? 'Voltar a ouvir a sala' : 'Ensurdecer: silenciar toda a sala';
+}
+deafenBtn.onclick = alternarEnsurdecimento;
+new MutationObserver(() => { if (ensurdecido) aplicarEnsurdecimento(); }).observe(document.body, { childList: true, subtree: true });
+
+const pushToTalk = document.getElementById('pushToTalk');
+try { pushToTalkAtivo = localStorage.getItem('sala.pushToTalk') === '1'; } catch (_) {}
+pushToTalk.checked = pushToTalkAtivo;
+pushToTalk.addEventListener('change', () => {
+  pushToTalkAtivo = pushToTalk.checked;
+  try { localStorage.setItem('sala.pushToTalk', pushToTalkAtivo ? '1' : '0'); } catch (_) {}
+  if (pushToTalkAtivo && micTrack && !micMuted) alternarMic();
+});
+function alvoEditavel(alvo) { return Boolean(alvo?.closest?.('input,textarea,select,[contenteditable="true"]')); }
+document.addEventListener('keydown', evento => {
+  if (evento.code === 'Space' && pushToTalkAtivo && !evento.repeat && !alvoEditavel(evento.target)) {
+    evento.preventDefault();
+    pushToTalkPressionado = true;
+    if (!micTrack) ativarMicrofone();
+    else if (micMuted && !ensurdecido) alternarMic();
+    return;
+  }
+  if (!(evento.ctrlKey && evento.shiftKey) || evento.repeat) return;
+  const tecla = evento.key.toLowerCase();
+  if (tecla === 'm') { evento.preventDefault(); alternarMic(); }
+  else if (tecla === 'd') { evento.preventDefault(); alternarEnsurdecimento(); }
+  else if (tecla === 'c') { evento.preventDefault(); cameraBtn.click(); }
+  else if (tecla === 'h') { evento.preventDefault(); chatToggle.click(); }
+  else if (tecla === 'e') { evento.preventDefault(); devicesBtn.click(); }
+  else if (tecla === 'p') { evento.preventDefault(); document.getElementById('presenceBtn').click(); }
+});
+document.addEventListener('keyup', evento => {
+  if (evento.code === 'Space' && pushToTalkAtivo && !alvoEditavel(evento.target) && micTrack && !micMuted) {
+    pushToTalkPressionado = false;
+    evento.preventDefault(); alternarMic();
+  } else if (evento.code === 'Space') {
+    pushToTalkPressionado = false;
+  }
+});
+
+const presenceBtn = document.getElementById('presenceBtn');
+const presenceMenu = document.getElementById('presenceMenu');
+function atualizarPresencaNaInterface(identidade, presenca) {
+  const id = identidade === myId ? 'self' : identidade;
+  if (id) atualizarTile(id);
+  document.dispatchEvent(new CustomEvent('room-update'));
+  presenceMenu.querySelectorAll('[data-presence]').forEach(b => b.classList.toggle('ativo', b.dataset.presence === presenca && identidade === myId));
+}
+function mostrarReacaoDaSala({ nome, reacao }) {
+  const caixa = document.getElementById('roomReactions');
+  const aviso = document.createElement('div');
+  aviso.className = 'room-reaction';
+  aviso.textContent = `${reacao} ${nome || ''}`;
+  caixa.replaceChildren(aviso);
+  setTimeout(() => aviso.remove(), 2500);
+}
+presenceBtn.onclick = evento => {
+  evento.stopPropagation();
+  presenceMenu.classList.toggle('hidden');
+};
+presenceMenu.addEventListener('click', evento => {
+  const botao = evento.target.closest('button');
+  if (!botao || !socket?.connected) return;
+  if (botao.dataset.presence !== undefined) {
+    presencaLocal = botao.dataset.presence;
+    socket.emit('sinal-presenca', { presenca: presencaLocal });
+    atualizarPresencaNaInterface(myId, presencaLocal);
+    presenceMenu.classList.add('hidden');
+  } else if (botao.dataset.reaction) {
+    socket.emit('sinal-presenca', { reacao: botao.dataset.reaction });
+    presenceMenu.classList.add('hidden');
+  }
+});
+document.addEventListener('click', evento => { if (!evento.target.closest('#presenceMenu,#presenceBtn')) presenceMenu.classList.add('hidden'); });
 
 // ---------- Microfone, fone e camera ----------
 // O navegador so revela o NOME dos dispositivos depois de conceder permissao a um deles.
@@ -3923,6 +4074,78 @@ const LINHA_DE_VOLUME = alvo => `
   <button class="mute-peer-btn" type="button" aria-pressed="false"></button>
 `;
 
+// ---------- Acesso e permissões da sala ----------
+const controlesDaConfiguracao = {
+  roomLocked: 'trancada', allowScreen: 'compartilharTela',
+  allowSoundboard: 'soundboard', allowMusic: 'musica'
+};
+
+function aplicarConfiguracaoDaSala(nova) {
+  configuracaoDaSala = { ...configuracaoDaSala, ...(nova || {}) };
+  for (const [id, chave] of Object.entries(controlesDaConfiguracao)) {
+    const campo = document.getElementById(id);
+    if (!campo) continue;
+    campo.checked = Boolean(configuracaoDaSala[chave]);
+    campo.disabled = !podeModerar;
+  }
+  const telaPermitida = podeModerar || configuracaoDaSala.compartilharTela;
+  screenBtn.disabled = !telaPermitida;
+  if (!telaPermitida && screenStream) pararTela();
+  if (!telaPermitida) screenBtn.title = 'Quem abriu a sala restringiu o compartilhamento de tela';
+  const sonsPermitidos = podeModerar || configuracaoDaSala.soundboard;
+  const somBtn = document.getElementById('soundboardBtn');
+  if (somBtn) { somBtn.disabled = !sonsPermitidos; somBtn.title = sonsPermitidos ? 'Mesa de sons da sala' : 'Mesa de sons restrita por quem abriu a sala'; }
+  const musicaPermitida = podeModerar || configuracaoDaSala.musica;
+  const musicaInput = document.getElementById('musicaInput');
+  const musicaSend = document.getElementById('musicaSend');
+  if (musicaInput) { musicaInput.disabled = !musicaPermitida; musicaInput.placeholder = musicaPermitida ? 'Nome da música, link ou !ajuda…' : 'Novos pedidos foram restringidos'; }
+  if (musicaSend) musicaSend.disabled = !musicaPermitida;
+}
+
+Object.entries(controlesDaConfiguracao).forEach(([id, chave]) => {
+  document.getElementById(id)?.addEventListener('change', evento => {
+    if (!socket?.connected || !podeModerar) return;
+    socket.emit('sala-configurar', { [chave]: evento.target.checked }, resposta => {
+      if (!resposta?.ok) { status.textContent = resposta?.error || 'Não foi possível alterar a sala.'; aplicarConfiguracaoDaSala(configuracaoDaSala); }
+    });
+  });
+});
+
+const pedidosPendentes = new Map();
+function desenharPedidosDeEntrada(lista) {
+  pedidosPendentes.clear();
+  (lista || []).forEach(p => pedidosPendentes.set(p.identidade, p));
+  renderizarPedidosDeEntrada();
+}
+function adicionarPedidoDeEntrada(pedido) {
+  if (!podeModerar || !pedido?.identidade || pedido.estado === 'recusado') return;
+  pedidosPendentes.set(pedido.identidade, pedido);
+  renderizarPedidosDeEntrada();
+  status.textContent = `${pedido.nome || 'Alguém'} quer entrar na sala.`;
+}
+function removerPedidoDeEntrada(identidade) { pedidosPendentes.delete(identidade); renderizarPedidosDeEntrada(); }
+function renderizarPedidosDeEntrada() {
+  const caixa = document.getElementById('joinRequests');
+  if (!caixa) return;
+  caixa.replaceChildren();
+  if (!podeModerar || !pedidosPendentes.size) return;
+  caixa.append(elemento('strong', '', 'Pedidos de entrada'));
+  pedidosPendentes.forEach(pedido => {
+    const linha = elemento('div', 'join-request');
+    linha.append(elemento('span', '', pedido.nome || 'Convidado'));
+    for (const [rotulo, aceitar] of [['Aceitar', true], ['Recusar', false]]) {
+      const botao = elemento('button', aceitar ? '' : 'secondary', rotulo);
+      botao.type = 'button';
+      botao.onclick = () => socket.emit('resolver-entrada', { identidade: pedido.identidade, aceitar }, resposta => {
+        if (resposta?.ok) removerPedidoDeEntrada(pedido.identidade);
+        else status.textContent = resposta?.error || 'Não foi possível responder ao pedido.';
+      });
+      linha.append(botao);
+    }
+    caixa.append(linha);
+  });
+}
+
 // ---------- Moderação ----------
 //
 // O botão nasce escondido e só aparece para quem pode usá-lo. Isso é conveniência de
@@ -4071,6 +4294,7 @@ function criarTileBase(id, name, state, isSelf) {
       <div class="avatar-fallback"></div>
       <span class="mic-icon audio-icon" aria-hidden="true"></span>
       <span class="screen-badge hidden">Tela</span>
+      <span class="presence-badge hidden" aria-label="Status"></span>
       ${isSelf ? BOTAO_DE_OCULTAR('camera') : BOTAO_DE_MODERAR}
     </div>
     <div class="participant-name"></div>
@@ -4096,6 +4320,7 @@ function criarTileBase(id, name, state, isSelf) {
     avatar: el.querySelector('.avatar-fallback'),
     micIcon: el.querySelector('.mic-icon'),
     screenBadge: el.querySelector('.screen-badge'),
+    presenceBadge: el.querySelector('.presence-badge'),
     peerAudio: el.querySelector('.peer-audio'),
     screenAudio: el.querySelector('.screen-audio'),
     volumeSlider: el.querySelector('.volume-slider'),
@@ -4565,6 +4790,11 @@ function atualizarTile(id) {
   // O selo "Tela" some do quadradinho da pessoa: agora a tela tem o proprio quadradinho.
   refs.screenBadge.classList.add('hidden');
   refs.micIcon.classList.toggle('muted', Boolean(estado.micMuted));
+  const simbolosDePresenca = { hand: '✋', brb: '☕', gaming: '🎮', quiet: '🔇' };
+  if (refs.presenceBadge) {
+    refs.presenceBadge.textContent = simbolosDePresenca[estado.presenca] || '';
+    refs.presenceBadge.classList.toggle('hidden', !simbolosDePresenca[estado.presenca]);
+  }
   // Quem está com a conexão perdida aparecia assim só na lista lateral -- que em modo
   // teatro nem existe. O quadradinho é onde se olha, então é nele que a queda precisa
   // aparecer: a pessoa ainda está na sala, apagada, esperando a volta.
@@ -4999,6 +5229,57 @@ const chatBadge = document.getElementById('chatBadge');
 const chatFocusBtn = document.getElementById('chatFocusBtn');
 const musicaFocusBtn = document.getElementById('musicaFocusBtn');
 
+// ---------- Qualidade, economia e vídeo compacto ----------
+const connectionQualityBtn = document.getElementById('connectionQualityBtn');
+function atualizarIndicadorDeConexao() {
+  const bruto = String(transporte?.qualidade || (socket?.connected ? 'good' : 'unknown')).toLowerCase();
+  const qualidade = ['excellent', 'good', 'poor', 'lost'].find(q => bruto.includes(q)) || 'unknown';
+  const rotulos = { excellent: 'Excelente', good: 'Boa', poor: 'Instável', lost: 'Sem mídia', unknown: 'Conexão' };
+  connectionQualityBtn.dataset.quality = qualidade;
+  connectionQualityBtn.querySelector('span').textContent = rotulos[qualidade];
+  connectionQualityBtn.title = qualidade === 'poor'
+    ? 'Conexão instável — ative Economia de dados ou abra o diagnóstico'
+    : `${rotulos[qualidade]} — abrir diagnóstico`;
+}
+connectionQualityBtn.onclick = () => abrirDiagnostico();
+setInterval(atualizarIndicadorDeConexao, 1500);
+
+const dataSaver = document.getElementById('dataSaver');
+try { dataSaver.checked = localStorage.getItem('sala.economiaDados') === '1'; } catch (_) {}
+function aplicarEconomiaDeDados() {
+  const ativa = dataSaver.checked;
+  document.querySelector('.app').classList.toggle('economia-dados', ativa);
+  transporte?.definirEconomia?.(ativa);
+  for (const seletor of document.querySelectorAll('[data-quality-profile],[data-screen-fps]')) {
+    if (ativa) {
+      if (seletor.dataset.antesDaEconomia === undefined) seletor.dataset.antesDaEconomia = seletor.value;
+      const novo = seletor.hasAttribute('data-quality-profile') ? 'economical' : '30';
+      if (seletor.value !== novo) { seletor.value = novo; seletor.dispatchEvent(new Event('change', { bubbles: true })); }
+    } else if (seletor.dataset.antesDaEconomia !== undefined) {
+      const anterior = seletor.dataset.antesDaEconomia;
+      delete seletor.dataset.antesDaEconomia;
+      if (seletor.value !== anterior) { seletor.value = anterior; seletor.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+  }
+  try { localStorage.setItem('sala.economiaDados', ativa ? '1' : '0'); } catch (_) {}
+  atualizarIndicadorDeConexao();
+}
+dataSaver.addEventListener('change', aplicarEconomiaDeDados);
+aplicarEconomiaDeDados();
+
+const compactBtn = document.getElementById('compactBtn');
+compactBtn.onclick = async () => {
+  if (document.pictureInPictureElement) { await document.exitPictureInPicture().catch(() => {}); return; }
+  if (stageVideo.srcObject && document.pictureInPictureEnabled && stageVideo.requestPictureInPicture) {
+    try { await stageVideo.requestPictureInPicture(); return; } catch (_) { /* usa o compacto da pagina */ }
+  }
+  const ativo = document.querySelector('.app').classList.toggle('compacto-local');
+  compactBtn.setAttribute('aria-pressed', String(ativo));
+  compactBtn.title = ativo ? 'Sair do modo compacto' : 'Abrir vídeo compacto';
+};
+stageVideo.addEventListener('enterpictureinpicture', () => { compactBtn.setAttribute('aria-pressed', 'true'); compactBtn.title = 'Fechar vídeo compacto'; });
+stageVideo.addEventListener('leavepictureinpicture', () => { compactBtn.setAttribute('aria-pressed', 'false'); compactBtn.title = 'Abrir vídeo compacto'; });
+
 const LARGURA_MAXIMA_DA_IMAGEM = 1280;
 const BYTES_MAXIMOS_DA_IMAGEM = 700 * 1024;
 let naoLidas = 0;
@@ -5047,6 +5328,7 @@ function abrirChat() {
   document.querySelector('.app').classList.remove('sem-chat');
   naoLidas = 0;
   chatBadge.classList.add('hidden');
+  divisorDeNaoLidas = false;
   chatInput.focus();
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
@@ -5056,6 +5338,7 @@ function fecharChat() {
   definirFocoChat(false);
   chatPanel.classList.remove('aberto');
   document.querySelector('.app').classList.add('sem-chat');
+  chatMsgs.querySelectorAll('.unread-divider').forEach(el => el.remove());
 }
 chatToggle.onclick = () => (chatVisivel() ? fecharChat() : abrirChat());
 chatClose.onclick = fecharChat;
@@ -5096,6 +5379,10 @@ function montarTexto(destino, texto) {
 }
 
 let perto = true;
+const mensagensDoChat = new Map();
+let contextoDoChat = null; // { tipo:'resposta'|'edicao', mensagem }
+let divisorDeNaoLidas = false;
+let carregandoHistorico = false;
 chatMsgs.addEventListener('scroll', () => {
   perto = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight < 80;
 });
@@ -5105,8 +5392,22 @@ function mostrarMensagem(msg) {
   if (vazio) vazio.remove();
   perto = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight < 80;
 
+  msg.id ||= `legado-${msg.em || Date.now()}-${Math.random().toString(36).slice(2)}`;
+  mensagensDoChat.set(msg.id, msg);
+  if (!carregandoHistorico && !msg._atualizandoLocal && !chatVisivel() && msg.autorId !== myId && !divisorDeNaoLidas) {
+    chatMsgs.querySelectorAll('.unread-divider').forEach(divisor => divisor.remove());
+    const divisor = document.createElement('div');
+    divisor.className = 'unread-divider';
+    divisor.textContent = 'Novas mensagens';
+    chatMsgs.appendChild(divisor);
+    divisorDeNaoLidas = true;
+  }
   const el = document.createElement('div');
   el.className = 'msg';
+  el.dataset.messageId = msg.id;
+  if (msg.editada) el.classList.add('editada');
+  const mencionou = Boolean(myName && msg.texto && new RegExp(`(^|\\s)@${myName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(msg.texto));
+  el.classList.toggle('mencionou', mencionou);
   const avatar = document.createElement('span');
   avatar.className = 'msg-avatar';
   avatar.textContent = iniciais(msg.autor || '?');
@@ -5124,6 +5425,15 @@ function mostrarMensagem(msg) {
   hora.textContent = horaCurta(msg.em || Date.now());
   topo.append(autor, hora);
 
+  if (msg.resposta) {
+    const resposta = document.createElement('button');
+    resposta.className = 'msg-reply';
+    resposta.type = 'button';
+    resposta.textContent = `↳ ${msg.resposta.autor}: ${msg.resposta.texto || 'Mensagem'}`;
+    resposta.onclick = () => focarMensagem(msg.resposta.id);
+    el.appendChild(resposta);
+  }
+
   const corpo = document.createElement('div');
   corpo.className = 'msg-texto';
   if (msg.texto) montarTexto(corpo, msg.texto);
@@ -5136,16 +5446,95 @@ function mostrarMensagem(msg) {
     corpo.appendChild(img);
   }
 
-  el.append(avatar, topo, corpo);
+  const acoes = document.createElement('div');
+  acoes.className = 'msg-actions';
+  const botaoAcao = (rotulo, titulo, acao) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = rotulo; b.title = titulo; b.dataset.chatAction = acao; return b;
+  };
+  acoes.append(botaoAcao('↩', 'Responder', 'responder'));
+  for (const emoji of ['👍', '❤️', '😂', '👏', '🎉']) { const b = botaoAcao(emoji, `Reagir com ${emoji}`, 'reagir'); b.dataset.emoji = emoji; acoes.append(b); }
+  if (msg.autorId === myId) acoes.append(botaoAcao('✎', 'Editar', 'editar'));
+  if (msg.autorId === myId || podeModerar) acoes.append(botaoAcao('⌫', 'Excluir', 'excluir'));
+  if (podeModerar) acoes.append(botaoAcao(msg.fixada ? '📌' : '📍', msg.fixada ? 'Desafixar' : 'Fixar', 'fixar'));
+
+  el.append(avatar, topo, corpo, acoes);
+  const reacoes = document.createElement('div');
+  reacoes.className = 'msg-reactions';
+  for (const [emoji, pessoas] of Object.entries(msg.reacoes || {})) {
+    if (!pessoas?.length) continue;
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = `${emoji} ${pessoas.length}`;
+    b.dataset.chatAction = 'reagir'; b.dataset.emoji = emoji;
+    b.classList.toggle('minha', pessoas.includes(myId));
+    reacoes.append(b);
+  }
+  if (reacoes.childElementCount) el.append(reacoes);
   chatMsgs.appendChild(el);
   if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
-  if (!chatVisivel() && msg.autorId !== meuSocketId) {
+  if (!carregandoHistorico && !msg._atualizandoLocal && !chatVisivel() && msg.autorId !== myId) {
     naoLidas++;
     chatBadge.textContent = naoLidas > 99 ? '99+' : String(naoLidas);
     chatBadge.classList.remove('hidden');
   }
+  if (!carregandoHistorico && !msg._atualizandoLocal && mencionou && msg.autorId !== myId && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification(`${msg.autor || 'Alguém'} mencionou você no Nexo`, { body: String(msg.texto || '').slice(0, 160), tag: `nexo-${roomCode}` });
+  }
+  atualizarFixadas();
 }
+
+function focarMensagem(id) {
+  const alvo = chatMsgs.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+  if (!alvo) return;
+  alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  alvo.animate([{ backgroundColor: '#a092ff35' }, { backgroundColor: 'transparent' }], { duration: 1200 });
+}
+function atualizarMensagemDoChat(msg) {
+  if (!msg?.id) return;
+  mensagensDoChat.set(msg.id, msg);
+  const antigo = chatMsgs.querySelector(`[data-message-id="${CSS.escape(msg.id)}"]`);
+  if (!antigo) { mostrarMensagem(msg); return; }
+  const proximo = antigo.nextSibling;
+  antigo.remove();
+  msg._atualizandoLocal = true;
+  mostrarMensagem(msg);
+  delete msg._atualizandoLocal;
+  const novo = chatMsgs.lastElementChild;
+  if (proximo) chatMsgs.insertBefore(novo, proximo);
+  atualizarFixadas();
+}
+function removerMensagemDoChat(id) {
+  mensagensDoChat.delete(id);
+  chatMsgs.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.remove();
+  if (contextoDoChat?.mensagem.id === id) limparContextoDoChat();
+  atualizarFixadas();
+  if (!mensagensDoChat.size) mostrarVazio();
+}
+function atualizarFixadas() {
+  const fixadas = [...mensagensDoChat.values()].filter(m => m.fixada);
+  const contador = document.getElementById('chatPinsCount');
+  contador.hidden = !fixadas.length; contador.textContent = String(fixadas.length);
+  const barra = document.getElementById('chatPinnedBar');
+  barra.hidden = !fixadas.length;
+  if (fixadas.length) {
+    const ultima = fixadas.at(-1);
+    barra.replaceChildren(document.createTextNode('📌 '), elemento('span', '', `${ultima.autor}: ${ultima.texto || 'Imagem'}`));
+    barra.onclick = () => focarMensagem(ultima.id);
+  }
+}
+
+function definirContextoDoChat(tipo, mensagem) {
+  contextoDoChat = { tipo, mensagem };
+  document.getElementById('chatContext').hidden = false;
+  document.getElementById('chatContextTitle').textContent = tipo === 'edicao' ? 'Editando sua mensagem' : `Respondendo a ${mensagem.autor}`;
+  document.getElementById('chatContextText').textContent = mensagem.texto || 'Imagem';
+  if (tipo === 'edicao') chatInput.value = mensagem.texto || '';
+  chatInput.focus();
+}
+function limparContextoDoChat() {
+  contextoDoChat = null;
+  document.getElementById('chatContext').hidden = true;
+}
+document.getElementById('chatContextClose').onclick = limparContextoDoChat;
 
 function mostrarVazio() {
   chatMsgs.innerHTML = '';
@@ -5161,7 +5550,15 @@ mostrarVazio();
 function enviarMensagem(texto, imagem) {
   if (!socket?.connected) { status.textContent = 'Aguarde a reconexão para enviar sua mensagem.'; return false; }
   if (!texto && !imagem) return false;
-  socket.emit('chat-message', { texto: texto || '', imagem: imagem || null });
+  if (contextoDoChat?.tipo === 'edicao') {
+    socket.emit('chat-acao', { acao: 'editar', id: contextoDoChat.mensagem.id, texto: texto || '' }, resposta => {
+      if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível editar a mensagem.';
+    });
+    limparContextoDoChat();
+  } else {
+    socket.emit('chat-message', { texto: texto || '', imagem: imagem || null, respostaA: contextoDoChat?.tipo === 'resposta' ? contextoDoChat.mensagem.id : null });
+    limparContextoDoChat();
+  }
   return true;
 }
 
@@ -5291,7 +5688,23 @@ function fecharImagem() {
 chatMsgs.addEventListener('click', (e) => {
   const img = e.target.closest('.msg-img');
   if (img && img.src) abrirImagem(img.src);
+  const botao = e.target.closest('[data-chat-action]');
+  const mensagemEl = botao?.closest('[data-message-id]');
+  const mensagem = mensagemEl && mensagensDoChat.get(mensagemEl.dataset.messageId);
+  if (!botao || !mensagem || !socket?.connected) return;
+  const acao = botao.dataset.chatAction;
+  if (acao === 'responder') definirContextoDoChat('resposta', mensagem);
+  else if (acao === 'editar') definirContextoDoChat('edicao', mensagem);
+  else if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
+  else if (acao === 'fixar') socket.emit('chat-acao', { acao, id: mensagem.id }, resposta => { if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível fixar.'; });
+  else if (acao === 'excluir' && confirm('Excluir esta mensagem para toda a sala?')) socket.emit('chat-acao', { acao, id: mensagem.id });
 });
+document.getElementById('chatPinsBtn').onclick = () => {
+  const fixadas = [...mensagensDoChat.values()].filter(m => m.fixada);
+  if (!fixadas.length) { status.textContent = 'Ainda não há mensagens fixadas.'; return; }
+  const visivel = fixadas.find(m => !chatMsgs.querySelector(`[data-message-id="${CSS.escape(m.id)}"]`)?.matches(':hover')) || fixadas[0];
+  focarMensagem(visivel.id);
+};
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) fecharImagem(); });
 lightboxImg.addEventListener('click', () => lightboxImg.classList.toggle('real'));
 lightboxFechar.onclick = fecharImagem;

@@ -253,6 +253,7 @@
     let qualidadeLocal = LK.ConnectionQuality?.Unknown ?? 'unknown';
     // Teto imposto pela conexao desta maquina. `null` = ainda nao se sabe.
     let tetoDaConexao = null;
+    let economiaDeDados = false;
     let horaDaMelhora = 0;
     // Onde cada fonte está sendo mostrada. `destaque` é o palco -- uma fonte só; `naGrade`
     // são as do modo múltiplo. A sala informa os dois e o transporte decide a camada: ele não
@@ -396,8 +397,10 @@
       // degrau de baixo. A câmera mantém três degraus e continua usando o do meio.
       const naGradeQuer = fonte === 'screen' ? V.LOW : V.MEDIUM;
       const pelaTela = onde === 'palco' ? V.HIGH : onde === 'grade' ? naGradeQuer : V.LOW;
-      if (tetoDaConexao === null || tetoDaConexao === undefined) return pelaTela;
-      return Math.min(pelaTela, tetoDaConexao);
+      const tetoEconomico = economiaDeDados ? V.LOW : null;
+      const teto = tetoDaConexao === null || tetoDaConexao === undefined ? tetoEconomico
+        : tetoEconomico === null ? tetoDaConexao : Math.min(tetoDaConexao, tetoEconomico);
+      return teto === null || teto === undefined ? pelaTela : Math.min(pelaTela, teto);
     }
 
     function aplicarCamada(par, publicacao) {
@@ -570,8 +573,9 @@
         .filter(par => !escolhidas.has(par.id))
         .sort((a, b) => ((ultimaFala.get(b.id) || 0) - (ultimaFala.get(a.id) || 0))
           || ((a.ordem.camera || 0) - (b.ordem.camera || 0)));
+      const maximo = economiaDeDados ? 2 : MAXIMO_DE_CAMERAS;
       for (const par of resto) {
-        if (escolhidas.size >= MAXIMO_DE_CAMERAS) break;
+        if (escolhidas.size >= maximo) break;
         escolhidas.add(par.id);
       }
       return escolhidas;
@@ -1102,6 +1106,11 @@
       definirExibicao,
       definirAbaVisivel,
       medirRecebimento,
+      definirEconomia(ativa) {
+        economiaDeDados = Boolean(ativa);
+        aplicarCamadaEmTodos();
+        reavaliarAssinaturas();
+      },
 
       async conectar(url, token) {
         saindoDeVez = false;

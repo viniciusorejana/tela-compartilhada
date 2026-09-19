@@ -39,6 +39,7 @@
   // a pessoa costuma usar, e só depois do primeiro ajuste aquela sala passa a ter o dela.
   let volume = 0.7;
   let mudo = false;
+  let mudoGlobal = false;
   try {
     // A chave ausente volta como `null`, e `Number(null)` é ZERO -- que passa raspando no
     // teste de faixa logo abaixo. Quem entrava pela primeira vez ficava com a mesa em 0%:
@@ -75,7 +76,7 @@
   function aplicarGanho() {
     if (!ganho) return;
     // A rampa curta evita o estalo que um corte seco no ganho produz.
-    const alvo = mudo ? 0 : volume;
+    const alvo = (mudo || mudoGlobal) ? 0 : volume;
     ganho.gain.setTargetAtTime(alvo, contexto.currentTime, 0.01);
   }
 
@@ -321,6 +322,7 @@
 
   window.NexoSoundboard = {
     abrir: abrirPainel,
+    definirMudoGlobal(ativo) { mudoGlobal = Boolean(ativo); aplicarGanho(); },
     // "Esquecer o que ajustei", em Dispositivos. Devolve a mesa ao padrão e apaga as duas
     // chaves antigas -- elas são desta mesa, e não da camada de preferências, então
     // ninguém mais pode apagá-las.

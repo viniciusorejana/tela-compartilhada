@@ -60,6 +60,29 @@ const io = new Server(server, {
   pingTimeout: 25000
 });
 const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
+// Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
+// pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
+const configuracaoPorSala = new Map();
+const pedidosDeEntradaPorSala = new Map();
+const aprovadosPorSala = new Map();
+const identidadesConhecidasPorSala = new Map();
+const configuracaoPadrao = () => ({ trancada: false, compartilharTela: true, soundboard: true, musica: true });
+function configuracaoDaSala(sala) {
+  if (!configuracaoPorSala.has(sala)) configuracaoPorSala.set(sala, configuracaoPadrao());
+  return configuracaoPorSala.get(sala);
+}
+function pedidosDaSala(sala) {
+  if (!pedidosDeEntradaPorSala.has(sala)) pedidosDeEntradaPorSala.set(sala, new Map());
+  return pedidosDeEntradaPorSala.get(sala);
+}
+function aprovadosDaSala(sala) {
+  if (!aprovadosPorSala.has(sala)) aprovadosPorSala.set(sala, new Set());
+  return aprovadosPorSala.get(sala);
+}
+function identidadesConhecidasDaSala(sala) {
+  if (!identidadesConhecidasPorSala.has(sala)) identidadesConhecidasPorSala.set(sala, new Set());
+  return identidadesConhecidasPorSala.get(sala);
+}
 // Um build por sistema, todos opcionais: o Windows é compilado aqui, e os outros dois vêm de
 // onde houver macOS e Linux para compilá-los (o electron-builder não gera .dmg no Windows).
 // Quem só tem o .exe na pasta continua servindo só o .exe, e a página mostra o que existe.
@@ -129,6 +152,24 @@ app.get('/api/sala-config', (req, res) => {
   const { sessao, credencial: credencialSessao } = preparada;
   const identidade = sessao.identidade;
   res.set('Cache-Control', 'no-store');
+
+  // Consultar uma sala inexistente não cria estado permanente: bots varrendo códigos não
+  // podem fazer estes mapas crescerem. O estado só nasce quando alguém efetivamente entra.
+  const configuracao = configuracaoPorSala.get(sala) || configuracaoPadrao();
+  const salaOcupada = Boolean(roomMembers.get(sala)?.size);
+  const jaEstaDentro = Array.from(roomMembers.get(sala)?.values() || []).some(m => m.identidade === identidade);
+  const podeRetomar = Boolean(identidadesConhecidasPorSala.get(sala)?.has(identidade));
+  if (configuracao.trancada && salaOcupada && !jaEstaDentro && !podeRetomar && !aprovadosDaSala(sala).has(identidade)) {
+    const pedidos = pedidosDaSala(sala);
+    const anterior = pedidos.get(identidade);
+    if (anterior?.estado === 'recusado') {
+      return res.status(403).json({ error: 'Seu pedido de entrada não foi aceito.', motivo: 'recusado', identidade, credencialSessao, publicUrl });
+    }
+    const pedido = anterior || { identidade, nome, em: Date.now(), estado: 'aguardando' };
+    pedidos.set(identidade, pedido);
+    io.to(roomName(sala)).emit('pedido-entrada', pedido);
+    return res.status(423).json({ error: 'A sala está trancada. Aguardando aprovação.', motivo: 'aguardando', identidade, credencialSessao, publicUrl });
+  }
 
   if (!sfu.estado.ativo) {
     return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, credencialSessao });
@@ -216,6 +257,10 @@ app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.B
   if (!CODIGO_DE_SALA.test(sala)) return res.status(400).json({ error: 'Código de sala inválido.' });
   const socketId = req.sessaoNexo.socket?.id;
   if (!socketEstaNaSala(socketId, sala)) return res.status(403).json({ error: 'Entre na sala antes de enviar sons.' });
+  const membro = roomMembers.get(sala)?.get(String(socketId));
+  if (!configuracaoDaSala(sala).soundboard && membro?.identidade !== moderacao.dono(sala)) {
+    return res.status(403).json({ error: 'A mesa de sons foi restringida por quem abriu a sala.' });
+  }
 
   req.processandoUpload = true;
   try {
@@ -772,6 +817,10 @@ io.on('connection', (socket) => {
         soundboard.limparSala(roomCode);
         musica.esquecerSala(roomCode);
         donoAnunciado.delete(roomCode);
+        configuracaoPorSala.delete(roomCode);
+        pedidosDeEntradaPorSala.delete(roomCode);
+        aprovadosPorSala.delete(roomCode);
+        identidadesConhecidasPorSala.delete(roomCode);
       }
     }
     // A saída pode mudar quem manda: se quem saiu era o dono, o mais antigo entre os que
@@ -818,6 +867,16 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const configuracao = configuracaoDaSala(roomCode);
+    const identidadeJaPresente = Array.from(roomMembers.get(roomCode)?.values() || []).some(m => m.identidade === sessao.identidade);
+    const podeRetomar = identidadesConhecidasDaSala(roomCode).has(sessao.identidade);
+    if (configuracao.trancada && roomMembers.get(roomCode)?.size && !identidadeJaPresente && !podeRetomar && !aprovadosDaSala(roomCode).has(sessao.identidade)) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'A sala está trancada e sua entrada ainda não foi aprovada.' });
+      return;
+    }
+    aprovadosDaSala(roomCode).delete(sessao.identidade);
+    pedidosDaSala(roomCode).delete(sessao.identidade);
+
     // A saida da sala anterior tem de ser anunciada com a identidade ANTIGA. Gravar a nova
     // antes faria o aviso de "fulano saiu" carregar o nome de quem acabou de chegar: os
     // outros tirariam da lista a pessoa errada e deixariam a que saiu parada la.
@@ -831,6 +890,7 @@ io.on('connection', (socket) => {
     // sala é desenhada a partir da mídia, que é chaveada por identidade, e não por socket.
     const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null }));
     membros.set(socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade });
+    identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     moderacao.entrou(roomCode, sessao.identidade);
     telemetria.entrou(socket);
 
@@ -847,6 +907,8 @@ io.on('connection', (socket) => {
         // dedução do cliente deixaria de valer no dia em que existir "moderador".
         dono: moderacao.dono(roomCode),
         podeModerar: moderacao.pode(roomCode, sessao.identidade, 'expulsar'),
+        configuracao,
+        pedidosEntrada: moderacao.pode(roomCode, sessao.identidade, 'expulsar') ? Array.from(pedidosDaSala(roomCode).values()).filter(p => p.estado === 'aguardando') : [],
         historico: historicoPorSala.get(roomCode) || [],
         musica: { disponivel: musica.disponivel(), estado: musica.instantaneo(roomCode), historico: historicoDeMusicaPorSala.get(roomCode) || [] },
         soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM }
@@ -940,16 +1002,67 @@ io.on('connection', (socket) => {
     responder({ ok: true, alcancados: alvos.length });
   });
 
+  socket.on('sala-configurar', (mudancas, callback) => {
+    const responder = r => { if (typeof callback === 'function') callback(r); };
+    const roomCode = roomCodeForSocket(socket);
+    const identidade = socket.data.identidadeDeMidia || null;
+    if (!roomCode || !moderacao.pode(roomCode, identidade, 'expulsar')) return responder({ ok: false, error: 'Só quem abriu a sala pode alterar estes controles.' });
+    const atual = configuracaoDaSala(roomCode);
+    for (const chave of ['trancada', 'compartilharTela', 'soundboard', 'musica']) {
+      if (Object.prototype.hasOwnProperty.call(mudancas || {}, chave)) atual[chave] = Boolean(mudancas[chave]);
+    }
+    io.to(roomName(roomCode)).emit('sala-configuracao', atual);
+    responder({ ok: true, configuracao: atual });
+  });
+
+  socket.on('resolver-entrada', (dados, callback) => {
+    const responder = r => { if (typeof callback === 'function') callback(r); };
+    const roomCode = roomCodeForSocket(socket);
+    const quemPede = socket.data.identidadeDeMidia || null;
+    if (!roomCode || !moderacao.pode(roomCode, quemPede, 'expulsar')) return responder({ ok: false, error: 'Sem permissão.' });
+    const identidade = String(dados?.identidade || '').slice(0, 120);
+    const pedido = pedidosDaSala(roomCode).get(identidade);
+    if (!pedido) return responder({ ok: false, error: 'Esse pedido não está mais pendente.' });
+    if (dados?.aceitar) {
+      aprovadosDaSala(roomCode).add(identidade);
+      pedidosDaSala(roomCode).delete(identidade);
+    } else {
+      pedido.estado = 'recusado';
+      pedido.em = Date.now();
+    }
+    io.to(roomName(roomCode)).emit('pedido-entrada-resolvido', { identidade, aceitar: Boolean(dados?.aceitar) });
+    responder({ ok: true });
+  });
+
+  socket.on('sinal-presenca', dados => {
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    if (!roomCode || !membro) return;
+    const presencas = new Set(['', 'hand', 'brb', 'gaming', 'quiet']);
+    if (Object.prototype.hasOwnProperty.call(dados || {}, 'presenca')) {
+      const presenca = String(dados.presenca || '');
+      if (!presencas.has(presenca)) return;
+      membro.state.presenca = presenca;
+      io.to(roomName(roomCode)).emit('presenca-atualizada', { identidade: membro.identidade, presenca });
+    }
+    const reacao = String(dados?.reacao || '');
+    if (['👍', '❤️', '😂', '👏', '🎉'].includes(reacao)) {
+      io.to(roomName(roomCode)).emit('reacao-sala', { identidade: membro.identidade, nome: membro.name, reacao });
+    }
+  });
+
   socket.on('media-state', (state) => {
     const roomCode = roomCodeForSocket(socket);
     if (!roomCode) return;
     const membros = roomMembers.get(roomCode);
     const membro = membros && membros.get(socket.id);
     if (!membro) return;
+    const dono = membro.identidade === moderacao.dono(roomCode);
     membro.state = {
+      ...membro.state,
       camera: Boolean(state?.camera),
-      screen: Boolean(state?.screen),
-      screenAudio: Boolean(state?.screenAudio),
+      screen: Boolean(state?.screen) && (configuracaoDaSala(roomCode).compartilharTela || dono),
+      screenAudio: Boolean(state?.screenAudio) && (configuracaoDaSala(roomCode).compartilharTela || dono),
       micMuted: Boolean(state?.micMuted)
     };
     socket.to(roomName(roomCode)).emit('media-state', { id: socket.id, ...membro.state });
@@ -1091,9 +1204,51 @@ io.on('connection', (socket) => {
     const imagem = (bruta.length <= TAMANHO_MAXIMO_DA_IMAGEM && IMAGEM_VALIDA.test(bruta)) ? bruta : null;
     if (!texto && !imagem) return;
 
-    const mensagem = { autor: membro.name, autorId: socket.id, texto, imagem, em: Date.now() };
+    const alvoResposta = String(dados?.respostaA || '');
+    const original = (historicoPorSala.get(roomCode) || []).find(m => m.id === alvoResposta);
+    const resposta = original ? { id: original.id, autor: original.autor, texto: String(original.texto || (original.imagem ? 'Imagem' : '')).slice(0, 140) } : null;
+    const mensagem = {
+      id: crypto.randomUUID(), autor: membro.name, autorId: membro.identidade,
+      texto, imagem, em: Date.now(), resposta, reacoes: {}, fixada: false
+    };
     guardarNoHistorico(roomCode, mensagem);
     io.to(roomName(roomCode)).emit('chat-mensagem', mensagem);
+  });
+
+  socket.on('chat-acao', (dados, callback) => {
+    const responder = r => { if (typeof callback === 'function') callback(r); };
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    const lista = historicoPorSala.get(roomCode) || [];
+    const mensagem = lista.find(m => m.id === String(dados?.id || ''));
+    if (!roomCode || !membro || !mensagem) return responder({ ok: false, error: 'Mensagem não encontrada.' });
+    const acao = String(dados?.acao || '');
+    const ehDono = moderacao.pode(roomCode, membro.identidade, 'expulsar');
+    if (acao === 'reagir') {
+      const emoji = String(dados?.emoji || '');
+      if (!['👍', '❤️', '😂', '👏', '🎉'].includes(emoji)) return responder({ ok: false });
+      mensagem.reacoes ||= {};
+      const pessoas = new Set(mensagem.reacoes[emoji] || []);
+      pessoas.has(membro.identidade) ? pessoas.delete(membro.identidade) : pessoas.add(membro.identidade);
+      mensagem.reacoes[emoji] = Array.from(pessoas);
+    } else if (acao === 'editar') {
+      if (mensagem.autorId !== membro.identidade) return responder({ ok: false, error: 'Você só pode editar suas mensagens.' });
+      const texto = String(dados?.texto || '').trim().slice(0, TAMANHO_MAXIMO_DO_TEXTO);
+      if (!texto) return responder({ ok: false, error: 'A mensagem não pode ficar vazia.' });
+      mensagem.texto = texto;
+      mensagem.editada = true;
+    } else if (acao === 'excluir') {
+      if (mensagem.autorId !== membro.identidade && !ehDono) return responder({ ok: false, error: 'Sem permissão.' });
+      historicoPorSala.set(roomCode, lista.filter(m => m.id !== mensagem.id));
+      io.to(roomName(roomCode)).emit('chat-removida', { id: mensagem.id });
+      return responder({ ok: true });
+    } else if (acao === 'fixar') {
+      if (!ehDono) return responder({ ok: false, error: 'Só quem abriu a sala pode fixar mensagens.' });
+      if (!mensagem.fixada && lista.filter(m => m.fixada).length >= 5) return responder({ ok: false, error: 'A sala já tem cinco mensagens fixadas.' });
+      mensagem.fixada = !mensagem.fixada;
+    } else return responder({ ok: false, error: 'Ação desconhecida.' });
+    io.to(roomName(roomCode)).emit('chat-atualizada', mensagem);
+    responder({ ok: true, mensagem });
   });
 
   // ---------- Canal de musica ----------
@@ -1106,6 +1261,9 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     const membro = roomMembers.get(roomCode)?.get(socket.id);
     if (!membro) return;
+    if (!configuracaoDaSala(roomCode).musica && membro.identidade !== moderacao.dono(roomCode)) {
+      return socket.emit('musica-mensagem', { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, texto: 'Quem abriu a sala restringiu novos pedidos de música.', em: Date.now() });
+    }
 
     const texto = String(dados?.texto || '').slice(0, 400).trim();
     if (!texto) return;
@@ -1153,6 +1311,7 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     const membro = roomMembers.get(roomCode)?.get(socket.id);
     if (!membro) return;
+    if (!configuracaoDaSala(roomCode).soundboard && membro.identidade !== moderacao.dono(roomCode)) return;
     const som = soundboard.obter(roomCode, dados?.id);
     if (!som) return;
 

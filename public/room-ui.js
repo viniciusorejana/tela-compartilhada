@@ -145,7 +145,8 @@
         const state = document.createElement('span');
         // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
-        state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : person.state.micMuted ? '' : 'voz';
+        const presencas = { hand: '✋', brb: '☕', gaming: '🎮', quiet: '🔇' };
+        state.textContent = person.semConexao ? 'sem conexão' : person.state.screen ? 'LIVE' : presencas[person.state.presenca] || (person.state.micMuted ? '' : 'voz');
         row.append(avatar, name, state);
         // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
         // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
