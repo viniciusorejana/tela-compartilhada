@@ -129,6 +129,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .stage-label { left:13px; padding:7px 11px; font-size:11px; }
 .stage-controls { right:13px; display:flex; align-items:center; gap:1px; padding:3px; }
 .stage-controls button { color:var(--text); background:transparent; padding:5px 9px; }
+/* Um `<svg>` é inline por padrão, e um elemento inline reserva o espaço do descender da
+   linha abaixo de si: o botão fica alguns pixels mais alto que os vizinhos e o desenho sobe
+   dentro dele. Era o que deixava o vídeo compacto torto no meio de uma fileira alinhada --
+   e cada ícone novo repetia o defeito até alguém lembrar da regra própria. */
+.stage-controls svg { display:block; }
 #zoomLevelLabel { min-width:32px; font-size:10px; text-align:center; color:var(--muted); }
 /* O som de quem está no palco se ajusta aqui mesmo. A divisória só existe quando o controle
    existe: [hidden] some da tela, mas continua casando o seletor irmão. */
@@ -750,7 +755,6 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
   .app.foco-chat.barra-recolhida,.app.foco-chat.barra-recolhida.sem-chat { grid-template-columns:0 minmax(0,1fr); }
 }
 @media(max-width:760px) {
-  .audience-toggle span { display:none; }
   .app.foco-chat,.app.foco-chat.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-areas:"topo" "chat" "barra"; }
   .app.foco-chat .chat { width:100%; }
 }
@@ -767,34 +771,95 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .connection-quality[data-quality="excellent"] i,.connection-quality[data-quality="good"] i { background:#4ccc8a; box-shadow:0 0 0 3px #4ccc8a24; }
 .connection-quality[data-quality="poor"] i { background:#f2b84b; box-shadow:0 0 0 3px #f2b84b24; }
 .connection-quality[data-quality="lost"] i { background:#ef6d7b; box-shadow:0 0 0 3px #ef6d7b24; }
-.chat-pinned-bar { margin:8px 10px 0; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid #a092ff32; border-radius:8px; background:#a092ff0d; color:#c9c1ea; font-size:11px; cursor:pointer; overflow:hidden; }
-.chat-pinned-bar[hidden],.chat-context[hidden] { display:none; }
+.chat-pinned-bar { margin:9px 12px 0; padding:7px 10px; display:flex; align-items:center; gap:7px; border:1px solid #a092ff2b; border-radius:9px; background:#a092ff0d; color:#b6aed1; font-size:11px; text-align:left; cursor:pointer; overflow:hidden; transition:background .14s,border-color .14s; }
+.chat-pinned-bar:hover { border-color:#a092ff4d; background:#a092ff16; }
+.chat-pinned-bar svg { flex:none; width:13px; height:13px; color:#a396e8; }
+.chat-pinned-bar strong { flex:none; color:#ccc4ea; font-weight:650; }
 .chat-pinned-bar span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.chat-context { margin:8px 10px 0; padding:8px 10px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 8px; border-left:3px solid var(--accent); border-radius:6px; background:#12131bd9; }
+.chat-pinned-bar[hidden],.chat-context[hidden] { display:none; }
+/* "Respondendo a" e "Editando" encostam no compositor de propósito: são o cabeçalho do que
+   está prestes a ser enviado, e não mais um aviso solto no meio da coluna. A borda de cima
+   arredonda, a de baixo não -- as duas peças leem como uma só. */
+.chat-context { position:relative; margin:9px 12px -8px; padding:8px 11px 15px; display:flex; align-items:center; gap:9px; border:1px solid #b9a9e01f; border-bottom:0; border-radius:10px 10px 0 0; background:#22232f; }
+.chat-context::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:10px 0 0 0; background:var(--accent); }
+.chat-context>div { flex:1; min-width:0; display:grid; gap:2px; }
 .chat-context strong,.chat-context span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.chat-context strong { font-size:11px; color:#d8d2ec; }
-.chat-context span { font-size:10px; color:var(--muted); }
-.chat-context button { grid-column:2; grid-row:1/3; padding:3px 7px; background:transparent; color:var(--muted); }
+.chat-context strong { font-size:10px; font-weight:650; color:#a99cf0; letter-spacing:.02em; }
+.chat-context strong b { color:#d9d2ff; font-weight:700; }
+.chat-context span { font-size:11px; color:var(--muted); }
+.chat-context button { flex:none; padding:5px 8px; background:transparent; color:var(--muted); font-size:12px; }
+.chat-context button:hover:not(:disabled) { background:#ffffff12; color:var(--text); }
+.app.foco-chat .chat-context { width:calc(100% - 24px); max-width:936px; margin-inline:auto; }
+/* As ações de uma mensagem FLUTUAM ACIMA dela, encaixadas na folga de 20px que separa uma
+   mensagem da outra. Encostadas no topo da própria mensagem, como estavam, elas passavam por
+   cima do nome, da hora e da citação -- e a mensagem desaparecia debaixo dos botões
+   exatamente quando o ponteiro chegava nela para lê-la. */
 .msg { position:relative; }
 .msg:hover .msg-actions,.msg:focus-within .msg-actions { opacity:1; pointer-events:auto; }
-.msg-actions { position:absolute; right:6px; top:2px; z-index:2; display:flex; gap:2px; opacity:0; pointer-events:none; padding:2px; border:1px solid var(--line); border-radius:7px; background:#171822; box-shadow:0 5px 18px #0007; }
-.msg-actions button { min-width:27px; min-height:25px; padding:3px 6px; background:transparent; color:#bbb6ce; font-size:11px; }
-.msg-reply { grid-column:2; margin:2px 0 5px; padding:5px 7px; border-left:2px solid #8f83de; border-radius:3px; background:#ffffff07; color:#aaa5ba; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.msg-reactions { grid-column:2; display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
-.msg-reactions button { padding:3px 7px; border:1px solid #ffffff18; border-radius:10px; background:#ffffff09; color:#ddd8ec; font-size:11px; }
-.msg-reactions button.minha { border-color:#9488ea; background:#9488ea25; }
-.msg.mencionou { margin-inline:4px; border-left:3px solid #d4ad4f; background:#d4ad4f0c; }
+.msg-actions { position:absolute; right:2px; top:-13px; z-index:3; display:flex; gap:1px; opacity:0; pointer-events:none; padding:2px; border:1px solid #b9a9e01f; border-radius:9px; background:var(--bg-3); box-shadow:0 6px 18px #0007; transition:opacity .13s; }
+.msg-actions button { display:grid; place-items:center; width:27px; height:25px; padding:0; border-radius:7px; background:transparent; color:#b6b0ca; }
+.msg-actions button:hover:not(:disabled) { background:#ffffff14; color:var(--text); }
+.msg-actions svg { display:block; }
+/* Um botão que só tem ícone centra o desenho pela grade, e não pela linha de base do texto:
+   um caractere herda a altura de linha da fonte e nasce torto dentro do quadrado. */
+.icone-so { display:inline-grid; place-items:center; }
+.icone-so svg { display:block; }
+/* O menu de reagir e o de "mais ações" são o MESMO elemento, movido até a mensagem clicada:
+   cem mensagens no histórico não precisam de cem paletas escondidas no DOM. */
+.msg-menu { position:fixed; z-index:106; display:flex; gap:3px; padding:6px; border:1px solid #b9a9e024; border-radius:11px; background:#1e1f2b; box-shadow:0 14px 40px #000a; }
+.msg-menu[data-tipo="mais"] { flex-direction:column; min-width:172px; gap:1px; padding:5px; }
+.msg-menu button { padding:8px 10px; border-radius:7px; background:transparent; color:var(--text); font-size:12px; font-weight:500; text-align:left; }
+.msg-menu button:hover:not(:disabled) { background:#ffffff0f; }
+.msg-menu button.perigo { color:#ff98a4; }
+.msg-menu button.perigo:hover:not(:disabled) { background:#ef6f7d24; }
+.msg-menu-emoji { width:36px; height:36px; display:grid; place-items:center; padding:0; font-size:19px; }
+.msg-menu-emoji:hover:not(:disabled) { background:#ffffff12; transform:scale(1.14); }
+.msg-menu-emoji.minha { background:#8879f633; box-shadow:inset 0 0 0 1px #a092ff66; }
+/* A lista de fixadas: com mais de uma, quem clica no alfinete quer escolher, não percorrer.
+   Cada linha mostra autor e trecho, e quem modera solta o alfinete ali mesmo. */
+.pins-menu { flex-direction:column; gap:1px; width:min(310px,calc(100vw - 24px)); max-height:min(60vh,340px); overflow-y:auto; padding:9px; }
+.pins-menu>strong { padding:1px 4px 6px; color:#9a94ad; font-size:9px; font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+.pin-item { display:flex; align-items:stretch; gap:2px; }
+.pin-ir { flex:1; min-width:0; display:grid; gap:2px; padding:7px 9px; border-radius:8px; background:transparent; text-align:left; }
+.pin-ir:hover:not(:disabled) { background:#ffffff0f; }
+.pin-ir strong { color:#b3a6f5; font-size:10px; font-weight:650; }
+.pin-ir span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); font-size:11px; font-weight:400; }
+.pin-soltar { flex:none; display:grid; place-items:center; width:30px; padding:0; border-radius:8px; background:transparent; color:#8f8aa3; }
+.pin-soltar:hover:not(:disabled) { background:#ef6f7d24; color:#ff98a4; }
+.pin-soltar svg { display:block; }
+/* A citação fica entre o nome e o texto, e o autor dela puxa a cor de destaque: é o que o
+   olho procura para saber a quem a mensagem responde antes de ler o resto. */
+.msg-reply { grid-column:2; display:flex; gap:6px; margin:1px 0 4px; padding:4px 9px; border-left:2px solid var(--accent); border-radius:0 6px 6px 0; background:#ffffff07; color:#9c95af; font-size:10px; text-align:left; overflow:hidden; white-space:nowrap; }
+.msg-reply:hover:not(:disabled) { background:#ffffff0d; color:#b6afc6; }
+.msg-reply-autor { flex:none; color:#b3a6f5; font-weight:650; }
+.msg-reply>:last-child { overflow:hidden; text-overflow:ellipsis; }
+.msg-reactions { grid-column:2; display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.msg-reactions button { display:flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid #ffffff14; border-radius:999px; background:#ffffff09; color:#cdc7dd; font-size:11px; font-weight:600; line-height:1.7; }
+.msg-reactions button:hover:not(:disabled) { border-color:#ffffff2e; background:#ffffff14; }
+.msg-reactions button.minha { border-color:#8879f6; background:#8879f628; color:#ded8ff; }
+/* Menção: a faixa dourada vale para a mensagem inteira, avatar incluído, e sem empurrar a
+   linha para o lado -- com `margin-inline` ela ficava desalinhada das vizinhas. */
+.msg.mencionou { padding:6px 9px 7px; margin:-6px -9px -7px; border-radius:9px; box-shadow:inset 3px 0 0 #d4ad4f; background:#d4ad4f0c; }
 .msg.editada .msg-hora::after { content:' · editada'; }
-.unread-divider { display:flex; align-items:center; gap:8px; color:#ef7888; font-size:10px; font-weight:700; text-transform:uppercase; }
-.unread-divider::before,.unread-divider::after { content:''; height:1px; flex:1; background:#ef788866; }
-#chatPinsCount { margin-left:3px; padding:1px 4px; border-radius:8px; background:#786bd0; color:white; font-size:9px; }
+.unread-divider { display:flex; align-items:center; gap:8px; color:var(--danger); font-size:9px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+.unread-divider::before,.unread-divider::after { content:''; height:1px; flex:1; background:#f0758359; }
+#chatPinsCount { margin-left:4px; padding:1px 5px; border-radius:8px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; }
+.chat-pins-btn { display:inline-flex; align-items:center; }
 .toggle-line { display:flex; align-items:center; justify-content:space-between; gap:14px; }
 .toggle-line span { display:grid; gap:3px; }
 .toggle-line small { color:var(--muted); font-weight:400; }
-.room-security { display:grid; gap:10px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+/* Os títulos daqui seguem os de "Bloqueados agora", logo abaixo no mesmo painel: caixa alta
+   pequena e espaçada. Sem isso, "Controles da sala" e "Pedidos de entrada" apareciam como
+   negrito comum e o painel parecia costurado de duas peças diferentes. */
+.room-security { display:grid; gap:11px; margin-top:16px; padding-top:15px; border-top:1px solid var(--line); }
+.room-security>strong { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
+/* `.field label` é `display:block` e tem especificidade maior que `.toggle-line`: sem esta
+   linha, o interruptor do push-to-talk e o da economia de dados caíam para baixo do texto,
+   em duas linhas, enquanto os iguais a eles na moderação ficavam certos. */
+.field label.toggle-line { display:flex; margin-bottom:0; font-size:13px; color:var(--text); cursor:pointer; }
 .toggle-line input[type="checkbox"] { appearance:none; -webkit-appearance:none; flex:0 0 auto; width:38px; height:22px; padding:0; border:1px solid #ffffff18; border-radius:999px; background:#11121a; cursor:pointer; position:relative; transition:background .16s,border-color .16s; }
 .toggle-line input[type="checkbox"]::after { content:''; position:absolute; width:16px; height:16px; left:2px; top:2px; border-radius:50%; background:#8d8b9b; box-shadow:0 1px 3px #0008; transition:transform .16s,background .16s; }
-.toggle-line input[type="checkbox"]:checked { border-color:#8170d8; background:#6e5fc2; }
+.toggle-line input[type="checkbox"]:checked { border-color:var(--accent-hi); background:var(--accent); }
 .toggle-line input[type="checkbox"]:checked::after { transform:translateX(16px); background:white; }
 .toggle-line input[type="checkbox"]:focus-visible { outline:2px solid var(--accent-hi); outline-offset:2px; }
 .toggle-line input[type="checkbox"]:disabled { opacity:.45; cursor:not-allowed; }
@@ -802,30 +867,66 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .ptt-field .toggle-line strong { font-size:11px; }
 .ptt-field .toggle-line small,.shortcut-hint { font-size:9px; line-height:1.5; }
 .join-requests { display:grid; gap:7px; }
-.join-request { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:6px; padding:8px; border-radius:7px; background:#ffffff07; font-size:11px; }
-.join-request button { padding:6px 8px; }
+.join-requests:empty { display:none; }
+.join-requests>strong { margin-top:5px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
+.join-request { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:6px; padding:7px 8px 7px 11px; border:1px solid #a092ff26; border-radius:8px; background:#a092ff0d; font-size:12px; }
+.join-request>span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.join-request button { padding:6px 10px; font-size:11px; }
 .waiting-card { text-align:center; }
 .waiting-card .modal-actions { justify-content:center; }
 .waiting-spinner { display:block; width:32px; height:32px; margin:0 auto 14px; border:3px solid #ffffff20; border-top-color:var(--accent); border-radius:50%; animation:girar .8s linear infinite; }
 @keyframes girar { to { transform:rotate(360deg); } }
-.presence-menu { position:fixed; left:78px; bottom:76px; z-index:105; width:220px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#181923; box-shadow:0 14px 45px #0009; }
-.presence-menu>strong { display:block; margin:3px 4px 7px; color:#aaa5ba; font-size:10px; text-transform:uppercase; }
-.presence-options { display:grid; gap:3px; margin-bottom:10px; }
-.presence-options button { text-align:left; background:transparent; color:var(--text); }
-.presence-options button.ativo { background:#8f83de28; color:#ded8ff; }
-.presence-reactions { display:flex; gap:5px; }
-.presence-reactions button { flex:1; padding:7px 3px; font-size:17px; }
-.presence-badge { position:absolute; right:6px; top:6px; z-index:2; padding:2px 5px; border-radius:9px; background:#171821dc; font-size:11px; cursor:help; }
+/* Sem `left`/`bottom` fixos: quem posiciona é o JS, ancorando no botão que abriu. A barra
+   lateral recolhe, e no celular ela é uma gaveta -- uma distância fixa da quina deixava o
+   menu boiando longe do que o chamou. */
+.presence-menu { position:fixed; z-index:105; width:220px; padding:12px; border:1px solid #b9a9e024; border-radius:12px; background:#1e1f2b; box-shadow:0 16px 45px #000a; }
+.presence-menu>strong { display:block; margin:3px 4px 7px; color:#9a94ad; font-size:9px; font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+.presence-options { display:grid; gap:2px; margin-bottom:13px; }
+.presence-options button { padding:8px 10px; text-align:left; background:transparent; color:var(--text); font-size:12px; font-weight:500; }
+.presence-options button:hover:not(:disabled) { background:#ffffff0f; }
+.presence-options button.ativo { background:#8879f62e; color:#ded8ff; box-shadow:inset 0 0 0 1px #a092ff4d; }
+.presence-reactions { display:flex; gap:4px; margin-bottom:0; }
+.presence-reactions button { flex:1; padding:8px 3px; border-radius:9px; background:#ffffff08; font-size:18px; line-height:1; transition:background .14s,transform .14s; }
+.presence-reactions button:hover:not(:disabled) { background:#ffffff16; transform:translateY(-2px) scale(1.06); }
+.presence-badge { position:absolute; right:6px; top:6px; z-index:2; display:grid; place-items:center; min-width:22px; height:22px; padding:0 4px; border:1px solid #ffffff1a; border-radius:8px; background:#14151dea; font-size:11px; line-height:1; cursor:help; }
+
+/* ---------- Reações que atravessam a sala ----------
+   Três propriedades de transformação independentes, em duas camadas: a de fora sobe
+   (`transform`), a de dentro gingue (`translate`), balança (`rotate`) e estoura na entrada
+   (`scale`). Empilhar tudo num `transform` só obrigaria as quatro a dividirem a MESMA curva
+   de tempo, e era isso que fazia a reação subir como se estivesse num trilho. O descasamento
+   entre elas -- sobe acelerando, ginga devagar -- é o que dá o flutuar. */
 .room-reactions { position:fixed; inset:0; z-index:95; pointer-events:none; overflow:hidden; }
-.room-reaction { position:fixed; left:var(--reaction-x); top:var(--reaction-y); color:white; font-size:34px; line-height:1; filter:drop-shadow(0 5px 7px #0009); animation:reagir 2.2s cubic-bezier(.2,.75,.25,1) forwards; will-change:transform,opacity; }
-@keyframes reagir { 0% { opacity:0; transform:translate(-50%,10px) scale(.65) rotate(-8deg); } 14% { opacity:1; transform:translate(-50%,-4px) scale(1.15) rotate(5deg); } 35% { transform:translate(-50%,-30px) scale(1) rotate(-3deg); } 100% { opacity:0; transform:translate(-50%,-145px) scale(1.25) rotate(9deg); } }
+.room-reaction { position:fixed; left:var(--reaction-x); top:var(--reaction-y); display:grid; justify-items:center; gap:4px; animation:reacao-sobe var(--reaction-duracao,2.3s) cubic-bezier(.17,.62,.3,1) forwards; will-change:transform,opacity; }
+.room-reaction-emoji { display:block; font-size:34px; line-height:1; filter:drop-shadow(0 6px 9px #000a); transform-origin:50% 85%;
+  animation:reacao-ginga calc(var(--reaction-duracao,2.3s) / 2.4) ease-in-out infinite alternate,
+            reacao-balanca calc(var(--reaction-duracao,2.3s) / 3.1) ease-in-out infinite alternate,
+            reacao-estoura .46s cubic-bezier(.2,1.7,.45,1) backwards; }
+.room-reaction-nome { max-width:140px; padding:2px 7px; border-radius:999px; background:#14151deb; color:#d3cde6; font-size:9px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:reacao-legenda calc(var(--reaction-duracao,2.3s) * .62) ease-out forwards; }
+@keyframes reacao-sobe {
+  0% { opacity:0; transform:translate(-50%,8px); }
+  9% { opacity:1; }
+  70% { opacity:1; }
+  100% { opacity:0; transform:translate(-50%,calc(var(--reaction-subida,190px) * -1)); }
+}
+@keyframes reacao-ginga { from { translate:calc(var(--reaction-deriva,22px) * -1) 0; } to { translate:var(--reaction-deriva,22px) 0; } }
+@keyframes reacao-balanca { from { rotate:calc(var(--reaction-giro,12deg) * -1); } to { rotate:var(--reaction-giro,12deg); } }
+@keyframes reacao-estoura { 0% { scale:.35; } 100% { scale:var(--reaction-escala,1); } }
+@keyframes reacao-legenda { 0% { opacity:0; } 18% { opacity:1; } 72% { opacity:1; } 100% { opacity:0; } }
+/* Quem pediu menos movimento continua vendo QUEM reagiu e COM O QUÊ -- some só o voo. A
+   animação precisa existir mesmo aqui: é o `animationend` dela que remove o elemento. */
+@keyframes reacao-discreta { 0% { opacity:0; transform:translate(-50%,0) scale(.9); } 12%,68% { opacity:1; transform:translate(-50%,-14px) scale(1); } 100% { opacity:0; transform:translate(-50%,-22px) scale(1); } }
+@media(prefers-reduced-motion:reduce) {
+  .room-reaction { animation:reacao-discreta 1.9s ease-out forwards; }
+  .room-reaction-emoji,.room-reaction-nome { animation:none; }
+}
 .join-request-notice { position:fixed; z-index:110; right:18px; top:72px; width:min(350px,calc(100vw - 28px)); display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #a092ff45; border-radius:12px; background:#1b1b28f5; box-shadow:0 16px 45px #0009; }
 .join-request-notice[hidden] { display:none; }
 .join-request-notice>div { display:grid; flex:1; gap:3px; min-width:0; }
 .join-request-notice strong { font-size:12px; }
 .join-request-notice span { color:var(--muted); font-size:10px; }
 .join-request-notice button { flex:none; padding:8px 10px; }
-#joinRequestCount { display:inline-grid; place-items:center; min-width:17px; height:17px; margin-left:4px; padding:0 4px; border-radius:9px; background:#ef7187; color:white; font-size:9px; }
+#joinRequestCount { display:inline-grid; place-items:center; min-width:17px; height:17px; margin-left:4px; padding:0 4px; border-radius:9px; background:var(--danger); color:#26202f; font-size:9px; font-weight:750; }
 #joinRequestCount[hidden] { display:none; }
 .app.compacto-local { grid-template-columns:minmax(0,1fr)!important; grid-template-areas:"palco"!important; }
 .app.compacto-local>.topbar,.app.compacto-local>.room-sidebar,.app.compacto-local>.chat,.app.compacto-local>.control-bar,.app.compacto-local .participants-section,.app.compacto-local .status-line { display:none!important; }
@@ -834,9 +935,25 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .app.compacto-local .stage-controls { opacity:1!important; transform:none!important; pointer-events:auto!important; }
 .app.compacto-local #compactBtn { position:fixed; right:12px; bottom:12px; z-index:120; display:block; background:#181923; }
 .app.economia-dados .connection-quality::after { content:'Eco'; padding:2px 5px; border-radius:8px; background:#56b88722; color:#70d9a3; font-size:8px; }
+/* Dois botões novos entraram na barra de cima, e ela ficou apertada antes de chegar ao
+   celular: no meio do caminho o nome da sala é que encolhia, virando "teste-v...". Os
+   rótulos de "Conexão" e "Plateia" saem primeiro -- os ícones continuam dizendo o que são,
+   e o nome da sala volta a caber inteiro. */
+/* Dois botões novos entraram na barra de cima, e ela ficou apertada antes de chegar ao
+   celular: no meio do caminho o nome da sala é que encolhia, virando "teste-v...". Os
+   rótulos de "Conexão" e "Plateia" saem primeiro -- os ícones continuam dizendo o que são,
+   e o nome da sala volta a caber inteiro. */
+@media(max-width:1250px) {
+  .connection-quality span,.audience-toggle span { display:none; }
+  .connection-quality,.audience-toggle { padding:8px 9px; }
+}
 @media(max-width:760px) {
-  .connection-quality span { display:none; }
-  .presence-menu { left:12px; bottom:calc(72px + env(safe-area-inset-bottom)); width:min(230px,calc(100vw - 24px)); }
-  .msg-actions { opacity:1; pointer-events:auto; }
+  .presence-menu { width:min(230px,calc(100vw - 24px)); }
+  /* Sem ponteiro não há `:hover`, então as ações precisam estar à vista -- mas apagadas, para
+     não transformar cada mensagem da conversa num par de botões disputando a leitura. */
+  .msg-actions { opacity:.5; pointer-events:auto; }
+  .msg-actions:active,.msg:focus-within .msg-actions { opacity:1; }
+  .msg-actions button { width:30px; height:28px; }
+  .msg-menu-emoji { width:42px; height:42px; font-size:21px; }
   #deafenBtn { min-width:45px; }
 }

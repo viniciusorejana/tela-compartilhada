@@ -75,6 +75,14 @@ function pedidosDaSala(sala) {
   if (!pedidosDeEntradaPorSala.has(sala)) pedidosDeEntradaPorSala.set(sala, new Map());
   return pedidosDeEntradaPorSala.get(sala);
 }
+// A fila de entrada é assunto de quem modera. Mandá-la para a sala inteira entregava a todos
+// o nome de quem está do lado de fora -- alguém que nem foi aceito ainda, e que pode acabar
+// recusado. O cliente já descartava o evento para os demais; o que faltava era não enviá-lo.
+function avisarQuemModera(sala, evento, dados) {
+  for (const [socketId, membro] of roomMembers.get(sala) || []) {
+    if (moderacao.pode(sala, membro.identidade, 'expulsar')) io.to(socketId).emit(evento, dados);
+  }
+}
 function aprovadosDaSala(sala) {
   if (!aprovadosPorSala.has(sala)) aprovadosPorSala.set(sala, new Set());
   return aprovadosPorSala.get(sala);
@@ -165,9 +173,14 @@ app.get('/api/sala-config', (req, res) => {
     if (anterior?.estado === 'recusado') {
       return res.status(403).json({ error: 'Seu pedido de entrada não foi aceito.', motivo: 'recusado', identidade, credencialSessao, publicUrl });
     }
+    // Quem espera repergunta a cada dois segundos. Reanunciar o mesmo pedido a cada resposta
+    // enchia a sala inteira de eventos idênticos enquanto a pessoa estivesse na fila; o
+    // anúncio é do pedido NOVO, e o cliente já mantém o que está pendente na tela.
     const pedido = anterior || { identidade, nome, em: Date.now(), estado: 'aguardando' };
-    pedidos.set(identidade, pedido);
-    io.to(roomName(sala)).emit('pedido-entrada', pedido);
+    if (!anterior) {
+      pedidos.set(identidade, pedido);
+      avisarQuemModera(sala, 'pedido-entrada', pedido);
+    }
     return res.status(423).json({ error: 'A sala está trancada. Aguardando aprovação.', motivo: 'aguardando', identidade, credencialSessao, publicUrl });
   }
 
@@ -192,7 +205,7 @@ app.delete('/api/sala-pedido', (req, res) => {
   const pedidos = pedidosDeEntradaPorSala.get(sala);
   if (pedidos?.delete(sessao.identidade)) {
     if (!pedidos.size) pedidosDeEntradaPorSala.delete(sala);
-    io.to(roomName(sala)).emit('pedido-entrada-cancelado', { identidade: sessao.identidade });
+    avisarQuemModera(sala, 'pedido-entrada-cancelado', { identidade: sessao.identidade });
   }
   res.status(204).end();
 });
@@ -1045,7 +1058,7 @@ io.on('connection', (socket) => {
       pedido.estado = 'recusado';
       pedido.em = Date.now();
     }
-    io.to(roomName(roomCode)).emit('pedido-entrada-resolvido', { identidade, aceitar: Boolean(dados?.aceitar) });
+    avisarQuemModera(roomCode, 'pedido-entrada-resolvido', { identidade, aceitar: Boolean(dados?.aceitar) });
     responder({ ok: true });
   });
 

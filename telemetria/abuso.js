@@ -17,6 +17,15 @@ const REGRAS = Object.freeze({
   'chat-message': { sessao: 40, sala: 240, rajada: [6, 2000] },
   'chat-imagem': { sessao: 4, sala: 40 },
   'chat-bytes': { sessao: 4 * MiB, sala: 20 * MiB },
+  // Reagir, responder e fixar são baratos por unidade e naturalmente frequentes; o que eles
+  // não podem é virar enxurrada. Sem regra própria caíam em 'outros', que não tem teto
+  // COLETIVO -- e o teto coletivo é justamente o que protege a sala do dedo preso no botão.
+  'chat-acao': { sessao: 45, sala: 220, rajada: [10, 2000] },
+  // A reação que atravessa a sala é a única daqui que vira animação na tela de todo mundo,
+  // então ela é a mais apertada: cabe comemorar, não cabe metralhar.
+  'sinal-presenca': { sessao: 20, sala: 90, rajada: [5, 3000] },
+  'sala-configurar': { sessao: 20, sala: 60 },
+  'resolver-entrada': { sessao: 30, sala: 90 },
   'join-room': { sessao: 6, sala: 120, longa: [20, 10 * MINUTO] },
   'leave-room': { sessao: Infinity },
   'media-state': { sessao: 30, sala: 600 },

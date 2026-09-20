@@ -1836,19 +1836,17 @@ function alternarMic() {
 micBtn.onclick = alternarMic;
 
 // Ensurdecer é local: corta tudo que chega e, como no Discord, também fecha o microfone.
-// Cada elemento lembra o mudo anterior para não desfazer uma escolha individual ao voltar.
+//
+// Ele NÃO varre o DOM apagando `muted` elemento a elemento. Essa era a primeira versão, e ela
+// se desfazia sozinha: `definirAudioDaVoz` e `atualizarAudioDeTela` reescrevem `muted` a cada
+// mudança de mídia da sala, então bastava alguém ligar a câmera para o som voltar. Guardar o
+// mudo anterior num `dataset` tinha o defeito simétrico -- calar uma pessoa durante o
+// ensurdecimento era esquecido ao voltar. Aqui o ensurdecimento é só mais uma condição de
+// quem JÁ decide o mudo, e reaplicá-lo é reexecutar essas duas funções.
 const deafenBtn = document.getElementById('deafenBtn');
 function aplicarEnsurdecimento() {
-  document.querySelectorAll('audio,video').forEach(mid => {
-    if (mid === stageVideo || mid.muted) {
-      if (ensurdecido && mid.dataset.nexoDeafen === undefined) mid.dataset.nexoDeafen = mid.muted ? '1' : '0';
-    } else if (ensurdecido && mid.dataset.nexoDeafen === undefined) mid.dataset.nexoDeafen = '0';
-    if (ensurdecido) mid.muted = true;
-    else if (mid.dataset.nexoDeafen !== undefined) {
-      mid.muted = mid.dataset.nexoDeafen === '1';
-      delete mid.dataset.nexoDeafen;
-    }
-  });
+  tiles.forEach((_refs, id) => definirAudioDaVoz(id, { lembrar: false }));
+  atualizarAudioDeTela();
   window.NexoSoundboard?.definirMudoGlobal?.(ensurdecido);
 }
 function alternarEnsurdecimento() {
@@ -1858,13 +1856,14 @@ function alternarEnsurdecimento() {
     if (!micMuted) alternarMic();
   } else if (!micAntesDeEnsurdecer && micTrack && micMuted && !pushToTalkAtivo) alternarMic();
   aplicarEnsurdecimento();
+  // O rótulo é o nome fixo da coisa, como em "Microfone" e "Câmera"; quem conta o estado é o
+  // ícone, que aparece cortado, e o fundo de atenção que o microfone fechado já usa.
   deafenBtn.setAttribute('aria-pressed', String(ensurdecido));
-  deafenBtn.classList.toggle('desligado', !ensurdecido);
-  deafenBtn.textContent = ensurdecido ? 'Surdo' : 'Ouvir';
+  deafenBtn.classList.toggle('secondary', !ensurdecido);
   deafenBtn.title = ensurdecido ? 'Voltar a ouvir a sala' : 'Ensurdecer: silenciar toda a sala';
+  deafenBtn.setAttribute('aria-label', deafenBtn.title);
 }
 deafenBtn.onclick = alternarEnsurdecimento;
-new MutationObserver(() => { if (ensurdecido) aplicarEnsurdecimento(); }).observe(document.body, { childList: true, subtree: true });
 
 const pushToTalk = document.getElementById('pushToTalk');
 try { pushToTalkAtivo = localStorage.getItem('sala.pushToTalk') === '1'; } catch (_) {}
@@ -1875,6 +1874,17 @@ pushToTalk.addEventListener('change', () => {
   if (pushToTalkAtivo && micTrack && !micMuted) alternarMic();
 });
 function alvoEditavel(alvo) { return Boolean(alvo?.closest?.('input,textarea,select,[contenteditable="true"]')); }
+// Fechar o microfone não pode depender de o `keyup` chegar. Alt+Tab com o Espaço apertado, um
+// clique que leva o foco para o campo do chat no meio da fala, a aba que vai para segundo
+// plano -- em todos esses casos o `keyup` nunca acontece, e o microfone ficava aberto sem
+// ninguém saber. Qualquer um desses caminhos passa por aqui.
+function soltarPushToTalk() {
+  if (!pushToTalkPressionado) return;
+  pushToTalkPressionado = false;
+  if (pushToTalkAtivo && micTrack && !micMuted) alternarMic();
+}
+window.addEventListener('blur', soltarPushToTalk);
+document.addEventListener('visibilitychange', () => { if (document.hidden) soltarPushToTalk(); });
 document.addEventListener('keydown', evento => {
   if (evento.code === 'Space' && pushToTalkAtivo && !evento.repeat && !alvoEditavel(evento.target)) {
     evento.preventDefault();
@@ -1893,12 +1903,11 @@ document.addEventListener('keydown', evento => {
   else if (tecla === 'p') { evento.preventDefault(); document.getElementById('presenceBtn').click(); }
 });
 document.addEventListener('keyup', evento => {
-  if (evento.code === 'Space' && pushToTalkAtivo && !alvoEditavel(evento.target) && micTrack && !micMuted) {
-    pushToTalkPressionado = false;
-    evento.preventDefault(); alternarMic();
-  } else if (evento.code === 'Space') {
-    pushToTalkPressionado = false;
-  }
+  if (evento.code !== 'Space') return;
+  // Soltar o Espaço fecha o microfone mesmo que o foco tenha ido parar num campo de texto
+  // entre o aperto e a soltura: o que vale é ter sido este atalho que abriu.
+  if (pushToTalkPressionado && !alvoEditavel(evento.target)) evento.preventDefault();
+  soltarPushToTalk();
 });
 
 const presenceBtn = document.getElementById('presenceBtn');
@@ -1907,35 +1916,95 @@ function atualizarPresencaNaInterface(identidade, presenca) {
   const id = identidade === myId ? 'self' : identidade;
   if (id) atualizarTile(id);
   document.dispatchEvent(new CustomEvent('room-update'));
-  presenceMenu.querySelectorAll('[data-presence]').forEach(b => b.classList.toggle('ativo', b.dataset.presence === presenca && identidade === myId));
+  // Só a MINHA escolha marca o menu. Sem esta guarda, a presença de qualquer outra pessoa
+  // passava por aqui e desmarcava os cinco botões -- o meu status sumia da lista por conta
+  // de alguém do outro lado ter pedido a palavra.
+  if (identidade !== myId) return;
+  presenceMenu.querySelectorAll('[data-presence]').forEach(b => b.classList.toggle('ativo', b.dataset.presence === presenca));
 }
+
+// ---------- Reações que atravessam a sala ----------
+//
+// A primeira versão subia em linha reta, na mesma velocidade e do mesmo pixel: três pessoas
+// reagindo juntas produziam um emoji só, grosso, piscando. O que dá vida a isto é a variação
+// -- cada reação sobe a própria altura, com a própria demora e a própria deriva lateral.
+//
+// A subida e a deriva ficam em DOIS elementos aninhados de propósito: uma transformação só
+// não consegue ter duas curvas de tempo diferentes, e é justamente o descasamento entre elas
+// (sobe acelerando, gingando devagar) que tira o movimento do trilho.
+const REACOES_SIMULTANEAS = 18;
 function mostrarReacaoDaSala({ identidade, nome, reacao }) {
   const caixa = document.getElementById('roomReactions');
+  // Teto contra o dedo preso no botão: a sala continua respondendo, e o excesso simplesmente
+  // não vira elemento. Sai a mais antiga, que já está quase no fim do percurso.
+  while (caixa.childElementCount >= REACOES_SIMULTANEAS) caixa.firstElementChild.remove();
   const id = identidade === myId ? 'self' : identidade;
   const quadradinho = tiles.get(id)?.root;
   const plateiaVisivel = !document.querySelector('.app').classList.contains('plateia-oculta');
-  const origem = plateiaVisivel && quadradinho?.getClientRects().length
-    ? quadradinho.getBoundingClientRect()
-    : stage.getBoundingClientRect();
+  const doQuadradinho = Boolean(plateiaVisivel && quadradinho?.getClientRects().length);
+  const origem = (doQuadradinho ? quadradinho : stage).getBoundingClientRect();
+  const sorteio = (minimo, maximo) => minimo + Math.random() * (maximo - minimo);
+
   const aviso = document.createElement('span');
   aviso.className = 'room-reaction';
-  aviso.textContent = reacao;
   aviso.setAttribute('role', 'img');
   aviso.setAttribute('aria-label', `${nome || 'Alguém'} reagiu com ${reacao}`);
-  const x = quadradinho && plateiaVisivel && quadradinho.getClientRects().length
-    ? origem.left + origem.width / 2
-    : origem.left + origem.width / 2 + (Math.random() - .5) * Math.min(120, origem.width / 3);
-  const y = quadradinho && plateiaVisivel && quadradinho.getClientRects().length
-    ? origem.top + origem.height * .55
-    : origem.bottom - Math.min(70, origem.height * .18);
+  const emoji = elemento('span', 'room-reaction-emoji', reacao);
+  emoji.setAttribute('aria-hidden', 'true');
+  aviso.append(emoji);
+  // Saindo do quadradinho já se sabe de quem é; do palco, não -- e aí o nome é o que
+  // transforma um emoji solto em alguém reagindo.
+  if (!doQuadradinho && nome) {
+    const autoria = elemento('span', 'room-reaction-nome', nome);
+    autoria.setAttribute('aria-hidden', 'true');
+    aviso.append(autoria);
+  }
+
+  // Do quadradinho as reações saem quase do mesmo ponto, mas nunca do mesmo pixel; do palco
+  // elas se espalham pela largura de baixo, como quem joga confete de baixo para cima.
+  const espalhar = doQuadradinho ? Math.min(26, origem.width / 5) : Math.min(150, origem.width / 3.2);
+  const x = origem.left + origem.width / 2 + sorteio(-espalhar, espalhar);
+  const y = doQuadradinho ? origem.top + origem.height * .52 : origem.bottom - Math.min(76, origem.height * .17);
   aviso.style.setProperty('--reaction-x', `${Math.round(x)}px`);
   aviso.style.setProperty('--reaction-y', `${Math.round(y)}px`);
+  aviso.style.setProperty('--reaction-subida', `${Math.round(sorteio(doQuadradinho ? 120 : 170, doQuadradinho ? 180 : 250))}px`);
+  aviso.style.setProperty('--reaction-deriva', `${Math.round(sorteio(14, 34)) * (Math.random() < .5 ? -1 : 1)}px`);
+  aviso.style.setProperty('--reaction-giro', `${Math.round(sorteio(7, 17)) * (Math.random() < .5 ? -1 : 1)}deg`);
+  aviso.style.setProperty('--reaction-duracao', `${sorteio(2, 2.7).toFixed(2)}s`);
+  aviso.style.setProperty('--reaction-escala', sorteio(.9, 1.12).toFixed(2));
   caixa.append(aviso);
-  setTimeout(() => aviso.remove(), 2300);
+  // `animationend` dispensa o cronômetro paralelo que precisava ser mantido em sincronia com
+  // a duração do CSS -- e que ficava para trás assim que a duração passou a ser sorteada.
+  aviso.addEventListener('animationend', evento => { if (evento.target === aviso) aviso.remove(); });
+}
+// O menu nasce ancorado no botão, e não numa distância fixa da quina. Com a barra lateral
+// recolhida -- ou aberta como gaveta, no celular -- o botão muda de lugar, e um `left` fixo
+// deixava o menu flutuando sozinho no meio da tela, longe do que o abriu.
+//
+// Ele é `role="menu"`, e não `role="dialog"`: room-ui.js junta TODOS os `[role="dialog"]` e
+// trata cada um como modal, marcando a sala inteira como `inert` enquanto estiver aberto.
+// Um popover de status fazia a sala parar -- e, pior, o `inert` não move o foco de onde
+// estava: quem tivesse o cursor no campo do chat o via piscando num campo que não aceitava
+// mais nenhuma tecla, que era o "não consigo editar" que aparecia de vez em quando.
+function posicionarMenuDePresenca() {
+  presenceMenu.classList.remove('hidden');
+  const botao = presenceBtn.getBoundingClientRect();
+  const visivel = botao.width > 4;
+  const ancora = visivel ? botao : document.querySelector('.control-bar').getBoundingClientRect();
+  const folga = 10;
+  const esquerda = visivel ? ancora.left : ancora.left + folga;
+  presenceMenu.style.left = `${Math.round(Math.min(Math.max(folga, esquerda), Math.max(folga, window.innerWidth - presenceMenu.offsetWidth - folga)))}px`;
+  const acimaDaAncora = window.innerHeight - ancora.top + folga;
+  presenceMenu.style.bottom = `${Math.round(Math.min(acimaDaAncora, Math.max(folga, window.innerHeight - presenceMenu.offsetHeight - folga)))}px`;
+}
+function fecharMenuDePresenca() {
+  presenceMenu.classList.add('hidden');
+  presenceBtn.setAttribute('aria-expanded', 'false');
 }
 presenceBtn.onclick = evento => {
   evento.stopPropagation();
-  presenceMenu.classList.toggle('hidden');
+  if (presenceMenu.classList.contains('hidden')) { posicionarMenuDePresenca(); presenceBtn.setAttribute('aria-expanded', 'true'); }
+  else fecharMenuDePresenca();
 };
 presenceMenu.addEventListener('click', evento => {
   const botao = evento.target.closest('button');
@@ -1944,13 +2013,16 @@ presenceMenu.addEventListener('click', evento => {
     presencaLocal = botao.dataset.presence;
     socket.emit('sinal-presenca', { presenca: presencaLocal });
     atualizarPresencaNaInterface(myId, presencaLocal);
-    presenceMenu.classList.add('hidden');
+    fecharMenuDePresenca();
   } else if (botao.dataset.reaction) {
     socket.emit('sinal-presenca', { reacao: botao.dataset.reaction });
-    presenceMenu.classList.add('hidden');
+    fecharMenuDePresenca();
   }
 });
-document.addEventListener('click', evento => { if (!evento.target.closest('#presenceMenu,#presenceBtn')) presenceMenu.classList.add('hidden'); });
+document.addEventListener('click', evento => { if (!evento.target.closest('#presenceMenu,#presenceBtn')) fecharMenuDePresenca(); });
+document.addEventListener('keydown', evento => {
+  if (evento.key === 'Escape' && !presenceMenu.classList.contains('hidden')) { evento.stopPropagation(); fecharMenuDePresenca(); }
+}, true);
 
 // ---------- Microfone, fone e camera ----------
 // O navegador so revela o NOME dos dispositivos depois de conceder permissao a um deles.
@@ -2296,6 +2368,32 @@ const elemento = (tag, classe, texto) => {
   if (texto != null) el.textContent = texto;
   return el;
 };
+
+// ---------- Ícones desenhados ----------
+//
+// "☺", "↩" e "⋯" são CARACTERES, não ícones: cada fonte os desenha num tamanho, numa
+// espessura e numa altura de linha diferentes, e num botão de 26px eles saem minúsculos e
+// fora do centro -- o rosto, em particular, fica ilegível. O resto da sala já desenha os
+// ícones em traço de 24×24, e é para lá que estes vão. O conteúdo é literal, escrito aqui;
+// nada que venha da rede passa por `innerHTML`.
+const icone = (desenho, tamanho = 15) => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', tamanho);
+  svg.setAttribute('height', tamanho);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.8');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = desenho;
+  return svg;
+};
+const ICONE_REAGIR = '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/>';
+const ICONE_RESPONDER = '<path d="m9 14-5-5 5-5"/><path d="M4 9h9.5A6.5 6.5 0 0 1 20 15.5V19"/>';
+const ICONE_MAIS = '<circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.3" fill="currentColor" stroke="none"/>';
+const ICONE_ALFINETE = '<path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/>';
 
 function blocoDeNumero(valor, rotulo) {
   const bloco = elemento('div', 'medicao-numero');
@@ -4137,9 +4235,17 @@ function aplicarConfiguracaoDaSala(nova) {
     campo.disabled = !podeModerar;
   }
   const telaPermitida = podeModerar || configuracaoDaSala.compartilharTela;
-  screenBtn.disabled = !telaPermitida;
+  // Duas razões independentes fecham este botão, e só uma delas é a sala: o celular que não
+  // sabe compartilhar tela continua sem o recurso mesmo numa sala liberada. Ignorar isso
+  // devolvia o botão a quem não tem como usá-lo, com a explicação apagada por cima.
+  screenBtn.disabled = !telaPermitida || !suportaCompartilharTela;
   if (!telaPermitida && screenStream) pararTela();
-  if (!telaPermitida) screenBtn.title = 'Quem abriu a sala restringiu o compartilhamento de tela';
+  if (!suportaCompartilharTela) screenBtn.title = 'Este navegador não permite compartilhar tela (comum em celulares).';
+  else if (!telaPermitida) screenBtn.title = 'Quem abriu a sala restringiu o compartilhamento de tela';
+  // Liberada de novo, a dica volta a dizer o que o botão faz -- senão ela ficava presa na
+  // restrição antiga, contando uma regra que já não existe.
+  else pintarBotaoDaTela(Boolean(screenStream));
+  screenBtn.setAttribute('aria-label', screenBtn.title);
   const sonsPermitidos = podeModerar || configuracaoDaSala.soundboard;
   const somBtn = document.getElementById('soundboardBtn');
   if (somBtn) { somBtn.disabled = !sonsPermitidos; somBtn.title = sonsPermitidos ? 'Mesa de sons da sala' : 'Mesa de sons restrita por quem abriu a sala'; }
@@ -4571,7 +4677,9 @@ function definirAudioDaVoz(id, { nivel, alternarMudo, lembrar = true }) {
   }
   if (alternarMudo) refs.localMute = !refs.localMute;
   refs.peerAudio.volume = refs.volumeDeVoz;
-  refs.peerAudio.muted = refs.localMute;
+  // Ensurdecer cala por cima, sem apagar o mudo individual: ao voltar a ouvir, quem estava
+  // calado continua calado e quem não estava volta a falar.
+  refs.peerAudio.muted = refs.localMute || ensurdecido;
   if (pinned?.id === id && pinned.source === 'camera') stageVideo.volume = refs.volumeDeVoz;
   sincronizarControlesDeAudio(id);
   // `lembrar: false` e usado ao APLICAR o que ja estava guardado -- senao a aplicacao
@@ -5114,8 +5222,8 @@ function atualizarAudioDeTela() {
     // quadradinho da tela. Antes os dois andavam juntos e nao dava para calar so a tela.
     const pref = preferenciaDeTela(id);
     refs.screenAudio.volume = pref.nivel;
-    refs.screenAudio.muted = pref.mudo || !deveTocar;
-    if (deveTocar && !pref.mudo) garantirReproducao(refs.screenAudio);
+    refs.screenAudio.muted = pref.mudo || !deveTocar || ensurdecido;
+    if (deveTocar && !pref.mudo && !ensurdecido) garantirReproducao(refs.screenAudio);
   });
 }
 
@@ -5341,8 +5449,14 @@ function atualizarIndicadorDeConexao() {
     ? 'Conexão instável — ative Economia de dados ou abra o diagnóstico'
     : `${rotulos[qualidade]} — abrir diagnóstico`;
 }
-connectionQualityBtn.onclick = () => abrirDiagnostico();
-setInterval(atualizarIndicadorDeConexao, 1500);
+// `abrirDiagnostico` vive dentro do módulo de room-ui.js e nunca foi global: chamá-la daqui
+// lançava ReferenceError e o botão não abria nada. O caminho público é o evento que o vigia
+// de conexão travada já usa.
+connectionQualityBtn.onclick = () => document.dispatchEvent(new CustomEvent('room-diagnostics-request'));
+// Parado em segundo plano o indicador não tem quem o leia, e acordar a cada 1,5 s só serve
+// para o navegador cobrar bateria por isso.
+setInterval(() => { if (!document.hidden) atualizarIndicadorDeConexao(); }, 1500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarIndicadorDeConexao(); });
 
 const dataSaver = document.getElementById('dataSaver');
 const dataSaverField = document.getElementById('dataSaverField');
@@ -5531,13 +5645,17 @@ function mostrarMensagem(msg) {
   hora.textContent = horaCurta(msg.em || Date.now());
   topo.append(autor, hora);
 
+  // A citação entra DEPOIS da linha do nome. Antes dela, virava a primeira linha da grade e
+  // puxava o avatar para cima junto -- ele deixava de ficar ao lado de quem falou e passava a
+  // ficar ao lado da citação, desalinhado de todas as outras mensagens.
+  let resposta = null;
   if (msg.resposta) {
-    const resposta = document.createElement('button');
+    resposta = document.createElement('button');
     resposta.className = 'msg-reply';
     resposta.type = 'button';
-    resposta.textContent = `↳ ${msg.resposta.autor}: ${msg.resposta.texto || 'Mensagem'}`;
+    resposta.title = 'Ir para a mensagem respondida';
+    resposta.append(elemento('span', 'msg-reply-autor', msg.resposta.autor), document.createTextNode(msg.resposta.texto || 'Mensagem'));
     resposta.onclick = () => focarMensagem(msg.resposta.id);
-    el.appendChild(resposta);
   }
 
   const corpo = document.createElement('div');
@@ -5552,18 +5670,22 @@ function mostrarMensagem(msg) {
     corpo.appendChild(img);
   }
 
+  // Três botões, e não os nove de antes. Nove ocupavam os 292px da coluna inteira e a barra
+  // flutuante passava por cima do nome, da hora e da citação -- a mensagem sumia justamente
+  // quando o ponteiro ia até ela. Reagir e as ações de dono abrem um menu ancorado.
   const acoes = document.createElement('div');
   acoes.className = 'msg-actions';
-  const botaoAcao = (rotulo, titulo, acao) => {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = rotulo; b.title = titulo; b.dataset.chatAction = acao; return b;
+  const botaoAcao = (desenho, titulo, acao) => {
+    const b = document.createElement('button'); b.type = 'button';
+    b.append(icone(desenho));
+    b.title = titulo; b.setAttribute('aria-label', titulo); b.dataset.chatAction = acao; return b;
   };
-  acoes.append(botaoAcao('↩', 'Responder', 'responder'));
-  for (const emoji of ['👍', '❤️', '😂', '👏', '🎉']) { const b = botaoAcao(emoji, `Reagir com ${emoji}`, 'reagir'); b.dataset.emoji = emoji; acoes.append(b); }
-  if (msg.autorId === myId) acoes.append(botaoAcao('✎', 'Editar', 'editar'));
-  if (msg.autorId === myId || podeModerar) acoes.append(botaoAcao('⌫', 'Excluir', 'excluir'));
-  if (podeModerar) acoes.append(botaoAcao(msg.fixada ? '📌' : '📍', msg.fixada ? 'Desafixar' : 'Fixar', 'fixar'));
+  acoes.append(botaoAcao(ICONE_REAGIR, 'Reagir', 'abrir-reacoes'), botaoAcao(ICONE_RESPONDER, 'Responder', 'responder'));
+  if (msg.autorId === myId || podeModerar) acoes.append(botaoAcao(ICONE_MAIS, 'Mais ações', 'abrir-mais'));
 
-  el.append(avatar, topo, corpo, acoes);
+  el.append(avatar, topo);
+  if (resposta) el.append(resposta);
+  el.append(corpo, acoes);
   const reacoes = document.createElement('div');
   reacoes.className = 'msg-reactions';
   for (const [emoji, pessoas] of Object.entries(msg.reacoes || {})) {
@@ -5597,19 +5719,28 @@ function focarMensagem(id) {
 function atualizarMensagemDoChat(msg) {
   if (!msg?.id) return;
   mensagensDoChat.set(msg.id, msg);
+  // O menu aberto está ancorado num botão que esta troca vai destruir. Fechá-lo antes evita
+  // que ele fique boiando ao lado de uma mensagem que já não existe.
+  if (mensagemDoMenu?.id === msg.id) fecharMenuDaMensagem();
   const antigo = chatMsgs.querySelector(`[data-message-id="${CSS.escape(msg.id)}"]`);
   if (!antigo) { mostrarMensagem(msg); return; }
   const proximo = antigo.nextSibling;
+  // Uma reação numa mensagem antiga não é mensagem nova: ela não pode arrastar quem está
+  // lendo o histórico para o fim da conversa. `mostrarMensagem` rola ao acrescentar, então a
+  // posição é devolvida ao fim da troca.
+  const rolagem = chatMsgs.scrollTop;
   antigo.remove();
   msg._atualizandoLocal = true;
   mostrarMensagem(msg);
   delete msg._atualizandoLocal;
   const novo = chatMsgs.lastElementChild;
   if (proximo) chatMsgs.insertBefore(novo, proximo);
+  if (!perto) chatMsgs.scrollTop = rolagem;
   atualizarFixadas();
 }
 function removerMensagemDoChat(id) {
   mensagensDoChat.delete(id);
+  if (mensagemDoMenu?.id === id) fecharMenuDaMensagem();
   chatMsgs.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.remove();
   if (contextoDoChat?.mensagem.id === id) limparContextoDoChat();
   atualizarFixadas();
@@ -5623,18 +5754,52 @@ function atualizarFixadas() {
   barra.hidden = !fixadas.length;
   if (fixadas.length) {
     const ultima = fixadas.at(-1);
-    barra.replaceChildren(document.createTextNode('📌 '), elemento('span', '', `${ultima.autor}: ${ultima.texto || 'Imagem'}`));
-    barra.onclick = () => focarMensagem(ultima.id);
+    // O alfinete é desenhado, e não um emoji: a sala inteira usa traço monocromático nos
+    // ícones, e um 📌 colorido no meio de uma barra discreta puxa o olho para o lugar errado.
+    barra.replaceChildren(icone(ICONE_ALFINETE, 13), elemento('strong', '', ultima.autor), elemento('span', '', ultima.texto || 'Imagem'));
+    barra.setAttribute('aria-label', fixadas.length > 1
+      ? `${fixadas.length} mensagens fixadas. Ver a lista.`
+      : `Mensagem fixada de ${ultima.autor}. Ir até ela.`);
+    barra.onclick = () => (fixadas.length > 1 ? abrirListaDeFixadas(barra) : focarMensagem(ultima.id));
+    // A barra é um `div` com papel de botão, e um `div` não responde a Enter sozinho: sem
+    // isto, quem navega pelo teclado chegava até ela e não conseguia acioná-la.
+    barra.onkeydown = evento => {
+      if (evento.key !== 'Enter' && evento.key !== ' ') return;
+      evento.preventDefault();
+      barra.onclick();
+    };
+  }
+  // A lista aberta descreve o que havia um instante atrás. Fixar ou desafixar com ela na tela
+  // precisa redesenhá-la, senão o clique seguinte leva a uma mensagem que já saiu de lá.
+  if (!chatPinsList.classList.contains('hidden')) {
+    if (fixadas.length > 1) desenharListaDeFixadas(fixadas);
+    else fecharListaDeFixadas();
   }
 }
 
 function definirContextoDoChat(tipo, mensagem) {
   contextoDoChat = { tipo, mensagem };
   document.getElementById('chatContext').hidden = false;
-  document.getElementById('chatContextTitle').textContent = tipo === 'edicao' ? 'Editando sua mensagem' : `Respondendo a ${mensagem.autor}`;
+  const titulo = document.getElementById('chatContextTitle');
+  // O nome de quem está sendo respondido sai destacado do rótulo: é o dado que interessa na
+  // hora de conferir, de relance, se a resposta vai para a pessoa certa.
+  if (tipo === 'edicao') titulo.textContent = 'Editando sua mensagem';
+  else titulo.replaceChildren(document.createTextNode('Respondendo a '), elemento('b', '', mensagem.autor));
   document.getElementById('chatContextText').textContent = mensagem.texto || 'Imagem';
-  if (tipo === 'edicao') chatInput.value = mensagem.texto || '';
+  if (tipo === 'edicao') {
+    chatInput.value = mensagem.texto || '';
+    // Atribuir `value` não dispara `input`, e é o `input` que mede a altura do campo: sem
+    // isto, editar uma mensagem de três linhas deixava o compositor com uma.
+    chatInput.dispatchEvent(new Event('input'));
+  }
   chatInput.focus();
+  // O cursor vai para o FIM do texto, que é onde se continua escrevendo -- e não para o
+  // começo, onde a primeira tecla parece sobrescrever o que já estava lá.
+  const fim = chatInput.value.length;
+  try { chatInput.setSelectionRange(fim, fim); } catch (_) { /* campo ainda não mediu */ }
+  // O foco é reforçado no quadro seguinte porque os painéis da sala devolvem o foco por um
+  // MutationObserver -- que é assíncrono, e chegava DEPOIS deste `focus()` para roubá-lo.
+  requestAnimationFrame(() => { if (document.activeElement !== chatInput && contextoDoChat) chatInput.focus(); });
 }
 function limparContextoDoChat() {
   contextoDoChat = null;
@@ -5791,6 +5956,75 @@ function fecharImagem() {
 }
 
 // Delegacao: as mensagens sao criadas o tempo todo, entao o ouvinte fica no container.
+// ---------- Menu de uma mensagem ----------
+//
+// Um menu só, movido até a mensagem em que se clicou, em vez de um por mensagem: cem
+// mensagens no histórico não podem virar cem paletas de emoji escondidas no DOM.
+const REACOES_DO_CHAT = ['👍', '❤️', '😂', '👏', '🎉'];
+const chatMsgMenu = document.getElementById('chatMsgMenu');
+let mensagemDoMenu = null;
+// O botão que abriu o menu, guardado para acompanhá-lo enquanto a conversa rola.
+let ancoraDoMenu = null;
+// Alinhado pela borda DIREITA do que o abriu, e preso dentro da janela: o chat é uma coluna
+// estreita encostada na quina, e um menu alinhado pela esquerda saía metade fora da tela.
+// Quando não cabe embaixo -- uma mensagem no rodapé --, ele sobe para cima da âncora.
+function ancorarAbaixoDe(painel, ancora) {
+  const base = ancora.getBoundingClientRect();
+  const folga = 8;
+  const esquerda = Math.min(base.right - painel.offsetWidth, window.innerWidth - painel.offsetWidth - folga);
+  painel.style.left = `${Math.round(Math.max(folga, esquerda))}px`;
+  const cabeAbaixo = base.bottom + painel.offsetHeight + folga < window.innerHeight;
+  painel.style.top = `${Math.round(cabeAbaixo ? base.bottom + 4 : Math.max(folga, base.top - painel.offsetHeight - 4))}px`;
+}
+function fecharMenuDaMensagem() {
+  chatMsgMenu.classList.add('hidden');
+  chatMsgMenu.replaceChildren();
+  mensagemDoMenu = null;
+  ancoraDoMenu = null;
+}
+function abrirMenuDaMensagem(botao, mensagem, tipo) {
+  mensagemDoMenu = mensagem;
+  chatMsgMenu.replaceChildren();
+  chatMsgMenu.dataset.tipo = tipo;
+  if (tipo === 'reacoes') {
+    for (const emoji of REACOES_DO_CHAT) {
+      const b = elemento('button', 'msg-menu-emoji', emoji);
+      b.type = 'button'; b.dataset.emoji = emoji; b.dataset.menuAction = 'reagir';
+      b.title = `Reagir com ${emoji}`; b.setAttribute('aria-label', b.title);
+      if (mensagem.reacoes?.[emoji]?.includes(myId)) b.classList.add('minha');
+      chatMsgMenu.append(b);
+    }
+  } else {
+    const opcoes = [];
+    if (mensagem.autorId === myId) opcoes.push(['editar', 'Editar mensagem']);
+    if (podeModerar) opcoes.push(['fixar', mensagem.fixada ? 'Desafixar do topo' : 'Fixar no topo']);
+    if (mensagem.autorId === myId || podeModerar) opcoes.push(['excluir', 'Excluir para todos']);
+    for (const [acao, rotulo] of opcoes) {
+      const b = elemento('button', acao === 'excluir' ? 'perigo' : '', rotulo);
+      b.type = 'button'; b.dataset.menuAction = acao;
+      chatMsgMenu.append(b);
+    }
+  }
+  chatMsgMenu.querySelectorAll('button').forEach(b => b.setAttribute('role', 'menuitem'));
+  chatMsgMenu.classList.remove('hidden');
+  ancoraDoMenu = botao;
+  ancorarAbaixoDe(chatMsgMenu, botao);
+  chatMsgMenu.querySelector('button')?.focus();
+}
+chatMsgMenu.addEventListener('click', evento => {
+  const botao = evento.target.closest('[data-menu-action]');
+  if (!botao || !mensagemDoMenu || !socket?.connected) return;
+  const mensagem = mensagemDoMenu;
+  const acao = botao.dataset.menuAction;
+  fecharMenuDaMensagem();
+  if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
+  else if (acao === 'editar') definirContextoDoChat('edicao', mensagem);
+  else if (acao === 'fixar') socket.emit('chat-acao', { acao, id: mensagem.id }, resposta => { if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível fixar.'; });
+  else if (acao === 'excluir' && confirm('Excluir esta mensagem para toda a sala?')) socket.emit('chat-acao', { acao, id: mensagem.id });
+});
+document.addEventListener('click', evento => { if (!evento.target.closest('#chatMsgMenu,[data-chat-action]')) fecharMenuDaMensagem(); });
+document.addEventListener('keydown', evento => { if (evento.key === 'Escape' && !chatMsgMenu.classList.contains('hidden')) { evento.stopPropagation(); fecharMenuDaMensagem(); } }, true);
+
 chatMsgs.addEventListener('click', (e) => {
   const img = e.target.closest('.msg-img');
   if (img && img.src) abrirImagem(img.src);
@@ -5799,18 +6033,92 @@ chatMsgs.addEventListener('click', (e) => {
   const mensagem = mensagemEl && mensagensDoChat.get(mensagemEl.dataset.messageId);
   if (!botao || !mensagem || !socket?.connected) return;
   const acao = botao.dataset.chatAction;
+  const jaAberto = !chatMsgMenu.classList.contains('hidden') && mensagemDoMenu === mensagem;
+  fecharMenuDaMensagem();
   if (acao === 'responder') definirContextoDoChat('resposta', mensagem);
-  else if (acao === 'editar') definirContextoDoChat('edicao', mensagem);
   else if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
-  else if (acao === 'fixar') socket.emit('chat-acao', { acao, id: mensagem.id }, resposta => { if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível fixar.'; });
-  else if (acao === 'excluir' && confirm('Excluir esta mensagem para toda a sala?')) socket.emit('chat-acao', { acao, id: mensagem.id });
+  else if (acao === 'abrir-reacoes' && !(jaAberto && chatMsgMenu.dataset.tipo === 'reacoes')) abrirMenuDaMensagem(botao, mensagem, 'reacoes');
+  else if (acao === 'abrir-mais' && !(jaAberto && chatMsgMenu.dataset.tipo === 'mais')) abrirMenuDaMensagem(botao, mensagem, 'mais');
 });
-document.getElementById('chatPinsBtn').onclick = () => {
+// ---------- As mensagens fixadas ----------
+//
+// Com mais de uma fixada, adivinhar qual mostrar é sempre errado: quem clica no alfinete quer
+// ESCOLHER. A versão anterior percorria a lista às cegas, um item por clique, e a pessoa tinha
+// de passar por todas até achar a que procurava -- sem nunca ver quantas eram.
+const chatPinsBtn = document.getElementById('chatPinsBtn');
+const chatPinsList = document.getElementById('chatPinsList');
+function fecharListaDeFixadas() {
+  chatPinsList.classList.add('hidden');
+  chatPinsList.replaceChildren();
+  chatPinsBtn.setAttribute('aria-expanded', 'false');
+}
+function desenharListaDeFixadas(fixadas) {
+  chatPinsList.replaceChildren(elemento('strong', '', `${fixadas.length} mensagens fixadas`));
+  for (const fixada of fixadas) {
+    const linha = elemento('div', 'pin-item');
+    const ir = elemento('button', 'pin-ir');
+    ir.type = 'button';
+    ir.setAttribute('role', 'menuitem');
+    ir.append(elemento('strong', '', fixada.autor), elemento('span', '', fixada.texto || 'Imagem'));
+    ir.onclick = () => { fecharListaDeFixadas(); focarMensagem(fixada.id); };
+    linha.append(ir);
+    // Quem fixou é quem desafixa, e o lugar natural de tirar da lista é a própria lista --
+    // caçar a mensagem no meio da conversa só para soltar o alfinete é o caminho longo.
+    if (podeModerar) {
+      const soltar = elemento('button', 'pin-soltar');
+      soltar.type = 'button';
+      soltar.title = 'Desafixar';
+      soltar.setAttribute('aria-label', `Desafixar a mensagem de ${fixada.autor}`);
+      soltar.append(icone(ICONE_ALFINETE, 13));
+      soltar.onclick = () => socket.emit('chat-acao', { acao: 'fixar', id: fixada.id }, resposta => {
+        if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível desafixar.';
+      });
+      linha.append(soltar);
+    }
+    chatPinsList.append(linha);
+  }
+}
+function abrirListaDeFixadas(ancora) {
   const fixadas = [...mensagensDoChat.values()].filter(m => m.fixada);
   if (!fixadas.length) { status.textContent = 'Ainda não há mensagens fixadas.'; return; }
-  const visivel = fixadas.find(m => !chatMsgs.querySelector(`[data-message-id="${CSS.escape(m.id)}"]`)?.matches(':hover')) || fixadas[0];
-  focarMensagem(visivel.id);
+  if (fixadas.length === 1) { focarMensagem(fixadas[0].id); return; }
+  fecharMenuDaMensagem();
+  desenharListaDeFixadas(fixadas);
+  chatPinsList.classList.remove('hidden');
+  ancorarAbaixoDe(chatPinsList, ancora);
+  chatPinsBtn.setAttribute('aria-expanded', 'true');
+  chatPinsList.querySelector('button')?.focus();
+}
+chatPinsBtn.onclick = () => {
+  if (!chatPinsList.classList.contains('hidden')) { fecharListaDeFixadas(); return; }
+  abrirListaDeFixadas(chatPinsBtn);
 };
+document.addEventListener('click', evento => {
+  if (!evento.target.closest('#chatPinsList,#chatPinsBtn,#chatPinnedBar')) fecharListaDeFixadas();
+});
+document.addEventListener('keydown', evento => {
+  if (evento.key === 'Escape' && !chatPinsList.classList.contains('hidden')) { evento.stopPropagation(); fecharListaDeFixadas(); }
+}, true);
+
+// Os menus são posicionados uma vez, em coordenadas da janela. Rolar a conversa move a
+// mensagem que os ancorou e NÃO move o menu: ele fica apontando para o nada, e o clique
+// seguinte acerta a mensagem errada. Acompanhar a âncora é mais barato que parece -- uma
+// medição e duas atribuições por quadro --, e evita fechar na cara de quem só rolou um
+// pouco para reler. Quando a âncora sai da conversa, aí sim o menu perde o sentido.
+function acompanharAncora() {
+  for (const [painel, ancora] of [[chatMsgMenu, ancoraDoMenu], [chatPinsList, chatPinsBtn]]) {
+    if (painel.classList.contains('hidden') || !ancora?.isConnected) continue;
+    const alvo = ancora.getBoundingClientRect();
+    const area = chatMsgs.getBoundingClientRect();
+    // Só o menu da mensagem some com a âncora: o botão de fixadas vive no cabeçalho, que não
+    // rola, e fechá-lo aqui apagaria a lista ao primeiro toque na roda do mouse.
+    if (ancora !== chatPinsBtn && (alvo.bottom < area.top || alvo.top > area.bottom)) { fecharMenuDaMensagem(); continue; }
+    ancorarAbaixoDe(painel, ancora);
+  }
+  if (!presenceMenu.classList.contains('hidden')) posicionarMenuDePresenca();
+}
+chatMsgs.addEventListener('scroll', acompanharAncora, { passive: true });
+window.addEventListener('resize', acompanharAncora);
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) fecharImagem(); });
 lightboxImg.addEventListener('click', () => lightboxImg.classList.toggle('real'));
 lightboxFechar.onclick = fecharImagem;

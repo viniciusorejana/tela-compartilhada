@@ -55,24 +55,58 @@ async function entrar(contexto, nome) {
   assert.ok(await convidado.locator('#musicaInput').evaluate(el => el.getBoundingClientRect().height < 80));
   await convidado.locator('#musicaInput').click();
   assert.equal(await convidado.evaluate(() => document.activeElement?.id), 'musicaInput');
+  // Reagir, editar, excluir e fixar passam por um menu ancorado: a barra que flutua sobre a
+  // mensagem tem três botões (reagir, responder e "mais"), e não os nove de antes, que
+  // cobriam o nome e a citação da própria mensagem que se queria ler.
   await convidado.evaluate(() => window.abrirChat());
-  await convidado.locator('[data-chat-action="reagir"][data-emoji="👍"]').first().click();
+  await convidado.locator('[data-chat-action="abrir-reacoes"]').first().click();
+  await convidado.locator('#chatMsgMenu [data-menu-action="reagir"][data-emoji="👍"]').click();
   await dono.waitForFunction(() => document.querySelector('.msg-reactions')?.textContent.includes('👍 1'));
+  assert.equal(await convidado.locator('#chatMsgMenu.hidden').count(), 1);
   await convidado.locator('[data-chat-action="responder"]').first().click();
   await convidado.locator('#chatInput').fill('Recebido!');
   await convidado.locator('#chatSend').click();
   await dono.waitForFunction(() => document.querySelector('.msg-reply')?.textContent.includes('Dono'));
   convidado.once('dialog', dialogo => dialogo.accept());
-  await convidado.locator('.msg').filter({ hasText: 'Recebido!' }).locator('[data-chat-action="excluir"]').click();
+  const recebida = convidado.locator('.msg').filter({ hasText: 'Recebido!' });
+  await recebida.locator('[data-chat-action="abrir-mais"]').click();
+  await convidado.locator('#chatMsgMenu [data-menu-action="excluir"]').click();
   await dono.waitForFunction(() => ![...document.querySelectorAll('.msg-texto')].some(e => e.textContent.includes('Recebido!')));
   await dono.locator('.msg').hover();
-  await dono.locator('[data-chat-action="editar"]').click();
+  await dono.locator('[data-chat-action="abrir-mais"]').click();
+  await dono.locator('#chatMsgMenu [data-menu-action="editar"]').click();
   await dono.locator('#chatInput').fill('Mensagem editada');
   await dono.locator('#chatSend').click();
   await convidado.waitForFunction(() => document.querySelector('.msg-texto')?.textContent.includes('Mensagem editada'));
   await dono.locator('.msg').hover();
-  await dono.locator('[data-chat-action="fixar"]').click();
+  await dono.locator('[data-chat-action="abrir-mais"]').click();
+  await dono.locator('#chatMsgMenu [data-menu-action="fixar"]').click();
   await convidado.waitForFunction(() => !document.getElementById('chatPinnedBar').hidden);
+
+  // Com MAIS DE UMA fixada, quem clica no alfinete quer escolher. A versão anterior
+  // percorria a lista às cegas -- um item por clique, sem nunca dizer quantos eram.
+  await dono.locator('#chatInput').fill('Outra para fixar');
+  await dono.locator('#chatSend').click();
+  await dono.locator('.msg').filter({ hasText: 'Outra para fixar' }).hover();
+  await dono.locator('.msg').filter({ hasText: 'Outra para fixar' }).locator('[data-chat-action="abrir-mais"]').click();
+  await dono.locator('#chatMsgMenu [data-menu-action="fixar"]').click();
+  await dono.waitForFunction(() => Number(document.getElementById('chatPinsCount').textContent) === 2);
+  await dono.locator('#chatPinsBtn').click();
+  await dono.locator('#chatPinsList:not(.hidden)').waitFor();
+  assert.equal(await dono.locator('#chatPinsList .pin-item').count(), 2);
+  await dono.locator('#chatPinsList .pin-ir').first().click();
+  assert.equal(await dono.locator('#chatPinsList.hidden').count(), 1);
+  // Soltar o alfinete pela própria lista: caçar a mensagem no meio da conversa só para
+  // desafixá-la é o caminho longo, e é dali que se vê o conjunto.
+  await dono.locator('#chatPinsBtn').click();
+  await dono.locator('#chatPinsList .pin-soltar').last().click();
+  await dono.waitForFunction(() => Number(document.getElementById('chatPinsCount').textContent) === 1);
+  // Uma fixada só não vira lista de um item: o clique leva direto até ela.
+  assert.equal(await dono.locator('#chatPinsList.hidden').count(), 1);
+  // Os ícones são DESENHADOS. "☺", "↩" e "⋯" são caracteres, e cada fonte os entrega num
+  // tamanho e numa altura de linha diferentes: num botão de 27px saíam minúsculos e tortos.
+  assert.equal(await dono.locator('[data-chat-action="abrir-reacoes"] svg').first().count(), 1);
+  assert.equal(await dono.locator('[data-chat-action="abrir-reacoes"]').first().evaluate(el => el.textContent.trim()), '');
 
   await convidado.locator('#chatClose').click();
   await convidado.locator('#sidebarToggle').click();
@@ -83,6 +117,52 @@ async function entrar(contexto, nome) {
   await convidado.locator('#presenceBtn').click();
   await convidado.locator('[data-reaction="👏"]').click();
   await dono.waitForFunction(() => document.querySelector('.room-reaction')?.getAttribute('aria-label') === 'Convidado reagiu com 👏');
+  // A reação sai em duas camadas porque a subida e a deriva lateral precisam de curvas de
+  // tempo diferentes -- com uma só, todas sobem no mesmo trilho, na mesma hora.
+  assert.equal(await dono.locator('.room-reaction .room-reaction-emoji').count(), 1);
+  await dono.waitForFunction(() => !document.querySelector('.room-reaction'), null, { timeout: 6000 });
+
+  // A presença de OUTRA pessoa não pode apagar a MINHA marcação: a versão anterior
+  // desmarcava os cinco botões sempre que qualquer presença chegava pela sinalização, e o
+  // status escolhido sumia da lista por conta de alguém do outro lado pedir a palavra.
+  await dono.evaluate(() => socket.emit('sinal-presenca', { presenca: 'brb' }));
+  await convidado.waitForFunction(() => [...presencasPorIdentidade.values()].includes('brb'), null, { timeout: 5000 });
+  assert.equal(await convidado.locator('#presenceMenu [data-presence="hand"].ativo').count(), 1);
+  // O menu nasce ancorado no botão que o abriu, e não a uma distância fixa da quina da tela:
+  // com a barra lateral recolhida ele boiava sozinho no meio da página.
+  assert.ok(await dono.evaluate(() => {
+    presenceBtn.click();
+    const menu = presenceMenu.getBoundingClientRect();
+    const botao = presenceBtn.getBoundingClientRect();
+    presenceBtn.click();
+    return Math.abs(menu.left - botao.left) < 2 && menu.bottom <= botao.top && menu.top > 0;
+  }));
+  // O menu de status é um popover, não um modal. Enquanto ele carregava `role="dialog"`,
+  // room-ui.js o tratava como tal e marcava a sala inteira como `inert` -- e `inert` NÃO
+  // move o foco de onde ele está: quem tinha o cursor no campo do chat o via piscando num
+  // campo que não aceitava mais nenhuma tecla. Era o "não consigo editar" intermitente.
+  assert.equal(await dono.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].some(d => d.id === 'presenceMenu')), false);
+  assert.deepEqual(await dono.evaluate(async () => {
+    const app = document.querySelector('.app');
+    chatInput.focus();
+    presenceBtn.click();
+    await new Promise(r => requestAnimationFrame(r));
+    const comMenuAberto = app.inert;
+    presenceBtn.click();
+    await new Promise(r => requestAnimationFrame(r));
+    return { comMenuAberto, depois: app.inert };
+  }), { comMenuAberto: false, depois: false });
+  // Editar leva o cursor para o FIM do texto: no começo, a primeira tecla parece sobrescrever
+  // o que já estava lá.
+  await dono.locator('.msg').first().hover();
+  await dono.locator('[data-chat-action="abrir-mais"]').first().click();
+  await dono.locator('#chatMsgMenu [data-menu-action="editar"]').click();
+  assert.deepEqual(await dono.evaluate(() => ({
+    foco: document.activeElement?.id,
+    cursorNoFim: chatInput.selectionStart === chatInput.value.length && chatInput.value.length > 0
+  })), { foco: 'chatInput', cursorNoFim: true });
+  await dono.locator('#chatContextClose').click();
+  await dono.locator('#chatInput').fill('');
 
   await convidado.locator('#sidebarToggle').click();
   await convidado.locator('[data-action="devices"]').click();
@@ -129,13 +209,42 @@ async function entrar(contexto, nome) {
   assert.equal(await convidado.evaluate(() => document.activeElement?.id), 'musicaInput');
   assert.equal(await convidado.locator('#musicaInput').inputValue(), 'pedido continua com foco');
   await convidado.locator('#musicaInput').fill('');
+  // Ensurdecer tem de sobreviver à próxima atualização de mídia da sala. A primeira versão
+  // varria o DOM apagando `muted` elemento a elemento, e `definirAudioDaVoz` -- que roda toda
+  // vez que alguém liga a câmera ou o microfone -- reescrevia tudo de volta: o som voltava
+  // sozinho, sem ninguém ter tocado no botão, e a pessoa só descobria sendo ouvida.
   assert.deepEqual(await convidado.evaluate(() => {
-    const audio = document.createElement('audio'); document.body.append(audio);
-    document.getElementById('deafenBtn').click(); const durante = audio.muted;
-    document.getElementById('deafenBtn').click(); const depois = audio.muted; audio.remove();
-    return { durante, depois };
-  }), { durante: true, depois: false });
+    const audio = tiles.get('self').peerAudio;
+    deafenBtn.click();
+    const durante = audio.muted;
+    definirAudioDaVoz('self', { lembrar: false });
+    const depoisDeAtualizarAMidia = audio.muted;
+    deafenBtn.click();
+    return { durante, depoisDeAtualizarAMidia, depois: audio.muted };
+  }), { durante: true, depoisDeAtualizarAMidia: true, depois: false });
+  // E o caminho inverso: quem foi calado individualmente continua calado quando o
+  // ensurdecimento sai. O instantâneo por elemento apagava justamente essa escolha.
+  assert.deepEqual(await convidado.evaluate(() => {
+    const refs = tiles.get('self');
+    refs.localMute = true;
+    definirAudioDaVoz('self', { lembrar: false });
+    deafenBtn.click(); deafenBtn.click();
+    const continuaCalado = refs.peerAudio.muted;
+    refs.localMute = false;
+    definirAudioDaVoz('self', { lembrar: false });
+    return { continuaCalado, voltaAoNormal: refs.peerAudio.muted };
+  }), { continuaCalado: true, voltaAoNormal: false });
   assert.notEqual(await convidado.locator('#deafenBtn').evaluate(el => getComputedStyle(el, '::before').webkitMaskImage), 'none');
+  // O rótulo dos controles é o nome fixo da coisa -- quem conta o estado é o ícone. Trocar o
+  // texto por "Surdo" fazia a barra inteira mudar de largura a cada clique.
+  assert.equal(await convidado.locator('#deafenBtn').evaluate(el => el.textContent.trim()), 'Ouvir');
+  // `abrirDiagnostico` vive dentro de room-ui.js e nunca foi global: chamá-la direto de
+  // sala.js lançava ReferenceError, e o botão da topbar não abria nada. O que se testa é o
+  // handler, então o clique sai por `evaluate` -- neste ponto o canal de música está aberto
+  // por cima da barra, e disputar ponteiro com ele não diria nada sobre o defeito.
+  await convidado.evaluate(() => document.getElementById('connectionQualityBtn').click());
+  await convidado.locator('#diagnosticsPanel:not(.hidden)').waitFor({ timeout: 5000 });
+  await convidado.evaluate(() => document.getElementById('diagnosticsPanel').classList.add('hidden'));
   assert.equal(await convidado.locator('#compactBtn svg').count(), 1);
   await convidado.evaluate(() => document.getElementById('compactBtn').click());
   assert.equal(await convidado.locator('.app.compacto-local').count(), 1);
@@ -153,6 +262,11 @@ async function entrar(contexto, nome) {
   assert.equal(await dono.locator('#roomSecurity').isVisible(), true);
   await dono.locator('#moderarPanel [data-close]').click();
 
+  // A fila de entrada é assunto de quem modera: quem só está na sala não pode receber o nome
+  // de alguém que ainda está do lado de fora e pode acabar recusado. O cliente já descartava
+  // o evento, mas ele chegava -- e o que não se envia é o que não vaza.
+  await convidado.evaluate(() => { window.vazouPedido = false; socket.on('pedido-entrada', () => { window.vazouPedido = true; }); });
+
   const desistente = await contextoB.newPage();
   await desistente.goto(`${origem}/${sala}/sala`);
   await desistente.locator('#nameInput').fill('Desistente');
@@ -164,6 +278,7 @@ async function entrar(contexto, nome) {
     const botao = joinRequestNoticeOpen.getBoundingClientRect();
     return aviso.right - botao.right < 16;
   }));
+  assert.equal(await convidado.evaluate(() => window.vazouPedido), false);
   await dono.waitForFunction(() => document.getElementById('joinRequestNotice').hidden, null, { timeout: 9000 });
   assert.equal(await dono.locator('#joinRequestCount').isVisible(), true);
   await desistente.locator('#waitingCancel').click();

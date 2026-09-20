@@ -60,10 +60,13 @@ input[aria-invalid="true"] { outline:1px solid #e68d9b; }
 .feature-icon.link { background:#b69f7c13; color:#c9b599; }
 h3 { margin:0 0 4px; font-size:12px; font-weight:600; }
 .features p { margin:0; color:#a092b0; font-size:11px; line-height:1.8; max-width:230px; }
-.recent { position:relative; z-index:1; padding:13px 15px; margin:0 0 12px; display:flex; align-items:center; flex-wrap:wrap; gap:9px 14px; border:1px solid #ae9aea24; border-radius:12px; background:#23212d; box-shadow:0 12px 30px #00000018; }
-.recent>span { flex-basis:100%; font-size:8px; font-weight:700; letter-spacing:.12em; color:#b8a9c7; }
+/* O cartão das últimas salas passou a ficar ENCOSTADO no de entrar, então ele precisa ler
+   como a peça menor da mesma família: mesmo gradiente, mesma cor de borda, e um raio um grau
+   abaixo do principal. Antes eram duas superfícies diferentes empilhadas. */
+.recent { position:relative; z-index:1; padding:14px 17px; margin:0 0 11px; display:flex; align-items:center; flex-wrap:wrap; gap:9px 14px; border:1px solid #ac9ac31f; border-radius:16px; background:linear-gradient(140deg,#262330,#21202c); box-shadow:0 18px 40px #00000022; }
+.recent>span { flex-basis:100%; font-size:8px; font-weight:650; letter-spacing:.11em; color:#b2a3c1; }
 #recentLinks { display:flex; gap:8px; flex-wrap:wrap; }
-#recentLinks a { border:1px solid #ad9aee2e; border-radius:7px; padding:6px 12px; font-size:11px; color:#d0c3e2; background:#ad9aee0b; }
+#recentLinks a { border:1px solid #ad9aee2e; border-radius:8px; padding:6px 12px; font-size:11px; color:#d0c3e2; background:#ad9aee0b; transition:background .15s,border-color .15s; }
 #recentLinks a:hover { background:#ad9aee18; border-color:#ad9aee4a; }
 footer { max-width:1160px; margin:0 auto; padding:22px 40px 30px; border-top:1px solid #b79dcc0b; display:flex; justify-content:space-between; gap:15px; color:#96859f; font-size:9px; }
 footer i { font-style:normal; margin:0 8px; color:#5e536a; }

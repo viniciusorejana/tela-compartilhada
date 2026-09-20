@@ -7,6 +7,7 @@
     "dev": "node server.js",
     "test": "node --test tests/*.test.js",
     "test:browser": "node tests/browser.cjs",
+    "test:recursos": "node tests/recursos-sala-browser.cjs",
     "test:electron": "node tests/electron.cjs",
     "test:download": "node tests/download-browser.cjs",
     "test:soundboard": "node tests/soundboard-browser.cjs",
@@ -15,7 +16,7 @@
     "painel:chave": "node scripts/painel-chave.cjs",
     "build:icon": "node scripts/build-icon.cjs",
     "build:helper": "powershell -ExecutionPolicy Bypass -File .\\build-helper.ps1",
-    "start": "npm run build:sfu && npm run build:helper && node server.js",
+    "start": "npm run build:sfu && node server.js",
     "build:sfu": "node scripts/baixar-livekit.cjs",
     "musica:instalar": "node scripts/baixar-musica.cjs",
     "musica:atualizar": "node scripts/baixar-musica.cjs --atualizar"
