@@ -337,11 +337,17 @@ O botão de copiar **fica**. Ele continua sendo o caminho de quem quer pedir aju
 Hoje o link é o convite e não há identidade. É o que a comunidade pede e o que o pagamento
 exige.
 
-- **Banco:** Postgres no mesmo VPS. Nesta escala não há motivo para serviço gerenciado — e
-  serviço gerenciado é o segundo lugar onde custo escapa, depois do egress. Backup diário
-  para object storage barato (Hetzner Storage Box, Backblaze B2).
-- Cadastro por e-mail com senha e OAuth (Google e Discord — é onde o público já está).
-- Perfil: nome de exibição, avatar, cor. É o que os usuários pedem, é barato, e é o que faz o
+> **Este degrau está aberto inteiro em [`plano-contas.md`](plano-contas.md)** — modelo de
+> dados, etapas, os três níveis e salas privadas. Duas recomendações daqui mudaram lá, depois
+> de olhar o código: o banco passou a ser **SQLite embutido** (zero dependência, zero processo
+> a mais) em vez de Postgres, e o **e-mail deixou de ser obrigatório no cadastro**, porque ele
+> arrastava junto o único custo fixo mensal do lançamento. O resto desta seção continua de pé.
+
+- **Banco:** no mesmo VPS, sem serviço gerenciado — serviço gerenciado é o segundo lugar onde
+  custo escapa, depois do egress. Backup diário para object storage barato (Hetzner Storage
+  Box, Backblaze B2).
+- Cadastro com senha, e OAuth do Discord depois (é onde o público já está).
+- Perfil: nome de exibição, cor e marca. É o que os usuários pedem, é barato, e é o que faz o
   produto parecer cuidado.
 
 #### O que o anônimo pode, e o que a conta desbloqueia
