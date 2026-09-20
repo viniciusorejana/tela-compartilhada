@@ -244,6 +244,26 @@ async function entrar(contexto, nome) {
   // por cima da barra, e disputar ponteiro com ele não diria nada sobre o defeito.
   await convidado.evaluate(() => document.getElementById('connectionQualityBtn').click());
   await convidado.locator('#diagnosticsPanel:not(.hidden)').waitFor({ timeout: 5000 });
+  // A latência existe SEM nenhuma faixa de mídia no ar. Ela vinha das estatísticas de uma
+  // faixa, e quem entra só para ouvir não tem nenhuma -- ficava sem um único número sobre a
+  // própria conexão justamente antes de decidir se ligava a câmera. Este teste roda sem
+  // servidor de mídia, então é exatamente esse o cenário: se o número aparecer aqui, ele
+  // aparece sempre.
+  assert.equal(await convidado.evaluate(() => Object.values(publicacoesLocais).some(Boolean)), false);
+  await convidado.waitForFunction(() => latenciaDaSinalizacao != null, null, { timeout: 12000 });
+  assert.ok(await convidado.evaluate(() => Number.isFinite(latenciaDaSinalizacao) && latenciaDaSinalizacao >= 0));
+  await convidado.waitForFunction(() => /\d+ ms/.test(document.querySelector('#connectionQualityBtn b')?.textContent || ''), null, { timeout: 8000 });
+  assert.match(await convidado.evaluate(() => [...document.querySelectorAll('#diagnosticsCards .diag-cartao')][0].textContent), /Latência até o servidor\s*\d+ ms/);
+  // O número não pode sobreviver à queda da conexão: um "24 ms" tranquilo na barra afirmaria
+  // o contrário do que está acontecendo.
+  assert.equal(await convidado.evaluate(async () => {
+    socket.disconnect();
+    await new Promise(r => setTimeout(r, 200));
+    const vazio = latenciaDaSinalizacao === null && document.querySelector('#connectionQualityBtn b').hidden;
+    socket.connect();
+    return vazio;
+  }), true);
+  await convidado.waitForFunction(() => socket?.connected && latenciaDaSinalizacao != null, null, { timeout: 15000 });
   await convidado.evaluate(() => document.getElementById('diagnosticsPanel').classList.add('hidden'));
   assert.equal(await convidado.locator('#compactBtn svg').count(), 1);
   await convidado.evaluate(() => document.getElementById('compactBtn').click());

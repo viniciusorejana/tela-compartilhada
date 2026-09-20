@@ -827,6 +827,15 @@ musica.definirCanalDeMensagens(falarComoBot);
 io.on('connection', (socket) => {
   telemetria.instalarSocket(socket);
 
+  // Ida e volta até aqui, medida pelo relógio de quem perguntou. O servidor não responde
+  // NADA além da confirmação: quem mede é o cliente, comparando o instante do envio com o do
+  // retorno, e assim não há relógio de duas máquinas para conciliar.
+  //
+  // Existe porque a latência da sala vinha das estatísticas de uma FAIXA de mídia, e quem
+  // entra só para ouvir não tem faixa nenhuma -- ficava sem nenhum número sobre a própria
+  // conexão justamente no momento em que ele é mais útil, antes de ligar qualquer coisa.
+  socket.on('eco', (callback) => { if (typeof callback === 'function') callback(); });
+
   function sairDaSalaAtual() {
     const roomCode = roomCodeForSocket(socket);
     if (!roomCode) return;

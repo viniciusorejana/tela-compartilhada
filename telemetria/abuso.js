@@ -26,6 +26,10 @@ const REGRAS = Object.freeze({
   'sinal-presenca': { sessao: 20, sala: 90, rajada: [5, 3000] },
   'sala-configurar': { sessao: 20, sala: 60 },
   'resolver-entrada': { sessao: 30, sala: 90 },
+  // A medida de latência: uma ida e volta a cada cinco segundos, e o servidor só confirma o
+  // recebimento. O teto é o dobro do ritmo esperado -- sobra para a volta de uma reconexão,
+  // que mede de novo na hora, sem abrir espaço para quem quiser usar isto como metrônomo.
+  'eco': { sessao: 26, sala: 400 },
   'join-room': { sessao: 6, sala: 120, longa: [20, 10 * MINUTO] },
   'leave-room': { sessao: Infinity },
   'media-state': { sessao: 30, sala: 600 },

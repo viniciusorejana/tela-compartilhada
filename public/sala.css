@@ -78,8 +78,12 @@ input::placeholder,textarea::placeholder { color:#89899f; }
 .topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 24px; border-bottom:1px solid var(--line); background:#1d1e29; min-width:0; }
 .room-id { display:flex; align-items:center; gap:12px; min-width:0; }
 .topbar-symbol { color:#aba1d4; font-size:22px; }
-h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; }
-#participantCount { font-size:10px; color:#8e8da3; white-space:nowrap; border-left:1px solid #ffffff14; padding-left:12px; }
+/* O nome da sala é o último a ceder espaço na barra de cima. Sem o mínimo garantido, ele e o
+   contador encolhiam juntos e o título chegava a ZERO enquanto "Só você na sala" continuava
+   inteiro ao lado -- a sala perdia o nome para não perder um número que a barra lateral e a
+   plateia já mostram. Agora a pressão vai toda para o contador, que some se precisar. */
+h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; min-width:7ch; }
+#participantCount { font-size:10px; color:#8e8da3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; border-left:1px solid #ffffff14; padding-left:12px; }
 .topbar-actions { display:flex; flex:none; align-items:center; gap:7px; }
 .topbar-actions button { font-size:11px; padding:8px 12px; }
 #copyLinkBtn { color:#d9d1ff; background:#8272df20; }
@@ -768,6 +772,11 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    sala: superfícies escuras, bordas discretas e estado indicado também por texto/forma. */
 .connection-quality { display:inline-flex; align-items:center; gap:7px; color:var(--muted); }
 .connection-quality i { width:9px; height:9px; border-radius:50%; background:#77788a; box-shadow:0 0 0 3px #77788a22; }
+/* A medida em milissegundos numa caixa de largura fixa: ela muda a cada cinco segundos, e sem
+   isso a barra inteira se reacomodava a cada medição -- "9 ms" e "148 ms" não ocupam o mesmo
+   espaço, e quem estava lendo o nome da sala via tudo escorregar para o lado. */
+.connection-quality b { min-width:46px; padding:1px 5px; border-radius:7px; background:#ffffff0d; color:#b9b3cc; font-size:9px; font-weight:650; font-variant-numeric:tabular-nums; text-align:center; }
+.connection-quality[data-quality="poor"] b,.connection-quality[data-quality="lost"] b { background:#f0758322; color:#f0a9b1; }
 .connection-quality[data-quality="excellent"] i,.connection-quality[data-quality="good"] i { background:#4ccc8a; box-shadow:0 0 0 3px #4ccc8a24; }
 .connection-quality[data-quality="poor"] i { background:#f2b84b; box-shadow:0 0 0 3px #f2b84b24; }
 .connection-quality[data-quality="lost"] i { background:#ef6d7b; box-shadow:0 0 0 3px #ef6d7b24; }
@@ -939,14 +948,18 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    celular: no meio do caminho o nome da sala é que encolhia, virando "teste-v...". Os
    rótulos de "Conexão" e "Plateia" saem primeiro -- os ícones continuam dizendo o que são,
    e o nome da sala volta a caber inteiro. */
-/* Dois botões novos entraram na barra de cima, e ela ficou apertada antes de chegar ao
-   celular: no meio do caminho o nome da sala é que encolhia, virando "teste-v...". Os
-   rótulos de "Conexão" e "Plateia" saem primeiro -- os ícones continuam dizendo o que são,
-   e o nome da sala volta a caber inteiro. */
+/* Na disputa por espaço na barra de cima, o rótulo de qualidade é o primeiro a sair -- antes
+   dos milissegundos e muito antes do nome da sala. "Excelente" é interpretação, e a bolinha
+   colorida ao lado já diz a mesma coisa; o número é o dado, e é por ele que se abre o
+   diagnóstico. Com os dois no ar abaixo desta largura, o nome da sala era espremido a zero. */
+@media(max-width:1499px) { .connection-quality span { display:none; } }
 @media(max-width:1250px) {
-  .connection-quality span,.audience-toggle span { display:none; }
+  .audience-toggle span { display:none; }
   .connection-quality,.audience-toggle { padding:8px 9px; }
 }
+/* Numa tela de celular sobram o menu, o nome da sala e as ações: aí o número cede a vez, e a
+   bolinha continua dizendo como está a conexão. O valor exato fica no diagnóstico. */
+@media(max-width:600px) { .connection-quality b { display:none; } }
 @media(max-width:760px) {
   .presence-menu { width:min(230px,calc(100vw - 24px)); }
   /* Sem ponteiro não há `:hover`, então as ações precisam estar à vista -- mas apagadas, para

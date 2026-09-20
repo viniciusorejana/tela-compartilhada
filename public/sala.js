@@ -396,6 +396,9 @@ async function iniciarConexao() {
     const voltando = sessaoIniciada;
     meuSocketId = socket.id;
     if (voltando) status.textContent = 'Reconectado ao servidor.';
+    // Primeira medida assim que existe caminho para medir, e não daqui a cinco segundos: é
+    // nesses primeiros instantes que se olha para a conexão, antes de ligar qualquer coisa.
+    medirLatenciaDaSinalizacao();
     sessaoIniciada = true;
     // O microfone NAO e aberto ao entrar. Num celular, abrir o microfone aqui tira o audio
     // de quem esta falando em outro aplicativo -- a pessoa entra para assistir e fica muda
@@ -577,6 +580,11 @@ async function iniciarConexao() {
     // Prometer reconexão a quem foi retirado é a mensagem errada duas vezes: ela não vai
     // acontecer, e ela apaga a frase que explicava o motivo.
     if (!fuiRemovido) status.textContent = 'Desconectado do servidor. Tentando reconectar...';
+    // O último número medido descreve uma conexão que acabou de cair. Mantê-lo na barra
+    // afirmaria, com um "24 ms" tranquilo, exatamente o contrário do que está acontecendo.
+    latenciaDaSinalizacao = null;
+    medindoLatencia = false;
+    atualizarIndicadorDeConexao();
     registrarDiagnostico('socket.disconnect');
   });
   socket.on('connect_error', erro => {
@@ -5438,6 +5446,37 @@ const chatFocusBtn = document.getElementById('chatFocusBtn');
 const musicaFocusBtn = document.getElementById('musicaFocusBtn');
 
 // ---------- Qualidade, economia e vídeo compacto ----------
+// ---------- Latência da sinalização ----------
+//
+// A latência da sala sempre veio das estatísticas de uma FAIXA de mídia -- e quem entra só
+// para ouvir não publica nem recebe faixa nenhuma. Ficava sem um único número sobre a própria
+// conexão justamente no momento em que ele decide se vale ligar a câmera.
+//
+// Esta medida não substitui a da mídia: ela percorre o mesmo caminho até o servidor, mas por
+// WebSocket, onde uma retransmissão de TCP aparece como um pico que o fluxo de mídia, em UDP,
+// não teria. Por isso as duas convivem, cada uma dizendo de onde veio: quando há mídia, vale
+// a dela; antes disso, esta é a que existe.
+let latenciaDaSinalizacao = null;
+let medindoLatencia = false;
+function medirLatenciaDaSinalizacao() {
+  if (medindoLatencia || document.hidden || !socket?.connected) return;
+  medindoLatencia = true;
+  const inicio = performance.now();
+  // Um relógio à parte porque a confirmação pode simplesmente não voltar: numa rede que caiu
+  // sem o socket perceber, guardar o último número medido afirmaria uma conexão boa que não
+  // existe mais. Sem resposta, a sala volta a dizer que não sabe.
+  const desistir = setTimeout(() => { medindoLatencia = false; latenciaDaSinalizacao = null; }, 4000);
+  socket.emit('eco', () => {
+    clearTimeout(desistir);
+    medindoLatencia = false;
+    latenciaDaSinalizacao = Math.round(performance.now() - inicio);
+  });
+}
+setInterval(medirLatenciaDaSinalizacao, 5000);
+// A volta do segundo plano e a reconexão medem na hora: o número de antes descreve uma rede
+// que pode não ser mais a mesma -- o celular que trocou de Wi-Fi para 4G é o caso comum.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) medirLatenciaDaSinalizacao(); });
+
 const connectionQualityBtn = document.getElementById('connectionQualityBtn');
 function atualizarIndicadorDeConexao() {
   const bruto = String(transporte?.qualidade || (socket?.connected ? 'good' : 'unknown')).toLowerCase();
@@ -5445,9 +5484,21 @@ function atualizarIndicadorDeConexao() {
   const rotulos = { excellent: 'Excelente', good: 'Boa', poor: 'Instável', lost: 'Sem mídia', unknown: 'Conexão' };
   connectionQualityBtn.dataset.quality = qualidade;
   connectionQualityBtn.querySelector('span').textContent = rotulos[qualidade];
+  // O número fica fora do rótulo, num elemento próprio: a barra de cima já estava apertada, e
+  // assim a largura dele varia sem empurrar o nome da sala a cada medição.
+  //
+  // Aqui é SEMPRE a da sinalização, mesmo quando há mídia no ar. Alternar entre as duas
+  // fontes faria o número pular ao ligar a câmera sem que nada na rede tivesse mudado -- e o
+  // diagnóstico, que mostra as duas lado a lado, é onde a diferença entre elas tem contexto.
+  const ms = latenciaDaSinalizacao;
+  const medida = connectionQualityBtn.querySelector('b');
+  medida.textContent = ms == null ? '' : `${ms} ms`;
+  medida.hidden = ms == null;
+  const detalhe = ms == null ? 'latência ainda não medida' : `${ms} ms até o servidor`;
   connectionQualityBtn.title = qualidade === 'poor'
-    ? 'Conexão instável — ative Economia de dados ou abra o diagnóstico'
-    : `${rotulos[qualidade]} — abrir diagnóstico`;
+    ? `Conexão instável (${detalhe}) — ative Economia de dados ou abra o diagnóstico`
+    : `${rotulos[qualidade]} · ${detalhe} — abrir diagnóstico`;
+  connectionQualityBtn.setAttribute('aria-label', connectionQualityBtn.title);
 }
 // `abrirDiagnostico` vive dentro do módulo de room-ui.js e nunca foi global: chamá-la daqui
 // lançava ReferenceError e o botão não abria nada. O caminho público é o evento que o vigia

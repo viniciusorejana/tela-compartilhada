@@ -348,6 +348,14 @@
       const estado = sala?.state || 'sem conexão';
       const conexao = cartao('Conexão');
       anotar(conexao, 'Sinalização', socket?.connected ? 'conectada' : 'desconectada', socket?.connected ? 'ok' : 'problema');
+      // Esta é a única latência que existe SEMPRE: ela não depende de haver faixa de mídia, e
+      // quem entrou só para ouvir não tem nenhuma. Acima de 150 ms a conversa já ganha aquele
+      // atraso que faz todo mundo falar junto -- é onde vale avisar, não em qualquer número.
+      if (latenciaDaSinalizacao != null) {
+        anotar(conexao, 'Latência até o servidor', `${latenciaDaSinalizacao} ms`, latenciaDaSinalizacao > 150 ? 'alerta' : 'ok');
+      } else {
+        anotar(conexao, 'Latência até o servidor', socket?.connected ? 'medindo…' : 'sem conexão', socket?.connected ? null : 'problema');
+      }
       // O estado vem em inglês da biblioteca, e este painel é lido por quem não está
       // depurando nada -- "signalReconnecting" não diz a ninguém que a sala está voltando.
       anotar(conexao, 'Servidor de mídia', ESTADOS_DA_SALA[estado] || estado, estado === 'connected' ? 'ok' : estado === 'connecting' || estado === 'reconnecting' ? 'alerta' : 'problema');
@@ -356,6 +364,7 @@
         `Navegador: ${navigator.userAgent}`,
         `Contexto seguro: ${window.isSecureContext ? 'sim' : 'não'}`,
         `Sinalização: ${socket?.connected ? 'conectada' : 'desconectada'}`,
+        `Latência até o servidor: ${latenciaDaSinalizacao != null ? latenciaDaSinalizacao + ' ms (ida e volta pela sinalização)' : 'não medida'}`,
         `Servidor de mídia: ${estado}`,
         `Codec de vídeo escolhido: ${codecDeVideoEscolhido()} (a câmera vai sempre em H.264)`,
         // Por onde o áudio do sistema está vindo, quando está. Pelo "agente" ele vai do
@@ -424,9 +433,11 @@
             rotaImpressa = true;
             anotar(conexao, 'Rota', `${local?.candidateType || 'não informada'} por ${local?.protocol || '?'}`);
             const ms = item.currentRoundTripTime != null ? Math.round(item.currentRoundTripTime * 1000) : null;
-            // Acima de 150 ms a conversa já fica com aquele atraso que faz todo mundo
-            // falar junto; é onde vale avisar, não em qualquer número.
-            if (ms != null) anotar(conexao, 'Latência', `${ms} ms`, ms > 150 ? 'alerta' : 'ok');
+            // A latência da MÍDIA, que só existe quando há faixa no ar. Ela tem nome próprio
+            // porque convive com a da sinalização, logo acima, e as duas costumam divergir:
+            // esta vai por UDP, e a outra por WebSocket, onde uma retransmissão de TCP vira
+            // um pico que o fluxo de mídia não teria.
+            if (ms != null) anotar(conexao, 'Latência da mídia', `${ms} ms`, ms > 150 ? 'alerta' : 'ok');
           }
           if (item.type === 'inbound-rtp' && item.kind === 'video') {
             recebidos += item.framesDecoded || 0;
