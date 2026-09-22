@@ -151,6 +151,23 @@ const medir = page => page.evaluate(() => ({
   assert.equal((await medir(bia)).ativos, 2, 'depois do corte os dois sons continuam tocando');
   console.log('PASS: cortar troca o som em vez de deixar um buraco');
 
+  // ---------- Apagar um som é moderação ----------
+  // A Ana entrou primeiro e abriu a sala; a Bia é participante. Até aqui qualquer pessoa
+  // apagava qualquer som, e uma só limpava a mesa inteira em um minuto.
+  assert.equal(await bia.locator('.som-apagar').count(), 0, 'quem não modera não deveria ver o ✕');
+  assert.equal(await ana.locator('.som-apagar').count(), 1, 'quem abriu a sala deveria ver o ✕');
+  // O ✕ escondido é conveniência. Quem decide é o servidor, e um cliente modificado chega lá
+  // do mesmo jeito -- então o pedido direto da Bia tem de ser recusado.
+  const recusa = await bia.evaluate(id => new Promise(resolve => socket.emit('soundboard-remover', { id }, resolve)), envio.som.id);
+  assert.equal(recusa?.ok, false, `o servidor aceitou apagar um som a pedido de quem não modera: ${JSON.stringify(recusa)}`);
+  await bia.waitForTimeout(300);
+  assert.equal(await bia.locator('.som-btn').count(), 1, 'o som tem de continuar na mesa depois da recusa');
+  await ana.locator('.som-apagar').click();
+  for (const page of [ana, bia]) {
+    await page.waitForFunction(() => document.querySelectorAll('.som-btn').length === 0, null, { timeout: 10000 });
+  }
+  console.log('PASS: só quem abriu a sala apaga sons, e o pedido direto de outra pessoa é recusado');
+
   await browser.close();
   await instancia.encerrar();
   console.log('Mesa de sons: tudo certo.');

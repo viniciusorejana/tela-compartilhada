@@ -23,6 +23,10 @@
   let sons = [];
   let espaco = null;
   let limiteDoSom = 2 * 1024 * 1024;
+  // Quem pode apagar vem da sala, que é quem sabe quem modera; este arquivo só desenha.
+  // Começa em falso porque mostrar o ✕ antes de saber seria oferecer uma ação que o
+  // servidor recusa.
+  let podeApagar = false;
   let contexto = null;
   let ganho = null;
   // id do som -> AudioBuffer ja decodificado. Baixar e decodificar acontece uma vez, quando
@@ -198,6 +202,8 @@
       botao.append(nome, autoria);
       botao.title = `Tocar "${som.nome}" para a sala`;
       botao.onclick = () => socket?.emit('soundboard-tocar', { id: som.id });
+      cartao.append(botao);
+      if (!podeApagar) return cartao;
 
       const apagar = document.createElement('button');
       apagar.type = 'button';
@@ -206,10 +212,13 @@
       apagar.title = `Apagar "${som.nome}" da mesa`;
       apagar.onclick = evento => {
         evento.stopPropagation();
-        socket?.emit('soundboard-remover', { id: som.id });
+        // A recusa só acontece se o papel mudou entre o desenho e o clique. Mesmo rara, ela
+        // precisa dizer o motivo: um ✕ que não faz nada parece defeito.
+        socket?.emit('soundboard-remover', { id: som.id }, resposta => {
+          if (resposta && !resposta.ok && resposta.error) $('sonsEspaco').textContent = resposta.error;
+        });
       };
-
-      cartao.append(botao, apagar);
+      cartao.append(apagar);
       return cartao;
     }));
 
@@ -323,6 +332,11 @@
   window.NexoSoundboard = {
     abrir: abrirPainel,
     definirMudoGlobal(ativo) { mudoGlobal = Boolean(ativo); aplicarGanho(); },
+    definirPodeApagar(pode) {
+      if (podeApagar === Boolean(pode)) return;
+      podeApagar = Boolean(pode);
+      pintarGrade();
+    },
     // "Esquecer o que ajustei", em Dispositivos. Devolve a mesa ao padrão e apaga as duas
     // chaves antigas -- elas são desta mesa, e não da camada de preferências, então
     // ninguém mais pode apagá-las.

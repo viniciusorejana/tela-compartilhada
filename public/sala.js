@@ -4257,6 +4257,10 @@ function aplicarConfiguracaoDaSala(nova) {
   const sonsPermitidos = podeModerar || configuracaoDaSala.soundboard;
   const somBtn = document.getElementById('soundboardBtn');
   if (somBtn) { somBtn.disabled = !sonsPermitidos; somBtn.title = sonsPermitidos ? 'Mesa de sons da sala' : 'Mesa de sons restrita por quem abriu a sala'; }
+  // Apagar não segue a chave da mesa: restringir trava enviar e tocar, e apagar o som de
+  // outra pessoa é moderação. Esta função roda sempre que o dono muda, e é por isso que o
+  // aviso sai daqui.
+  window.NexoSoundboard?.definirPodeApagar?.(podeModerar);
   const musicaPermitida = podeModerar || configuracaoDaSala.musica;
   const musicaInput = document.getElementById('musicaInput');
   const musicaSend = document.getElementById('musicaSend');

@@ -1361,13 +1361,27 @@ io.on('connection', (socket) => {
   });
 
   socket.on('soundboard-remover', (dados, callback) => {
+    const responder = r => { if (typeof callback === 'function') callback(r); };
     const roomCode = roomCodeForSocket(socket);
-    if (!roomCode) return;
+    if (!roomCode) return responder({ ok: false });
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    // Apagar um som é apagar o que outra pessoa pôs na sala, e até aqui qualquer um podia --
+    // inclusive com a mesa restringida, que travava enviar e tocar mas não apagar. Com 30
+    // remoções por minuto no limitador e 30 sons por mesa, uma pessoa sozinha limpava a mesa
+    // inteira em um minuto.
+    //
+    // A regra decidida é "apaga quem tem conta" (docs/plano-contas.md). Contas ainda não
+    // existem, e aplicá-la ao pé da letra deixaria a mesa sem ninguém capaz de apagar nada.
+    // Até lá apaga quem abriu a sala, que já apaga qualquer mensagem do chat pelo mesmo
+    // motivo; a conta entra nesta condição quando existir.
+    if (!membro || !moderacao.pode(roomCode, membro.identidade, 'expulsar')) {
+      return responder({ ok: false, error: 'Só quem abriu a sala pode apagar sons da mesa.' });
+    }
     const removido = soundboard.remover(roomCode, dados?.id);
     if (removido) {
       io.to(roomName(roomCode)).emit('soundboard-lista', { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode) });
     }
-    if (typeof callback === 'function') callback({ ok: Boolean(removido) });
+    responder({ ok: Boolean(removido) });
   });
 
   socket.on('soundboard-lista', (callback) => {
