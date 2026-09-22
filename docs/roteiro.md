@@ -25,6 +25,7 @@ dela.
 | Relatos de problema chegam ao painel (degrau 2) | `b18cde9` |
 | Sugestões com caminho próprio, em lista separada | `e18dc5f` |
 | Sala com dono: expulsar, banir, desbanir, transferir (primeiro item do degrau 6) | `bd73c01`, `e18dc5f` |
+| Apagar sons da mesa virou moderação: só quem abriu a sala, até as contas existirem | `5e81f75` |
 | Aplicativo para Linux e macOS; a página oferece só o que existe | `3668834`, `92740d6` |
 | `npm start` roda no Linux (era pendência do degrau 1) | `540fc6c` |
 | Melhorias de sala: chat, layout, controles, latência desde a entrada | `779dc3e` a `633265c` |
@@ -39,7 +40,7 @@ dela.
 
 ---
 
-## Fase 1 — Contas · ~10–12 dias · *próxima*
+## Fase 1 — Contas · ~11–13 dias · *próxima*
 
 Plano completo em [`plano-contas.md`](plano-contas.md).
 
@@ -47,8 +48,8 @@ Plano completo em [`plano-contas.md`](plano-contas.md).
 |---|---|---|
 | A | banco, cadastro, login e sessão — com o "sem atraso" garantido por teste | 3 |
 | B | perfil que segue a pessoa; apagar a conta | 2 |
-| C | só conta abre sala; carência de 60 s; dono sobrevive ao F5; banimento sem atingir homônimos | 3 |
-| D | os níveis 720p30 / 720p60 / 1080p–1440p, com o teto conferido no servidor | 2 |
+| C | só conta abre sala; carência de 60 s; dono sobrevive ao F5; banimento sem atingir homônimos; enviar e apagar sons exigem conta; a própria mensagem continua editável depois do F5 | 3,5 |
+| D | os níveis 720p30 / 720p60 / 1080p–1440p, com o teto conferido no servidor; teto de pessoas maior com assinante na sala; premium à mão pelo painel | 2,5 |
 
 Cada etapa sobe sozinha. A etapa A não muda nada para quem já usa.
 
@@ -64,14 +65,17 @@ Cada etapa sobe sozinha. A etapa A não muda nada para quem já usa.
     dentro deles);
   - o teste que fecha o degrau: alguém em 4G, alguém em Wi-Fi corporativo com UDP bloqueado, e
     um iPhone, os três recebendo tela.
-- **Teto de pessoas por sala** (degrau 6, ainda não existe). Uma sala de 15 em 1440p são ~90
-  Mbps, e quem paga é você.
+- **Teto de pessoas por sala** (degrau 6, ainda não existe): **25** para começar. Uma sala de
+  15 em 1440p são ~90 Mbps, e quem paga é você. O aumento para **50** com um assinante na sala
+  vem na etapa D, porque depende de o plano existir.
 - **O estado do Nexo na página inicial** (a metade do degrau 4 que falta): 720p60 e 1080p30
   cabem em software; 1080p60 e 1440p cedem resolução para não travar.
 - **Página de privacidade** — precisa existir no dia em que houver senha guardada (LGPD).
 - **Relatar uma pessoa ao mantenedor** (degrau 6): cabe na rota dos relatos, agora com o
   código da conta.
-- **Avisar o grupo atual** e dar uma janela antes de "só conta abre sala" valer.
+- **Avisar o grupo atual** e dar uma janela antes de "só conta abre sala" valer. Sugestão:
+  premium de cortesia para esse grupo por alguns meses, pelo painel. Hoje eles transmitem em
+  1440p de graça; assim viram os primeiros apoiadores, em vez de sentirem que perderam algo.
 
 ---
 
@@ -93,8 +97,8 @@ Estimativa deste roteiro; nenhum plano mediu esta fase ainda.
 - O e-mail passa a ser obrigatório aqui, e com ele entra o remetente transacional.
 - **Fora do código:** receber como pessoa física ou como MEI é conversa com contador, e precisa
   estar resolvido antes do primeiro pagamento.
-- **Atalho:** antes de integrar, o painel marca uma conta como premium à mão, para quem pagar
-  por PIX direto. Valida se R$ 10 converte antes de gastar dias na integração.
+- **Atalho, pronto desde a etapa D:** o painel marca uma conta como premium à mão, para quem
+  pagar por PIX direto. Valida se R$ 10 converte antes de gastar dias na integração.
 - **Vitalício só como captação limitada** ("primeiros apoiadores"): o custo é mensal e a
   receita seria única — ver `lancamento.md`, degrau 5.
 

@@ -21,6 +21,9 @@ quem transmite, não a sua conta de banda.
 | Convite | o link vale enquanto a sala existir, e morre com ela |
 | Premium | começa em **R$ 10/mês**; o valor se ajusta depois |
 | Teto de resolução | conferido no servidor quando os planos entrarem, a partir do plano guardado na conta |
+| Mesa de sons | enviar e apagar sons exigem conta (grátis ou premium). Até as contas existirem, apaga só quem abriu a sala — já em vigor (`5e81f75`) |
+| Pessoas por sala | toda sala tem teto, e ele sobe quando há um assinante na sala |
+| Editar e apagar a própria mensagem | sem conta, vale até recarregar a página, como hoje; com conta, vale sempre |
 | Salas privadas | ficam como estão: tranca + aprovação |
 | Salas e conversas persistentes | **não agora**; o terreno fica preparado |
 | Senha e banco | sem atraso entre salas nem entre telas — medido, não prometido |
@@ -582,19 +585,45 @@ O que já está preparado, e o que ainda mudaria:
 
 ## Os três níveis
 
+A matriz inteira, levantada do que o Nexo oferece hoje no código:
+
 | | sem conta | conta grátis | premium — R$ 10/mês |
 |---|:--:|:--:|:--:|
+| **Entrar e abrir** | | | |
 | Entrar por link, com a sala aberta | ✅ | ✅ | ✅ |
-| Voz, câmera, chat, música, mesa de sons | ✅ | ✅ | ✅ |
-| Compartilhar tela | 720p30 | 720p**60** | **1080p e 1440p** |
-| **Abrir sala** | ❌ | ✅ | ✅ |
-| Trancar, aprovar, expulsar, banir | só se herdar a sala | ✅ | ✅ |
-| Código permanente | ❌ | ✅ | ✅ |
-| Configuração segue a pessoa | ❌ | ✅ | ✅ |
-| Cor e marca de perfil | ❌ | ✅ | ✅ |
+| **Abrir sala** | ❌ espera alguém com conta | ✅ | ✅ |
+| Pessoas na sala | teto base, ou o maior se houver um assinante | igual | **leva a sala ao teto maior** |
+| **Mídia** | | | |
+| Voz, redução de ruído, push-to-talk | ✅ | ✅ | ✅ |
+| Câmera (720p) | ✅ | ✅ | ✅ |
+| **Transmitir tela** | **720p30** | **720p60** | **1080p e 1440p** |
+| Assistir telas | na qualidade de quem transmite | igual | igual |
+| Áudio da tela; áudio de um programa só (aplicativo no Windows) | ✅ | ✅ | ✅ |
+| Várias telas ao mesmo tempo | ✅ | ✅ | ✅ |
+| **Sala** | | | |
+| Chat: texto, imagem, responder, reagir | ✅ | ✅ | ✅ |
+| Editar e apagar as próprias mensagens | até recarregar a página | sempre | sempre |
+| Pedir música; tocar sons da mesa | ✅ | ✅ | ✅ |
+| **Enviar sons para a mesa** | ❌ | ✅ | ✅ |
+| **Apagar sons da mesa** | ❌ (só se a sala passar para ele) | ✅ | ✅ |
+| **Como dono** | | | |
+| Trancar, aprovar, expulsar, banir, fixar, restringir tela/sons/música | só se a sala passar para ele | ✅ | ✅ |
 | Continuar dono depois do F5 | ❌ | ✅ | ✅ |
-| Banimento sem atingir homônimos | ❌ (por nome) | ✅ | ✅ |
+| **Quando é banido** | pelo nome, e atinge anônimos com o mesmo nome | só a própria conta | igual |
+| **Identidade** | | | |
+| Nome | escolhido a cada entrada | apelido, repetível | igual |
+| Código permanente; cor e marca | ❌ | ✅ | ✅ |
+| Configuração em qualquer aparelho | só neste navegador | ✅ | ✅ |
 | Selo de apoiador *(sugestão; custo zero)* | ❌ | ❌ | ✅ |
+| **O que o servidor guarda** | nada ligado à pessoa | conta, perfil, ajustes | + e-mail e pagamento |
+
+Resumindo: **sem conta** é convidado, e participa de tudo o que é essencial. **Conta grátis**
+abre salas, transmite a 60 quadros, cria conteúdo na mesa e tem identidade. **Premium**
+transmite em resolução alta e aumenta a sala.
+
+**Apagar sons, quando a sala passa a um anônimo:** a regra decidida é "apaga quem tem conta",
+mas quem modera a sala também apaga, como já apaga qualquer mensagem do chat. Hoje, sem contas,
+esse é o único caminho — e foi assim que a correção `5e81f75` entrou.
 
 **Compartilhar tela continua livre para quem não tem conta.** A pessoa foi convidada
 justamente para mostrar alguma coisa; limitar a *resolução* dela não quebra nada, e cria um
@@ -611,6 +640,39 @@ hardware chegar — sem cobrar de novo.
 **A conta, a R$ 10** (na conversão usada no `docs/lancamento.md`, ~R$ 6,40 por euro, e antes
 das taxas do meio de pagamento): **~9 assinantes pagam o VPS de €14** que atende uns 2.000
 ativos, e **~26 pagam os €40** que atendem uns 3.000.
+
+**Quem assiste não paga — e esse é o melhor argumento do premium.** Quem assiste recebe a tela
+na qualidade de quem transmite, até o que a própria conexão aguenta. Um assinante no grupo faz
+todo mundo ver a tela dele em 1080p, inclusive quem nem tem conta. Por isso assistir nunca é
+limitado por plano.
+
+O outro lado dessa frase é o custo: um assinante custa o que ele transmite vezes quantos
+assistem. É o motivo de o teto de pessoas, logo abaixo, importar mais para o premium do que
+para qualquer outro nível.
+
+**O único degrau de quadros é entre sem conta e conta grátis.** Não contraria "nunca se cobra
+por quadros", porque a conta é grátis — e 60 quadros custam de fato ~1,4× a banda de 30. É uma
+exceção consciente, e fica registrada como tal.
+
+### O teto de pessoas por sala
+
+Decidido: toda sala tem teto, e ele **sobe quando há um assinante na sala**. "Um assinante na
+sala" é qualquer um presente, e não só quem abriu: funciona como um impulso que quem paga dá à
+sala em que está.
+
+- **Números de partida: 25 e 50.** 25 fica acima dos picos de 10 a 20 que o uso real mostrou;
+  50 é o dobro. São constantes, e o painel precisa mostrar quantas salas encostam no teto — é
+  isso que diz se os números estão certos.
+- **Quem entra conta a si mesmo.** Um assinante consegue entrar numa sala que já está no teto
+  base, porque é a presença dele que o aumenta.
+- **Quando o assinante sai, ninguém é removido.** A sala continua com quem está; novas entradas
+  são recusadas, com o motivo, até ela ficar abaixo do teto base ou outro assinante chegar.
+- **O caso mais caro:** 50 pessoas assistindo em tela cheia a uma tela em 1440p são ~300 Mbps
+  numa sala só (49 × ~6 Mbps) — quase um terço de uma porta de 1 Gbps. Improvável no começo, e
+  é exatamente o número que o painel deve vigiar.
+
+O teto base não depende de conta nenhuma e entra antes, na fase 2 do
+[`roteiro.md`](roteiro.md); o aumento pelo assinante entra na etapa D.
 
 ---
 
@@ -654,7 +716,7 @@ Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
   volume por pessoa têm de ficar de fora, e um teste que afirme isso protege a decisão de ser
   desfeita sem querer.
 
-### Etapa C — sala e moderação com conta (3 dias)
+### Etapa C — sala e moderação com conta (3,5 dias)
 
 - `salas.js` — o ciclo de vida: só conta abre, carência de 60 s, tela de espera para quem
   chega antes. `sairDaSalaAtual` encolhe para uma chamada.
@@ -664,16 +726,26 @@ Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
   de dizer "Sem cadastro" para quem cria.
 - Lista da sala: o código só aparece quando dois nomes se repetem; cartão de perfil com o
   código.
-- Testes: F5 do dono, homônimos, sair da conta e voltar anônimo, transferência respeitada, e um
-  teste de navegador para quem chega antes de a sala abrir.
+- Mesa de sons: enviar e apagar exigem conta. Apagar já é só de quem modera desde `5e81f75`;
+  aqui a conta entra na mesma condição, e a rota de envio passa a recusar quem não tem conta.
+- Mensagens: a mensagem em memória guarda, só no servidor, a conta de quem escreveu. Quem tem
+  conta edita e apaga as próprias mensagens mesmo depois de recarregar a página; sem conta,
+  continua valendo só até recarregar.
+- Testes: F5 do dono, homônimos, sair da conta e voltar anônimo, transferência respeitada,
+  envio de som sem conta recusado, editar a própria mensagem depois do F5, e um teste de
+  navegador para quem chega antes de a sala abrir.
 
-### Etapa D — os níveis (2 dias)
+### Etapa D — os níveis (2,5 dias)
 
 - `planos.js` — módulo puro com os limites de cada nível, testável sem navegador como
   `quality-utils.js` e `moderacao.js`.
 - Cadeado no seletor; largura e altura repassadas em `aoEvento`; folga de 10%; avisar, esperar
   e só então desligar; `MutePublishedTrack` na lista de `sfu.js`.
-- Testes: limites, folga, plano vencido guardando a escolha, e um caso de navegador em que a
+- O teto de pessoas sobe com um assinante na sala (o teto base já veio da fase 2 do roteiro).
+- Painel: marcar uma conta como premium à mão, com prazo em `plano_ate`. É o atalho que deixa
+  receber de apoiadores por PIX direto antes de a etapa E existir.
+- Testes: limites, folga, plano vencido guardando a escolha, um assinante entrando numa sala
+  que está no teto base, a saída dele sem remover ninguém, e um caso de navegador em que a
   faixa acima do plano cai.
 
 ### Etapa E — pagamento (fora deste plano; o gancho está pronto)
@@ -681,7 +753,7 @@ Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
 `conta.plano` e `conta.plano_ate` são a superfície inteira. A webhook do provedor muda uma
 coluna; tudo o mais já lê dali. É aqui que o e-mail passa a ser obrigatório.
 
-**Soma:** ~10 a 12 dias de trabalho concentrado até o fim da etapa D.
+**Soma:** ~11 a 13 dias de trabalho concentrado até o fim da etapa D.
 
 ---
 
@@ -689,7 +761,7 @@ coluna; tudo o mais já lê dali. É aqui que o e-mail passa a ser obrigatório.
 
 | arquivo | mudança |
 |---|---|
-| `server.js` | `/api/sala-config` e `join-room` perguntam ao ciclo de vida se a sala está aberta e quem pode abri-la; `sairDaSalaAtual` encolhe para uma chamada |
+| `server.js` | `/api/sala-config` e `join-room` perguntam ao ciclo de vida se a sala está aberta e quem pode abri-la; `sairDaSalaAtual` encolhe para uma chamada; a mesa de sons confere a conta para enviar e apagar; o teto de pessoas na entrada |
 | `moderacao.js` | chave por conta ou por nome; ausente ≠ saiu; sucessão que prefere conta; as regras de banimento |
 | `telemetria/index.js` | `aoEvento` repassa largura e altura; a sessão carrega `contaId` e `plano` |
 | `telemetria/sessoes.js` | `emitir` aceita a conta da sessão autenticada |
