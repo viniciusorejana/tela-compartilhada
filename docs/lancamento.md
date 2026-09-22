@@ -337,11 +337,14 @@ O botão de copiar **fica**. Ele continua sendo o caminho de quem quer pedir aju
 Hoje o link é o convite e não há identidade. É o que a comunidade pede e o que o pagamento
 exige.
 
-> **Este degrau está aberto inteiro em [`plano-contas.md`](plano-contas.md)** — modelo de
-> dados, etapas, os três níveis e salas privadas. Duas recomendações daqui mudaram lá, depois
-> de olhar o código: o banco passou a ser **SQLite embutido** (zero dependência, zero processo
-> a mais) em vez de Postgres, e o **e-mail deixou de ser obrigatório no cadastro**, porque ele
-> arrastava junto o único custo fixo mensal do lançamento. O resto desta seção continua de pé.
+> **Este degrau está aberto inteiro em [`plano-contas.md`](plano-contas.md)**, com as
+> decisões tomadas em 21/09/2026 — modelo de dados, etapas, os três níveis, banimento e
+> salas. O que mudou em relação a esta seção: o banco é **SQLite embutido** (zero dependência,
+> zero processo a mais), o **e-mail é opcional no cadastro** (ele arrastava junto o único
+> custo fixo mensal do lançamento), os **nomes podem se repetir** e quem tem conta ganha um
+> código permanente, e o **premium começa em R$ 10** — a conclusão de custo deste documento,
+> feita a R$ 15, passa a ser ~26 assinantes para os €40/mês. O resto desta seção continua de
+> pé.
 
 - **Banco:** no mesmo VPS, sem serviço gerenciado — serviço gerenciado é o segundo lugar onde
   custo escapa, depois do egress. Backup diário para object storage barato (Hetzner Storage
