@@ -224,7 +224,9 @@ codificador. Isso transforma "o Nexo é ruim" em "a minha máquina não codifica
 
 ## Plano de ação, em degraus
 
-Cada degrau é entregável sozinho, e a ordem é por **bloqueio**, não por facilidade.
+Cada degrau é entregável sozinho, e a ordem é por **bloqueio**, não por facilidade. O que já
+foi feito de cada um, e a ordem atual junto com os planos de contas e do WebCodecs, está em
+[`roteiro.md`](roteiro.md).
 
 ### Degrau 1 — sair de casa (bloqueia tudo, e é menor do que parece)
 
@@ -249,14 +251,14 @@ O que **de fato** falta, e é tudo pequeno:
 
 1. **TLS.** `server.js` usa `http.createServer` e não termina TLS. Um proxy reverso resolve
    (Caddy faz isso em três linhas de configuração, com certificado automático).
-2. **`npm start` não roda em Linux.** Ele chama `build:helper`, que é um script PowerShell.
-   Em Linux o comando é `npm run build:sfu && node server.js` — ou o script ganha uma
-   condicional por plataforma.
-3. **O agente de áudio precisa chegar lá por fora.** Os `.exe` não são versionados
-   (`.gitignore`), então num servidor Linux `fs.existsSync(AGENTE_PATH)` é falso e
-   `/api/agente` responde 503. O servidor **roda** — a funcionalidade apenas não é oferecida.
-   Para oferecê-la, o `AgenteAudio.exe` compilado no Windows tem de ser copiado para o
-   servidor, ou publicado num release e a rota passar a redirecionar.
+2. ~~**`npm start` não roda em Linux.**~~ **Resolvido em 19/09/2026** (`540fc6c`): o `start`
+   deixou de chamar `build:helper`, que é um script PowerShell, e passou a ser
+   `npm run build:sfu && node server.js` — que roda igual no Linux.
+3. **Os instaladores do aplicativo precisam chegar lá por fora.** Desde `3668834` o agente de
+   áudio vai **dentro** do aplicativo de Windows, então o servidor não precisa mais dele. O que
+   continua fora do Git (`app/dist/` está no `.gitignore`) são os próprios instaladores —
+   `SalaCompartilhada.exe`, `Nexo.AppImage` e `Nexo.dmg`. Sem eles no `app/dist` do VPS, o
+   servidor **roda**, e a página apenas não oferece o download.
 4. **arm64 não é aceito.** `pacoteDestaMaquina()` recusa `process.arch !== 'x64'`. Só importa
    se o destino for ARM (ver "hospedagem gratuita", adiante).
 
@@ -264,7 +266,8 @@ Uma consequência de desenho que vale registrar: **hospedar remoto torna o `audi
 irrelevante e o `audio-agent` essencial.** O helper lista e captura aplicativos da máquina
 onde o **servidor** roda — o que só faz sentido no uso local, em que servidor e transmissor
 são o mesmo computador. Remoto, quem captura áudio de aplicativo é o agente, na máquina da
-pessoa. Então o item 3 acima não é detalhe: sem ele, ninguém tem áudio de aplicativo.
+pessoa — e é por isso que ele passou a viajar dentro do aplicativo. Então o item 3 acima não é
+detalhe: sem os instaladores no servidor, ninguém tem áudio de aplicativo.
 
 - **Teste que fecha o degrau:** alguém em 4G, alguém em Wi-Fi corporativo com UDP bloqueado,
   e um iPhone — os três recebendo tela.
@@ -404,11 +407,12 @@ degrau 1. Como oferta permanente, é uma dívida que cresce.
 
 ### Degrau 6 — moderação mínima, e o que NÃO construir
 
-- **Sala com dono, expulsar e banir.** `telemetria/abuso.js` já tem cota e limite de taxa,
-  mas não há como remover uma pessoa. Numa comunidade aberta isso aparece na primeira semana.
+- **Sala com dono, expulsar e banir.** **Feito** (`bd73c01`, `e18dc5f`): dono, expulsar,
+  banir por 60 minutos, desbanir e transferir. O que as contas mudam nisso está em
+  [`plano-contas.md`](plano-contas.md).
 - **Limite de pessoas por sala.** Hoje existe teto de 6 câmeras; o de pessoas, não. Uma sala
   de 15 em 1440p é ~90 Mbps sozinha.
-- **Um caminho para relatar abuso**, que reusa a mesma rota do degrau 1.5.
+- **Um caminho para relatar abuso**, que reusa a rota dos relatos do degrau 2.
 
 #### Sobre virar um Discord: a recomendação é não
 
@@ -430,8 +434,10 @@ A posição mais forte é **complementar, não substituto**: a turma se organiza
 para o Nexo assistir junto. Isso também é o caminho de aquisição mais barato que existe, porque
 o convite circula exatamente onde as pessoas já estão.
 
-Então o minimalismo fica — **1 sala = 1 call + 1 chat + 1 bot** — com duas adições e só duas:
-o link deixa de expirar, e a sala passa a ter dono. Dois papéis, não um sistema de cargos:
+Então o minimalismo fica — **1 sala = 1 call + 1 chat + 1 bot** — com uma adição, já feita: a
+sala passa a ter dono. O link **continua** morrendo com a sala: em 21/09/2026 ficou decidido
+não persistir salas por enquanto, com o terreno preparado (ver
+[`plano-contas.md`](plano-contas.md)). Dois papéis, não um sistema de cargos:
 **dono** e **participante**. Se a comunidade pedir mais, você já terá usuários para justificar
 o custo — e aí a decisão é tomada com dados em vez de com suposição.
 
