@@ -60,6 +60,12 @@ caracteres", "não usa O, I, L, 0 nem 1". Erro de digitação não gasta tentati
 editor de apelido, cor e marca; ao salvar, a sala inteira vê o perfil novo na hora — na lista,
 no chat e, para quem entrar depois, no servidor de mídia. Vale também para mudanças feitas em
 `/conta` com a sala aberta noutra aba.
+
+**Uma conta, uma conexão.** Entrar numa sala com a mesma conta por outro aparelho (ou outra
+aba) encerra a conexão mais antiga — na mesma sala ou em outra. A aba antiga diz por quê e
+oferece "Usar a conta aqui", que faz o caminho inverso. A mesma sessão voltando de uma queda
+de rede não conta, e anônimos não são atingidos: sem conta, não há como saber que duas abas
+são a mesma pessoa. A sala também só pode ser **passada** para quem entrou com conta.
 O plano inteiro, com o porquê de cada decisão, está em [`docs/plano-contas.md`](docs/plano-contas.md).
 
 O banco é SQLite embutido no próprio Node (`node:sqlite`, sem dependência), em

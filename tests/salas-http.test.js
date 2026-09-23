@@ -76,6 +76,51 @@ test('a sala só passa para quem tem conta, e quem transferiu não a retoma ao v
   assert.equal(volta.entrada.dono, bia.identidade, 'a transferência vale como foi feita');
 });
 
+// Uma conta, uma conexão: a mesma conta entrando por outro aparelho tira a conexão antiga --
+// na mesma sala ou em outra --, e diz por quê antes de fechar.
+async function entrarEm(servidor, t, cred, sala) {
+  const socket = await conectarSocket(servidor.origem, cred.credencialSessao);
+  t.after(socket.fechar);
+  const entrada = await socket.pedir('join-room', sala, 'ignorado', cred.identidade);
+  assert.equal(entrada.ok, true, JSON.stringify(entrada));
+  return socket;
+}
+
+test('a mesma conta em outra sala, por outro aparelho, tira a conexão antiga', async t => {
+  const servidor = await semJanela(); t.after(servidor.encerrar);
+  const ana = await servidor.conta('ana', { apelido: 'Ana', sala: SALA });
+  const notebook = await entrarEm(servidor, t, ana, SALA);
+  const noCelular = await servidor.credencial('Ana', 'outra-sala', '', ana.cookie);
+  const celular = await entrarEm(servidor, t, noCelular, 'outra-sala');
+  const aviso = await notebook.esperar(m => m.includes('removido-da-sala'));
+  assert.match(aviso, /"motivo":"outra-conexao"/);
+  assert.match(aviso, /"mesmaSala":false/);
+  await notebook.esperar(m => m === '41');
+  assert.equal((await celular.pedir('musica-estado')).estado.conectado, false, 'a conexão nova continua de pé');
+});
+
+test('a mesma conta na mesma sala: fica só a entrada nova, e ela continua dona', async t => {
+  const servidor = await semJanela(); t.after(servidor.encerrar);
+  const ana = await servidor.conta('ana', { apelido: 'Ana', sala: SALA });
+  const antiga = await entrarEm(servidor, t, ana, SALA);
+  const bia = await entrarEm(servidor, t, await servidor.credencial('Bia', SALA), SALA);
+  const outroAparelho = await servidor.credencial('Ana', SALA, '', ana.cookie);
+  const nova = await conectarSocket(servidor.origem, outroAparelho.credencialSessao); t.after(nova.fechar);
+  const entrada = await nova.pedir('join-room', SALA, 'ignorado', outroAparelho.identidade);
+  assert.equal(entrada.dono, outroAparelho.identidade, 'a sala é da conta, e a conta chegou por aqui');
+  assert.match(await antiga.esperar(m => m.includes('removido-da-sala')), /"mesmaSala":true/);
+  // Quem estava na sala vê a entrada antiga sair: a pessoa não aparece duas vezes.
+  await bia.esperar(m => m.includes('peer-left') && m.includes(ana.identidade));
+});
+
+test('anônimos com o mesmo nome não se derrubam: sem conta, não dá para saber que é a mesma pessoa', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const primeira = await entrarEm(servidor, t, await servidor.credencial('Caio', SALA), SALA);
+  await entrarEm(servidor, t, await servidor.credencial('Caio', SALA), SALA);
+  await new Promise(resolve => setTimeout(resolve, 400));
+  assert.equal(primeira.recebidos.some(m => m.includes('removido-da-sala') || m === '41'), false);
+});
+
 // As regras 1, 2 e 3 do banimento, com homônimos de verdade.
 test('banir a Ana anônima não barra a Ana com conta; banir a conta barra o apelido dela para anônimos', async t => {
   const servidor = await semJanela(); t.after(servidor.encerrar);

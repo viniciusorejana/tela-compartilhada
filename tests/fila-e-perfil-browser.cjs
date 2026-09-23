@@ -79,6 +79,10 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   assert.equal(await ana.evaluate(() => document.activeElement.closest('.fila-item')?.dataset.id), 'f1', 'o foco acompanha a faixa, para a próxima seta');
   await ana.keyboard.press('Home');
   for (const pagina of [ana, bia]) await esperarOrdem(pagina, '14235', 'Home leva ao topo');
+  // A tela muda na hora e o servidor confirma logo depois, redesenhando a lista. O estado
+  // chega antes da mensagem do bot: esperá-la é saber que a lista parou de mudar.
+  await esperarAte(async () => /Ana.*pôs.*Faixa 1.*a seguir/.test(await ultimaDoBot(ana)), 'a confirmação do Home não chegou');
+  assert.equal(await ana.evaluate(() => document.activeElement.closest('.fila-item')?.dataset.id), 'f1', 'e o foco sobrevive à confirmação do servidor');
   console.log('PASS: reordenar pelo teclado, com o foco seguindo a faixa');
 
   // ---------- Arrastar ----------
@@ -182,8 +186,31 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   assert.equal(await bia.locator('#atualizarAppBtn').isHidden(), true);
   console.log('PASS: o aplicativo antigo vê "Atualizar" num canto, com a versão nova e o link, e "Depois" vale');
 
+  // ---------- A mesma conta em outro aparelho ----------
+  //
+  // A Ana abre a mesma conta em outro navegador e entra na sala: a aba antiga sai, com o
+  // motivo e o caminho de volta -- que, usado, tira a conta do outro aparelho.
+  const outroAparelho = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  await outroAparelho.addCookies([{ name: 'nexo_conta', value: cookie.split('=')[1], url: origin }]);
+  const anaNoCelular = await entrar(outroAparelho, 'Ana');
+  await ana.locator('#removidoPanel').waitFor({ timeout: 10000 });
+  assert.equal(await ana.locator('#removidoTitulo').textContent(), 'Sua conta está em outro aparelho');
+  assert.match(await ana.locator('#removidoMotivo').textContent(), /entrou nesta sala por outro aparelho/);
+  assert.equal(await ana.locator('#removidoVoltar').isVisible(), true);
+  await ana.screenshot({ path: path.join(saida, 'outro-aparelho.png') });
+  await ana.waitForTimeout(800);
+  assert.equal(await ana.locator('#removidoPanel').isVisible(), true, 'a aba antiga não volta sozinha para a sala');
+  assert.equal(await anaNoCelular.locator('#removidoPanel').isVisible(), false);
+  await ana.locator('#removidoVoltar').click();
+  await ana.waitForLoadState();
+  await ana.evaluate(() => window.NexoConta?.pronto);
+  await ana.locator('#nameConfirmBtn').click();
+  await ana.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
+  await anaNoCelular.locator('#removidoPanel').waitFor({ timeout: 10000 });
+  console.log('PASS: a mesma conta em outro aparelho tira a conexão antiga, que mostra o motivo e o caminho de volta');
+
   assert.deepEqual(erros, []);
-  console.log('Fila, perfil e atualização na sala: tudo certo.');
+  console.log('Fila, perfil, atualização e conta única na sala: tudo certo.');
 })().catch(async erro => {
   console.error(erro);
   console.error(instancia?.erros());

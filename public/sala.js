@@ -456,6 +456,9 @@ async function iniciarConexao() {
   socket.on('limite-atingido', aviso => { status.textContent = aviso.error || 'Aguarde antes de tentar novamente.'; });
   let renovandoSessao = false;
   socket.on('connect_error', async erro => {
+    // Quem foi retirado (moderação, ou a conta aberta em outro aparelho) não renova nada: a
+    // renovação traria esta aba de volta e derrubaria a conexão nova.
+    if (fuiRemovido) return;
     status.textContent = erro.message || 'Não foi possível conectar ao chat.';
     if (renovandoSessao || saindoDaSala || !erro.message?.includes('Sessão inválida')) return;
     renovandoSessao = true;
@@ -685,12 +688,22 @@ async function iniciarConexao() {
 
   // Ser removido não pode ser silencioso, e não pode parecer queda de conexão -- senão a
   // pessoa fica recarregando a página sem entender, e a sala recebe dez tentativas de volta.
-  socket.on('removido-da-sala', ({ motivo, minutos }) => {
+  socket.on('removido-da-sala', ({ motivo, minutos, mesmaSala }) => {
     fuiRemovido = true;
+    // A conta entrou por outro aparelho: não é castigo, é a conta que foi para outro lugar.
+    // A frase diz isso, e o painel oferece o caminho de volta -- que, por sua vez, tira a
+    // conta do outro aparelho.
+    const outraConexao = motivo === 'outra-conexao';
     const frase = motivo === 'banir'
       ? `Você foi removido desta sala e não pode voltar por ${minutos || 60} min.`
       : motivo === 'suspensa' ? 'Sua conta foi suspensa, e por isso você saiu da sala.'
+      : outraConexao ? (mesmaSala
+        ? 'Sua conta entrou nesta sala por outro aparelho, e esta conexão foi encerrada: a conta fica num lugar só, para não aparecer duas vezes.'
+        : 'Sua conta entrou em outra sala por outro aparelho, e esta conexão foi encerrada: a conta fica num lugar só.')
       : 'Você foi removido desta sala por quem a modera.';
+    document.getElementById('removidoTitulo').textContent = outraConexao ? 'Sua conta está em outro aparelho' : 'Você saiu desta sala';
+    document.getElementById('removidoVoltar').hidden = !outraConexao;
+    document.getElementById('removidoInicio').classList.toggle('secundario', outraConexao);
     status.textContent = frase;
     // `desconectar` e não só encerrar as capturas: ele marca a saída como deliberada, e sem
     // isso o transporte trataria a queda como oscilação e tentaria voltar para a sala de que
@@ -704,6 +717,9 @@ async function iniciarConexao() {
       + (motivo === 'banir' ? ' Se isso foi um engano, fale com quem abriu a sala.' : '');
     document.getElementById('removidoPanel').classList.remove('hidden');
   });
+
+  // Voltar a usar a conta aqui é entrar de novo -- e a entrada nova tira a do outro aparelho.
+  document.getElementById('removidoVoltar').onclick = () => location.reload();
 
   socket.on('audio-data', (data) => receberPcm(data));
 

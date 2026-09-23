@@ -291,6 +291,35 @@ function perfilNaSala(conta) {
   return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca };
 }
 
+// ---------- Uma conta, uma conexão ----------
+//
+// A mesma conta entrou numa sala por outro aparelho (ou outra aba): a conexão mais antiga
+// sai, nesta sala ou em qualquer outra. Duas conexões da mesma conta eram a mesma pessoa
+// aparecendo duas vezes -- duas vozes, dois quadradinhos, o notebook esquecido aberto no
+// quarto ouvindo a chamada que ela já tinha levado para o celular.
+//
+// Fica de fora a MESMA sessão voltando por um socket novo (uma oscilação de rede): a
+// identidade é a mesma, e quem cuida dela é `sessoes.associar`, que já troca o socket.
+// Anônimos também: sem conta, não há como saber que duas abas são a mesma pessoa.
+//
+// A saída é a da moderação -- motivo, depois o socket, depois o servidor de mídia --, e pelo
+// mesmo motivo: fechar o socket junto com o aviso corta o aviso antes de ele sair.
+function substituirConexoesAntigas(socket, sessao, salaNova) {
+  if (!sessao.contaId) return;
+  for (const [sala, membros] of roomMembers) {
+    for (const [socketId, membro] of membros) {
+      if (membro.contaId !== sessao.contaId || socketId === socket.id || membro.identidade === sessao.identidade) continue;
+      const antigo = io.sockets.sockets.get(socketId);
+      if (antigo) {
+        antigo.leave(roomName(sala));
+        antigo.emit('removido-da-sala', { motivo: 'outra-conexao', mesmaSala: sala === salaNova });
+        setTimeout(() => { try { antigo.disconnect(true); } catch (_) { /* já saiu por conta própria */ } }, MS_ATE_FECHAR_O_SOCKET);
+      }
+      if (membro.identidade) sfu.consultar('RemoveParticipant', { room: sala, identity: membro.identidade }).catch(() => {});
+    }
+  }
+}
+
 // O perfil mudou -- pelo painel da sala ou pela página da conta, em outra aba. Quem está numa
 // sala com essa conta passa a aparecer do jeito novo para todo mundo, na hora. Antes o perfil
 // "valia na próxima vez que você entrar numa sala": trocar a cor pedia sair da chamada.
@@ -1201,6 +1230,7 @@ io.on('connection', (socket) => {
     if (sessao.contaId) identidadesConhecidasDaSala(roomCode).add(`conta:${sessao.contaId}`);
     moderacao.entrou(roomCode, sessao.identidade, { contaId: sessao.contaId || null, nome: sessao.nome });
     telemetria.entrou(socket);
+    substituirConexoesAntigas(socket, sessao, roomCode);
 
     if (typeof callback === 'function') {
       // Quem entra depois recebe o que ja foi conversado, para a sala nao parecer muda. A
