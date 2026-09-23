@@ -279,6 +279,12 @@
     $('musicaFilaTotal').textContent = fila.length;
     $('musicaFilaDuracao').textContent = duracaoTotal(fila);
     $('musicaEmbaralhar').disabled = fila.length < 2;
+    // Redesenhar troca todos os elementos, e o foco iria junto para o nada. Toda mudança chega
+    // duas vezes -- a otimista e a confirmação do servidor --, e sem isto quem reordena pelo
+    // teclado perdia o lugar entre uma seta e a outra.
+    const focoAntes = lista.contains(document.activeElement)
+      ? { id: document.activeElement.closest('.fila-item')?.dataset.id, alca: document.activeElement.classList.contains('fila-alca') }
+      : null;
     const anteriores = new Set([...lista.children].map(el => el.dataset.id));
     lista.replaceChildren(...fila.map((faixa, indice) => {
       const item = document.createElement('li');
@@ -343,8 +349,10 @@
       item.append(alca, posicao, capa, info, acoes);
       return item;
     }));
-    if (focarDepois) {
-      lista.querySelector(`[data-id="${CSS.escape(focarDepois)}"] .fila-alca`)?.focus();
+    const focar = focarDepois || focoAntes?.id;
+    if (focar) {
+      const item = lista.querySelector(`[data-id="${CSS.escape(focar)}"]`);
+      (focarDepois || focoAntes?.alca ? item?.querySelector('.fila-alca') : item?.querySelector('.fila-acoes button:last-child'))?.focus();
       focarDepois = null;
     }
   }
