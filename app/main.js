@@ -94,7 +94,9 @@ function criarJanela() {
       // É por aqui que o PID do aplicativo chega até a página. O PID que interessa é o do
       // processo principal: ele é a raiz da árvore, e excluir a raiz exclui os filhos --
       // inclusive o processo de áudio, que é quem realmente toca o som.
-      additionalArguments: [`--pid-do-app=${process.pid}`]
+      // A versão vai pelo mesmo caminho: é com ela que a sala diz, sem insistir, que existe um
+      // aplicativo mais novo (public/versao-app.js).
+      additionalArguments: [`--pid-do-app=${process.pid}`, `--versao-do-app=${app.getVersion()}`]
     }
   });
 

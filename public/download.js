@@ -48,7 +48,9 @@
     acao.append(label);
     const primeiro = ordenados[0];
     const outros = ordenados.length - 1;
-    label.textContent = `${primeiro.nome} · ${megabytes(primeiro.size)} MB · build de ${new Date(primeiro.builtAt).toLocaleDateString('pt-BR')}`
+    // A versão aparece quando o build a anotou (app/escrever-versao.js): é o número que o
+    // aplicativo aberto compara para dizer que existe um mais novo.
+    label.textContent = `${primeiro.nome}${primeiro.versao ? ` · versão ${primeiro.versao}` : ''} · ${megabytes(primeiro.size)} MB · build de ${new Date(primeiro.builtAt).toLocaleDateString('pt-BR')}`
       + (outros === 1 ? ' · e mais um sistema abaixo' : outros > 1 ? ` · e mais ${outros} sistemas abaixo` : '');
   }
 

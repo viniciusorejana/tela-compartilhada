@@ -6,11 +6,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const argumento = process.argv.find(a => a.startsWith('--pid-do-app='));
 const pid = argumento ? Number(argumento.split('=')[1]) : 0;
+// Só o formato de versão atravessa: o argumento vem do processo principal, mas a página é
+// conteúdo remoto, e nada solto passa pela ponte.
+const versao = (process.argv.find(a => a.startsWith('--versao-do-app=')) || '').split('=')[1] || '';
 
 contextBridge.exposeInMainWorld('appNativo', {
   // O PID da raiz da árvore deste aplicativo. É o que a sala manda para o agente para que
   // ele exclua da captura tudo o que este aplicativo toca -- a voz e as telas dos outros.
   pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+  // Qual aplicativo é este, para a sala comparar com o que o servidor distribui.
+  versao: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(versao) ? versao : '',
+  plataforma: ['win32', 'linux', 'darwin'].includes(process.platform) ? process.platform : '',
   iniciarAgente: (url) => ipcRenderer.invoke('agente:iniciar', url),
   prepararCaptura: tipo => ipcRenderer.invoke('captura:preparar', tipo),
   capturaSelecionada: () => ipcRenderer.invoke('captura:selecionada'),

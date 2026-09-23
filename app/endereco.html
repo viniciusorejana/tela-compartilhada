@@ -23,12 +23,17 @@
     width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #b8a3d52a;
     background: #181721; color: inherit; font: inherit;
   }
-  input:focus { outline: 2px solid #b5a0ef; outline-offset: 1px; }
+  input:focus { outline: none; border-color: #8879f6; box-shadow: 0 0 0 3px #8879f633; }
+  /* O mesmo botão da sala e da página inicial (public/tema.css): violeta forte, texto branco. */
   button {
-    width: 100%; margin-top: 14px; padding: 11px; border: 0; border-radius: 8px;
-    background: #ad98ee; color: #231a33; font: 600 14px system-ui; cursor: pointer;
+    width: 100%; min-height: 44px; margin-top: 14px; padding: 0 16px; border: 0; border-radius: 10px;
+    background: #6c5ce7; color: #fff; font: 600 13px "Segoe UI", system-ui, sans-serif; cursor: pointer;
+    transition: background-color .17s, transform .11s;
   }
-  button:hover { background: #c0adfa; }
+  button:hover { background: #7b6cf0; }
+  button:active { transform: scale(.985); }
+  button:focus-visible { outline: 2px solid #b6abff; outline-offset: 3px; }
+  .versao { color: #8f8ea6; font-weight: 600; letter-spacing: .06em; }
   .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
   .falha {
     background: #3a1410; border: 1px solid #7c2d20; color: #ffb4a4;
@@ -41,7 +46,7 @@
 </head>
 <body>
   <div class="cartao">
-    <span class="marca">NEXO / DESKTOP</span>
+    <span class="marca">NEXO / DESKTOP<span class="versao" id="versao"></span></span>
     <h1>Seu squad, em uma janela.</h1>
     <p>Conecte ao servidor da sua galera. Vamos guardar o endereço para o próximo encontro.</p>
 
@@ -64,6 +69,8 @@
 <script>
   const campo = document.getElementById('endereco');
   const erro = document.getElementById('erro');
+  // Qual aplicativo é este: a primeira coisa a perguntar quando algo não funciona.
+  if (window.appNativo?.versao) document.getElementById('versao').textContent = ` · ${window.appNativo.versao}`;
 
   // Quando a página anterior não carregou, o motivo vem junto -- e o endereço tentado volta
   // preenchido, porque quase sempre ele está certo e o servidor é que estava fora do ar.

@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const { ipDoPedido } = require('./telemetria/origem');
+const { valida } = require('./public/versao-app');
 
 // Os executáveis do aplicativo. Um arquivo fixo por sistema, declarado aqui: nada que venha
 // de um pedido vira caminho.
@@ -69,10 +70,23 @@ function esquecerAntigos() {
   }
 }
 
+// A versão de cada build, anotada por app/escrever-versao.js ao empacotar. Sem o arquivo, ou
+// sem a linha de um sistema, a versão fica desconhecida -- e desconhecida não gera aviso de
+// atualização nenhum: é melhor não avisar do que mandar alguém baixar o mesmo arquivo em laço.
+async function lerVersoes(arquivo) {
+  if (!arquivo) return {};
+  try {
+    const { sistemas } = JSON.parse(await fs.readFile(arquivo, 'utf8'));
+    const versoes = {};
+    for (const chave of Object.keys(SISTEMAS)) if (valida(sistemas?.[chave]?.versao)) versoes[chave] = sistemas[chave].versao;
+    return versoes;
+  } catch (_) { return {}; }
+}
+
 // `arquivos` é o caminho do executável do Windows (forma antiga, mantida) ou um mapa
 // `{ windows, linux, mac }` com os caminhos de cada build. Cada sistema é opcional: quem
 // compila só o Windows continua servindo só o Windows, e a página mostra o que existe.
-module.exports = function desktopDownload(app, arquivos, { permitir = () => true, identificar = quemEsta } = {}) {
+module.exports = function desktopDownload(app, arquivos, { permitir = () => true, identificar = quemEsta, versoes = null } = {}) {
   const caminhos = typeof arquivos === 'string' ? { windows: arquivos } : (arquivos || {});
   const url = chave => `/downloads/${SISTEMAS[chave].arquivo}`;
   const faxina = setInterval(esquecerAntigos, MINUTOS_DA_JANELA * 60_000);
@@ -92,9 +106,10 @@ module.exports = function desktopDownload(app, arquivos, { permitir = () => true
   app.get('/api/desktop-app', async (_req, res, next) => {
     res.set('Cache-Control', 'no-store');
     try {
+      const versaoDe = await lerVersoes(versoes);
       const encontrados = await Promise.all(Object.keys(SISTEMAS).map(async chave => {
         const info = await artifact(chave);
-        return info && { chave, ...SISTEMAS[chave], url: url(chave), size: info.size, builtAt: info.mtime.toISOString() };
+        return info && { chave, ...SISTEMAS[chave], url: url(chave), size: info.size, builtAt: info.mtime.toISOString(), versao: versaoDe[chave] || null };
       }));
       const sistemas = encontrados.filter(Boolean);
       const windows = sistemas.find(s => s.chave === 'windows');
