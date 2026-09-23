@@ -86,6 +86,8 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
     });
     const origem = `http://127.0.0.1:${porta}`;
     return { origem, pasta, medicao, painel, pastaSfu, portaMetricas, filho, encerrar, erros: () => erros,
+      // Monta a fila de música de uma sala à mão (ver iniciar-telemetria.cjs).
+      filaDeMusica(sala, dados) { filho.send({ tipo: 'fila-de-teste', sala, ...dados }); },
       async chave() { return JSON.parse(await fs.readFile(path.join(painel, 'segredo.json'), 'utf8')).segredo; },
       async credencial(nome = 'Teste', sala = 'squad-teste', credencial = '', cookie = '') {
         const cabecalhos = {};

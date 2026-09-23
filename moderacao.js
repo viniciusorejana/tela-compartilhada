@@ -336,6 +336,19 @@ function criarModeracao({ agora = Date.now, maximoDeSalas = 512, msDeAusencia = 
 
   function esquecer(sala) { salas.delete(sala); }
 
+  // Quem tem conta troca o apelido no meio da sala (o perfil ao vivo, em server.js). A pessoa
+  // é a mesma -- a chave é a conta --, e só o nome mudou: sem isto, banir alguém depois da
+  // troca bloquearia, para os anônimos, o apelido ANTIGO dela (regra 3).
+  function renomear(sala, identidade, nome) {
+    const item = salas.get(sala);
+    const m = item && membroDaIdentidade(item, identidade);
+    if (!m || !m.contaId) return false;
+    m.nome = normalizarNome(nome);
+    m.exibir = String(nome).trim();
+    lembrar(item, identidade, { contaId: m.contaId, nome: m.nome, exibir: m.exibir });
+    return true;
+  }
+
   // Quem tem conta na sala, entre os presentes: é o que decide quem pode apagar sons da mesa
   // e editar mensagens antigas. A conta fica aqui, no servidor.
   function contaDe(sala, identidade) {
@@ -352,7 +365,7 @@ function criarModeracao({ agora = Date.now, maximoDeSalas = 512, msDeAusencia = 
     }));
   }
 
-  return { entrou, saiu, dono, papel, pode, expulsar, banir, desbanir, listarBanidos, transferir, banido, fechou, esquecer, contaDe, resumo, PERMISSOES, MINUTOS_DE_BANIMENTO };
+  return { entrou, saiu, dono, papel, pode, expulsar, banir, desbanir, listarBanidos, transferir, banido, fechou, esquecer, contaDe, renomear, resumo, PERMISSOES, MINUTOS_DE_BANIMENTO };
 }
 
 module.exports = { criarModeracao, nomeDaIdentidade, PERMISSOES, MINUTOS_DE_BANIMENTO, MAXIMO_DE_BANIDOS, MS_DE_AUSENCIA };

@@ -619,6 +619,22 @@ async function iniciarConexao() {
     avaliarDestaque();
   });
 
+  // Alguém com conta mudou apelido, cor ou marca -- na sala ou na página da conta. Chega para
+  // todo mundo, inclusive para quem mudou: é a confirmação de que a sala inteira já vê.
+  socket.on('peer-perfil', ({ identidade, name, perfil }) => {
+    if (!identidade) return;
+    if (identidade === myId) {
+      if (name) myName = name;
+      if (perfil) meuPerfil = perfil;
+    } else {
+      const par = peers.get(identidade);
+      if (par && name) par.name = name;
+      if (perfil) perfisPorIdentidade.set(identidade, perfil);
+    }
+    repintarAvatares();
+    atualizarSelosDeDono();
+  });
+
   // ---------- Quem manda na sala ----------
   //
   // Chega no `join-room` e é atualizado por este aviso, que dispara quando o dono muda --
@@ -4500,9 +4516,9 @@ function aplicarConfiguracaoDaSala(nova) {
   window.NexoSoundboard?.definirPodeEnviar?.(temConta);
   const musicaPermitida = podeModerar || configuracaoDaSala.musica;
   const musicaInput = document.getElementById('musicaInput');
-  const musicaSend = document.getElementById('musicaSend');
-  if (musicaInput) { musicaInput.disabled = !musicaPermitida; musicaInput.placeholder = musicaPermitida ? 'Nome da música, link ou !ajuda…' : 'Novos pedidos foram restringidos'; }
-  if (musicaSend) musicaSend.disabled = !musicaPermitida;
+  if (musicaInput) { musicaInput.disabled = !musicaPermitida; musicaInput.placeholder = musicaPermitida ? 'Nome ou link da música…' : 'Novos pedidos foram restringidos'; }
+  // Os dois botões de pedir (o fim da fila e o "a seguir") seguem o campo: musica.js decide.
+  window.NexoMusica?.atualizarBotoes?.();
 }
 
 Object.entries(controlesDaConfiguracao).forEach(([id, chave]) => {
@@ -4884,12 +4900,18 @@ function abrirPerfil(id) {
   const criar = document.getElementById('perfilCriarConta');
   criar.hidden = !(ehEu && !perfil?.conta);
   criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+  // O próprio cartão leva ao editor: é ali que a pessoa se vê e pensa em mudar.
+  document.getElementById('perfilEditar').hidden = !(ehEu && perfil?.conta);
   document.getElementById('perfilModerar').hidden = ehEu || !podeModerar || id === donoDaSala;
   document.getElementById('perfilPanel').classList.remove('hidden');
 }
 document.getElementById('perfilModerar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
   if (perfilAberto && perfilAberto !== 'self') abrirModeracao(perfilAberto);
+};
+document.getElementById('perfilEditar').onclick = () => {
+  document.getElementById('perfilPanel').classList.add('hidden');
+  window.NexoPerfilSala?.abrir();
 };
 
 function removerTile(id) {

@@ -106,7 +106,7 @@ telemetria = iniciarTelemetria({
   contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
   aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto
 });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS });
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta) });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
@@ -162,7 +162,7 @@ require('./desktop-download')(app, {
   windows: path.join(pastaDosBuilds, 'SalaCompartilhada.exe'),
   linux: path.join(pastaDosBuilds, 'Nexo.AppImage'),
   mac: path.join(pastaDosBuilds, 'Nexo.dmg')
-}, { permitir: req => telemetria.limitarOrigem(req) });
+}, { permitir: req => telemetria.limitarOrigem(req), versoes: path.join(pastaDosBuilds, 'versao.json') });
 app.use('/api/soundboard', telemetria.soundboardHttp);
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));
@@ -289,6 +289,31 @@ app.get('/api/sala-config', (req, res) => {
 function perfilNaSala(conta) {
   const { cor, marca } = contas.perfil(conta);
   return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca };
+}
+
+// O perfil mudou -- pelo painel da sala ou pela página da conta, em outra aba. Quem está numa
+// sala com essa conta passa a aparecer do jeito novo para todo mundo, na hora. Antes o perfil
+// "valia na próxima vez que você entrar numa sala": trocar a cor pedia sair da chamada.
+//
+// O nome muda em quatro lugares, e cada um tem o seu motivo: o membro (é dele que o chat e a
+// música tiram o autor), a sessão (é ela que uma reconexão apresenta), a moderação (é o nome
+// que um banimento passaria a barrar) e o servidor de mídia (é de lá que quem chegar depois
+// lê o nome -- o antigo estava gravado no token da entrada).
+function aplicarPerfilNasSalas(conta) {
+  const nome = nomeQueNaoSeFingeDeBot(conta.apelido);
+  const perfil = perfilNaSala(conta);
+  for (const [roomCode, membros] of roomMembers) {
+    for (const [socketId, membro] of membros) {
+      if (membro.contaId !== conta.id) continue;
+      membro.name = nome;
+      membro.perfil = perfil;
+      const sessao = io.sockets.sockets.get(socketId)?.data.sessaoNexo;
+      if (sessao) { sessao.nome = nome; sessao.perfil = perfil; }
+      moderacao.renomear(roomCode, membro.identidade, nome);
+      if (membro.identidade) sfu.consultar('UpdateParticipant', { room: roomCode, identity: membro.identidade, name: nome }).catch(() => {});
+      io.to(roomName(roomCode)).emit('peer-perfil', { identidade: membro.identidade, name: nome, perfil });
+    }
+  }
 }
 
 // Quem desistiu na tela de espera precisa sumir da fila imediatamente. `keepalive` permite
@@ -925,8 +950,10 @@ function duracaoLegivel(segundos) {
 const AJUDA_DA_MUSICA = [
   'Escreva o nome de uma música (ou cole um link) e eu toco.',
   '`!bot <música>` · `!lista <nome ou link>` · `!pular` · `!pausar` · `!voltar`',
+  '`!proxima <música>` toca a seguir · `!inserir <n> <música>` entra na posição n',
+  '`!mover <de> <para>` · `!remover <n>` · `!embaralhar` · `!esvaziar` (a atual continua)',
   '`!parar` esvazia a fila e me tira da chamada (`!sair` faz o mesmo).',
-  '`!fila` · `!agora` · `!volume 0-150` · `!remover <n>` · `!embaralhar`',
+  '`!fila` · `!agora` · `!volume 0-150` · Na fila do painel dá para arrastar as faixas.',
   'Aceito YouTube, SoundCloud, Bandcamp, links diretos e muito mais. Link do Spotify eu procuro pelo nome.',
   'Link de playlist entra inteiro. Link de música que estava numa playlist toca só ela — use `!lista` para pegar tudo.'
 ].join('\n');
@@ -972,6 +999,34 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
       });
     }
 
+    // Pedido com lugar na fila. `!proxima` é o caso de todo dia -- "essa, antes das que já
+    // estão esperando" --, e `!inserir 3 <música>` cobre o resto.
+    if (['proxima', 'próxima', 'seguinte', 'playnext', 'pn', 'depois'].includes(comando)) {
+      if (!resto) return falarComoBot(roomCode, 'Escreva a música: `!proxima nome ou link`');
+      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(resto).slice(0, 120)}**…`);
+      await musica.pedir(roomCode, resto, quemPediu, { posicao: 1 });
+      return;
+    }
+    if (['inserir', 'posicao', 'posição', 'pos'].includes(comando)) {
+      const partes = resto.match(/^(\d{1,3})\s+([\s\S]+)$/);
+      if (!partes) return falarComoBot(roomCode, 'Diga a posição e a música: `!inserir 2 nome ou link`');
+      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(partes[2]).slice(0, 120)}**…`);
+      await musica.pedir(roomCode, partes[2], quemPediu, { posicao: Number(partes[1]) });
+      return;
+    }
+    if (['mover', 'mv', 'move'].includes(comando)) {
+      const [de, para] = resto.split(/\s+/).map(Number);
+      const faixa = musica.instantaneo(roomCode).fila[de - 1];
+      if (!faixa || !Number.isInteger(para) || para < 1) return falarComoBot(roomCode, 'Use `!mover <de> <para>`, com as posições que o `!fila` mostra.');
+      const movida = musica.moverNaFila(roomCode, faixa.id, para);
+      return falarComoBot(roomCode, `↕ **${movida.faixa.titulo}** foi para a posição ${movida.para}.`);
+    }
+    if (['esvaziar', 'limparfila', 'clear'].includes(comando)) {
+      const quantas = musica.esvaziarFila(roomCode);
+      return falarComoBot(roomCode, quantas
+        ? `Esvaziei a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`
+        : 'A fila já está vazia.');
+    }
     if (['pular', 'skip', 'next', 'n'].includes(comando)) {
       const saindo = musica.pular(roomCode);
       return falarComoBot(roomCode, saindo ? `⏭ Pulei **${saindo.titulo}**.` : 'Não tem nada tocando.');
@@ -1551,6 +1606,61 @@ io.on('connection', (socket) => {
     }
     await interpretarComandoDeMusica(roomCode, texto, membro.name);
     } finally { terminarBusca(); }
+  });
+
+  // A fila pela tela: arrastar, "tocar a seguir", "tocar agora", tirar, esvaziar. Estruturado,
+  // e não um `!comando` montado pela página, porque a faixa vai pelo `id` -- a posição que a
+  // pessoa viu pode já ter mudado quando o pedido chega. E quem mexeu aparece no canal: a
+  // fila é de todos, e mexer nela sem rastro seria mexer escondido.
+  socket.on('musica-fila', (dados, responder) => {
+    const resposta = typeof responder === 'function' ? responder : () => {};
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomCode && roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return resposta({ ok: false, error: 'Entre na sala antes.' });
+    if (!configuracaoDaSala(roomCode).musica && membro.identidade !== moderacao.dono(roomCode)) {
+      return resposta({ ok: false, error: 'Quem abriu a sala restringiu a música.' });
+    }
+    const acao = String(dados?.acao || '');
+    const id = String(dados?.id || '').slice(0, 40);
+    const quem = musica.semMarcacao(membro.name);
+    const naFila = musica.instantaneo(roomCode).fila.find(faixa => faixa.id === id);
+    const sumiu = () => resposta({ ok: false, error: 'Essa faixa não está mais na fila.' });
+
+    if (acao === 'mover') {
+      const movida = musica.moverNaFila(roomCode, id, dados?.para);
+      if (!movida) return sumiu();
+      if (movida.de !== movida.para) {
+        falarComoBot(roomCode, movida.para === 1
+          ? `⤒ **${quem}** pôs **${movida.faixa.titulo}** para tocar a seguir.`
+          : `↕ **${quem}** moveu **${movida.faixa.titulo}** para a posição ${movida.para}.`);
+      }
+      return resposta({ ok: true });
+    }
+    if (acao === 'agora') {
+      if (!naFila) return sumiu();
+      if (!musica.instantaneo(roomCode).tocando) return resposta({ ok: false, error: 'Não tem nada tocando para pular.' });
+      // Anunciado antes: pular já publica o "▶ Tocando", e a ordem no canal é a do que aconteceu.
+      falarComoBot(roomCode, `⏭ **${quem}** pulou para **${naFila.titulo}**.`);
+      musica.tocarAgora(roomCode, id);
+      return resposta({ ok: true });
+    }
+    if (acao === 'remover') {
+      const removida = musica.removerDaFilaPorId(roomCode, id);
+      if (!removida) return sumiu();
+      falarComoBot(roomCode, `✕ **${quem}** tirou **${removida.titulo}** da fila.`);
+      return resposta({ ok: true });
+    }
+    if (acao === 'esvaziar') {
+      const quantas = musica.esvaziarFila(roomCode);
+      if (quantas) falarComoBot(roomCode, `**${quem}** esvaziou a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`);
+      return resposta({ ok: true, quantas });
+    }
+    if (acao === 'embaralhar') {
+      if (!musica.embaralhar(roomCode)) return resposta({ ok: false, error: 'Precisa de pelo menos duas faixas na fila.' });
+      falarComoBot(roomCode, `🔀 **${quem}** embaralhou a fila.`);
+      return resposta({ ok: true });
+    }
+    resposta({ ok: false, error: 'Ação desconhecida.' });
   });
 
   socket.on('musica-estado', (callback) => {

@@ -28,6 +28,7 @@ npm run test:browser  # Playwright: sala, mídia, ICE
 npm run test:painel   # painel de telemetria
 npm run test:soundboard
 npm run test:download
+npm run test:fila     # fila de música, perfil na sala, aviso de atualização
 ```
 
 ## Idioma

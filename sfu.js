@@ -574,7 +574,9 @@ function tokenDeServidor(video) {
 // entrou com os planos -- é ele que desliga a TELA de quem transmite acima do teto do plano,
 // sem tirar a pessoa, a voz nem a câmera.
 async function consultar(metodo, corpo) {
-  if (!['ListRooms', 'ListParticipants', 'RemoveParticipant', 'MutePublishedTrack'].includes(metodo)) throw new Error('Método não permitido.');
+  // UpdateParticipant é só para o nome: quem tem conta troca o apelido de dentro da sala, e
+  // quem chegar depois tem de ver o nome novo -- o antigo estava gravado no token da entrada.
+  if (!['ListRooms', 'ListParticipants', 'RemoveParticipant', 'MutePublishedTrack', 'UpdateParticipant'].includes(metodo)) throw new Error('Método não permitido.');
   const video = metodo === 'ListRooms' ? { roomList: true } : { roomAdmin: true, room: corpo.room };
   return JSON.parse(await telemetriaLivekit.pedir({ porta: PORTA_LOCAL, caminho: `/twirp/livekit.RoomService/${metodo}`, corpo: JSON.stringify(corpo), autorizacao: `Bearer ${tokenDeServidor(video)}` }));
 }

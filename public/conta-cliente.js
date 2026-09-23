@@ -45,5 +45,7 @@
   }
   window.addEventListener('pagehide', () => enviar(true));
 
-  window.NexoConta = { pronto, atual: () => estado };
+  // `atualizar` recebe o que o servidor devolveu ao salvar o perfil de dentro da sala: a
+  // próxima abertura do editor já parte do perfil novo.
+  window.NexoConta = { pronto, atual: () => estado, atualizar: novo => { estado = { ...estado, ...novo }; } };
 })();

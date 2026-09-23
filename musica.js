@@ -1035,7 +1035,8 @@ function agendarSaidaPorOciosidade(estado) {
 let mensagemDoBot = () => {};
 function definirCanalDeMensagens(fn) { mensagemDoBot = fn; }
 
-async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false } = {}) {
+// `posicao` põe o pedido num lugar da fila: 1 é "tocar a seguir". Sem ela, vai para o fim.
+async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false, posicao = null } = {}) {
   const estado = salas.get(sala) || criarEstado(sala);
   const espacoNaFila = MAXIMO_NA_FILA - estado.fila.length;
   if (espacoNaFila <= 0) throw new Error(`a fila já tem ${MAXIMO_NA_FILA} faixas`);
@@ -1060,14 +1061,15 @@ async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false } =
   // A busca cedeu a execução. Outra pessoa pode ter ocupado a fila enquanto isto
   // resolvia o link; a cota precisa continuar valendo depois do await.
   if (estado.fila.length + novas.length > MAXIMO_NA_FILA) throw new Error('A fila foi preenchida durante a busca. Tente novamente depois.');
-  estado.fila.push(...novas);
+  const entrouEm = inserirNaLista(estado.fila, novas, posicao);
   if (!tocavaAntes) seguirParaProxima(estado);
   else { avisarSala(sala); adiantarProxima(estado); }
 
+  const aSeguir = posicao !== null && entrouEm === 1;
   if (pediuLista) {
-    mensagemDoBot(sala, `＋ **${novas.length} ${novas.length === 1 ? 'faixa' : 'faixas'}** de _${novas[0].origem}_ na fila.`);
+    mensagemDoBot(sala, `＋ **${novas.length} ${novas.length === 1 ? 'faixa' : 'faixas'}** de _${novas[0].origem}_ na fila${tocavaAntes && aSeguir ? ', para tocar a seguir' : ''}.`);
   } else if (tocavaAntes) {
-    mensagemDoBot(sala, `＋ **${novas[0].titulo}** entrou na fila (posição ${estado.fila.length})`);
+    mensagemDoBot(sala, aSeguir ? `＋ **${novas[0].titulo}** vai tocar a seguir` : `＋ **${novas[0].titulo}** entrou na fila (posição ${entrouEm})`);
     // O link trazia uma lista junto e a pessoa pode nao ter percebido. Dizer isso UMA vez,
     // com o comando pronto, e melhor do que enfileirar cinquenta faixas por conta propria.
     if (listaEmbutida(pedido)) mensagemDoBot(sala, 'Esse link faz parte de uma lista. Para enfileirar ela inteira: `!lista <link>`');
@@ -1129,7 +1131,84 @@ function removerDaFila(sala, posicao) {
   if (!estado || !Number.isInteger(indice) || indice < 0 || indice >= estado.fila.length) return null;
   const [removida] = estado.fila.splice(indice, 1);
   avisarSala(sala);
+  adiantarProxima(estado);
   return removida;
+}
+
+// ---------- Reordenar ----------
+//
+// A tela aponta a faixa pelo `id`, e não pela posição: entre a pessoa ver a fila e o pedido
+// chegar, outra pessoa pode ter tirado a de cima -- e "mover a 3" moveria outra música. Os
+// comandos de texto (`!mover 5 1`) continuam por posição, porque é o que se lê no `!fila`.
+//
+// As duas funções puras abaixo são a regra inteira; as da sala só as aplicam e avisam.
+const posicaoNaFila = (posicao, tamanho) => {
+  const numero = Math.trunc(Number(posicao));
+  return Number.isFinite(numero) ? Math.max(1, Math.min(tamanho, numero)) : tamanho;
+};
+
+function moverNaLista(lista, id, para) {
+  const de = lista.findIndex(faixa => faixa.id === id);
+  if (de < 0) return null;
+  const destino = posicaoNaFila(para, lista.length) - 1;
+  const [faixa] = lista.splice(de, 1);
+  lista.splice(destino, 0, faixa);
+  return { faixa, de: de + 1, para: destino + 1 };
+}
+
+// Sem posição, vai para o fim, como sempre foi. Com posição além do fim, também.
+function inserirNaLista(lista, novas, posicao) {
+  const indice = posicao === undefined || posicao === null ? lista.length : posicaoNaFila(posicao, lista.length + 1) - 1;
+  lista.splice(indice, 0, ...novas);
+  return indice + 1;
+}
+
+function moverNaFila(sala, id, para) {
+  const estado = salas.get(sala);
+  if (!estado) return null;
+  const movida = moverNaLista(estado.fila, id, para);
+  if (!movida) return null;
+  avisarSala(sala);
+  // A primeira da fila pode ter mudado: é ela que precisa estar resolvida quando a atual acabar.
+  adiantarProxima(estado);
+  return movida;
+}
+
+function removerDaFilaPorId(sala, id) {
+  const estado = salas.get(sala);
+  const indice = estado ? estado.fila.findIndex(faixa => faixa.id === id) : -1;
+  return indice < 0 ? null : removerDaFila(sala, indice + 1);
+}
+
+// "Tocar agora" é "passar para o topo" e "pular" -- a mesma coisa que alguém faria com dois
+// cliques, sem a janela em que a faixa já subiu e a atual ainda não saiu.
+function tocarAgora(sala, id) {
+  const estado = salas.get(sala);
+  if (!estado?.tocando) return null;
+  const movida = moverNaLista(estado.fila, id, 1);
+  if (!movida) return null;
+  pular(sala);
+  return movida.faixa;
+}
+
+// Só para os testes de navegador: uma fila montada à mão, sem baixar nada nem entrar no
+// servidor de mídia. É o que deixa testar a tela da fila numa máquina sem yt-dlp.
+function filaDeTeste(sala, { tocando = null, fila = [] } = {}) {
+  const estado = salas.get(sala) || criarEstado(sala);
+  estado.tocando = tocando;
+  estado.fila = fila;
+  avisarSala(sala);
+}
+
+// Esvazia só a fila: a que está tocando continua. `!parar` é o que tira tudo e sai.
+function esvaziarFila(sala) {
+  const estado = salas.get(sala);
+  if (!estado?.fila.length) return 0;
+  const quantas = estado.fila.length;
+  estado.fila = [];
+  avisarSala(sala);
+  if (!estado.tocando) agendarSaidaPorOciosidade(estado);
+  return quantas;
 }
 
 function embaralhar(sala) {
@@ -1140,6 +1219,7 @@ function embaralhar(sala) {
     [estado.fila[i], estado.fila[j]] = [estado.fila[j], estado.fila[i]];
   }
   avisarSala(sala);
+  adiantarProxima(estado);
   return true;
 }
 
@@ -1211,6 +1291,7 @@ module.exports = {
   ehListaInteira, listaEmbutida, buscarListas, listarFaixasDaLista,
   ondeMora, atravessarPonte, expandirAtalho,
   pedir, pular, pausar, definirVolume, removerDaFila, embaralhar,
+  moverNaFila, removerDaFilaPorId, tocarAgora, esvaziarFila, moverNaLista, inserirNaLista, filaDeTeste,
   desconectar, esquecerSala, encerrarTudo, instantaneo, estadoDaSala, saudeDaSala,
   PREFIXO_DA_IDENTIDADE, NOME_DO_BOT, MAXIMO_NA_FILA
 };

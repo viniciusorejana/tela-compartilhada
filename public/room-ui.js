@@ -390,6 +390,7 @@
         // compressão em cada sentido, mais cem mensagens por segundo, e nada na tela dizia
         // qual dos dois estava no ar.
         `Áudio do sistema: ${typeof planoDeAudio === 'function' ? planoDeAudio() : 'desconhecido'}`,
+        `Aplicativo: ${window.NexoAtualizacao?.situacao()?.texto || 'navegador'}`,
         `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`,
         `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
         'Revisão de mídia: sfu-1'];
@@ -548,6 +549,9 @@
       }
       anotar(maquina, 'Codec escolhido', `${codecDeVideoEscolhido()} na tela · H.264 na câmera`);
       if (typeof planoDeAudio === 'function') anotar(maquina, 'Áudio do sistema', planoDeAudio());
+      // A versão do aplicativo é a primeira pergunta de todo relato de defeito que vem dele.
+      const versaoDoApp = window.NexoAtualizacao?.situacao();
+      if (versaoDoApp) anotar(maquina, 'Aplicativo', versaoDoApp.texto, versaoDoApp.desatualizado ? 'alerta' : 'ok');
       if (midiasBloqueadas.size) anotar(maquina, 'Reprodução bloqueada', `${midiasBloqueadas.size} elemento(s)`, 'problema');
       desenharCartoes();
 
@@ -667,12 +671,28 @@
       if (focusWasReleased && previousFocus?.isConnected) previousFocus.focus();
     }
   }
+  const fecharDialogo = dialog => { if (dialog === settingsPanel) fecharPainelDeTela(); else dialog.classList.add('hidden'); };
+  // Um X no canto de todo painel que se fecha. O Escape e o clique fora continuam valendo, mas
+  // nenhum dos dois se descobre olhando -- e no celular não existe Escape. Ficam de fora os
+  // três que não se "fecham": a entrada, a espera e o aviso de remoção têm saídas próprias.
+  const semX = new Set([nameGate, $('waitingPanel'), $('removidoPanel')]);
+  for (const dialog of dialogs) {
+    const cartao = dialog.querySelector('.modal-card');
+    if (semX.has(dialog) || !cartao) continue;
+    const fechar = document.createElement('button');
+    fechar.type = 'button';
+    fechar.className = 'ghost icone-so modal-fechar';
+    fechar.title = 'Fechar';
+    fechar.setAttribute('aria-label', 'Fechar');
+    fechar.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    fechar.addEventListener('click', () => fecharDialogo(dialog));
+    cartao.prepend(fechar);
+  }
   for (const dialog of dialogs) {
     new MutationObserver(syncDialog).observe(dialog, { attributes: true, attributeFilter: ['class'] });
     dialog.addEventListener('click', event => {
       if (event.target !== dialog || dialog === nameGate) return;
-      if (dialog === settingsPanel) fecharPainelDeTela();
-      else dialog.classList.add('hidden');
+      fecharDialogo(dialog);
     });
   }
   document.addEventListener('keydown', event => {
@@ -684,8 +704,7 @@
     }
     if (event.key === 'Escape' && activeDialog && activeDialog !== nameGate) {
       event.stopImmediatePropagation();
-      if (activeDialog === settingsPanel) fecharPainelDeTela();
-      else activeDialog.classList.add('hidden');
+      fecharDialogo(activeDialog);
     } else if (event.key === 'Escape') closeSidebar();
   }, true);
   syncDialog();

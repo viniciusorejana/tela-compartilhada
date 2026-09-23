@@ -51,6 +51,15 @@ Criar conta é opcional para entrar numa sala, e fica em `/conta`: nome de usuá
 ele que se entra), apelido (livre e repetível, é o que a sala mostra) e senha de 10 caracteres
 ou mais. Não há e-mail: no lugar dele, um **código de recuperação** aparece uma vez, no
 cadastro, e vale uma vez. Perdeu a senha e o código, perdeu a conta — a tela diz isso antes.
+O código pode ser copiado ou **baixado num `.txt`**, e na recuperação pode ser colado do jeito
+que foi guardado (com rótulo, em minúsculas, com o traço que o editor pôs): a página e o
+servidor acham o código no meio do texto e, quando não acham, dizem por quê — "tem 19
+caracteres", "não usa O, I, L, 0 nem 1". Erro de digitação não gasta tentativa.
+
+**O perfil muda de dentro da sala.** Clicar no próprio nome, no rodapé da barra lateral, abre o
+editor de apelido, cor e marca; ao salvar, a sala inteira vê o perfil novo na hora — na lista,
+no chat e, para quem entrar depois, no servidor de mídia. Vale também para mudanças feitas em
+`/conta` com a sala aberta noutra aba.
 O plano inteiro, com o porquê de cada decisão, está em [`docs/plano-contas.md`](docs/plano-contas.md).
 
 O banco é SQLite embutido no próprio Node (`node:sqlite`, sem dependência), em
@@ -445,12 +454,26 @@ tame impala the less i know the better     pedir é só escrever
 https://youtu.be/...                       link também: cole e pronto
 !bot <música>                              o mesmo, explícito (!tocar e !p também servem)
 !lista <link>                              a playlist inteira, mesmo de um link de música
+!proxima <música>                          toca a seguir, na frente de quem espera (Ctrl+Enter)
+!inserir <n> <música>                      entra na posição n da fila
 !pular  !pausar  !voltar                   controle da reprodução
 !parar                                     esvazia a fila e tira o bot da chamada (= !sair)
 !fila  !agora  !embaralhar  !remover <n>   a fila
+!mover <de> <para>  !esvaziar              reordena; esvaziar mantém a que está tocando
 !volume 0-150                              volume do bot para a sala inteira (fica guardado)
 !ajuda
 ```
+
+**A fila se mexe pela tela.** No painel do canal, cada faixa tem capa, duração e quem pediu,
+uma alça para **arrastar** (mouse ou dedo) e, na linha em que se está, **tocar a seguir** e um
+menu com tocar agora, subir, descer, mandar para o fim, **mover para uma posição digitada** e
+tirar. Pelo teclado: foco na alça e ↑ ↓ (Home e End levam ao topo e ao fim). O cabeçalho mostra
+quantas faixas esperam e quanto tempo somam, e tem embaralhar e esvaziar.
+
+A tela aponta cada faixa pelo `id`, nunca pela posição: entre a pessoa ver a fila e o pedido
+chegar, outra pode ter tirado a de cima, e "mover a 3" moveria outra música. Cada mudança
+aparece no canal com o nome de quem fez (`↕ Ana moveu …`) — a fila é de todos, e mexer nela
+sem rastro seria mexer escondido.
 
 `!parar` e `!sair` são a mesma coisa: a fila é esvaziada, o download encerrado, a faixa
 despublicada e o bot deixa a chamada — medido em **100 ms** do comando até ele sumir da lista de
@@ -1281,7 +1304,11 @@ próprio teste; não depende de arquivo no repositório nem do `ffmpeg`.
 
 `npm run test:contas` (porta `:3221`, sem servidor de mídia) cria conta pela tela, guarda o
 código de recuperação, muda o perfil, leva os ajustes a um segundo navegador (e confere que o
-microfone não vai junto), baixa e apaga os dados, e faz alguém sem conta esperar a sala abrir.
+microfone não vai junto), baixa e apaga os dados, faz alguém sem conta esperar a sala abrir e
+recupera uma conta colando o `.txt` do código inteiro.
+`npm run test:fila` (porta `:3225`, sem servidor de mídia) mexe na fila de música com duas
+pessoas (tocar a seguir, teclado, arrastar, mover para uma posição, tirar, esvaziar), edita o
+perfil de dentro da sala e confere o aviso de atualização de um aplicativo antigo.
 `npm run test:planos` (porta `:3223`, com o servidor de mídia) confere o cadeado do seletor, a
 tela sem conta subindo em 720p e ficando, e a tela acima do plano sendo avisada e desligada — só
 ela. Os testes antigos de mídia rodam com as duas janelas de transição ligadas
@@ -1429,9 +1456,31 @@ a pessoa informa o endereço do site no aplicativo.
 Se o arquivo não existir, o botão fica indisponível e o acesso pelo navegador continua
 normal. A consulta de disponibilidade e o download usam `Cache-Control: no-store` para
 não preservar uma build antiga. O arquivo é transmitido por streaming, com suporte a Range.
-A metadata (`/api/desktop-app`) informa tamanho e data do arquivo, não a versão dos arquivos
-web que o aplicativo carrega. Uma instalação clonada do Git precisa gerar/copiar o portátil,
-pois `app/dist` permanece ignorado pelo Git.
+A metadata (`/api/desktop-app`) informa tamanho, data e **versão** de cada build. Uma
+instalação clonada do Git precisa gerar/copiar o portátil, pois `app/dist` permanece ignorado
+pelo Git.
+
+### Versão do aplicativo e aviso de atualização
+
+A versão é a do `app/package.json` (hoje **1.1.0**). Os scripts `empacotar` rodam, depois do
+`electron-builder`, o `app/escrever-versao.js`, que anota a versão do build em
+`app/dist/versao.json` — uma linha por sistema, porque cada um sai de uma máquina diferente. É
+**desse arquivo**, e não do `package.json`, que o servidor tira a versão que anuncia: anunciar
+a do código antes de empacotar mandaria todo mundo baixar o mesmo arquivo velho, em laço. Sem
+o arquivo, a versão fica desconhecida e ninguém é avisado de nada. Quem copia um build feito
+em outra máquina copia junto a linha dele no `versao.json`.
+
+Para lançar uma versão: suba o `version` do `app/package.json`, rode o `empacotar` de cada
+sistema e ponha os arquivos (e o `versao.json`) no `app/dist` do servidor.
+
+No aplicativo, a sala compara a própria versão (que o `preload.js` expõe como
+`appNativo.versao`) com a do build servido para aquele sistema. Se houver uma mais nova,
+aparece um botão verde **Atualizar** no topo — nada abre sozinho, porque a pessoa está no meio
+de uma chamada. O botão mostra a versão nova, a atual e o link; **Depois** esconde o aviso por
+três dias para aquela versão. Um aplicativo anterior à 1.1.0 não conta a versão, e por isso é
+tratado como 1.0.0: quem já tem o `.exe` antigo também é avisado. A versão aparece ainda no
+diagnóstico da conexão (e no relatório técnico que vai junto de um relato) e na tela de
+endereço do aplicativo.
 
 Após adicionar estas rotas pela primeira vez, reinicie o servidor Node. Para validar:
 `npm test` e `npm run test:download`. O teste de navegador usa um arquivo fictício pequeno;

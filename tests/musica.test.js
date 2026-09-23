@@ -97,6 +97,53 @@ test('lista inteira e música-dentro-de-lista são casos diferentes', () => {
   assert.equal(musica.listaEmbutida('texto solto'), null);
 });
 
+// A fila é apontada pelo `id`. Entre a pessoa ver e o pedido chegar, outra pode ter tirado
+// a faixa de cima -- e "mover a 3" moveria outra música.
+test('mover uma faixa pelo id, para qualquer posição, sem sair dos limites da fila', () => {
+  const fila = () => ['a', 'b', 'c', 'd'].map(id => ({ id, titulo: id.toUpperCase() }));
+  const ids = lista => lista.map(f => f.id).join('');
+
+  let lista = fila();
+  assert.deepEqual(musica.moverNaLista(lista, 'd', 1), { faixa: { id: 'd', titulo: 'D' }, de: 4, para: 1 });
+  assert.equal(ids(lista), 'dabc', 'para o topo: tocar a seguir');
+  lista = fila();
+  musica.moverNaLista(lista, 'a', 3);
+  assert.equal(ids(lista), 'bcad', 'para baixo, a posição é a de chegada');
+  lista = fila();
+  musica.moverNaLista(lista, 'b', 99);
+  assert.equal(ids(lista), 'acdb', 'além do fim, vai para o fim');
+  lista = fila();
+  musica.moverNaLista(lista, 'c', 0);
+  assert.equal(ids(lista), 'cabd', 'antes do começo, vai para o começo');
+  lista = fila();
+  assert.equal(musica.moverNaLista(lista, 'sumiu', 1), null, 'faixa que saiu da fila não move outra no lugar');
+  assert.equal(ids(lista), 'abcd');
+  assert.equal(musica.moverNaLista(lista, 'b', 'não é número').para, 4, 'posição ilegível vai para o fim, e não some');
+});
+
+test('pedir numa posição: 1 é tocar a seguir, sem posição é o fim, e uma lista entra em ordem', () => {
+  const nova = id => ({ id });
+  const ids = lista => lista.map(f => f.id).join('');
+  let lista = ['a', 'b'].map(nova);
+  assert.equal(musica.inserirNaLista(lista, [nova('x')], 1), 1);
+  assert.equal(ids(lista), 'xab');
+  lista = ['a', 'b'].map(nova);
+  assert.equal(musica.inserirNaLista(lista, [nova('x')]), 3);
+  assert.equal(ids(lista), 'abx');
+  lista = ['a', 'b'].map(nova);
+  assert.equal(musica.inserirNaLista(lista, [nova('x'), nova('y')], 2), 2);
+  assert.equal(ids(lista), 'axyb', 'o álbum pedido para a posição 2 entra inteiro ali, na ordem dele');
+  lista = ['a'].map(nova);
+  assert.equal(musica.inserirNaLista(lista, [nova('x')], 50), 2, 'além do fim, entra no fim');
+});
+
+test('reordenar numa sala sem bot não quebra nada', () => {
+  assert.equal(musica.moverNaFila('sala-vazia', 'x', 1), null);
+  assert.equal(musica.removerDaFilaPorId('sala-vazia', 'x'), null);
+  assert.equal(musica.tocarAgora('sala-vazia', 'x'), null);
+  assert.equal(musica.esvaziarFila('sala-vazia'), 0);
+});
+
 test('desconectar uma sala que não tem bot é uma operação silenciosa', async () => {
   // O servidor chama isto toda vez que uma sala esvazia, tenha havido música ou não.
   await assert.doesNotReject(musica.desconectar('sala-sem-bot', 'sala-vazia'));

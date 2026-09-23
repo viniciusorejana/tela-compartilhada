@@ -46,18 +46,19 @@
       <div class="section-caption member-caption">NO SQUAD <span id="memberTotal">0</span></div>
       <div id="memberList" class="member-list"></div>
     </div>
-    <div class="connection-box"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div><button class="ghost" data-action="sugestao" type="button" title="Sugestões e problemas" aria-label="Sugestões e problemas">✎</button><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão">⌁</button></div>
-    <div class="self-profile"><span class="self-avatar" id="selfAvatar">?</span><div><strong id="selfName">Seu perfil</strong><small id="selfState">Pronto para entrar</small></div><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost" type="button" data-action="devices" title="Configurar dispositivos" aria-label="Configurar dispositivos">⚙</button></div>
+    <div class="connection-box"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div><button class="ghost" data-action="sugestao" type="button" title="Sugestões e problemas" aria-label="Sugestões e problemas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/></svg></button><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button></div>
+    <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Editar meu perfil" aria-label="Editar meu perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState">Pronto para entrar</small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost" type="button" data-action="devices" title="Configurar dispositivos" aria-label="Configurar dispositivos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button></div>
   </aside>
   <header class="topbar">
     <div class="room-id">
-      <button class="ghost" id="sidebarToggle" type="button" aria-label="Abrir lista de participantes" aria-expanded="false" aria-controls="roomSidebar">☰</button>
+      <button class="ghost" id="sidebarToggle" type="button" aria-label="Abrir lista de participantes" aria-expanded="false" aria-controls="roomSidebar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
       <span class="topbar-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span>
       <h1 id="roomTitle">sala</h1>
       <span class="session-badge" id="sessionBadge">SALA DE VOZ</span>
       <span id="participantCount">Seu ponto de encontro</span>
     </div>
     <div class="topbar-actions">
+      <button id="atualizarAppBtn" class="ghost atualizar-app" type="button" hidden aria-haspopup="true" aria-expanded="false" aria-controls="atualizarAppMenu"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Atualizar</span></button>
       <button id="connectionQualityBtn" class="connection-quality ghost" type="button" title="Qualidade da conexão" aria-label="Qualidade da conexão" data-quality="unknown"><i></i><span>Conexão</span><b hidden></b></button>
       <button id="moderarSalaBtn" class="ghost" type="button" hidden title="Moderação desta sala" aria-label="Moderação desta sala">Moderação <span id="joinRequestCount" hidden>0</span></button>
       <button id="copyLinkBtn" class="secondary" type="button" title="Copiar o link desta sala">Convidar amigos</button>
@@ -103,16 +104,16 @@
   <aside class="chat" id="chatPanel" aria-label="Chat da sala">
     <div class="chat-head">
       <strong><span aria-hidden="true">#</span> chat da sala</strong>
-      <div class="chat-head-actions"><button id="chatPinsBtn" class="ghost chat-pins-btn" type="button" aria-label="Ver mensagens fixadas" title="Mensagens fixadas" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/></svg><span id="chatPinsCount" hidden>0</span></button><button id="chatFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no chat" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="chatClose" class="ghost" type="button" title="Fechar chat" aria-label="Fechar chat">✕</button></div>
+      <div class="chat-head-actions"><button id="chatPinsBtn" class="ghost chat-pins-btn" type="button" aria-label="Ver mensagens fixadas" title="Mensagens fixadas" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/></svg><span id="chatPinsCount" hidden>0</span></button><button id="chatFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no chat" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="chatClose" class="ghost" type="button" title="Fechar chat" aria-label="Fechar chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
     <div id="chatPinnedBar" class="chat-pinned-bar" role="button" tabindex="0" aria-label="Ir para a última mensagem fixada" hidden></div>
     <div class="chat-msgs" id="chatMsgs" role="log" aria-label="Mensagens da sala" aria-live="polite"></div>
     <div id="chatContext" class="chat-context" hidden><div><strong id="chatContextTitle"></strong><span id="chatContextText"></span></div><button id="chatContextClose" class="ghost" type="button" aria-label="Cancelar">✕</button></div>
     <div class="chat-compose">
-      <button id="attachImageBtn" class="ghost" type="button" title="Enviar imagem" aria-label="Enviar imagem">＋</button>
+      <button id="attachImageBtn" class="ghost botao-icone" type="button" title="Enviar imagem" aria-label="Enviar imagem"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <input id="chatImageFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
       <textarea id="chatInput" rows="1" maxlength="2000" placeholder="Converse com o squad…" aria-label="Mensagem para a sala"></textarea>
-      <button id="chatSend" type="button" title="Enviar">➤</button>
+      <button id="chatSend" class="botao-icone" type="button" title="Enviar" aria-label="Enviar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
     </div>
     <small class="chat-hint">Enter envia · Shift+Enter quebra linha</small>
   </aside>
@@ -120,21 +121,22 @@
   <aside class="chat musica" id="musicaPanel" aria-label="Canal de música">
     <div class="chat-head">
       <strong><span aria-hidden="true">♪</span> música</strong>
-      <div class="chat-head-actions"><button id="musicaFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no canal de música" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="musicaClose" class="ghost" type="button" title="Fechar canal de música" aria-label="Fechar canal de música">✕</button></div>
+      <div class="chat-head-actions"><button id="musicaFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no canal de música" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="musicaClose" class="ghost" type="button" title="Fechar canal de música" aria-label="Fechar canal de música"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
 
     <div class="musica-corpo">
       <div class="tocando" id="tocandoAgora" hidden>
         <div class="tocando-capa" id="tocandoCapa" aria-hidden="true">♪</div>
         <div class="tocando-info">
+          <span class="tocando-rotulo" id="tocandoRotulo">TOCANDO AGORA</span>
           <strong id="tocandoTitulo">—</strong>
           <small id="tocandoAutor"></small>
           <div class="tocando-barra" role="img" aria-label="Progresso da faixa"><i id="tocandoProgresso"></i></div>
           <span class="tocando-tempo" id="tocandoTempo">0:00</span>
         </div>
         <div class="tocando-botoes">
-          <button id="musicaPausar" class="ghost" type="button" title="Pausar" aria-label="Pausar">⏸</button>
-          <button id="musicaPular" class="ghost" type="button" title="Pular" aria-label="Pular">⏭</button>
+          <button id="musicaPausar" class="ghost botao-icone" type="button" title="Pausar" aria-label="Pausar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+          <button id="musicaPular" class="ghost botao-icone" type="button" title="Pular" aria-label="Pular"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14l10-7ZM19 5v14"/></svg></button>
         </div>
       </div>
 
@@ -144,19 +146,27 @@
         <span id="musicaVolumeValor">85%</span>
       </div>
 
-      <details class="musica-fila" id="musicaFila" hidden>
-        <summary>Na fila <span id="musicaFilaTotal">0</span></summary>
-        <ol id="musicaFilaLista"></ol>
-      </details>
+      <!-- A fila: cada faixa vai pelo id, não pela posição (ver musica.js no servidor). -->
+      <section class="musica-fila" id="musicaFila" hidden aria-labelledby="musicaFilaTitulo">
+        <div class="fila-topo">
+          <button type="button" class="fila-recolher" id="musicaFilaRecolher" aria-expanded="true" aria-controls="musicaFilaLista"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span id="musicaFilaTitulo">A seguir</span><span class="fila-contagem" id="musicaFilaTotal">0</span></button>
+          <span class="fila-duracao" id="musicaFilaDuracao"></span>
+          <button type="button" class="ghost botao-icone" id="musicaEmbaralhar" title="Embaralhar a fila" aria-label="Embaralhar a fila"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+          <button type="button" class="ghost botao-icone" id="musicaEsvaziar" title="Esvaziar a fila (a que está tocando continua)" aria-label="Esvaziar a fila"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+        </div>
+        <ol id="musicaFilaLista" class="fila-lista" aria-describedby="musicaFilaDica"></ol>
+        <small id="musicaFilaDica" class="fila-dica">Arraste pela alça para mudar a ordem. No teclado: foco na alça e ↑ ↓.</small>
+      </section>
 
       <div class="chat-msgs" id="musicaMsgs" role="log" aria-label="Mensagens do canal de música" aria-live="polite"></div>
     </div>
 
     <div class="chat-compose">
-      <textarea id="musicaInput" rows="1" maxlength="400" placeholder="Nome da música, link ou !ajuda…" aria-label="Pedir uma música"></textarea>
-      <button id="musicaSend" type="button" title="Pedir">➤</button>
+      <textarea id="musicaInput" rows="1" maxlength="400" placeholder="Nome ou link da música…" aria-label="Pedir uma música"></textarea>
+      <button id="musicaProxima" class="ghost botao-icone" type="button" title="Tocar a seguir: passa na frente da fila (Ctrl+Enter)" aria-label="Pedir para tocar a seguir"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M12 20V9M7 13l5-5 5 5"/></svg></button>
+      <button id="musicaSend" class="botao-icone" type="button" title="Pedir: entra no fim da fila (Enter)" aria-label="Pedir música"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
     </div>
-    <small class="chat-hint">Escreva o nome e eu toco · <code>!pular</code> <code>!fila</code> <code>!ajuda</code></small>
+    <small class="chat-hint">Enter pede · Ctrl+Enter toca a seguir · <code>!ajuda</code></small>
   </aside>
 
   <nav class="control-bar" aria-label="Controles da chamada">
@@ -352,15 +362,43 @@
   </div>
 </div>
 
-<div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">Envie este link para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
+<div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">O navegador não deixou copiar sozinho. O link já está selecionado: use Ctrl+C (ou segure e copie, no celular) e mande para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
 <div class="modal hidden" id="sugestaoPanel" role="dialog" aria-modal="true" aria-labelledby="sugestaoTitulo"><div class="modal-card"><h2 id="sugestaoTitulo">Sugestões e problemas</h2><p class="modal-sub">O que faltou, o que incomodou, o que seria bom ter. Chega direto em quem cuida do Nexo — e o que você escrever aqui é o que decide o que vem antes.</p><div class="relato"><label class="relato-titulo" for="sugestaoTexto">Conte com suas palavras</label><textarea id="sugestaoTexto" rows="5" maxlength="500" placeholder="Ex.: queria poder deixar a sala aberta e voltar depois com o mesmo link."></textarea><p class="relato-aviso">Vão junto <strong>a sala e o nome</strong> com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite, senhas nem o relatório técnico — para problemas de imagem e som, o <strong>Diagnóstico</strong> tem um campo próprio, que anexa as medições.</p><div id="sugestaoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendSugestaoBtn">Enviar</button><button class="secondary" type="button" data-close="sugestaoPanel">Fechar</button></div></div></div>
-<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="modal-sub" id="perfilDica"></p><div class="modal-actions"><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="modal-sub" id="perfilDica"></p><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
+<!-- O perfil de quem tem conta, editado sem sair da chamada (perfil-sala.js). Muda na hora
+     para a sala inteira: o servidor avisa todo mundo quando a conta salva. -->
+<div class="modal hidden" id="meuPerfilPanel" role="dialog" aria-modal="true" aria-labelledby="meuPerfilTitulo"><div class="modal-card meu-perfil-card">
+  <h2 id="meuPerfilTitulo">Meu perfil</h2>
+  <p class="modal-sub" id="meuPerfilSub">Muda na hora para todo mundo nesta sala, e vale nas próximas: o perfil segue a sua conta.</p>
+  <div class="meu-perfil-previa" aria-hidden="true"><span class="perfil-avatar" id="meuPerfilAvatar"></span><div><strong id="meuPerfilNome"></strong><small id="meuPerfilCodigo"></small></div></div>
+  <form id="meuPerfilForm" novalidate>
+    <label class="campo-rotulo" for="meuPerfilApelido">Apelido</label>
+    <input id="meuPerfilApelido" type="text" maxlength="40" autocomplete="nickname" required>
+    <small class="campo-dica">O nome que a sala mostra. Numa sala com dois nomes iguais, o seu código aparece ao lado.</small>
+    <fieldset class="escolhas" id="meuPerfilCores"><legend>Cor</legend></fieldset>
+    <fieldset class="escolhas" id="meuPerfilMarcas"><legend>Marca no lugar das iniciais</legend></fieldset>
+    <p class="relato-status" id="meuPerfilStatus" role="status"></p>
+  </form>
+  <div class="meu-perfil-sem-conta" id="meuPerfilSemConta" hidden>
+    <p class="modal-sub">Sem conta, o nome vale só nesta entrada e qualquer pessoa pode usar o mesmo. Com uma conta grátis você escolhe apelido, cor e marca, ganha um código que distingue você, e o perfil segue você em todo aparelho.</p>
+    <p class="modal-sub">A conta é criada numa aba nova, sem derrubar esta chamada. Depois, recarregue a sala para entrar com ela.</p>
+  </div>
+  <div class="modal-actions">
+    <button type="submit" form="meuPerfilForm" id="meuPerfilSalvar" disabled>Salvar</button>
+    <a class="botao-link" id="meuPerfilCriar" href="/conta" target="_blank" rel="noopener" hidden>Criar conta grátis</a>
+    <button type="button" data-close="meuPerfilPanel">Fechar</button>
+    <a class="botao-link secundario meu-perfil-mais" id="meuPerfilConta" href="/conta" target="_blank" rel="noopener">Senha e conta</a>
+  </div>
+</div></div>
 <div class="modal hidden" id="removidoPanel" role="dialog" aria-modal="true" aria-labelledby="removidoTitulo"><div class="modal-card"><h2 id="removidoTitulo">Você saiu desta sala</h2><p class="modal-sub" id="removidoMotivo"></p><div class="modal-actions"><a class="botao-link" id="removidoConta" href="/conta" hidden>Entrar com a minha conta</a><a class="botao-link" href="/">Voltar ao início</a></div></div></div>
 <div class="modal hidden" id="moderarPanel" role="dialog" aria-modal="true" aria-labelledby="moderarTitulo"><div class="modal-card"><h2 id="moderarTitulo">Moderar <span id="moderarNome"></span></h2><p class="modal-sub">Você modera esta sala agora, então estas ações são suas. Elas valem enquanto a sala existir: nada disso fica guardado depois que ela fecha, um minuto após a última pessoa sair.</p><div class="moderar-acoes" id="moderarAcoes"><button type="button" id="moderarRemover">Remover da sala</button><button type="button" id="moderarBanir">Remover e bloquear por 1 h</button><button type="button" id="moderarBanirTrancar">Bloquear e trancar a sala</button><button class="secondary" type="button" id="moderarTransferir">Passar a sala para esta pessoa</button></div><p class="modal-sub" id="moderarRessalva">Quem tem conta é bloqueado pela conta: nem um F5 nem outro apelido o trazem de volta. Quem não tem é bloqueado pelo nome — e voltar com outro nome escapa. Para isso, bloqueie e tranque: quem chegar depois cai na fila de pedidos.</p><section class="room-security" id="roomSecurity"><strong>Controles da sala</strong><label class="toggle-line" for="roomLocked"><span>Trancar novas entradas<small>Quem já está dentro continua e pode reconectar.</small></span><input id="roomLocked" type="checkbox"></label><label class="toggle-line" for="allowScreen"><span>Participantes podem compartilhar tela</span><input id="allowScreen" type="checkbox" checked></label><label class="toggle-line" for="allowSoundboard"><span>Participantes podem usar a mesa de sons</span><input id="allowSoundboard" type="checkbox" checked></label><label class="toggle-line" for="allowMusic"><span>Participantes podem pedir músicas</span><input id="allowMusic" type="checkbox" checked></label><div id="joinRequests" class="join-requests"></div></section><div class="moderar-removidos"><strong>Bloqueados agora</strong><div id="moderarListaRemovidos"></div></div><div id="moderarStatus" class="relato-status" role="status"></div><div class="modal-actions"><button class="secondary" type="button" data-close="moderarPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><div id="diagnosticsCards"></div><details class="avancado"><summary>Relatório técnico (para colar num chat)</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="relato"><label class="relato-titulo" for="relatoTexto">Continua errado? Conte o que aconteceu</label><textarea id="relatoTexto" rows="3" maxlength="500" placeholder="Ex.: a tela do Fulano ficou preta quando eu entrei pelo celular."></textarea><p class="relato-aviso">Vão junto <strong>o relatório técnico acima</strong>, a sala e o nome com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite nem senhas.</p><div id="relatoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendRelatoBtn">Enviar para o desenvolvedor</button><button class="secondary" type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="waitingPanel" role="dialog" aria-modal="true" aria-labelledby="waitingTitle"><div class="modal-card waiting-card"><span class="waiting-spinner" aria-hidden="true"></span><h2 id="waitingTitle">Aguardando entrada</h2><p class="modal-sub" id="waitingText">A sala está trancada. Quem abriu recebeu seu pedido.</p><div class="modal-actions"><a class="botao-link" id="waitingConta" href="/conta" hidden>Tenho conta: abrir a sala</a><button class="secondary" id="waitingCancel" type="button">Cancelar e voltar</button></div></div></div>
 <div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><strong>Meu status</strong><div class="presence-options"><button type="button" data-presence="">Disponível</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button></div></div>
 <div id="chatMsgMenu" class="msg-menu hidden" role="menu" aria-label="Ações da mensagem"></div>
+<div id="musicaFilaMenu" class="msg-menu menu-lista hidden" role="menu" aria-label="Ações da faixa"></div>
+<!-- `role="group"`, e não "dialog": room-ui.js trata todo dialog como modal e congela a sala. -->
+<div id="atualizarAppMenu" class="msg-menu atualizar-menu hidden" role="group" aria-labelledby="atualizarAppTitulo"><strong id="atualizarAppTitulo">Nova versão disponível</strong><p id="atualizarAppTexto"></p><div class="atualizar-acoes"><a class="botao-link" id="atualizarAppBaixar" href="/" target="_blank" rel="noopener">Baixar agora</a><button type="button" class="secondary" id="atualizarAppDepois">Depois</button></div></div>
 <div id="chatPinsList" class="msg-menu pins-menu hidden" role="menu" aria-label="Mensagens fixadas"></div>
 <div id="roomReactions" class="room-reactions" aria-live="polite"></div>
 <div id="joinRequestNotice" class="join-request-notice" role="status" hidden><div><strong id="joinRequestNoticeTitle">Alguém quer entrar</strong><span>Abra a moderação para aceitar ou recusar.</span></div><button id="joinRequestNoticeOpen" type="button">Ver pedido</button></div>
@@ -377,6 +415,9 @@
 <script src="/multi-view.js"></script>
 <script src="/musica.js"></script>
 <script src="/soundboard.js"></script>
+<script src="/perfil-sala.js"></script>
+<script src="/versao-app.js"></script>
+<script src="/atualizacao-app.js"></script>
 <script src="/room-ui.js"></script>
 </body>
 </html>
