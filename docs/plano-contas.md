@@ -236,6 +236,8 @@ recuperação): serviço externo, com cota e com reputação de domínio. Seria 
 mensal do lançamento inteiro, para resolver um problema que ainda não existe.
 
 - **Cadastro:** apelido + senha. Quinze segundos, sem sair da página.
+  **Em aberto:** com o apelido repetível (seção 4), ele não identifica ninguém no login — falta
+  um nome de usuário único para entrar. Ver `seguranca-e-privacidade.md`, decisão 1.
 - **Recuperação:** um **código de recuperação** mostrado uma vez, com botão de copiar e um
   aviso honesto: *perdeu a senha e o código, perdeu a conta*.
 - **E-mail:** campo opcional no perfil.
@@ -692,13 +694,18 @@ de conta.
 Cada etapa é entregável sozinha e tem teste próprio. Estimativa em dias de trabalho
 concentrado, não de calendário.
 
-### Etapa A — banco, conta e sessão, sem atraso (3 dias)
+### Etapa A — banco, conta e sessão, sem atraso (3,5 dias)
 
 - `contas/banco.js` — abertura, PRAGMAs, migração 1 com tabelas `STRICT`, e **todo** o SQL.
 - `contas/manutencao.js` — worker com conexão própria: checkpoint em intervalo e backup diário.
 - `contas/senha.js` — `scrypt` assíncrono, semáforo de 1, fila de 16, 429 com a fila cheia.
 - `contas/index.js` e `contas/rotas.js` — cadastrar (com o código de recuperação), entrar,
   sair, `eu`, trocar senha, apagar. Cookie, CSRF e freio de tentativas no formato do painel.
+- Segurança do login (ver `seguranca-e-privacidade.md`): nome de usuário único para entrar,
+  senha de 10+ caracteres conferida contra uma lista de senhas comuns, freio por conta além do
+  freio por origem, a mesma resposta para usuário inexistente e senha errada, código de
+  recuperação de uso único — e a origem do Socket.IO fixada no `PUBLIC_URL` **antes** de o
+  cookie existir.
 - `abuso.js` — `'cadastrar'` (com teto diário por origem), `'entrar'`, `'conta-escrever'`.
 - `recursos.js` — atraso e ocupação do laço de eventos no painel, com a nota do piso do
   Windows.
@@ -708,10 +715,12 @@ concentrado, não de calendário.
 
 Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
 
-### Etapa B — perfil (2 dias)
+### Etapa B — perfil (2,5 dias)
 
 - Leitor único das preferências; `perfil.ajustes` com gravação atrasada; cor e marca; o
   apelido da conta vence o campo de nome da sala; "apagar minha conta" que apaga.
+- **Baixar meus dados**: um JSON com conta, perfil e ajustes. É o direito de acesso e
+  portabilidade da LGPD (art. 18), e sai quase de graça depois do leitor único.
 - Testes do que sincroniza e, principalmente, **do que não sincroniza** — id de dispositivo e
   volume por pessoa têm de ficar de fora, e um teste que afirme isso protege a decisão de ser
   desfeita sem querer.
@@ -753,7 +762,7 @@ Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
 `conta.plano` e `conta.plano_ate` são a superfície inteira. A webhook do provedor muda uma
 coluna; tudo o mais já lê dali. É aqui que o e-mail passa a ser obrigatório.
 
-**Soma:** ~11 a 13 dias de trabalho concentrado até o fim da etapa D.
+**Soma:** ~12 a 14 dias de trabalho concentrado até o fim da etapa D.
 
 ---
 

@@ -1,14 +1,15 @@
 # Roteiro do Nexo
 
-Atualizado em 22/09/2026. Junta num lugar só a ordem e o estado dos três planos:
-[`lancamento.md`](lancamento.md) (custo e degraus), [`plano-contas.md`](plano-contas.md) e
+Atualizado em 22/09/2026. Junta num lugar só a ordem e o estado dos planos:
+[`lancamento.md`](lancamento.md) (custo e degraus), [`plano-contas.md`](plano-contas.md),
+[`seguranca-e-privacidade.md`](seguranca-e-privacidade.md) e
 [`plano-webcodecs.md`](plano-webcodecs.md). Os planos guardam o **porquê**; aqui fica o
 **quê**, em que ordem, e o que já está feito.
 
 Este arquivo muda quando uma etapa fecha. Os planos mudam quando uma decisão muda.
 
-**Ordem:** feito → **1. contas** → **2. antes de abrir** → *lançamento* → **3. pagamento** →
-**4. guiado pelo uso**
+**Ordem:** feito → **agora: o aplicativo** → **1. contas** → **2. antes de abrir** →
+*lançamento* → **3. pagamento** → **4. guiado pelo uso**
 
 O pagamento fica **depois** do lançamento de propósito: o uso real diz se R$ 10 converte antes
 de se gastar dias numa integração, e o atalho da fase 3 permite receber de apoiadores antes
@@ -29,7 +30,7 @@ dela.
 | Aplicativo para Linux e macOS; a página oferece só o que existe | `3668834`, `92740d6` |
 | `npm start` roda no Linux (era pendência do degrau 1) | `540fc6c` |
 | Melhorias de sala: chat, layout, controles, latência desde a entrada | `779dc3e` a `633265c` |
-| Planos: custo e lançamento, contas, WebCodecs | `docs/` |
+| Planos: custo e lançamento, contas, segurança e privacidade, WebCodecs | `docs/` |
 
 ### Esperando confirmação
 
@@ -40,14 +41,26 @@ dela.
 
 ---
 
-## Fase 1 — Contas · ~11–13 dias · *próxima*
+## Agora — o aplicativo de desktop · meia tarde
+
+Antes de qualquer fase, porque é código que já está sendo distribuído. Detalhe em
+[`seguranca-e-privacidade.md`](seguranca-e-privacidade.md), item 1.
+
+- A página da sala consegue trocar o servidor do aplicativo, e a janela pode navegar para
+  qualquer lugar levando junto as funções nativas — inclusive a que liga o agente de áudio.
+  Três mudanças em `app/main.js` prendem o aplicativo à origem que a pessoa escolheu.
+- A janelinha do seletor de tela deixa de rodar com Node ligado.
+
+---
+
+## Fase 1 — Contas · ~12–14 dias · *próxima*
 
 Plano completo em [`plano-contas.md`](plano-contas.md).
 
 | etapa | entrega | dias |
 |---|---|---|
-| A | banco, cadastro, login e sessão — com o "sem atraso" garantido por teste | 3 |
-| B | perfil que segue a pessoa; apagar a conta | 2 |
+| A | banco, cadastro, login e sessão — com o "sem atraso" garantido por teste; **nome de usuário único para entrar**, senha de 10+ caracteres, freio por conta, e a origem do Socket.IO fixada antes de o cookie existir | 3,5 |
+| B | perfil que segue a pessoa; apagar a conta; **baixar meus dados** | 2,5 |
 | C | só conta abre sala; carência de 60 s; dono sobrevive ao F5; banimento sem atingir homônimos; enviar e apagar sons exigem conta; a própria mensagem continua editável depois do F5 | 3,5 |
 | D | os níveis 720p30 / 720p60 / 1080p–1440p, com o teto conferido no servidor; teto de pessoas maior com assinante na sala; premium à mão pelo painel | 2,5 |
 
@@ -60,19 +73,33 @@ Cada etapa sobe sozinha. A etapa A não muda nada para quem já usa.
 **Pode andar junto com a fase 1**: quase tudo aqui é operação, não código.
 
 - **Sair de casa** (degrau 1): VPS de ~€14/mês. O código já está pronto; falta
-  - um proxy com TLS (Caddy);
+  - **medir a latência antes de contratar**: a Europa é simples pela LGPD, mas fica a ~200 ms
+    de ida e volta do Brasil, e o `lancamento.md` não considerou isso;
+  - um proxy com TLS (Caddy) — a criptografia passa a terminar no seu servidor, e não mais na
+    Cloudflare;
+  - endurecer o servidor: SSH só com chave, firewall, atualizações automáticas, Node sem
+    privilégio e o painel só pelo túnel SSH;
+  - backups cifrados fora da máquina, com uma restauração testada;
   - copiar os instaladores do aplicativo para `app/dist` do servidor (o agente de áudio já vai
     dentro deles);
   - o teste que fecha o degrau: alguém em 4G, alguém em Wi-Fi corporativo com UDP bloqueado, e
     um iPhone, os três recebendo tela.
+- **Cabeçalhos de segurança nas páginas públicas**, com a CSP primeiro em modo relatório.
 - **Teto de pessoas por sala** (degrau 6, ainda não existe): **25** para começar. Uma sala de
   15 em 1440p são ~90 Mbps, e quem paga é você. O aumento para **50** com um assinante na sala
   vem na etapa D, porque depende de o plano existir.
 - **O estado do Nexo na página inicial** (a metade do degrau 4 que falta): 720p60 e 1080p30
   cabem em software; 1080p60 e 1440p cedem resolução para não travar.
-- **Página de privacidade** — precisa existir no dia em que houver senha guardada (LGPD).
+- **Política de privacidade, termos de uso e um canal de contato** — precisam existir no dia em
+  que houver senha guardada (LGPD). O registro de tudo o que se guarda já está pronto em
+  `seguranca-e-privacidade.md`, e é o esqueleto da política.
+- **Procedimento de incidente escrito**: o prazo para comunicar a ANPD é de 6 dias úteis para
+  pequeno porte, e isso não dá tempo de inventar o procedimento na hora.
+- **Relatos com prazo de 180 dias**, e ACL na pasta das chaves do servidor de mídia.
+- **Parecer jurídico sobre o ECA Digital**, em vigor desde março de 2026. É fora do código, e é
+  o maior risco jurídico do lançamento.
 - **Relatar uma pessoa ao mantenedor** (degrau 6): cabe na rota dos relatos, agora com o
-  código da conta.
+  código da conta. Com o ECA Digital, deixa de ser conveniência e passa a ser obrigação.
 - **Avisar o grupo atual** e dar uma janela antes de "só conta abre sala" valer. Sugestão:
   premium de cortesia para esse grupo por alguns meses, pelo painel. Hoje eles transmitem em
   1440p de graça; assim viram os primeiros apoiadores, em vez de sentirem que perderam algo.
@@ -95,6 +122,8 @@ Estimativa deste roteiro; nenhum plano mediu esta fase ainda.
 - **R$ 10/mês**, com PIX (Mercado Pago, Asaas ou Pagar.me). A webhook do provedor muda
   `conta.plano` — é a superfície inteira, e ela já existe desde a etapa A.
 - O e-mail passa a ser obrigatório aqui, e com ele entra o remetente transacional.
+- **Nenhum dado de cartão passa pelo servidor**: o pagamento acontece na página do provedor, e a
+  assinatura de cada aviso da webhook é conferida.
 - **Fora do código:** receber como pessoa física ou como MEI é conversa com contador, e precisa
   estar resolvido antes do primeiro pagamento.
 - **Atalho, pronto desde a etapa D:** o painel marca uma conta como premium à mão, para quem
