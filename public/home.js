@@ -14,23 +14,31 @@
     window.location.href = `/${encodeURIComponent(code)}/sala`;
   }
   document.getElementById('roomForm').onsubmit = event => { event.preventDefault(); openRoom(input.value); };
-  document.getElementById('createBtn').onclick = () => {
-    const bytes = crypto.getRandomValues(new Uint8Array(5));
-    const random = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-    openRoom(input.value.trim() || `sala-${random}`);
-  };
-  input.addEventListener('input', () => { error.hidden = true; input.removeAttribute('aria-invalid'); });
   // Quem já tem conta vê o próprio apelido no lugar do "Entrar". O pedido não segura nada da
   // página: sem resposta, o link continua dizendo "Entrar" e leva ao mesmo lugar.
-  fetch('/api/conta/eu', { credentials: 'same-origin' })
-    .then(resposta => (resposta.ok ? resposta.json() : null))
-    .then(dados => {
-      if (!dados?.conta) return;
-      const link = document.getElementById('contaLink');
-      link.textContent = dados.conta.apelido;
-      link.title = `Sua conta · @${dados.conta.usuario}`;
-    })
-    .catch(() => { /* Sem conta ou sem rede: o "Entrar" continua valendo. */ });
+  const conta = fetch('/api/conta/eu', { credentials: 'same-origin' })
+    .then(resposta => (resposta.ok ? resposta.json() : { conta: null }))
+    .catch(() => ({ conta: null }));
+  conta.then(dados => {
+    if (!dados?.conta) return;
+    const link = document.getElementById('contaLink');
+    link.textContent = dados.conta.apelido;
+    link.title = `Sua conta · @${dados.conta.usuario}`;
+  });
+  // Criar uma sala é abrir uma, e só uma conta abre sala: quem clica sem conta vai para o
+  // cadastro e volta direto para a sala nova. Entrar numa sala aberta continua sem cadastro.
+  document.getElementById('createBtn').onclick = async () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(5));
+    const random = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+    const codigo = normalize(input.value) || `sala-${random}`;
+    const dados = await conta;
+    if (!dados?.conta && !dados?.abrirSemConta && /^[a-z0-9_-]{4,32}$/.test(codigo)) {
+      window.location.href = `/conta?motivo=criar-sala&voltar=${encodeURIComponent(`/${codigo}/sala`)}`;
+      return;
+    }
+    openRoom(codigo);
+  };
+  input.addEventListener('input', () => { error.hidden = true; input.removeAttribute('aria-invalid'); });
   try {
     const recent = JSON.parse(localStorage.getItem('nexoRecentRooms') || '[]');
     if (!Array.isArray(recent)) return;

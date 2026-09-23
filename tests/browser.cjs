@@ -868,7 +868,9 @@ async function esperarCodec(page, fonte, esperado) {
   await solo.waitForFunction(() => tiles.has('self'));
   assert.equal(await solo.evaluate(() => peers.size), 0);
   assert.equal(await solo.locator('.participant').count(), 1);
-  assert.equal(await solo.locator('#chatMsgs').textContent().then(text => text.includes('Histórico antigo')), false);
+  // A sala espera um minuto vazia antes de ser esquecida (salas.js): quem estava sozinho e
+  // voltou logo encontra a própria conversa. Antes ela sumia no instante da saída.
+  await solo.waitForFunction(() => document.getElementById('chatMsgs').textContent.includes('Histórico antigo'), null, { timeout: 5000 });
   const companion = await join(mobileLimpo, 'Companhia', 'entrada-saida');
   await solo.waitForFunction(() => peers.size === 1);
   await solo.locator('.workspace-name').click();

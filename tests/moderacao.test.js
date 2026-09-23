@@ -207,6 +207,149 @@ test('nome com # é extraído pelo último separador', () => {
   assert.equal(nomeDaIdentidade(null), '');
 });
 
+// ---------- Com conta ----------
+//
+// Os testes abaixo são as regras que as contas trouxeram (docs/plano-contas.md). Cada um é um
+// caso que, errado, entrega a sala à pessoa errada ou barra a pessoa errada -- e nenhum deles
+// dá erro quando está errado.
+
+const ANA = { contaId: 'conta-ana', nome: 'Ana' };
+const BIA = { contaId: 'conta-bia', nome: 'Bia' };
+
+test('o dono com conta que aperta F5 volta dono, com outra identidade', () => {
+  const { moderacao: m } = comRelogio();
+  m.entrou('sala', 'Ana#1', ANA);
+  m.entrou('sala', 'Caio#2');
+  m.saiu('sala', 'Ana#1');
+  // Ausente: os poderes ficam com quem está, para a sala nunca ficar sem quem modere.
+  assert.equal(m.dono('sala'), 'Caio#2');
+  m.entrou('sala', 'Ana#9', ANA);
+  assert.equal(m.dono('sala'), 'Ana#9', 'a mesma conta retoma o lugar, e com ele a sala');
+  assert.equal(m.pode('sala', 'Caio#2', 'expulsar'), false);
+});
+
+test('ausente por mais de 60 segundos saiu de vez, e a sucessão fica', () => {
+  const { moderacao: m, avancarMinutos } = comRelogio();
+  m.entrou('sala', 'Ana#1', ANA);
+  m.entrou('sala', 'Caio#2');
+  m.saiu('sala', 'Ana#1');
+  avancarMinutos(1.5);
+  assert.equal(m.dono('sala'), 'Caio#2');
+  m.entrou('sala', 'Ana#9', ANA);
+  assert.equal(m.dono('sala'), 'Caio#2', 'fora do prazo, quem volta entra no fim da fila');
+});
+
+// Sem conta não há como reconhecer ninguém depois de um F5: ele sorteia outra identidade.
+test('o dono sem conta que aperta F5 perde a sala, como antes', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Ana#1');
+  m.entrou('sala', 'Caio#2');
+  m.saiu('sala', 'Ana#1');
+  m.entrou('sala', 'Ana#9');
+  assert.equal(m.dono('sala'), 'Caio#2');
+});
+
+// "Só conta abre sala" seria meia verdade se a sala passasse a um anônimo com uma conta ali.
+test('a sucessão prefere a conta presente mais antiga; sem conta, o anônimo mais antigo', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Ana#1', ANA);
+  m.entrou('sala', 'Caio#2');
+  m.entrou('sala', 'Bia#3', BIA);
+  m.saiu('sala', 'Ana#1');
+  assert.equal(m.dono('sala'), 'Bia#3', 'Caio chegou antes, mas Bia tem conta');
+  const s = criarModeracao();
+  s.entrou('sala', 'Ana#1');
+  s.entrou('sala', 'Caio#2');
+  s.entrou('sala', 'Duda#3');
+  s.saiu('sala', 'Ana#1');
+  assert.equal(s.dono('sala'), 'Caio#2');
+});
+
+// A transferência foi uma escolha de quem era dono, e vale como foi feita.
+test('a transferência vale mesmo para quem não tem conta, e quem transferiu não retoma', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Ana#1', ANA);
+  m.entrou('sala', 'Caio#2');
+  assert.equal(m.transferir('sala', 'Ana#1', 'Caio#2').ok, true);
+  m.saiu('sala', 'Ana#1');
+  m.entrou('sala', 'Ana#9', ANA);
+  assert.equal(m.dono('sala'), 'Caio#2');
+});
+
+test('a mesma conta em duas abas: sair de uma não deixa a pessoa ausente', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Ana#1', ANA);
+  m.entrou('sala', 'Ana#2', ANA);
+  m.entrou('sala', 'Caio#3');
+  // A outra aba é a própria pessoa: removê-la seria um clique errado, não moderação.
+  assert.equal(m.expulsar('sala', 'Ana#2', 'Ana#1').motivo, 'nao-em-si-mesmo');
+  m.saiu('sala', 'Ana#1');
+  assert.equal(m.dono('sala'), 'Ana#2');
+  assert.equal(m.pode('sala', 'Ana#2', 'banir'), true);
+});
+
+// Regra 1: quem tem conta é banido pela conta -- e nenhuma outra Ana é atingida.
+test('banir uma conta pega o F5 e a troca de apelido, e não pega outra conta com o mesmo nome', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Dono#0', BIA);
+  m.entrou('sala', 'Ana#1', ANA);
+  assert.equal(m.banir('sala', 'Dono#0', 'Ana#1').porConta, true);
+  assert.ok(m.banido('sala', { contaId: ANA.contaId, nome: 'Aninha' }), 'trocar o apelido não escapa');
+  assert.equal(m.banido('sala', { contaId: 'conta-de-outra-ana', nome: 'Ana' }), null, 'outra Ana com conta não é atingida');
+});
+
+// Regras 2 e 3.
+test('o banimento por nome só vale para anônimos; banir a conta barra o apelido dela para anônimos', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Dono#0', BIA);
+  m.entrou('sala', 'Ana#1');
+  m.banir('sala', 'Dono#0', 'Ana#1');
+  assert.ok(m.banido('sala', { nome: 'ana' }), 'a Ana anônima que voltar é barrada');
+  assert.deepEqual(m.banido('sala', { nome: 'ANA' }).porNome, true, 'e sabe que foi pelo nome');
+  assert.equal(m.banido('sala', { contaId: ANA.contaId, nome: 'Ana' }), null, 'uma Ana com conta entra');
+
+  const s = criarModeracao();
+  s.entrou('sala', 'Dono#0', BIA);
+  s.entrou('sala', 'Caio#1', { contaId: 'conta-caio', nome: 'Caio' });
+  s.banir('sala', 'Dono#0', 'Caio#1');
+  assert.ok(s.banido('sala', { nome: 'Caio' }), 'sair da conta e voltar anônimo com o mesmo nome não escapa');
+});
+
+test('banir quem tinha conta e acabou de sair ainda acerta a conta', () => {
+  const { moderacao: m, avancarMinutos } = comRelogio();
+  m.entrou('sala', 'Dono#0', BIA);
+  m.entrou('sala', 'Ana#1', ANA);
+  m.saiu('sala', 'Ana#1');
+  avancarMinutos(5);
+  assert.equal(m.banir('sala', 'Dono#0', 'Ana#1').porConta, true);
+  assert.ok(m.banido('sala', { contaId: ANA.contaId, nome: 'Ana' }));
+});
+
+test('a lista de bloqueados diz quem tinha conta, e libera pela chave', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Dono#0', BIA);
+  m.entrou('sala', 'Ana#1', ANA);
+  m.banir('sala', 'Dono#0', 'Ana#1');
+  const [registro] = m.listarBanidos('sala');
+  assert.deepEqual({ conta: registro.conta, exibir: registro.exibir }, { conta: true, exibir: 'Ana' });
+  assert.equal(m.desbanir('sala', 'Dono#0', registro.chave).ok, true);
+  assert.equal(m.banido('sala', { contaId: ANA.contaId, nome: 'Ana' }), null);
+});
+
+// Quando a sala fecha, quem guardava lugar some -- e o banimento continua até o prazo.
+test('fechar a sala esquece os ausentes e mantém os banimentos vivos', () => {
+  const m = criarModeracao();
+  m.entrou('sala', 'Dono#0', BIA);
+  m.entrou('sala', 'Ana#1');
+  m.banir('sala', 'Dono#0', 'Ana#1');
+  m.saiu('sala', 'Dono#0');
+  m.fechou('sala');
+  assert.equal(m.dono('sala'), null);
+  assert.ok(m.banido('sala', { nome: 'Ana' }));
+  m.entrou('sala', 'Caio#5');
+  assert.equal(m.dono('sala'), 'Caio#5', 'quem abre de novo é o dono da sala nova');
+});
+
 // Um papel sem permissão nenhuma não pode virar um papel com todas por causa de um nome
 // desconhecido chegando no lugar de um conhecido.
 test('identidade desconhecida não ganha permissão', () => {

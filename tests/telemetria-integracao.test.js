@@ -124,7 +124,8 @@ test('relatos em excesso são recusados sem derrubar a sessão', async t => {
 
 test('bytes de upload abortado continuam no contador do servidor', async t => {
   const servidor = await iniciarServidor({ ambiente: { NEXO_LIMITES: JSON.stringify({ 'soundboard-bytes': { sessao: 150000, sala: 1000000 } }) } }); t.after(servidor.encerrar);
-  const cred = await servidor.credencial('Upload'); const a = await conectarSocket(servidor.origem, cred.credencialSessao); t.after(a.fechar);
+  // Enviar som exige conta: sem ela, o pedido seria recusado antes de chegar à conversão.
+  const cred = await servidor.conta('upload', { sala: 'squad-teste' }); const a = await conectarSocket(servidor.origem, cred.credencialSessao); t.after(a.fechar);
   await a.pedir('join-room', 'squad-teste', 'Upload', cred.identidade);
   await new Promise(resolve => {
     const req = http.request(servidor.origem + '/api/soundboard/squad-teste', { method: 'POST', headers: { 'X-Nexo-Sessao': cred.credencialSessao, 'Content-Type': 'audio/wav', 'Content-Length': 1000000 } });

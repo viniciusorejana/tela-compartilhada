@@ -73,12 +73,36 @@ A senha e o código de recuperação são derivados com `scrypt` assíncrono, **
 fila de até 16: assim um pico de logins espera na fila, e as salas não. `tests/contas.test.js`
 afirma que uma rajada de 20 logins não segura o laço de eventos por 100 ms.
 
+### A sala com contas
+
+- **Só uma conta abre uma sala.** Quem chega por um link a um código que não está aberto, sem
+  conta, vê "a sala ainda não foi aberta" e entra sozinho assim que alguém com conta chegar (a
+  página pergunta a cada cinco segundos e desiste em dez minutos). "Ainda não abriu" e "já
+  fechou" são o mesmo estado: sem persistência, o servidor não sabe se um código já existiu.
+- **A sala espera um minuto vazia** antes de ser esquecida (`salas.js`): quem estava sozinho e
+  apertou F5 volta para a mesma conversa.
+- **O dono com conta sobrevive ao F5**: quem sai fica ausente por 60 s e guarda o lugar;
+  enquanto isso, os poderes ficam com o próximo presente. Quando o dono sai de vez, assume a
+  conta presente mais antiga; sem conta presente, o anônimo mais antigo. Uma transferência
+  explícita vale como foi feita, e quem transferiu não retoma nada.
+- **Banimento que acerta a pessoa certa**: quem tem conta é banido pela conta (F5, outro apelido
+  ou outro aparelho não escapam, e nenhuma outra pessoa com o mesmo nome é atingida); quem não
+  tem, pelo nome, e isso só vale para anônimos — com a saída "entre com a sua conta" para o
+  homônimo que não tem nada com isso. Banir uma conta barra também o apelido dela para anônimos.
+  Contra quem volta com outro nome, o gesto é **bloquear e trancar a sala**.
+- **Mensagens**: com conta, a própria mensagem continua editável depois de recarregar a página;
+  sem conta, até recarregar, como sempre foi. A conta de quem escreveu fica só no servidor.
+- **Nomes que se repetem** ganham um trecho do código na lista (`Ana · K7M2`); clicar na pessoa
+  mostra o cartão de perfil com o código inteiro.
+
+### O perfil, os dados e o apagar
+
 Em `/conta` a pessoa também edita o perfil (apelido, uma cor e uma marca de um conjunto pronto
 — avatar por arquivo fica para depois, porque aceitar imagem pede moderação de imagem), **baixa
 os próprios dados** num JSON (conta, perfil, ajustes e sessões, sem os hashes) e **apaga a
 conta**, com a senha: o `ON DELETE CASCADE` leva perfil e sessões junto, e as cópias de
 segurança expiram em até 30 dias. `npm run test:contas` percorre isso tudo pela tela, com
-navegadores de verdade.
+navegadores de verdade — e também a espera de quem chega antes de a sala abrir.
 
 ## Requisitos
 
@@ -539,8 +563,9 @@ constantes**, sem subir ao longo de 150 s.
 
 **Mesa de sons: memória, e só enquanto a sala existir.** Os arquivos ficam num `Map` dentro do
 processo Node, nunca em disco, com teto de 2 MB por som, 30 sons e 24 MB por sala, e 256 MB
-somando todas as salas. Quando a última pessoa sai, a mesa é apagada junto com o histórico do
-chat — o mesmo `if (!membros.size)` cuida dos dois. Reiniciar o servidor também zera tudo,
+somando todas as salas. Quando a sala fecha — um minuto depois de a última pessoa sair —, a mesa
+é apagada junto com o histórico do chat, pelas limpezas registradas em `salas.aoFechar`
+(`salas.js`). Reiniciar o servidor também zera tudo,
 porque nada disso sobrevive ao processo. Ver [Mesa de sons](#mesa-de-sons-soundboard) para o
 porquê de cada limite.
 
@@ -574,8 +599,13 @@ vazia, e o que a sala 2 enviar depois só existe lá. Um clique na sala 1 també
 sala 2 — o aviso de disparo só vai para quem está naquela sala.
 
 Nada disso é guardado em disco. Os sons vivem na memória do processo enquanto a sala existir e
-somem quando a última pessoa sai — junto com o histórico do chat e com o bot, pela mesma regra:
-nada de uma sala fechada sobrevive a ela. Reiniciar o servidor também zera tudo.
+somem quando ela fecha — junto com o histórico do chat e com o bot, pela mesma regra: nada de
+uma sala fechada sobrevive a ela. Reiniciar o servidor também zera tudo.
+
+**Enviar e apagar sons pedem conta** (grátis basta); tocar os que já estão na mesa, não. Quem
+modera a sala também apaga, como já apaga qualquer mensagem do chat — é o caminho que sobra
+quando a sala passou para alguém sem conta. Sem conta, o botão de enviar continua à vista,
+desligado e com o motivo ao lado.
 
 **O volume da mesa é seu e é por sala.** Ele não sobe para o servidor: baixar a mesa não baixa
 para os outros, e cada sala guarda o próprio número no seu navegador, porque uma mesa de
@@ -940,6 +970,7 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | vazio | Origens EXTRAS (separadas por vírgula) que podem abrir o Socket.IO e escrever na conta. A página servida por este servidor e a origem do `PUBLIC_URL` já valem sem configurar nada; qualquer outra é recusada |
 | `NEXO_PASTA_CONTAS` | `native/contas` | Onde fica o banco das contas (`nexo.db`) e as cópias diárias |
+| `NEXO_ANONIMO_ABRE_SALA` | `0` | `1` deixa quem não tem conta abrir sala. É a janela de transição do roteiro: o grupo que já usa continua abrindo salas enquanto cria as contas. Desligue quando todos tiverem conta |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
 | `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
@@ -1094,7 +1125,7 @@ LGPD e ECA Digital -- está em [`docs/seguranca-e-privacidade.md`](docs/seguranc
 O essencial:
 
 - HTTPS é necessário para captura de tela fora de `localhost`; nunca instrua usuários a ignorar alertas de certificado.
-- Ainda não há contas: quem tem o link entra numa sala aberta. Quem abriu a sala pode trancá-la (a entrada passa a depender de aprovação), expulsar, banir e liberar; a sala e tudo o que ela tinha -- chat, sons, fila de música -- somem quando ela esvazia. As contas estão planejadas em [`docs/plano-contas.md`](docs/plano-contas.md).
+- **Só uma conta abre sala**; quem tem o link entra enquanto ela estiver aberta, com conta ou sem. A sala fecha um minuto depois de esvaziar, e o link morre com ela. Quem modera pode trancá-la (a entrada passa a depender de aprovação), expulsar, banir e liberar; quem tem conta é banido pela conta, quem não tem, pelo nome. A sala e tudo o que ela tinha -- chat, sons, fila de música -- somem quando ela fecha. O plano está em [`docs/plano-contas.md`](docs/plano-contas.md).
 - A mídia passa pelo servidor de mídia, cifrada (DTLS-SRTP) entre cada pessoa e o servidor, que a decifra para distribuir -- como Discord e Meet fazem por padrão. Nada é gravado. O TURN embutido fica desligado.
 - O IP de quem entra nunca vai para o disco: os limites por origem usam um HMAC com segredo sorteado a cada início do processo.
 - O painel só abre na própria máquina do servidor; acesso remoto só com `NEXO_PAINEL_REMOTO=1` e HTTPS.
@@ -1125,6 +1156,8 @@ tela-compartilhada/
 ├── sfu.js                          # sobe o servidor de midia e emite os tokens de acesso
 ├── musica.js                       # o bot: fila por sala, yt-dlp/ffmpeg e a faixa publicada
 ├── soundboard.js                   # a mesa de sons de cada sala, so na memoria
+├── salas.js                        # ciclo de vida da sala: quem abre, a carencia de 60 s, as limpezas ao fechar
+├── moderacao.js                    # dono, ausencia, sucessao e banimento por conta ou por nome
 ├── contas/                         # contas: todo o SQL (banco.js), senha, regras, rotas e a worker de manutencao
 │   └── migracoes/                  # uma migracao numerada por arquivo, em PRAGMA user_version
 ├── build-helper.ps1                # build Release x64 do helper C++

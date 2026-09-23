@@ -28,7 +28,7 @@ function cliente(origem) {
 test('cadastrar e entrar põem a sessão num cookie HttpOnly, SameSite=Strict, e "eu" a reconhece', async t => {
   const servidor = await iniciarServidor(); t.after(servidor.encerrar);
   const ana = cliente(servidor.origem);
-  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null }, 'sem conta é o estado normal, e responde 200');
+  assert.equal((await ana.pedir('/api/conta/eu')).dados.conta, null, 'sem conta é o estado normal, e responde 200');
   const cadastro = await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'Ana', apelido: 'Ana', senha: SENHA } });
   assert.equal(cadastro.status, 201, JSON.stringify(cadastro.dados));
   assert.match(cadastro.definido, /^nexo_conta=[\w-]{43}; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000$/);
@@ -38,7 +38,7 @@ test('cadastrar e entrar põem a sessão num cookie HttpOnly, SameSite=Strict, e
   assert.match(eu.dados.conta.codigo, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   assert.equal(JSON.stringify(eu.dados).includes('scrypt'), false, 'nenhum hash sai do servidor');
   assert.equal((await ana.pedir('/api/conta/sair', { metodo: 'POST' })).status, 200);
-  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null });
+  assert.equal((await ana.pedir('/api/conta/eu')).dados.conta, null);
   const entrada = await ana.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
   assert.equal(entrada.status, 200);
   assert.equal((await ana.pedir('/api/conta/eu')).dados.conta.usuario, 'ana');
@@ -127,7 +127,7 @@ test('apagar a conta pelo HTTP pede a senha, apaga e desfaz o cookie', async t =
   const apagada = await ana.pedir('/api/conta/apagar', { metodo: 'POST', corpo: { senha: SENHA } });
   assert.equal(apagada.status, 200);
   assert.match(apagada.definido, /Max-Age=0/);
-  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null });
+  assert.equal((await ana.pedir('/api/conta/eu')).dados.conta, null);
   const outra = cliente(servidor.origem);
   assert.equal((await outra.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } })).status, 401);
 });

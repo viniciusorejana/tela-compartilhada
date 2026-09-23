@@ -57,7 +57,10 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
   if (midia) { await fs.mkdir(pastaSfu); binarioSfu = await binarioDeTeste(); }
   const [portaSfu, portaMetricas, portaTcp, portaUdp] = await portasLivres();
   const filho = spawn(process.execPath, ['tests/helpers/iniciar-telemetria.cjs'], { cwd: path.join(__dirname, '..', '..'), windowsHide: true,
-    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, NEXO_PASTA_CONTAS: path.join(pasta, 'contas'), ...ambiente },
+    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, NEXO_PASTA_CONTAS: path.join(pasta, 'contas'),
+      // Os testes anteriores às contas abrem salas sem conta, e é isso que eles testam: a sala.
+      // Quem testa "só conta abre sala" desliga esta janela com NEXO_ANONIMO_ABRE_SALA=0.
+      NEXO_ANONIMO_ABRE_SALA: '1', ...ambiente },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let erros = ''; filho.stderr.on('data', p => { erros = (erros + p).slice(-16000); });
   async function encerrar() {
@@ -81,9 +84,20 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
     const origem = `http://127.0.0.1:${porta}`;
     return { origem, pasta, medicao, painel, pastaSfu, portaMetricas, filho, encerrar, erros: () => erros,
       async chave() { return JSON.parse(await fs.readFile(path.join(painel, 'segredo.json'), 'utf8')).segredo; },
-      async credencial(nome = 'Teste', sala = 'squad-teste', credencial = '') {
-        const r = await fetch(`${origem}/api/sala-config?sala=${sala}&nome=${encodeURIComponent(nome)}`, { headers: credencial ? { 'X-Nexo-Sessao': credencial } : {} });
+      async credencial(nome = 'Teste', sala = 'squad-teste', credencial = '', cookie = '') {
+        const cabecalhos = {};
+        if (credencial) cabecalhos['X-Nexo-Sessao'] = credencial;
+        if (cookie) cabecalhos.Cookie = cookie;
+        const r = await fetch(`${origem}/api/sala-config?sala=${sala}&nome=${encodeURIComponent(nome)}`, { headers: cabecalhos });
         return r.json();
+      },
+      // Cria uma conta e devolve o cookie dela; com `sala`, já pede a entrada nela.
+      async conta(usuario, { apelido = usuario, sala = null } = {}) {
+        const r = await fetch(`${origem}/api/conta/cadastrar`, { method: 'POST', headers: { Origin: origem, 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario, apelido, senha: 'cafe com pao no sabado' }) });
+        if (r.status !== 201) throw new Error(`Não foi possível criar a conta ${usuario}: ${r.status} ${await r.text()}`);
+        const cookie = r.headers.get('set-cookie').split(';')[0];
+        const conta = (await r.json()).conta;
+        return { cookie, conta, ...(sala ? await this.credencial(apelido, sala, '', cookie) : {}) };
       }
     };
   } catch (erro) { await encerrar(); throw erro; }

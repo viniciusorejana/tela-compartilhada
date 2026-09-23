@@ -337,6 +337,18 @@
       podeApagar = Boolean(pode);
       pintarGrade();
     },
+    // Enviar um som pede conta; tocar os que já estão na mesa, não. O botão continua à vista,
+    // e desligado com o motivo: um botão escondido é uma funcionalidade que ninguém sabe que
+    // existe, e um desligado com a porta ao lado é o convite para criar a conta.
+    definirPodeEnviar(pode) {
+      $('sonsEnviarBtn').disabled = !pode;
+      $('sonsEnviarBtn').title = pode ? 'Enviar um arquivo de som para a mesa' : 'Enviar sons pede uma conta grátis';
+      const aviso = $('sonsSemConta');
+      if (aviso) {
+        aviso.hidden = Boolean(pode);
+        aviso.querySelector('a').href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+      }
+    },
     // "Esquecer o que ajustei", em Dispositivos. Devolve a mesa ao padrão e apaga as duas
     // chaves antigas -- elas são desta mesa, e não da camada de preferências, então
     // ninguém mais pode apagá-las.

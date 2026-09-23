@@ -29,7 +29,7 @@ const iguais = (a, b) => {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 };
 
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
 
   app.use('/api/conta', (req, res, next) => {
@@ -79,8 +79,10 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
   // visitas, e um 401 aqui encheria o console de toda página de um erro que não é erro.
   app.get('/api/conta/eu', (req, res) => {
     const achada = sessaoDoPedido(req, res);
-    if (!achada) return res.json({ conta: null });
-    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf });
+    // `abrirSemConta` diz à página inicial se "Criar minha sala" pede conta: na janela de
+    // transição (NEXO_ANONIMO_ABRE_SALA) ainda não pede.
+    if (!achada) return res.json({ conta: null, abrirSemConta });
+    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta });
   });
 
   app.put('/api/conta/perfil', json, autenticada, (req, res) => {

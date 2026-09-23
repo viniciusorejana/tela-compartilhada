@@ -363,6 +363,8 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .sons-vazio { font-size:11px; color:#9690a8; line-height:1.7; margin:0 0 16px; }
 .sons-envio { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
 .sons-envio small { font-size:10px; color:#a99fba; }
+.sons-envio small.sons-sem-conta { flex-basis:100%; color:#cfc4df; }
+.sons-sem-conta a { color:#cbbcff; }
 .sons-volume { margin-bottom:0; }
 .sons-volume .volume-row { gap:8px; }
 /* O que a sala guardou das escolhas de quem está aqui. Vive no fim das preferências de
@@ -392,6 +394,12 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .gate-conta-link { display:block; text-align:center; margin-top:16px; color:#cbbcff; font-size:11px; }
 /* A marca escolhida no perfil é um símbolo de texto, não um emoji: a fonte de símbolos
    desenha todos no mesmo traço, e o avatar não vira um adesivo colorido no meio da lista. */
+.perfil-topo { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+.perfil-topo h2 { margin:0; word-break:break-word; }
+.perfil-topo .modal-sub { margin:4px 0 0; font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
+.perfil-avatar { flex:none; display:grid; place-items:center; width:54px; height:54px; border-radius:50%; color:#15121f; font-size:21px; font-weight:700; }
+.member { cursor:pointer; }
+.member:focus-visible { outline:2px solid var(--accent-hi); outline-offset:-2px; }
 .com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; }
 .modal-card { width:min(100%,470px); max-height:88vh; max-height:88dvh; overflow-y:auto; border:1px solid #b9a9e024; border-radius:18px; background:#23222f; padding:26px; box-shadow:0 25px 80px #0005; }
 .modal-card h2 { font-size:23px; letter-spacing:-.04em; margin:0 0 7px; }

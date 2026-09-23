@@ -31,6 +31,7 @@ const musica = require('./musica');
 const soundboard = require('./soundboard');
 const medicao = require('./medicao');
 const { criarModeracao } = require('./moderacao');
+const { criarSalas } = require('./salas');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
 const { instalarRotasDeContas } = require('./contas/rotas');
@@ -39,6 +40,16 @@ const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/o
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
 const moderacao = criarModeracao();
+// Quem abre a sala, quanto ela espera vazia e o que some quando ela fecha: ver salas.js.
+//
+// NEXO_ANONIMO_ABRE_SALA=1 é a janela de transição do roteiro: o grupo que já usa o Nexo
+// continua abrindo salas sem conta enquanto cria as suas. A regra decidida é a outra, e é o
+// padrão.
+const ANONIMO_ABRE_SALA = (process.env.NEXO_ANONIMO_ABRE_SALA || '').trim() === '1';
+const salas = criarSalas({ anonimoAbre: ANONIMO_ABRE_SALA });
+// roomCode -> Map<socketId, { name, state, identidade, contaId, perfil }>. É o mapa do ciclo de
+// vida: quem entra e sai passa por `salas`, e o resto do servidor só o lê.
+const roomMembers = salas.mapa;
 
 const app = express();
 // O Express se anuncia em todo cabeçalho; ninguém de fora precisa saber o que roda aqui.
@@ -74,7 +85,7 @@ const io = new Server(server, {
 let telemetria = null;
 const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) });
 telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem });
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
@@ -106,6 +117,22 @@ function identidadesConhecidasDaSala(sala) {
   if (!identidadesConhecidasPorSala.has(sala)) identidadesConhecidasPorSala.set(sala, new Set());
   return identidadesConhecidasPorSala.get(sala);
 }
+// Quem já esteve nesta sala volta sem pedir: pela identidade (a oscilação de rede) ou pela
+// conta (o F5, que troca a identidade). Consultar não cria estado para um código qualquer.
+function jaEsteveNaSala(sala, { identidade, contaId }) {
+  const conhecidas = identidadesConhecidasPorSala.get(sala);
+  return Boolean(conhecidas && (conhecidas.has(identidade) || (contaId && conhecidas.has(`conta:${contaId}`))));
+}
+// A tranca vale enquanto a sala existe -- inclusive nos 60 segundos em que ela espera vazia,
+// senão bastava o dono dar F5 sozinho para qualquer um com o link entrar sem pedir.
+const salaComGente = sala => Boolean(roomMembers.get(sala)?.size) || salas.emCarencia(sala);
+
+// "Ainda não abriu" e "já fechou" são o mesmo estado (salas.js), e a mesma frase serve aos
+// dois -- inclusive ao caso mais comum: quem abriu o link antes de quem convidou.
+const MENSAGEM_SALA_FECHADA = 'A sala ainda não foi aberta. Assim que alguém com conta entrar, você entra junto.';
+// A regra 4 do banimento: quem é barrado por um nome que também pode ser de outra pessoa
+// recebe a saída, e não só a parede.
+const MENSAGEM_NOME_BARRADO = 'Esse nome foi barrado nesta sala. Se não é você quem foi removido, entre com a sua conta.';
 // Um build por sistema, todos opcionais: o Windows é compilado aqui, e os outros dois vêm de
 // onde houver macOS e Linux para compilá-los (o electron-builder não gera .dmg no Windows).
 // Quem só tem o .exe na pasta continua servindo só o .exe, e a página mostra o que existe.
@@ -169,15 +196,26 @@ app.get('/api/sala-config', (req, res) => {
   // entrada na sinalização -- que era recusada. O resultado era alguém fora do chat e
   // DENTRO da mídia, aparecendo na lista de todo mundo como um par sem nome na sala.
   //
-  // O nome basta aqui: o banimento é por nome (ver moderacao.js), e ele é conhecido antes de
-  // existir sessão ou identidade.
-  const castigo = moderacao.banido(sala, nome);
+  // Conta e nome são conhecidos antes de existir sessão ou identidade, e é por eles que o
+  // banimento acerta: a conta para quem tem uma, o nome só para anônimos (ver moderacao.js).
+  const castigo = moderacao.banido(sala, { contaId: conta?.id || null, nome });
   if (castigo) {
     // O `motivo` existe para o cliente distinguir esta recusa das outras: sem ele a página
     // cai no "não foi possível preparar a entrada, recarregue" -- que manda a pessoa fazer
     // exatamente o que não vai funcionar, e esconde o único dado útil, o prazo.
+    if (castigo.porNome) return res.status(403).json({ error: MENSAGEM_NOME_BARRADO, motivo: 'nome-barrado' });
     return res.status(403).json({ error: `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.`, motivo: 'removido' });
   }
+
+  // Só uma conta abre a sala. Quem chega a um código que não está aberto, sem conta, espera --
+  // e esperar não cria sessão, nem estado, nem nada que um robô varrendo códigos pudesse
+  // fazer crescer. A página pergunta de novo a cada cinco segundos.
+  const acesso = salas.acesso(sala, { temConta: Boolean(conta) });
+  if (acesso === 'espera') {
+    if (!telemetria.limitarOrigem(req, 'sala-espera')) return res.status(429).set('Retry-After', '30').json({ error: 'Muitos pedidos. Aguarde um pouco.' });
+    return res.status(403).json({ error: MENSAGEM_SALA_FECHADA, motivo: 'sala-fechada', publicUrl });
+  }
+  if (acesso === 'lotado') return res.status(503).json({ error: 'O servidor atingiu o número máximo de salas abertas. Tente daqui a pouco.', motivo: 'lotado' });
 
   const preparada = telemetria.prepararSessao(req, res, sala, nome, conta ? { id: conta.id, perfil: perfilNaSala(conta) } : null);
   if (!preparada) return;
@@ -188,10 +226,9 @@ app.get('/api/sala-config', (req, res) => {
   // Consultar uma sala inexistente não cria estado permanente: bots varrendo códigos não
   // podem fazer estes mapas crescerem. O estado só nasce quando alguém efetivamente entra.
   const configuracao = configuracaoPorSala.get(sala) || configuracaoPadrao();
-  const salaOcupada = Boolean(roomMembers.get(sala)?.size);
   const jaEstaDentro = Array.from(roomMembers.get(sala)?.values() || []).some(m => m.identidade === identidade);
-  const podeRetomar = Boolean(identidadesConhecidasPorSala.get(sala)?.has(identidade));
-  if (configuracao.trancada && salaOcupada && !jaEstaDentro && !podeRetomar && !aprovadosDaSala(sala).has(identidade)) {
+  const podeRetomar = jaEsteveNaSala(sala, { identidade, contaId: conta?.id || null });
+  if (configuracao.trancada && salaComGente(sala) && !jaEstaDentro && !podeRetomar && !aprovadosDaSala(sala).has(identidade)) {
     const pedidos = pedidosDaSala(sala);
     const anterior = pedidos.get(identidade);
     if (anterior?.estado === 'recusado') {
@@ -317,6 +354,12 @@ app.post('/api/soundboard/:sala', express.raw({ type: '*/*', limit: soundboard.B
   const socketId = req.sessaoNexo.socket?.id;
   if (!socketEstaNaSala(socketId, sala)) return res.status(403).json({ error: 'Entre na sala antes de enviar sons.' });
   const membro = roomMembers.get(sala)?.get(String(socketId));
+  // Enviar um som é pôr conteúdo na sala de todo mundo, e isso pede conta (grátis basta). É
+  // a mesma lógica de abrir a sala: quem cria algo ali é alguém que o servidor reconhece.
+  // Tocar os sons que já estão na mesa continua livre.
+  if (!membro?.contaId) {
+    return res.status(403).json({ error: 'Enviar sons para a mesa exige uma conta grátis. Tocar os que já estão aqui continua livre.', motivo: 'sem-conta' });
+  }
   if (!configuracaoDaSala(sala).soundboard && membro?.identidade !== moderacao.dono(sala)) {
     return res.status(403).json({ error: 'A mesa de sons foi restringida por quem abriu a sala.' });
   }
@@ -366,9 +409,6 @@ app.use('/api/soundboard', (erro, req, res, _next) => {
   if (!res.headersSent) res.status(erro.type === 'entity.too.large' ? 413 : 400).json({ error: 'Não foi possível receber o som.' });
 });
 
-// roomCode -> Map<socketId, { name, state }>
-const roomMembers = new Map();
-
 // Chat da sala. Fica na conexao de sinalizacao, que ja existe e passa o tempo todo ociosa:
 // vídeo e voz passam pelo SFU e não encostam nisso. O histórico serve para quem entra
 // depois nao achar a sala muda, e vive so na memoria -- some quando a sala esvazia.
@@ -390,6 +430,13 @@ function guardarNoHistorico(roomCode, msg) {
   let bytes = lista.reduce((soma, m) => soma + tamanhoDaMensagem(m), 0);
   while (bytes > BYTES_MAXIMOS_DO_HISTORICO && lista.length > 1) bytes -= tamanhoDaMensagem(lista.shift());
   historicoPorSala.set(roomCode, lista);
+}
+// A mensagem guarda, só aqui, a conta de quem escreveu: é o que deixa quem tem conta editar a
+// própria mensagem depois de recarregar a página, quando a identidade já é outra. Ela nunca
+// viaja -- toda mensagem que sai do servidor passa por aqui antes.
+function mensagemPublica(mensagem) {
+  const { autorConta, ...publica } = mensagem;
+  return publica;
 }
 // O canal de musica tem historico proprio, e bem menor: ali as mensagens sao pedidos e
 // respostas do bot, que envelhecem rapido. Quem entra no meio quer ver o que esta tocando
@@ -567,10 +614,6 @@ function roomName(roomCode) {
   return `room:${roomCode}`;
 }
 
-function membrosDaSala(roomCode) {
-  if (!roomMembers.has(roomCode)) roomMembers.set(roomCode, new Map());
-  return roomMembers.get(roomCode);
-}
 
 // ---------- Anunciar quem manda ----------
 //
@@ -581,6 +624,23 @@ function membrosDaSala(roomCode) {
 // A comparação com o anterior existe porque a sucessão dispara em toda saída. Sem ela, cada
 // pessoa que saísse da sala mandaria um aviso de dono idêntico ao que já valia.
 const donoAnunciado = new Map();
+
+// Tudo o que é de uma sala some quando ela fecha -- 60 segundos depois de esvaziar, e não no
+// instante em que a última pessoa sai (salas.js). O histórico do chat, a mesa de sons, o bot
+// de música, a configuração e as filas de entrada: nada de uma sala fechada sobrevive, e
+// nada disso tocou o disco. Um mapa novo por sala registra a própria limpeza aqui.
+salas.aoFechar(sala => {
+  historicoPorSala.delete(sala);
+  historicoDeMusicaPorSala.delete(sala);
+  soundboard.limparSala(sala);
+  musica.esquecerSala(sala);
+  donoAnunciado.delete(sala);
+  configuracaoPorSala.delete(sala);
+  pedidosDeEntradaPorSala.delete(sala);
+  aprovadosPorSala.delete(sala);
+  identidadesConhecidasPorSala.delete(sala);
+  moderacao.fechou(sala);
+});
 
 // Quanto tempo o aviso de remoção tem para chegar antes de o socket ser fechado. Curto o
 // bastante para ninguém continuar na sala de verdade, longo o bastante para uma mensagem
@@ -872,27 +932,11 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     telemetria.saiu(socket);
     socket.leave(roomName(roomCode));
-    const membros = roomMembers.get(roomCode);
-    if (membros) {
-      membros.delete(socket.id);
-      // Sala vazia: o historico do chat some junto, nada fica guardado em disco. A mesa de
-      // sons e o bot de musica seguem a mesma regra -- o bot sai da chamada e para de
-      // baixar, e os sons enviados somem da memoria. Nada de uma sala fechada sobrevive.
-      if (!membros.size) {
-        roomMembers.delete(roomCode);
-        historicoPorSala.delete(roomCode);
-        historicoDeMusicaPorSala.delete(roomCode);
-        soundboard.limparSala(roomCode);
-        musica.esquecerSala(roomCode);
-        donoAnunciado.delete(roomCode);
-        configuracaoPorSala.delete(roomCode);
-        pedidosDeEntradaPorSala.delete(roomCode);
-        aprovadosPorSala.delete(roomCode);
-        identidadesConhecidasPorSala.delete(roomCode);
-      }
-    }
-    // A saída pode mudar quem manda: se quem saiu era o dono, o mais antigo entre os que
-    // ficaram assume. Isto vem ANTES do "peer-left" de propósito -- quem recebe os dois
+    // Sala vazia não é esquecida aqui: ela espera 60 segundos e, se ninguém voltar, as
+    // limpezas registradas em `salas.aoFechar` apagam tudo o que era dela.
+    salas.saiu(roomCode, socket.id);
+    // A saída pode mudar quem manda: se quem saiu era o dono sem conta, ou ficou ausente,
+    // alguém assume (ver moderacao.js). Isto vem ANTES do "peer-left" de propósito -- quem recebe os dois
     // avisos aplica na ordem em que chegam, e anunciar o dono novo depois da saída faria a
     // lista piscar o selo em quem já não está lá.
     const identidadeQueSaiu = socket.data.identidadeDeMidia || null;
@@ -921,24 +965,31 @@ io.on('connection', (socket) => {
     // formato no dia em que existir outro caminho para criar uma sessao -- estava solta
     // num "if" seguinte, onde nunca podia ser alcancada e parecia protecao sem proteger.
     const salaValida = /^[a-z0-9_-]{4,32}$/.test(roomCode) && roomCode === sessao.sala;
-    if (!salaValida || (!roomMembers.has(roomCode) && roomMembers.size >= 512)) {
-      if (typeof callback === 'function') callback({ ok: false, error: 'Sessão inválida ou capacidade de salas atingida.' });
+    if (!salaValida) {
+      if (typeof callback === 'function') callback({ ok: false, error: 'Sessão inválida.' });
+      return;
+    }
+    // A sala pode ter fechado entre a configuração e esta entrada: a mesma pergunta das duas
+    // portas, feita de novo, e ANTES de criar qualquer estado para um código fechado.
+    const acesso = salas.acesso(roomCode, { temConta: Boolean(sessao.contaId) });
+    if (acesso === 'espera' || acesso === 'lotado') {
+      if (typeof callback === 'function') callback({ ok: false, motivo: acesso === 'espera' ? 'sala-fechada' : 'lotado', error: acesso === 'espera' ? MENSAGEM_SALA_FECHADA : 'O servidor atingiu o número máximo de salas abertas.' });
       return;
     }
     const name = sessao.nome;
 
     // Banido não entra, e a recusa diz por quanto tempo -- "aguarde" sem prazo é o tipo de
     // mensagem que faz a pessoa tentar dez vezes seguidas.
-    const castigo = moderacao.banido(roomCode, sessao.identidade);
+    const castigo = moderacao.banido(roomCode, { contaId: sessao.contaId, nome: sessao.nome });
     if (castigo) {
-      if (typeof callback === 'function') callback({ ok: false, error: `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.` });
+      if (typeof callback === 'function') callback({ ok: false, error: castigo.porNome ? MENSAGEM_NOME_BARRADO : `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.` });
       return;
     }
 
     const configuracao = configuracaoDaSala(roomCode);
     const identidadeJaPresente = Array.from(roomMembers.get(roomCode)?.values() || []).some(m => m.identidade === sessao.identidade);
-    const podeRetomar = identidadesConhecidasDaSala(roomCode).has(sessao.identidade);
-    if (configuracao.trancada && roomMembers.get(roomCode)?.size && !identidadeJaPresente && !podeRetomar && !aprovadosDaSala(roomCode).has(sessao.identidade)) {
+    const podeRetomar = jaEsteveNaSala(roomCode, sessao);
+    if (configuracao.trancada && salaComGente(roomCode) && !identidadeJaPresente && !podeRetomar && !aprovadosDaSala(roomCode).has(sessao.identidade)) {
       if (typeof callback === 'function') callback({ ok: false, error: 'A sala está trancada e sua entrada ainda não foi aprovada.' });
       return;
     }
@@ -953,15 +1004,17 @@ io.on('connection', (socket) => {
 
     socket.join(roomName(roomCode));
     socketRoomCodes.set(socket.id, roomCode);
-    const membros = membrosDaSala(roomCode);
     // A identidade vai em cada par porque é por ela que a moderação funciona: a lista da
     // sala é desenhada a partir da mídia, que é chaveada por identidade, e não por socket.
     // O perfil vai junto (cor, marca e código de quem tem conta); a conta, não -- ela fica no
     // membro, só no servidor, para a moderação e a mesa de sons saberem quem é quem.
-    const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null }));
-    membros.set(socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null });
+    const peers = Array.from(salas.da(roomCode)?.entries() || []).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null }));
+    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null });
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
-    moderacao.entrou(roomCode, sessao.identidade);
+    // A conta também: é ela que deixa quem tem conta voltar de um F5 numa sala trancada, já
+    // com outra identidade, sem pedir aprovação para entrar na própria sala.
+    if (sessao.contaId) identidadesConhecidasDaSala(roomCode).add(`conta:${sessao.contaId}`);
+    moderacao.entrou(roomCode, sessao.identidade, { contaId: sessao.contaId || null, nome: sessao.nome });
     telemetria.entrou(socket);
 
     if (typeof callback === 'function') {
@@ -979,7 +1032,9 @@ io.on('connection', (socket) => {
         podeModerar: moderacao.pode(roomCode, sessao.identidade, 'expulsar'),
         configuracao,
         pedidosEntrada: moderacao.pode(roomCode, sessao.identidade, 'expulsar') ? Array.from(pedidosDaSala(roomCode).values()).filter(p => p.estado === 'aguardando') : [],
-        historico: historicoPorSala.get(roomCode) || [],
+        // `propria` marca, para quem tem conta, as mensagens que ela escreveu antes de recarregar
+        // a página: a identidade mudou, e sem isto ela não conseguiria mais editá-las.
+        historico: (historicoPorSala.get(roomCode) || []).map(m => ({ ...mensagemPublica(m), propria: Boolean(sessao.contaId && m.autorConta === sessao.contaId) })),
         musica: { disponivel: musica.disponivel(), estado: musica.instantaneo(roomCode), historico: historicoDeMusicaPorSala.get(roomCode) || [] },
         soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM }
       });
@@ -1019,7 +1074,7 @@ io.on('connection', (socket) => {
       return responder({ ok: true, removidos: moderacao.listarBanidos(roomCode) });
     }
     if (acao === 'desbanir') {
-      const liberado = moderacao.desbanir(roomCode, quemPede, String(pedido?.nome || '').slice(0, 40));
+      const liberado = moderacao.desbanir(roomCode, quemPede, String(pedido?.chave || pedido?.nome || '').slice(0, 120));
       if (!liberado.ok) {
         return responder({ ok: false, error: liberado.motivo === 'sem-permissao' ? 'Só quem abriu a sala pode fazer isso.'
           : liberado.motivo === 'nao-estava-banido' ? 'Essa pessoa já pode voltar.' : 'Não foi possível concluir.' });
@@ -1048,6 +1103,17 @@ io.on('connection', (socket) => {
     if (acao === 'transferir') {
       anunciarDono(roomCode);
       return responder({ ok: true });
+    }
+
+    // Banir e trancar, no mesmo gesto. Nenhuma lista de banidos fecha a porta a quem volta com
+    // outro nome ou outra conta -- uma identidade nova não está nela. O que fecha é dizer quem
+    // ENTRA: com a sala trancada, quem volta cai na fila de pedidos, e quem modera vê.
+    if (acao === 'banir' && pedido?.trancar === true) {
+      const configuracao = configuracaoDaSala(roomCode);
+      if (!configuracao.trancada) {
+        configuracao.trancada = true;
+        io.to(roomName(roomCode)).emit('sala-configuracao', configuracao);
+      }
     }
 
     // Tirar da sala é preciso em DOIS lugares. O socket leva a sinalização -- a lista, o
@@ -1279,10 +1345,11 @@ io.on('connection', (socket) => {
     const resposta = original ? { id: original.id, autor: original.autor, texto: String(original.texto || (original.imagem ? 'Imagem' : '')).slice(0, 140) } : null;
     const mensagem = {
       id: crypto.randomUUID(), autor: membro.name, autorId: membro.identidade,
-      texto, imagem, em: Date.now(), resposta, reacoes: {}, fixada: false
+      texto, imagem, em: Date.now(), resposta, reacoes: {}, fixada: false,
+      autorConta: membro.contaId || null
     };
     guardarNoHistorico(roomCode, mensagem);
-    io.to(roomName(roomCode)).emit('chat-mensagem', mensagem);
+    io.to(roomName(roomCode)).emit('chat-mensagem', mensagemPublica(mensagem));
   });
 
   socket.on('chat-acao', (dados, callback) => {
@@ -1294,6 +1361,9 @@ io.on('connection', (socket) => {
     if (!roomCode || !membro || !mensagem) return responder({ ok: false, error: 'Mensagem não encontrada.' });
     const acao = String(dados?.acao || '');
     const ehDono = moderacao.pode(roomCode, membro.identidade, 'expulsar');
+    // Sem conta, a mensagem é de quem escreveu até recarregar a página, como sempre foi: o F5
+    // sorteia outra identidade. Com conta, é dela sempre -- é a conta que reconhece a autoria.
+    const ehAutor = mensagem.autorId === membro.identidade || Boolean(membro.contaId && mensagem.autorConta === membro.contaId);
     if (acao === 'reagir') {
       const emoji = String(dados?.emoji || '');
       if (!['👍', '❤️', '😂', '👏', '🎉'].includes(emoji)) return responder({ ok: false });
@@ -1302,13 +1372,13 @@ io.on('connection', (socket) => {
       pessoas.has(membro.identidade) ? pessoas.delete(membro.identidade) : pessoas.add(membro.identidade);
       mensagem.reacoes[emoji] = Array.from(pessoas);
     } else if (acao === 'editar') {
-      if (mensagem.autorId !== membro.identidade) return responder({ ok: false, error: 'Você só pode editar suas mensagens.' });
+      if (!ehAutor) return responder({ ok: false, error: 'Você só pode editar suas mensagens.' });
       const texto = String(dados?.texto || '').trim().slice(0, TAMANHO_MAXIMO_DO_TEXTO);
       if (!texto) return responder({ ok: false, error: 'A mensagem não pode ficar vazia.' });
       mensagem.texto = texto;
       mensagem.editada = true;
     } else if (acao === 'excluir') {
-      if (mensagem.autorId !== membro.identidade && !ehDono) return responder({ ok: false, error: 'Sem permissão.' });
+      if (!ehAutor && !ehDono) return responder({ ok: false, error: 'Sem permissão.' });
       historicoPorSala.set(roomCode, lista.filter(m => m.id !== mensagem.id));
       io.to(roomName(roomCode)).emit('chat-removida', { id: mensagem.id });
       return responder({ ok: true });
@@ -1317,8 +1387,8 @@ io.on('connection', (socket) => {
       if (!mensagem.fixada && lista.filter(m => m.fixada).length >= 5) return responder({ ok: false, error: 'A sala já tem cinco mensagens fixadas.' });
       mensagem.fixada = !mensagem.fixada;
     } else return responder({ ok: false, error: 'Ação desconhecida.' });
-    io.to(roomName(roomCode)).emit('chat-atualizada', mensagem);
-    responder({ ok: true, mensagem });
+    io.to(roomName(roomCode)).emit('chat-atualizada', mensagemPublica(mensagem));
+    responder({ ok: true, mensagem: mensagemPublica(mensagem) });
   });
 
   // ---------- Canal de musica ----------
@@ -1403,12 +1473,11 @@ io.on('connection', (socket) => {
     // remoções por minuto no limitador e 30 sons por mesa, uma pessoa sozinha limpava a mesa
     // inteira em um minuto.
     //
-    // A regra decidida é "apaga quem tem conta" (docs/plano-contas.md). Contas ainda não
-    // existem, e aplicá-la ao pé da letra deixaria a mesa sem ninguém capaz de apagar nada.
-    // Até lá apaga quem abriu a sala, que já apaga qualquer mensagem do chat pelo mesmo
-    // motivo; a conta entra nesta condição quando existir.
-    if (!membro || !moderacao.pode(roomCode, membro.identidade, 'expulsar')) {
-      return responder({ ok: false, error: 'Só quem abriu a sala pode apagar sons da mesa.' });
+    // A regra decidida é "apaga quem tem conta" (docs/plano-contas.md), e quem modera a sala
+    // também apaga -- como já apaga qualquer mensagem do chat. É o caminho que sobra quando a
+    // sala passou para alguém sem conta.
+    if (!membro || !(membro.contaId || moderacao.pode(roomCode, membro.identidade, 'expulsar'))) {
+      return responder({ ok: false, error: 'Apagar sons da mesa exige uma conta grátis.' });
     }
     const removido = soundboard.remover(roomCode, dados?.id);
     if (removido) {
@@ -1535,7 +1604,7 @@ function aoSubir() {
 let encerrandoServidor = false;
 function encerrarServidor() {
   if (encerrandoServidor) return;
-  encerrandoServidor = true; sfu.encerrarSfu();
+  encerrandoServidor = true; sfu.encerrarSfu(); salas.encerrar();
   Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo(), contas.encerrar()]).finally(() => process.exit(0));
 }
 for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sinal, encerrarServidor);

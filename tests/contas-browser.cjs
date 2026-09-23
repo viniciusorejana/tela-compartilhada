@@ -147,11 +147,55 @@ async function etapaB(contextoA, contextoB, contextoC) {
   console.log('PASS: cadastro pela tela, código de recuperação, perfil, apelido na sala, ajustes em outro aparelho sem o microfone, baixar e apagar');
 }
 
+async function comConta(contexto, usuario, apelido) {
+  const { cookie } = await instancia.conta(usuario, { apelido });
+  await contexto.addCookies([{ name: 'nexo_conta', value: cookie.split('=')[1], url: origin }]);
+}
+
+async function etapaC(contextoAnonimo, contextoDaDona) {
+  // ---------- Criar sala sem conta leva ao cadastro ----------
+  const inicio = await novaPagina(contextoAnonimo);
+  await inicio.goto(origin);
+  await inicio.locator('#roomCode').fill('sala-nova');
+  await inicio.locator('#createBtn').click();
+  await inicio.waitForURL('**/conta?motivo=criar-sala**');
+  assert.equal(new URL(inicio.url()).searchParams.get('voltar'), '/sala-nova/sala');
+  assert.equal(await inicio.locator('#abaCriar').getAttribute('aria-selected'), 'true', 'quem veio criar a sala cai direto em "Criar conta"');
+  await inicio.close();
+
+  // ---------- Quem chega antes de a sala abrir espera, e entra junto ----------
+  const bia = await novaPagina(contextoAnonimo);
+  await bia.goto(`${origin}/sala-da-dona/sala`);
+  await bia.locator('#nameInput').fill('Bia');
+  await bia.locator('#nameConfirmBtn').click();
+  await bia.locator('#waitingPanel').waitFor();
+  assert.equal(await bia.locator('#waitingTitle').textContent(), 'A sala ainda não foi aberta');
+  assert.equal(await bia.locator('#waitingConta').isVisible(), true, 'quem tem conta pode abrir a sala ele mesmo');
+  await bia.screenshot({ path: path.join(saida, 'espera-pela-sala.png') });
+
+  await comConta(contextoDaDona, 'dona', 'Dona');
+  const dona = await novaPagina(contextoDaDona);
+  await entrarNaSala(dona, 'sala-da-dona');
+  // A página da Bia pergunta de novo a cada cinco segundos: ela entra sem apertar nada.
+  await bia.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
+  assert.equal(await bia.locator('#waitingPanel').isVisible(), false);
+
+  // ---------- A lista, o cartão de perfil e a mesa de sons de quem não tem conta ----------
+  await bia.locator('#soundboardBtn').click();
+  assert.equal(await bia.locator('#sonsEnviarBtn').isDisabled(), true, 'enviar som pede conta');
+  await bia.keyboard.press('Escape');
+  await dona.close();
+  await bia.close();
+  console.log('PASS: criar sala sem conta leva ao cadastro; quem chega antes espera e entra junto quando a conta abre');
+}
+
 (async () => {
-  instancia = await iniciarServidor({ ambiente: { PORT: String(port) } });
+  // Sem a janela de transição: "só conta abre sala" valendo, como vai estar em produção.
+  instancia = await iniciarServidor({ ambiente: { PORT: String(port), NEXO_ANONIMO_ABRE_SALA: '0' } });
   browser = await chromium.launch({ headless: true });
   const contexto = () => browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true });
   await etapaB(await contexto(), await contexto(), await contexto());
+  await etapaC(await contexto(), await contexto());
   assert.deepEqual(erros, []);
 })().catch(erro => {
   console.error(erro);

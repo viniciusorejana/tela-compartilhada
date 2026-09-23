@@ -23,6 +23,9 @@ const REGRAS = Object.freeze({
   // O servidor inteiro. É mais ou menos o que a fila de derivação atende sem crescer.
   'entrar-global': { sessao: 120 },
   'conta-escrever': { sessao: 20, longa: [120, 60 * MINUTO] },
+  // Quem espera uma sala abrir pergunta a cada cinco segundos, e atrás de um túnel todo mundo
+  // divide a mesma origem. Esperar não cria sessão nem estado, então o teto é folgado.
+  'sala-espera': { sessao: 300 },
   // Os ajustes sobem sozinhos, dois segundos depois da última mudança. Têm balde próprio para
   // que mexer muito na qualidade nunca impeça ninguém de trocar a senha.
   'conta-ajustes': { sessao: 30, longa: [300, 60 * MINUTO] },

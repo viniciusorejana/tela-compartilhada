@@ -141,7 +141,11 @@
         pintarAvatar(avatar, person.name, perfilDe(person.id));
         const name = document.createElement('span');
         name.className = 'member-name';
-        name.textContent = person.name + (person.id === 'self' ? ' (você)' : '');
+        // `rotuloDe` acrescenta um trecho do código só quando outro nome na sala é igual.
+        name.textContent = rotuloDe(person.id) + (person.id === 'self' ? ' (você)' : '');
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `Ver o perfil de ${person.name}`);
         const state = document.createElement('span');
         // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';
@@ -184,6 +188,18 @@
   setInterval(renderRoom, 1000);
   document.addEventListener('room-update', renderRoom);
   renderRoom();
+
+  // A lista é redesenhada inteira quando muda, então o clique é ouvido no contêiner.
+  $('memberList').addEventListener('click', event => {
+    const row = event.target.closest('.member');
+    if (row) abrirPerfil(row.dataset.memberId);
+  });
+  $('memberList').addEventListener('keydown', event => {
+    const row = event.target.closest('.member');
+    if (!row || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    abrirPerfil(row.dataset.memberId);
+  });
 
   document.addEventListener('keydown', event => {
     if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.avatar-wrap')) {

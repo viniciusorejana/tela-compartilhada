@@ -249,7 +249,7 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
     // Um token já emitido continua valendo por minutos, e ser removido da sala não pode
     // esperar por isso. Esta é a terceira porta -- as outras duas são `/api/sala-config` e o
     // `join-room` --, e é a única que fecha para quem já tinha o token na mão.
-    if (moderacao?.banido(sessao.sala, sessao.identidade)) return false;
+    if (moderacao?.banido(sessao.sala, { contaId: sessao.contaId || null, nome: sessao.nome })) return false;
     return true;
   });
   medicao.iniciar();

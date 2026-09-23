@@ -80,7 +80,10 @@ async function entrar(contexto, nome) {
   const page = await contexto.newPage();
   page.on('pageerror', erro => { throw new Error(`erro na página de ${nome}: ${erro.message}`); });
   await page.goto(`${origin}/${SALA}/sala`);
-  await page.locator('#nameInput').fill(nome);
+  // Com conta, o campo de nome é o apelido dela, só para leitura -- e isso só se sabe depois
+  // de a conta carregar.
+  await page.evaluate(() => window.NexoConta?.pronto);
+  if (!(await page.locator('#nameInput').evaluate(el => el.readOnly))) await page.locator('#nameInput').fill(nome);
   await page.locator('#nameConfirmBtn').click();
   await page.waitForFunction(() => tiles.has('self'), null, { timeout: 60000 });
   // Abrir a mesa é o gesto que destrava o áudio -- como para qualquer pessoa.
@@ -99,11 +102,25 @@ const medir = page => page.evaluate(() => ({
   await esperarServidor();
 
   browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
-  const contexto = await browser.newContext({ viewport: { width: 1300, height: 900 } });
-  await contexto.addInitScript(espiaoDeAudio);
+  // Enviar som pede conta: a Ana tem uma, a Bia não. Contextos separados, porque o cookie da
+  // conta é do navegador inteiro.
+  const contextoDaAna = await browser.newContext({ viewport: { width: 1300, height: 900 } });
+  const contextoDaBia = await browser.newContext({ viewport: { width: 1300, height: 900 } });
+  const { cookie } = await instancia.conta('ana', { apelido: 'Ana' });
+  await contextoDaAna.addCookies([{ name: 'nexo_conta', value: cookie.split('=')[1], url: origin }]);
+  for (const contexto of [contextoDaAna, contextoDaBia]) await contexto.addInitScript(espiaoDeAudio);
 
-  const ana = await entrar(contexto, 'Ana');
-  const bia = await entrar(contexto, 'Bia');
+  const ana = await entrar(contextoDaAna, 'Ana');
+  const bia = await entrar(contextoDaBia, 'Bia');
+
+  // Sem conta, o botão de enviar fica à vista e desligado, com a porta ao lado -- e o
+  // servidor recusa do mesmo jeito se alguém mandar direto.
+  assert.equal(await bia.locator('#sonsEnviarBtn').isDisabled(), true);
+  assert.equal(await bia.locator('#sonsSemConta').isVisible(), true);
+  const semConta = await bia.evaluate(async sala => (await fetch(`/api/soundboard/${sala}?nome=tom`, {
+    method: 'POST', headers: { 'content-type': 'audio/wav', ...window.NexoSessao.cabecalhos() }, body: new Uint8Array(64)
+  })).status, SALA);
+  assert.equal(semConta, 403, 'enviar som sem conta deveria ser recusado no servidor');
 
   // Sobe um som pela mesma rota que o botão de enviar usa.
   const envio = await ana.evaluate(async ([bytes, sala, segundos]) => {
@@ -151,11 +168,11 @@ const medir = page => page.evaluate(() => ({
   assert.equal((await medir(bia)).ativos, 2, 'depois do corte os dois sons continuam tocando');
   console.log('PASS: cortar troca o som em vez de deixar um buraco');
 
-  // ---------- Apagar um som é moderação ----------
-  // A Ana entrou primeiro e abriu a sala; a Bia é participante. Até aqui qualquer pessoa
+  // ---------- Apagar um som pede conta, ou moderar a sala ----------
+  // A Ana tem conta e abriu a sala; a Bia não tem conta e só participa. Antes qualquer pessoa
   // apagava qualquer som, e uma só limpava a mesa inteira em um minuto.
-  assert.equal(await bia.locator('.som-apagar').count(), 0, 'quem não modera não deveria ver o ✕');
-  assert.equal(await ana.locator('.som-apagar').count(), 1, 'quem abriu a sala deveria ver o ✕');
+  assert.equal(await bia.locator('.som-apagar').count(), 0, 'quem não tem conta nem modera não deveria ver o ✕');
+  assert.equal(await ana.locator('.som-apagar').count(), 1, 'quem tem conta deveria ver o ✕');
   // O ✕ escondido é conveniência. Quem decide é o servidor, e um cliente modificado chega lá
   // do mesmo jeito -- então o pedido direto da Bia tem de ser recusado.
   const recusa = await bia.evaluate(id => new Promise(resolve => socket.emit('soundboard-remover', { id }, resolve)), envio.som.id);
@@ -166,7 +183,7 @@ const medir = page => page.evaluate(() => ({
   for (const page of [ana, bia]) {
     await page.waitForFunction(() => document.querySelectorAll('.som-btn').length === 0, null, { timeout: 10000 });
   }
-  console.log('PASS: só quem abriu a sala apaga sons, e o pedido direto de outra pessoa é recusado');
+  console.log('PASS: enviar e apagar sons pedem conta, e o pedido direto de quem não tem é recusado');
 
   await browser.close();
   await instancia.encerrar();

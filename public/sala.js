@@ -189,8 +189,27 @@ function buscarConfigDaSala(nome) {
   pedidoDeConfig ||= pedirConfigDaSala(nome).finally(() => { pedidoDeConfig = null; });
   return pedidoDeConfig;
 }
+// Quem chega antes de a sala abrir -- ou depois de ela fechar, que é o mesmo estado -- espera
+// numa tela, e a página pergunta de novo a cada cinco segundos, bem abaixo do que o servidor
+// aceita. Dez minutos depois ela desiste e diz para conferir o link: a essa altura, o mais
+// provável é o convite estar errado, e não quem convidou estar atrasado.
+const MS_ENTRE_PERGUNTAS_DA_ESPERA = 5000;
+const MS_DE_ESPERA_PELA_SALA = 10 * 60000;
+let esperandoAbrir = false;
+function mostrarEsperaPelaSala(texto) {
+  esperandoAbrir = true;
+  document.getElementById('waitingTitle').textContent = 'A sala ainda não foi aberta';
+  document.getElementById('waitingText').textContent = texto;
+  const entrar = document.getElementById('waitingConta');
+  entrar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+  entrar.hidden = Boolean(contaNaSala);
+  document.getElementById('waitingPanel')?.classList.remove('hidden');
+  status.textContent = 'A sala ainda não foi aberta. Aguardando alguém com conta entrar…';
+}
+
 async function pedirConfigDaSala(nome) {
   let ultimoMotivo = 'sala-config';
+  let desistirDeEsperarEm = null;
   for (let tentativa = 0; tentativa < 150; tentativa++) {
     const controle = new AbortController();
     const prazo = setTimeout(() => controle.abort(), 8000);
@@ -200,8 +219,27 @@ async function pedirConfigDaSala(nome) {
       if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
       if (dados.nome) nomeDaSessao = dados.nome;
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
-      if (resposta.ok) return dados;
+      if (resposta.ok) { esperandoAbrir = false; return dados; }
+      if (dados.motivo === 'sala-fechada') {
+        desistirDeEsperarEm ??= Date.now() + MS_DE_ESPERA_PELA_SALA;
+        if (Date.now() >= desistirDeEsperarEm) {
+          esperandoAbrir = false;
+          document.getElementById('waitingPanel')?.classList.add('hidden');
+          const desistiu = new Error('A sala não abriu em dez minutos. Confira o link com quem convidou você.');
+          desistiu.removido = true;
+          throw desistiu;
+        }
+        mostrarEsperaPelaSala('Assim que alguém com conta entrar, você entra junto — esta página confere sozinha a cada poucos segundos. Se ninguém chegar, confira o link com quem convidou você.');
+        ultimoMotivo = 'sala-fechada';
+        await new Promise(resolve => setTimeout(resolve, MS_ENTRE_PERGUNTAS_DA_ESPERA));
+        tentativa--;   // esperar a sala abrir não gasta as tentativas de quem enfrenta erro de rede
+        if (saindoDaSala) break;
+        continue;
+      }
       if (dados.motivo === 'aguardando') {
+        document.getElementById('waitingTitle').textContent = 'Aguardando entrada';
+        document.getElementById('waitingText').textContent = 'A sala está trancada. Quem abriu recebeu seu pedido.';
+        document.getElementById('waitingConta').hidden = true;
         aguardandoEntrada = true;
         document.getElementById('waitingPanel')?.classList.remove('hidden');
         status.textContent = 'Aguardando quem abriu a sala aprovar sua entrada…';
@@ -216,10 +254,12 @@ async function pedirConfigDaSala(nome) {
         throw recusa;
       }
       // Removido da sala não é falha de preparação: é uma resposta definitiva, com prazo, e
-      // insistir doze vezes só atrasaria a frase que explica o que aconteceu.
-      if (dados.motivo === 'removido') {
+      // insistir doze vezes só atrasaria a frase que explica o que aconteceu. Barrado pelo
+      // nome também -- e esse vem com a saída: entrar com a própria conta.
+      if (dados.motivo === 'removido' || dados.motivo === 'nome-barrado') {
         const recusa = new Error(dados.error || 'Você foi removido desta sala.');
         recusa.removido = true;
+        recusa.porNome = dados.motivo === 'nome-barrado';
         throw recusa;
       }
       ultimoMotivo = dados.error || 'sala-config';
@@ -246,7 +286,7 @@ async function cancelarPedidoDeEntrada(redirecionar = false) {
       });
     } catch (_) { /* A expiração do servidor remove pedidos cujo navegador sumiu. */ }
   }
-  if (redirecionar) location.assign('/');
+  if (redirecionar) { saindoDaSala = true; location.assign('/'); }
 }
 document.getElementById('waitingCancel').onclick = () => cancelarPedidoDeEntrada(true);
 window.addEventListener('pagehide', () => { if (aguardandoEntrada) cancelarPedidoDeEntrada(false); });
@@ -325,6 +365,10 @@ async function iniciarConexao() {
       fuiRemovido = true;
       status.textContent = erro.message;
       document.getElementById('removidoMotivo').textContent = erro.message;
+      // Barrado por um nome que pode ser de outra pessoa: a porta é a própria conta.
+      const comConta = document.getElementById('removidoConta');
+      comConta.hidden = !erro.porNome;
+      comConta.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
       document.getElementById('removidoPanel').classList.remove('hidden');
       return;
     }
@@ -452,12 +496,14 @@ async function iniciarConexao() {
         status.textContent = response?.error || 'Não foi possível entrar na sala.';
         return;
       }
+      // O próprio perfil primeiro: o quadradinho, a lista e as permissões da mesa de sons
+      // dependem dele, e todos são desenhados logo abaixo.
+      if (response.perfil) meuPerfil = response.perfil;
       criarTileLocal();
       donoDaSala = response.dono || null;
       podeModerar = Boolean(response.podeModerar);
       aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
       desenharPedidosDeEntrada(response.pedidosEntrada || []);
-      if (response.perfil) meuPerfil = response.perfil;
       for (const participante of response.peers || []) {
         if (!participante.identidade) continue;
         if (participante.perfil) perfisPorIdentidade.set(participante.identidade, participante.perfil);
@@ -4326,9 +4372,11 @@ function aplicarConfiguracaoDaSala(nova) {
   const somBtn = document.getElementById('soundboardBtn');
   if (somBtn) { somBtn.disabled = !sonsPermitidos; somBtn.title = sonsPermitidos ? 'Mesa de sons da sala' : 'Mesa de sons restrita por quem abriu a sala'; }
   // Apagar não segue a chave da mesa: restringir trava enviar e tocar, e apagar o som de
-  // outra pessoa é moderação. Esta função roda sempre que o dono muda, e é por isso que o
-  // aviso sai daqui.
-  window.NexoSoundboard?.definirPodeApagar?.(podeModerar);
+  // outra pessoa é de quem tem conta ou modera. Enviar pede conta. Esta função roda sempre que
+  // o dono muda, e é por isso que os dois avisos saem daqui.
+  const temConta = Boolean(meuPerfil?.conta);
+  window.NexoSoundboard?.definirPodeApagar?.(podeModerar || temConta);
+  window.NexoSoundboard?.definirPodeEnviar?.(temConta);
   const musicaPermitida = podeModerar || configuracaoDaSala.musica;
   const musicaInput = document.getElementById('musicaInput');
   const musicaSend = document.getElementById('musicaSend');
@@ -4488,15 +4536,18 @@ function desenharRemovidos(resposta) {
     const linha = elemento('div', 'moderar-removido');
     // O nome entra como TEXTO, como todo nome nesta interface: ele foi escolhido por quem
     // entrou na sala.
-    linha.append(elemento('span', 'moderar-removido-nome', item.nome));
-    linha.append(elemento('span', 'moderar-removido-prazo', `${item.minutos} min`));
+    const nome = item.exibir || item.nome;
+    linha.append(elemento('span', 'moderar-removido-nome', nome));
+    // Dizer COMO a pessoa foi barrada: pela conta, ninguém mais é atingido; pelo nome, um
+    // anônimo homônimo também fica de fora.
+    linha.append(elemento('span', 'moderar-removido-prazo', `${item.conta ? 'pela conta' : 'pelo nome'} · ${item.minutos} min`));
     const liberar = elemento('button', 'secondary', 'Liberar');
     liberar.type = 'button';
     liberar.addEventListener('click', () => {
       liberar.disabled = true;
-      socket.emit('moderar', { acao: 'desbanir', nome: item.nome }, resposta => {
+      socket.emit('moderar', { acao: 'desbanir', chave: item.chave, nome: item.nome }, resposta => {
         if (!resposta?.ok) { liberar.disabled = false; document.getElementById('moderarStatus').textContent = resposta?.error || 'Não foi possível liberar.'; return; }
-        document.getElementById('moderarStatus').textContent = `${item.nome} pode voltar à sala.`;
+        document.getElementById('moderarStatus').textContent = `${nome} pode voltar à sala.`;
         desenharRemovidos(resposta);
       });
     });
@@ -4505,16 +4556,17 @@ function desenharRemovidos(resposta) {
   }
 }
 
-function pedirModeracao(acao) {
+function pedirModeracao(acao, { trancar = false } = {}) {
   const alvo = alvoDaModeracao;
   if (!alvo) return;
   const aviso = document.getElementById('moderarStatus');
   aviso.textContent = 'Enviando…';
-  socket.emit('moderar', { acao, identidade: alvo }, resposta => {
+  socket.emit('moderar', { acao, identidade: alvo, trancar }, resposta => {
     if (!resposta?.ok) { aviso.textContent = resposta?.error || 'Não foi possível concluir.'; return; }
     fecharModeracao();
     const nome = peers.get(alvo)?.name || 'A pessoa';
     status.textContent = acao === 'transferir' ? `${nome} agora é quem manda nesta sala.`
+      : acao === 'banir' && trancar ? `${nome} foi removida, e a sala foi trancada: quem chegar agora pede para entrar.`
       : acao === 'banir' ? `${nome} foi removida e não pode voltar por uma hora.`
       : `${nome} foi removida da sala.`;
   });
@@ -4529,6 +4581,7 @@ document.getElementById('joinRequestNoticeOpen').onclick = () => {
 };
 document.getElementById('moderarRemover').onclick = () => pedirModeracao('expulsar');
 document.getElementById('moderarBanir').onclick = () => pedirModeracao('banir');
+document.getElementById('moderarBanirTrancar').onclick = () => pedirModeracao('banir', { trancar: true });
 document.getElementById('moderarTransferir').onclick = () => pedirModeracao('transferir');
 document.querySelector('#moderarPanel [data-close]').addEventListener('click', fecharModeracao);
 
@@ -4661,8 +4714,62 @@ function criarTileBase(id, name, state, isSelf) {
 // antes. Repintar todos é barato numa sala de dezenas, e a lista lateral vem junto.
 function repintarAvatares() {
   tiles.forEach((refs, id) => pintarAvatar(refs.avatar, id === 'self' ? myName : peers.get(id)?.name, perfilDe(id)));
+  atualizarRotulosDosQuadradinhos();
   document.dispatchEvent(new Event('room-update'));
 }
+
+// ---------- Nomes que se repetem ----------
+//
+// Nomes podem se repetir: é uma decisão, e o código permanente de quem tem conta é o que
+// distingue a Ana que você conhece das outras. Mas ele aparece na lista SÓ quando duas pessoas
+// da sala têm o mesmo nome -- pintado o tempo todo, ele tornaria cada pessoa rastreável entre
+// salas sem motivo nenhum. Quem não tem conta não tem identidade permanente para mostrar:
+// aparece um trecho da sessão, que muda a cada entrada.
+function rotuloDe(id) {
+  const nome = id === 'self' ? myName : peers.get(id)?.name || '';
+  const chave = nome.trim().toLowerCase();
+  const outros = [...(id === 'self' ? [] : [myName]), ...[...peers.entries()].filter(([outro]) => outro !== id).map(([, par]) => par.name)];
+  if (!chave || !outros.some(outro => String(outro || '').trim().toLowerCase() === chave)) return nome;
+  const perfil = perfilDe(id);
+  const identidade = id === 'self' ? myId : id;
+  return `${nome} · ${perfil?.codigo ? perfil.codigo.slice(0, 4) : String(identidade || '').split('#').pop().slice(0, 4)}`;
+}
+function atualizarRotulosDosQuadradinhos() {
+  tiles.forEach((refs, id) => {
+    const texto = refs.root.querySelector('.participant-name')?.firstChild;
+    if (texto?.nodeType === Node.TEXT_NODE) texto.data = `${rotuloDe(id)}${id === 'self' ? ' (você)' : ''}`;
+  });
+}
+
+// ---------- O cartão de perfil ----------
+//
+// Clicar em alguém na lista mostra quem é: o código, para quem tem conta, ou que a pessoa
+// entrou sem conta. É o lugar onde o código aparece sempre -- quando alguém procura.
+let perfilAberto = null;
+function abrirPerfil(id) {
+  const ehEu = id === 'self';
+  const par = ehEu ? null : peers.get(id);
+  if (!ehEu && !par) return;
+  perfilAberto = id;
+  const nome = ehEu ? myName : par.name;
+  const perfil = perfilDe(id);
+  pintarAvatar(document.getElementById('perfilAvatar'), nome, perfil);
+  document.getElementById('perfilNome').textContent = `${nome}${ehEu ? ' (você)' : ''}`;
+  document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
+  document.getElementById('perfilDica').textContent = perfil?.conta
+    ? 'O código é permanente e não muda com o apelido: é ele que distingue esta pessoa de outras com o mesmo nome.'
+    : ehEu ? 'Você entrou sem conta: o nome vale só nesta entrada. Com uma conta grátis, você tem um código, abre salas e transmite a 60 quadros.'
+      : 'Entrou como convidada: o nome foi escolhido na entrada, e qualquer pessoa pode usar o mesmo.';
+  const criar = document.getElementById('perfilCriarConta');
+  criar.hidden = !(ehEu && !perfil?.conta);
+  criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+  document.getElementById('perfilModerar').hidden = ehEu || !podeModerar || id === donoDaSala;
+  document.getElementById('perfilPanel').classList.remove('hidden');
+}
+document.getElementById('perfilModerar').onclick = () => {
+  document.getElementById('perfilPanel').classList.add('hidden');
+  if (perfilAberto && perfilAberto !== 'self') abrirModeracao(perfilAberto);
+};
 
 function removerTile(id) {
   removerTileDeTela(id);
@@ -5101,6 +5208,7 @@ function atualizarTile(id) {
 }
 
 function atualizarContador() {
+  atualizarRotulosDosQuadradinhos();
   const total = peers.size + 1;
   participantCount.textContent = total === 1 ? 'Só você na sala' : `${total} pessoas na sala`;
   document.dispatchEvent(new Event('room-update'));
@@ -5729,6 +5837,14 @@ function montarTexto(destino, texto) {
 
 let perto = true;
 const mensagensDoChat = new Map();
+// As mensagens que são minhas. A identidade só reconhece as desta aba; as de antes do F5
+// chegam no histórico marcadas `propria` pelo servidor, que reconhece a conta -- e ficam
+// lembradas aqui, porque a versão editada que volta depois não traz a marca.
+const minhasMensagens = new Set();
+function ehMinha(msg) {
+  if (msg?.propria) minhasMensagens.add(msg.id);
+  return Boolean(msg) && (msg.autorId === myId || minhasMensagens.has(msg.id));
+}
 let contextoDoChat = null; // { tipo:'resposta'|'edicao', mensagem }
 let divisorDeNaoLidas = false;
 let carregandoHistorico = false;
@@ -5759,7 +5875,7 @@ function mostrarMensagem(msg) {
   el.classList.toggle('mencionou', mencionou);
   const avatar = document.createElement('span');
   avatar.className = 'msg-avatar';
-  const perfilDoAutor = msg.autorId === myId ? meuPerfil : perfisPorIdentidade.get(msg.autorId);
+  const perfilDoAutor = ehMinha(msg) ? meuPerfil : perfisPorIdentidade.get(msg.autorId);
   pintarAvatar(avatar, msg.autor || '?', perfilDoAutor);
   avatar.setAttribute('aria-hidden', 'true');
 
@@ -5810,7 +5926,7 @@ function mostrarMensagem(msg) {
     b.title = titulo; b.setAttribute('aria-label', titulo); b.dataset.chatAction = acao; return b;
   };
   acoes.append(botaoAcao(ICONE_REAGIR, 'Reagir', 'abrir-reacoes'), botaoAcao(ICONE_RESPONDER, 'Responder', 'responder'));
-  if (msg.autorId === myId || podeModerar) acoes.append(botaoAcao(ICONE_MAIS, 'Mais ações', 'abrir-mais'));
+  if (ehMinha(msg) || podeModerar) acoes.append(botaoAcao(ICONE_MAIS, 'Mais ações', 'abrir-mais'));
 
   el.append(avatar, topo);
   if (resposta) el.append(resposta);
@@ -6125,9 +6241,9 @@ function abrirMenuDaMensagem(botao, mensagem, tipo) {
     }
   } else {
     const opcoes = [];
-    if (mensagem.autorId === myId) opcoes.push(['editar', 'Editar mensagem']);
+    if (ehMinha(mensagem)) opcoes.push(['editar', 'Editar mensagem']);
     if (podeModerar) opcoes.push(['fixar', mensagem.fixada ? 'Desafixar do topo' : 'Fixar no topo']);
-    if (mensagem.autorId === myId || podeModerar) opcoes.push(['excluir', 'Excluir para todos']);
+    if (ehMinha(mensagem) || podeModerar) opcoes.push(['excluir', 'Excluir para todos']);
     for (const [acao, rotulo] of opcoes) {
       const b = elemento('button', acao === 'excluir' ? 'perigo' : '', rotulo);
       b.type = 'button'; b.dataset.menuAction = acao;
