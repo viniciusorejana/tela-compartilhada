@@ -4206,10 +4206,15 @@ function alternarTelaCheia() {
 }
 if (!suportaTelaCheia && !stageVideo.webkitEnterFullscreen) fullscreenBtn.hidden = true;
 fullscreenBtn.onclick = () => alternarTelaCheia();
+// Desenhos, e não os glifos ⛶ e ⛝: eram o único botão da barra do palco que mudava de tamanho
+// e de linha de base conforme a fonte do sistema, ao lado de quatro ícones em SVG.
+const ICONE_TELA_CHEIA = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const ICONE_SAIR_DA_TELA_CHEIA = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
 function aoMudarTelaCheia() {
   const cheio = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-  fullscreenBtn.textContent = cheio ? '⛝' : '⛶';
+  fullscreenBtn.innerHTML = cheio ? ICONE_SAIR_DA_TELA_CHEIA : ICONE_TELA_CHEIA;
   fullscreenBtn.title = cheio ? 'Sair da tela cheia' : 'Tela cheia';
+  fullscreenBtn.setAttribute('aria-label', fullscreenBtn.title);
   limitarPan();
   aplicarTransformDoPalco();
 }
