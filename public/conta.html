@@ -32,6 +32,7 @@
         <input id="entrarSenha" name="senha" type="password" autocomplete="current-password" maxlength="128" required>
         <p class="error" role="alert" hidden></p>
         <button type="submit">Entrar <span aria-hidden="true">→</span></button>
+        <button type="button" class="conta-link-texto" id="irParaRecuperar">Esqueci a senha</button>
       </form>
 
       <form id="formCriar" role="tabpanel" aria-labelledby="abaCriar" novalidate hidden>
@@ -50,13 +51,18 @@
       </form>
 
       <form id="formRecuperar" role="tabpanel" aria-labelledby="abaRecuperar" novalidate hidden>
-        <p class="conta-sub">Use o código de recuperação que apareceu quando você criou a conta. Ele vale uma vez: depois de usado, você recebe outro.</p>
+        <p class="conta-sub">Use o código de recuperação que apareceu quando você criou a conta, ou o mais recente que você gerou. Ele vale uma vez: depois de usado, você recebe outro.</p>
         <label for="recuperarUsuario">Nome de usuário</label>
-        <input id="recuperarUsuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
+        <input id="recuperarUsuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required aria-describedby="recuperarUsuarioDica">
+        <small id="recuperarUsuarioDica">O que você usa para entrar, e não o apelido que a sala mostra.</small>
         <label for="recuperarCodigo">Código de recuperação</label>
-        <input id="recuperarCodigo" name="codigo" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="40" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX">
+        <!-- Largo de propósito: a pessoa cola o que anotou, com o que estiver em volta, e a
+             página acha o código ali dentro (recuperacao.js). -->
+        <input id="recuperarCodigo" name="codigo" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="400" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" aria-describedby="recuperarCodigoDica">
+        <small id="recuperarCodigoDica" class="codigo-dica" aria-live="polite">20 letras e números. Pode colar do jeito que anotou.</small>
         <label for="recuperarSenha">Senha nova</label>
-        <input id="recuperarSenha" name="nova" type="password" autocomplete="new-password" maxlength="128" required>
+        <input id="recuperarSenha" name="nova" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="recuperarSenhaDica">
+        <small id="recuperarSenhaDica">Pelo menos 10 caracteres, e não pode ser o seu usuário nem o seu apelido.</small>
         <p class="error" role="alert" hidden></p>
         <button type="submit">Recuperar a conta <span aria-hidden="true">→</span></button>
       </form>
@@ -66,7 +72,8 @@
     <section id="codigoNovo" class="conta-card" aria-labelledby="codigoNovoTitulo" hidden>
       <h1 id="codigoNovoTitulo">Guarde este código</h1>
       <p class="conta-sub">É o único jeito de voltar à conta se você esquecer a senha. Ele não aparece de novo, e o Nexo não guarda uma cópia que dê para ler.</p>
-      <div class="codigo-recuperacao"><code id="codigoNovoValor"></code><button type="button" id="copiarCodigo" class="secondary">Copiar</button></div>
+      <div class="codigo-recuperacao"><code id="codigoNovoValor"></code><div class="codigo-acoes"><button type="button" id="copiarCodigo" class="secondary">Copiar</button><button type="button" id="baixarCodigo" class="secondary">Baixar .txt</button></div></div>
+      <p class="conta-sub" id="copiarAviso" role="status"></p>
       <p class="conta-aviso"><strong>Perdeu a senha e o código, perdeu a conta.</strong> Anote num lugar seu: um gerenciador de senhas, um papel guardado.</p>
       <label class="conta-confirma"><input type="checkbox" id="guardeiCodigo"> Guardei o código</label>
       <button type="button" id="seguirDoCodigo" disabled>Continuar <span aria-hidden="true">→</span></button>
@@ -146,6 +153,7 @@
     </section>
   </main>
   <script src="/perfil.js"></script>
+  <script src="/recuperacao.js"></script>
   <script src="/conta.js"></script>
 </body>
 </html>

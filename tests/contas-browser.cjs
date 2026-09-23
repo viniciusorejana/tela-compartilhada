@@ -147,6 +147,65 @@ async function etapaB(contextoA, contextoB, contextoC) {
   console.log('PASS: cadastro pela tela, código de recuperação, perfil, apelido na sala, ajustes em outro aparelho sem o microfone, baixar e apagar');
 }
 
+// A recuperação como uma pessoa faz: guarda o código num arquivo, esquece a senha dias depois,
+// erra o login, chega a "Esqueci a senha" pelo link do próprio erro e cola o arquivo inteiro.
+async function etapaRecuperacao(contextoDoCadastro, outroAparelho) {
+  const cadastro = await novaPagina(contextoDoCadastro);
+  await cadastro.goto(`${origin}/conta`);
+  await cadastro.locator('#abaCriar').click();
+  await cadastro.locator('#criarUsuario').fill('esquecida');
+  await cadastro.locator('#criarSenha').fill(SENHA);
+  await cadastro.locator('#formCriar button[type="submit"]').click();
+  await cadastro.locator('#codigoNovo').waitFor();
+  const [arquivo] = await Promise.all([cadastro.waitForEvent('download'), cadastro.locator('#baixarCodigo').click()]);
+  assert.equal(arquivo.suggestedFilename(), 'nexo-recuperacao-esquecida.txt');
+  const anotado = fs.readFileSync(await arquivo.path(), 'utf8');
+  const codigo = await cadastro.locator('#codigoNovoValor').textContent();
+  assert.ok(anotado.includes(codigo) && anotado.includes('@esquecida'));
+  await cadastro.close();
+
+  const pagina = await novaPagina(outroAparelho);
+  await pagina.goto(`${origin}/conta?voltar=${encodeURIComponent('/sala-da-esquecida/sala')}`);
+  await pagina.locator('#entrarUsuario').fill('Esquecida');
+  await pagina.locator('#entrarSenha').fill('nao lembro qual era');
+  await pagina.locator('#formEntrar button[type="submit"]').click();
+  await pagina.locator('#formEntrar .error:not([hidden])').waitFor();
+  await pagina.locator('#irParaRecuperar').click();
+  assert.equal(await pagina.locator('#recuperarUsuario').inputValue(), 'Esquecida', 'o usuário digitado vem junto');
+
+  // Um código truncado é apontado antes de sair da página, sem gastar tentativa.
+  await pagina.locator('#recuperarCodigo').fill(codigo.slice(0, -1));
+  assert.match(await pagina.locator('#recuperarCodigoDica').textContent(), /tem 19/);
+  // O arquivo inteiro, colado: a página acha o código e mostra o que leu.
+  await pagina.locator('#recuperarCodigo').fill(anotado);
+  assert.equal(await pagina.locator('#recuperarCodigoDica').textContent(), `Código lido: ${codigo}`);
+  await pagina.locator('#recuperarSenha').fill('lembrei do codigo ainda bem');
+  await pagina.locator('#recuperarSenha').focus();
+  assert.equal(await pagina.locator('#recuperarCodigo').inputValue(), codigo, 'ao sair do campo, fica só o código');
+  await pagina.screenshot({ path: path.join(saida, 'recuperacao.png') });
+  await pagina.locator('#formRecuperar button[type="submit"]').click();
+  await pagina.locator('#codigoNovo').waitFor();
+  const novo = await pagina.locator('#codigoNovoValor').textContent();
+  assert.notEqual(novo, codigo, 'usado, o código troca');
+  await pagina.locator('#guardeiCodigo').check();
+  await pagina.locator('#seguirDoCodigo').click();
+  await pagina.waitForURL('**/sala-da-esquecida/sala');
+  assert.equal((await pagina.evaluate(() => fetch('/api/conta/eu').then(r => r.json()))).conta.usuario, 'esquecida', 'volta para a sala já com a conta');
+
+  // O código antigo não vale de novo, e a resposta diz o que conferir.
+  await pagina.evaluate(() => fetch('/api/conta/sair', { method: 'POST' }));
+  await pagina.goto(`${origin}/conta`);
+  await pagina.locator('#abaRecuperar').click();
+  await pagina.locator('#recuperarUsuario').fill('esquecida');
+  await pagina.locator('#recuperarCodigo').fill(codigo);
+  await pagina.locator('#recuperarSenha').fill('tentando o codigo velho');
+  await pagina.locator('#formRecuperar button[type="submit"]').click();
+  await pagina.locator('#formRecuperar .error:not([hidden])').waitFor();
+  assert.match(await pagina.locator('#formRecuperar .error').textContent(), /código mais recente/);
+  await pagina.close();
+  console.log('PASS: recuperação pela tela -- arquivo colado inteiro, código truncado apontado, volta para a sala, código antigo recusado');
+}
+
 async function comConta(contexto, usuario, apelido) {
   const { cookie } = await instancia.conta(usuario, { apelido });
   await contexto.addCookies([{ name: 'nexo_conta', value: cookie.split('=')[1], url: origin }]);
@@ -196,6 +255,7 @@ async function etapaC(contextoAnonimo, contextoDaDona) {
   const contexto = () => browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true });
   await etapaB(await contexto(), await contexto(), await contexto());
   await etapaC(await contexto(), await contexto());
+  await etapaRecuperacao(await contexto(), await contexto());
   assert.deepEqual(erros, []);
 })().catch(erro => {
   console.error(erro);

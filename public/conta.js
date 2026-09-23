@@ -103,13 +103,58 @@
   });
 
   aoEnviar($('formRecuperar'), async formulario => {
+    // O formato é conferido aqui também, para o aviso vir sem ida ao servidor. O servidor
+    // confere de novo: a página é conveniência, não tranca.
+    const lido = NexoRecuperacao.ler(valor(formulario, 'codigo'));
+    if (lido.problema) { avisar(formulario, NexoRecuperacao.mensagem(lido)); $('recuperarCodigo').focus(); return; }
     const r = await api('/api/conta/recuperar', { metodo: 'POST', corpo: {
-      usuario: valor(formulario, 'usuario'), codigo: valor(formulario, 'codigo'), nova: valor(formulario, 'nova')
+      usuario: valor(formulario, 'usuario'), codigo: NexoRecuperacao.formatar(lido.codigo), nova: valor(formulario, 'nova')
     } });
     if (!r.ok) { falhou(formulario, r); return; }
     formulario.reset();
+    dicaDoCodigo();
     if (r.dados.perfil) perfil = r.dados.perfil;
     mostrarCodigo(r.dados.recuperacao, r.dados.conta);
+  });
+
+  // Quem errou a senha está a um clique da saída, com o usuário já digitado.
+  $('irParaRecuperar').onclick = () => {
+    const usuario = $('entrarUsuario').value.trim();
+    if (usuario) $('recuperarUsuario').value = usuario;
+    abrirAba('abaRecuperar', false);
+    (usuario ? $('recuperarCodigo') : $('recuperarUsuario')).focus();
+  };
+
+  // O campo do código diz, enquanto a pessoa digita, se o que está ali já é um código -- e o
+  // que falta, quando não é. Ao sair do campo, o código achado aparece no formato mostrado no
+  // cadastro: é a confirmação de que a página leu o que a pessoa quis dizer.
+  const DICA_DO_CODIGO = $('recuperarCodigoDica').textContent;
+  function dicaDoCodigo() {
+    const campo = $('recuperarCodigo');
+    const dica = $('recuperarCodigoDica');
+    const lido = NexoRecuperacao.ler(campo.value);
+    dica.classList.toggle('certo', Boolean(lido.codigo));
+    dica.classList.toggle('problema', Boolean(lido.problema) && lido.problema !== 'vazio' && campo.value.length > 4);
+    if (lido.codigo) dica.textContent = `Código lido: ${NexoRecuperacao.formatar(lido.codigo)}`;
+    else if (lido.problema === 'vazio' || campo.value.length <= 4) dica.textContent = DICA_DO_CODIGO;
+    else dica.textContent = NexoRecuperacao.mensagem(lido);
+    return lido;
+  }
+  $('recuperarCodigo').addEventListener('input', dicaDoCodigo);
+  // Um campo de uma linha APAGA as quebras do que é colado, e o código grudava na palavra da
+  // linha seguinte ("G6EYGerado") -- aí não havia mais código para achar. Colado aqui, cada
+  // quebra vira espaço.
+  $('recuperarCodigo').addEventListener('paste', evento => {
+    const texto = evento.clipboardData?.getData('text');
+    if (!texto || !/[\r\n]/.test(texto)) return;
+    evento.preventDefault();
+    const campo = evento.target;
+    campo.setRangeText(texto.replace(/\s*[\r\n]+\s*/g, ' ').trim(), campo.selectionStart, campo.selectionEnd, 'end');
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  $('recuperarCodigo').addEventListener('blur', () => {
+    const lido = dicaDoCodigo();
+    if (lido.codigo) $('recuperarCodigo').value = NexoRecuperacao.formatar(lido.codigo);
   });
 
   // ---------- O código de recuperação, mostrado uma vez ----------
@@ -117,6 +162,7 @@
   function mostrarCodigo(codigo, novaConta) {
     contaDepoisDoCodigo = novaConta;
     $('codigoNovoValor').textContent = codigo;
+    $('copiarAviso').textContent = '';
     $('guardeiCodigo').checked = false;
     $('seguirDoCodigo').disabled = true;
     mostrar('codigoNovo');
@@ -126,17 +172,45 @@
     try {
       await navigator.clipboard.writeText($('codigoNovoValor').textContent);
       $('copiarCodigo').textContent = 'Copiado!';
+      $('copiarAviso').textContent = 'Copiado. Cole num lugar seu antes de continuar.';
       setTimeout(() => { $('copiarCodigo').textContent = 'Copiar'; }, 1800);
     } catch (_) {
+      // Sem permissão para a área de transferência, o código fica selecionado -- e a pessoa
+      // PRECISA saber que não foi copiado, ou vai colar o que estava lá antes.
       const selecao = window.getSelection();
       const intervalo = document.createRange();
       intervalo.selectNodeContents($('codigoNovoValor'));
       selecao.removeAllRanges();
       selecao.addRange(intervalo);
+      $('copiarAviso').textContent = 'Não deu para copiar sozinho: o código ficou selecionado. Use Ctrl+C (ou segure e copie, no celular).';
     }
+  };
+  // Um arquivo é o jeito mais difícil de errar uma letra: nada é redigitado. O texto em volta
+  // do código não atrapalha -- colado inteiro na recuperação, a página acha o código nele.
+  $('baixarCodigo').onclick = () => {
+    const codigo = $('codigoNovoValor').textContent;
+    const quem = contaDepoisDoCodigo?.usuario ? `@${contaDepoisDoCodigo.usuario}` : 'sua conta';
+    const texto = [
+      'Nexo · código de recuperação', '',
+      // O código com espaço dos dois lados na mesma linha: se as quebras sumirem no caminho,
+      // ele continua separado do texto em volta.
+      `Conta: ${quem}`, `Código: ${codigo}  (vale uma vez)`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, '',
+      'Use em "Esqueci a senha", na página da conta. O código vale uma vez: depois de usado,',
+      'o Nexo mostra outro. Gerar um código novo cancela este.'
+    ].join('\r\n');
+    const url = URL.createObjectURL(new Blob([texto + '\r\n'], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `nexo-recuperacao-${contaDepoisDoCodigo?.usuario || 'conta'}.txt`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $('copiarAviso').textContent = 'Arquivo baixado. Guarde-o num lugar seu.';
   };
   $('seguirDoCodigo').onclick = () => {
     $('codigoNovoValor').textContent = '';
+    $('copiarAviso').textContent = '';
     // Recuperar uma conta suspensa devolve o código novo, mas não uma sessão.
     if (contaDepoisDoCodigo) concluir(contaDepoisDoCodigo);
     else { mostrar('semConta'); abrirAba('abaEntrar'); }
@@ -152,28 +226,10 @@
     el.classList.toggle('com-marca', aparencia.marca);
   }
 
-  // As opções vêm do mesmo conjunto que o servidor aceita (perfil.js), e cada uma é um rádio
-  // de verdade: dá para escolher pelo teclado, e o leitor de tela diz o nome da cor.
-  const NOMES_DAS_CORES = { lilas: 'Lilás', menta: 'Menta', ambar: 'Âmbar', coral: 'Coral', ceu: 'Céu', rosa: 'Rosa', limao: 'Limão', areia: 'Areia', turquesa: 'Turquesa', ameixa: 'Ameixa' };
-  const NOMES_DAS_MARCAS = { brilho: 'Brilho', losango: 'Losango', estrela: 'Estrela', lua: 'Lua', raio: 'Raio', flor: 'Flor', cavalo: 'Cavalo', nota: 'Nota', coracao: 'Coração', sol: 'Sol', trevo: 'Trevo', circulo: 'Círculo' };
-  function opcao(grupo, valor, rotulo, desenhar) {
-    const label = document.createElement('label');
-    const radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = grupo; radio.value = valor;
-    radio.setAttribute('aria-label', rotulo);
-    const amostra = document.createElement('span');
-    amostra.className = 'escolha';
-    amostra.title = rotulo;
-    desenhar(amostra);
-    label.append(radio, amostra);
-    return label;
-  }
+  // As opções vêm do mesmo conjunto que o servidor aceita, montadas por perfil.js -- o mesmo
+  // que monta o editor de dentro da sala.
   function montarEscolhas() {
-    const cores = $('perfilCores'), marcas = $('perfilMarcas');
-    cores.append(opcao('cor', '', 'A cor do meu nome', el => { el.classList.add('texto'); el.textContent = 'Do nome'; }));
-    for (const [nome, cor] of Object.entries(NexoPerfil.CORES)) cores.append(opcao('cor', nome, NOMES_DAS_CORES[nome] || nome, el => { el.style.background = cor; }));
-    marcas.append(opcao('marca', '', 'As iniciais do apelido', el => { el.classList.add('texto'); el.textContent = 'Iniciais'; }));
-    for (const [nome, simbolo] of Object.entries(NexoPerfil.MARCAS)) marcas.append(opcao('marca', nome, NOMES_DAS_MARCAS[nome] || nome, el => { el.textContent = simbolo; el.style.background = '#ffffff14'; el.style.color = '#e4dcf6'; }));
+    NexoPerfil.montarEscolhas($('perfilCores'), $('perfilMarcas'));
     $('formPerfil').addEventListener('input', previa);
   }
   const escolhido = grupo => $('formPerfil').querySelector(`input[name="${grupo}"]:checked`)?.value || null;
@@ -226,7 +282,7 @@
     conta = r.dados.conta;
     perfil = r.dados.perfil;
     pintarConta();
-    dizer('Perfil salvo. Ele vale na próxima vez que você entrar numa sala.');
+    dizer('Perfil salvo. Quem está numa sala com você já vê o novo.');
   });
 
   $('apagarCerteza').onchange = () => { $('formApagar').querySelector('button').disabled = !$('apagarCerteza').checked; };

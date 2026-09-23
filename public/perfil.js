@@ -60,6 +60,10 @@
     brilho: '✦', losango: '◆', estrela: '★', lua: '☾', raio: 'ϟ', flor: '✿',
     cavalo: '♞', nota: '♪', coracao: '♥', sol: '☀', trevo: '♣', circulo: '●'
   });
+  // Os nomes que o leitor de tela diz e o `title` mostra. Aqui, e não em cada tela que desenha
+  // as opções: a página da conta e o editor dentro da sala mostram a mesma lista.
+  const NOMES_DAS_CORES = Object.freeze({ lilas: 'Lilás', menta: 'Menta', ambar: 'Âmbar', coral: 'Coral', ceu: 'Céu', rosa: 'Rosa', limao: 'Limão', areia: 'Areia', turquesa: 'Turquesa', ameixa: 'Ameixa' });
+  const NOMES_DAS_MARCAS = Object.freeze({ brilho: 'Brilho', losango: 'Losango', estrela: 'Estrela', lua: 'Lua', raio: 'Raio', flor: 'Flor', cavalo: 'Cavalo', nota: 'Nota', coracao: 'Coração', sol: 'Sol', trevo: 'Trevo', circulo: 'Círculo' });
   const corValida = nome => (Object.prototype.hasOwnProperty.call(CORES, nome) ? nome : null);
   const marcaValida = nome => (Object.prototype.hasOwnProperty.call(MARCAS, nome) ? nome : null);
 
@@ -84,7 +88,28 @@
     };
   }
 
-  const api = { AJUSTES_SINCRONIZADOS, BYTES_MAXIMOS_DOS_AJUSTES, limparAjustes, CORES, MARCAS, corValida, marcaValida, corDoNome, iniciais, aparencia };
+  // As opções de cor e marca como rádios de verdade: dá para escolher pelo teclado, e o leitor
+  // de tela diz o nome. Só no navegador; a primeira de cada grupo é "o padrão" (valor vazio).
+  function montarEscolhas(cores, marcas, grupo = '') {
+    const opcao = (nomeDoGrupo, valor, rotulo, desenhar) => {
+      const label = document.createElement('label');
+      const radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = `${grupo}${nomeDoGrupo}`; radio.value = valor;
+      radio.setAttribute('aria-label', rotulo);
+      const amostra = document.createElement('span');
+      amostra.className = 'escolha';
+      amostra.title = rotulo;
+      desenhar(amostra);
+      label.append(radio, amostra);
+      return label;
+    };
+    cores.append(opcao('cor', '', 'A cor do meu nome', el => { el.classList.add('texto'); el.textContent = 'Do nome'; }));
+    for (const [nome, cor] of Object.entries(CORES)) cores.append(opcao('cor', nome, NOMES_DAS_CORES[nome] || nome, el => { el.style.background = cor; }));
+    marcas.append(opcao('marca', '', 'As iniciais do apelido', el => { el.classList.add('texto'); el.textContent = 'Iniciais'; }));
+    for (const [nome, simbolo] of Object.entries(MARCAS)) marcas.append(opcao('marca', nome, NOMES_DAS_MARCAS[nome] || nome, el => { el.classList.add('simbolo'); el.textContent = simbolo; }));
+  }
+
+  const api = { AJUSTES_SINCRONIZADOS, BYTES_MAXIMOS_DOS_AJUSTES, limparAjustes, CORES, MARCAS, NOMES_DAS_CORES, NOMES_DAS_MARCAS, corValida, marcaValida, corDoNome, iniciais, aparencia, montarEscolhas };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NexoPerfil = api;
 })(typeof window === 'undefined' ? globalThis : window);
