@@ -1,7 +1,7 @@
 // Real Electron/preload/picker UI, with synthetic sources. No desktop or device
 // capture, no existing user profile, and no running audio agent is touched.
 const { _electron } = require('playwright');
-const { spawn } = require('node:child_process');
+const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -51,11 +51,11 @@ let server, electron;
       ipcMain.handle('agente:iniciar', () => ({ rodando: false, motivo: 'test-fixture' }));
     });
   `);
-  server = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), env: { ...process.env, PORT: '3219', HOST: '127.0.0.1' }, windowsHide: true, stdio: 'ignore' });
-  for (let n = 0; n < 60; n++) {
-    try { if ((await fetch(origin)).ok) break; } catch (_) {}
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+  // Pelo ajudante, e não com `node server.js`: ele isola as contas, o painel e a medição numa
+  // pasta temporária e usa uma cópia do servidor de mídia -- o binário instalado faria o
+  // encerrarOrfaos() derrubar a sala de verdade aberta nesta máquina. E ele abre a janela de
+  // transição, porque o "Electron" entra sem conta numa sala vazia.
+  server = await iniciarServidor({ ambiente: { PORT: '3219' }, midia: true });
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   electron = await _electron.launch({ executablePath: path.join(__dirname, '../app/node_modules/electron/dist/electron.exe'), args: [harness], env, timeout: 20000 });
@@ -146,5 +146,5 @@ let server, electron;
   console.log('PASS: o aplicativo fica na origem escolhida -- a sala não troca o servidor, destinos de fora abrem no navegador, a origem continua livre por dentro, e a tela local troca o servidor');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   await electron?.close();
-  server?.kill();
+  await server?.encerrar();
 });

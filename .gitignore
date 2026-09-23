@@ -12,3 +12,9 @@ native/musica/
 native/medicao/
 native/painel/
 native/contas/
+native/dev/
+
+# Configuração por ambiente: fica só na máquina de quem roda. O modelo é versionado.
+.env
+.env.*
+!.env.example

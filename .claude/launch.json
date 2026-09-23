@@ -4,7 +4,7 @@
     {
       "name": "nexo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
+      "runtimeArgs": ["--env-file-if-exists=.env.dev", "server.js"],
       "port": 3000
     }
   ]

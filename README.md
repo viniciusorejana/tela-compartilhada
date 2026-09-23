@@ -26,15 +26,18 @@ A sala tem ainda um **bot de música por sala**, que entra na chamada como parti
 que for pedido no canal `♪ música`, e uma **mesa de sons** temporária, que vive enquanto a sala
 existir. Os dois estão descritos abaixo.
 
-Para desenvolver a interface sem recompilar os helpers nativos, use `npm run dev`. A captura de
-áudio por processo continua exigindo os executáveis compilados por `npm run build:helper`, a
-mídia exige o servidor baixado por `npm run build:sfu` — `npm start` faz os dois — e o bot de
-música exige as ferramentas baixadas por `npm run musica:instalar`.
+Há dois ambientes, cada um com o seu arquivo de configuração (ver [Configuração](#configuracao)):
+`npm start` sobe a produção com o `.env.prod`, e `npm run dev` sobe o desenvolvimento com o
+`.env.dev`, com contas e painel próprios. A captura de áudio por processo exige os executáveis
+compilados por `npm run build:helper`, a mídia exige o servidor baixado por `npm run build:sfu` —
+`npm start` e `npm run start:dev` baixam sozinhos se faltar — e o bot de música exige as
+ferramentas baixadas por `npm run musica:instalar`.
 
 ## Painel privado de telemetria
 
 O dashboard de custo, banda, limites de uso e saúde sobe junto com o servidor em `/painel`.
-Na máquina do servidor, execute `npm run painel:chave` para consultar a chave de acesso.
+Na máquina do servidor, execute `npm run painel:chave` para consultar a chave de acesso
+(`npm run painel:chave:dev` para a do desenvolvimento).
 Consulte [acesso remoto, contabilidade, limites e testes](docs/telemetria.md) para configurar
 HTTPS/proxy e entender a cobertura dos números. Verificações: `npm test` e `npm run test:painel`.
 
@@ -917,7 +920,8 @@ npm install
 npm start
 ```
 
-O `npm start` compila os dois executaveis nativos e sobe o servidor na porta 3000.
+O `npm start` baixa o servidor de mídia se faltar e sobe o Nexo na porta 3000, com a
+configuração do `.env.prod` (na primeira vez, copie o `.env.example` para ele).
 
 ### 2. Deixar a sala acessivel pela internet
 
@@ -957,8 +961,9 @@ cloudflared tunnel --url http://localhost:3000
 
 ### 3. Voce entra na sala
 
-Antes de iniciar o servidor, defina `$env:PUBLIC_URL="https://sua-maquina.sua-tailnet.ts.net"`
-com o endereço real informado pelo Funnel. Abra **`http://localhost:3000`** no seu próprio PC.
+Ponha no `.env.prod` o endereço real informado pelo Funnel —
+`PUBLIC_URL=https://sua-maquina.sua-tailnet.ts.net` — e `NEXO_PROXIES_CONFIAVEIS=127.0.0.1,::1`,
+e reinicie o servidor. Abra **`http://localhost:3000`** no seu próprio PC.
 Crie a sala e use **Convidar amigos**: com `PUBLIC_URL` configurado, o convite terá o endereço público.
 O aplicativo não descobre o endereço do Funnel automaticamente.
 
@@ -992,7 +997,38 @@ instalado.
 
 ## Configuracao
 
-As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo terminal:
+A configuração mora em arquivos de ambiente na raiz, um por ambiente, lidos pelo próprio Node
+(`--env-file-if-exists`), sem dependência nova:
+
+| Arquivo | Versionado | Usado por |
+| --- | --- | --- |
+| `.env.example` | sim | Modelo com todas as variáveis, o padrão de cada uma e o porquê |
+| `.env.prod` | não | `npm start`, `npm run painel:chave` |
+| `.env.dev` | não | `npm run dev`, `npm run start:dev`, `npm run painel:chave:dev` e o preview do Claude Code |
+
+Na primeira vez, copie o `.env.example` para `.env.prod` e para `.env.dev` e ajuste. Os dois
+ficam fora do Git (`.gitignore`): levam o endereço da máquina, e cada instalação tem o seu.
+Nenhum segredo mora neles — as chaves do servidor de mídia e do painel são geradas sozinhas.
+
+Diferenças que importam entre os dois:
+
+- **Mesma porta, de propósito.** Os dois usam a 3000. Com a produção no ar, o `npm run dev` não
+  consegue escutar e sai antes de subir o servidor de mídia — que, ao subir, encerraria o que
+  encontrasse rodando, e com ele as chamadas de verdade.
+- **Dados separados.** O desenvolvimento guarda contas, painel e medição em `native/dev/`; apagar
+  essa pasta zera o ambiente sem tocar nas contas reais. O servidor de mídia (`native/livekit`)
+  é um só.
+- **Regras.** O desenvolvimento roda com as regras decididas (`NEXO_ANONIMO_ABRE_SALA=0`,
+  `NEXO_PLANOS=1`); a produção fica na janela de transição até o grupo inteiro ter conta.
+
+Um arquivo ausente não impede a subida: vale o padrão do código. Uma variável definida no
+terminal vence a do arquivo, o que serve para um ajuste de uma vez só:
+
+```powershell
+$env:NEXO_LOG_SFU = 'arquivo'; npm start
+```
+
+As variáveis principais:
 
 | Variavel | Padrao | Funcao |
 | --- | --- | --- |
@@ -1001,12 +1037,16 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
 | `CORS_ORIGIN` | vazio | Origens EXTRAS (separadas por vírgula) que podem abrir o Socket.IO e escrever na conta. A página servida por este servidor e a origem do `PUBLIC_URL` já valem sem configurar nada; qualquer outra é recusada |
 | `NEXO_PASTA_CONTAS` | `native/contas` | Onde fica o banco das contas (`nexo.db`) e as cópias diárias |
+| `NEXO_PASTA_PAINEL` | `native/painel` | Chave e sessões do painel |
+| `NEXO_DADOS_TELEMETRIA` | `native/medicao` | Registros de banda, uso e alertas do painel |
+| `NEXO_FUSO` | fuso da máquina | Fuso das horas do painel; num VPS em UTC, `America/Sao_Paulo` |
+| `NEXO_LIMITES` | vazio | Ajuste dos limites antiabuso em JSON (ver [telemetria](docs/telemetria.md)) |
 | `NEXO_ANONIMO_ABRE_SALA` | `0` | `1` deixa quem não tem conta abrir sala. É a janela de transição do roteiro: o grupo que já usa continua abrindo salas enquanto cria as contas. Desligue quando todos tiverem conta |
 | `NEXO_PLANOS` | `1` | `0` desliga os tetos de resolução e de quadros dos planos: todo mundo transmite como premium. A outra janela de transição; o teto de pessoas continua valendo |
 | `NEXO_PESSOAS_POR_SALA` | `25,50` | Teto de pessoas por sala, sem e com alguém premium presente |
 | `NEXO_ESPERA_TETO_MS` | `5000` | Quanto tempo uma tela acima do plano tem para republicar menor antes de ser desligada |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
-| `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
+| `SFU_UDP_PORTS` | `7882` | Porta UDP da midia (aceita faixa, `7882-7891`) |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
 | `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
 | `NEXO_BINARIO_SFU` | dentro de `NEXO_PASTA_SFU` | Caminho do executavel do servidor de midia. Separado da pasta de configuracao porque a regra de firewall do Windows e por caminho: binario em pasta nova pede permissao de novo |
@@ -1020,15 +1060,9 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `NEXO_LOG_SFU` | vazio | Vazio mostra so ERROR/FATAL/WARN do servidor de midia; `1` mostra tudo (util para ICE, mas traz nome e endereco dos participantes); `arquivo` grava tudo em `native/livekit/sfu.log`; `0` silencia |
 | `NEXO_PAINEL_REMOTO` | `0` | `1` permite abrir `/painel` fora da maquina do servidor. Exige `PUBLIC_URL` https e proxy declarado |
 | `NEXO_PROXIES_CONFIAVEIS` | vazio | IPs dos proxies de quem o servidor aceita `X-Forwarded-For`. Sem isso, todos atras de um tunel dividem o mesmo limite por origem |
+| `NEXO_SEM_MIDIA` | `0` | `1` sobe só o chat, as contas e o painel, sem servidor de mídia |
 
-Exemplo:
-
-```powershell
-$env:PORT="3000"
-$env:HOST="0.0.0.0"
-$env:PUBLIC_URL="https://stream.exemplo.com"
-npm start
-```
+As demais (`SFU_IPS`, `SFU_BIND`, `NEXO_ANUNCIAR_LAN`, `NEXO_ICE_LITE`...) estão no `.env.example`.
 
 `PUBLIC_URL` não publica o servidor nem configura DNS. Ele define o endereço de convite e os logs.
 

@@ -7,7 +7,8 @@ Os tokens de `public/tema.css` são compartilhados com a sala.
 ## Acesso
 
 1. Inicie normalmente com `npm start` ou `npm run dev` se os binários já estiverem instalados.
-2. Na máquina do servidor, execute **`npm run painel:chave`**.
+2. Na máquina do servidor, execute **`npm run painel:chave`** — ou `npm run painel:chave:dev`
+   para o servidor de desenvolvimento, que tem chave própria em `native/dev/painel`.
 3. Abra `http://localhost:3000/painel` e cole a chave (ajuste a porta se usar `PORT`).
 
 A chave aleatória de 256 bits fica em `native/painel/segredo.json`, fora do Git. Nunca é
@@ -47,10 +48,10 @@ $env:NEXO_PAINEL_REMOTO = '1'   # exige também PUBLIC_URL https e proxy declara
 de origem — uma pessoa reconectando em laço gasta a cota das outras, e a sala fica lenta
 para entrar sem nenhum culpado aparente.
 
-```powershell
-$env:PUBLIC_URL = 'https://seu-servidor.ts.net'
-$env:NEXO_PROXIES_CONFIAVEIS = '127.0.0.1,::1'
-npm start
+```ini
+# .env.prod
+PUBLIC_URL=https://seu-servidor.ts.net
+NEXO_PROXIES_CONFIAVEIS=127.0.0.1,::1
 ```
 
 Declare somente os IPs dos proxies administrados por você. Cadeias são percorridas da

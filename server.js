@@ -1706,13 +1706,21 @@ const PORT = process.env.PORT || 3000;
 // o servidor tem de subir mesmo na rede mais capenga.
 const HOST = process.env.HOST || '::';
 const publicUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
-if (!process.env.HOST) {
-  server.once('error', erro => {
-    if (!['EAFNOSUPPORT', 'EADDRNOTAVAIL', 'EINVAL', 'EPROTONOSUPPORT'].includes(erro.code)) throw erro;
-    console.log('IPv6 indisponível nesta máquina: escutando só em IPv4.');
-    server.listen(PORT, '0.0.0.0', aoSubir);
-  });
-}
+let caiuParaIpv4 = false;
+server.on('error', erro => {
+  // O .env.dev e o .env.prod usam a mesma porta de propósito: com a produção no ar, o dev
+  // morre aqui, antes do aoSubir -- que é onde o servidor de mídia que estiver rodando seria
+  // encerrado, e com ele as chamadas. É o caminho esperado, então merece uma frase e não
+  // um rastro de pilha.
+  if (erro.code === 'EADDRINUSE') {
+    console.error(`\nA porta ${PORT} já está em uso: outro Nexo está no ar nesta máquina? Encerre-o antes, ou troque PORT.`);
+    process.exit(1);
+  }
+  if (process.env.HOST || caiuParaIpv4 || !['EAFNOSUPPORT', 'EADDRNOTAVAIL', 'EINVAL', 'EPROTONOSUPPORT'].includes(erro.code)) throw erro;
+  caiuParaIpv4 = true;
+  console.log('IPv6 indisponível nesta máquina: escutando só em IPv4.');
+  server.listen(PORT, '0.0.0.0', aoSubir);
+});
 server.listen(PORT, HOST, aoSubir);
 function aoSubir() {
   process.send?.({ tipo: 'pronto', porta: server.address().port });
