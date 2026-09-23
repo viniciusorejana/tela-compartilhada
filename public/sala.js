@@ -2216,6 +2216,10 @@ function aplicarSaidaEmTodos() {
   tiles.forEach(refs => { aplicarSaidaEm(refs.peerAudio); aplicarSaidaEm(refs.screenAudio); });
   tilesDeTela.forEach(refs => aplicarSaidaEm(refs.video));
   aplicarSaidaEm(stageVideo);
+  // O som acima de 100% sai pelo contexto de áudio, e ele também precisa ir para o fone
+  // escolhido -- ou, onde o navegador não deixa, voltar a 100% (ver podeReforcar).
+  aplicarSaidaNoReforco();
+  reaplicarVolumes();
 }
 
 function preencher(seletor, lista, escolhido, rotuloPadrao) {
@@ -4479,10 +4483,37 @@ copyLinkBtn.onclick = async () => {
 // Os mesmos dois controles aparecem no quadradinho e no card da grade. Um molde so evita
 // que eles se afastem um do outro com o tempo -- e e o que permite ao pintarControleDeVolume
 // tratar os dois pelo mesmo caminho.
+//
+// O número ao lado do controle é o volume escolhido, sempre à vista e discreto: apagado em
+// 100%, aceso quando mudou, âmbar quando passa de 100%. Antes ele só existia no `title`, que
+// ninguém descobre -- e "por que eu ouço o Fulano mais alto que os outros?" ficava sem resposta.
+// Clicar nele volta a 100%.
 const LINHA_DE_VOLUME = alvo => `
-  <input type="range" class="volume-slider" min="0" max="100" value="100" step="1" data-alvo="${alvo}">
+  <input type="range" class="volume-slider" min="0" max="${VOLUME_MAXIMO * 100}" value="100" step="1" data-alvo="${alvo}">
+  <button class="volume-valor" type="button" title="Voltar a 100%">100%</button>
   <button class="mute-peer-btn" type="button" aria-pressed="false"></button>
 `;
+
+// Os controles de volume são muitos (quadradinho, card da grade, palco), e nascem e morrem
+// com as pessoas. Um ouvinte no documento serve a todos, inclusive aos que ainda não existem.
+//
+// 100% "gruda": numa régua que vai a 200%, acertar o meio exato com o dedo é sorte, e voltar
+// ao normal é a coisa mais comum que se faz com ela. Na fase de captura, para o valor já
+// chegar grudado a quem ouve o controle.
+document.addEventListener('input', evento => {
+  const controle = evento.target;
+  if (!controle.matches?.('.volume-slider[data-alvo]')) return;
+  const valor = Number(controle.value);
+  if (valor !== 100 && Math.abs(valor - 100) <= 4) controle.value = '100';
+}, true);
+document.addEventListener('click', evento => {
+  const botao = evento.target.closest?.('.volume-valor');
+  const controle = botao?.parentElement?.querySelector('.volume-slider');
+  if (!controle || controle.disabled) return;
+  evento.stopPropagation();
+  controle.value = '100';
+  controle.dispatchEvent(new Event('input', { bubbles: true }));
+});
 
 // ---------- Acesso e permissões da sala ----------
 const controlesDaConfiguracao = {
@@ -4930,6 +4961,8 @@ function removerTile(id) {
   volumeDaTela.delete(id);
   const refs = tiles.get(id);
   if (!refs) return;
+  desmontarReforco(refs.peerAudio);
+  desmontarReforco(refs.screenAudio);
   refs.root.remove();
   tiles.delete(id);
   reordenarQuadradinhos();
@@ -4948,6 +4981,9 @@ function ligarMidiaDoTile(id) {
     if (refs.peerAudio.srcObject !== peer.remoteStreams.micAudio) refs.peerAudio.srcObject = peer.remoteStreams.micAudio;
     acompanharVoz(id, peer.remoteStreams.micAudio);
   } else { refs.peerAudio.srcObject = null; pararDeAcompanhar(id); }
+  // Acima de 100%, o reforço está preso à faixa antiga: uma faixa nova (a volta de uma queda)
+  // tem de passar pelo ganho de novo, ou a pessoa voltaria a 100% sem ninguém mexer.
+  if (refs.volumeDeVoz > 1) definirAudioDaVoz(id, { lembrar: false });
   atualizarTile(id);
   garantirReproducao(refs.peerAudio);
   garantirReproducao(refs.camVideo);
@@ -4977,9 +5013,95 @@ function preferenciaDeTela(id) {
 // quem manda e a preferencia guardada aqui; os controles so a leem e a escrevem, e depois
 // de qualquer escrita todo mundo se redesenha a partir dela.
 //
-// Volume de <audio> so aceita 0..1 por especificacao; acima disso o navegador lanca
-// IndexSizeError e o ajuste inteiro se perde.
-const entre0e1 = valor => Math.max(0, Math.min(1, Number(valor) || 0));
+// O volume de cada pessoa vai de 0 a 200%: quem fala baixo, ou um microfone ruim, pede mais
+// do que o 100% que o elemento de áudio sabe tocar. O NÚMERO guardado vai até 2; quem toca
+// acima de 1 é o reforço logo abaixo.
+const VOLUME_MAXIMO = 2;
+const nivelDeVolume = valor => Math.max(0, Math.min(VOLUME_MAXIMO, Number(valor) || 0));
+
+// ---------- Acima de 100% ----------
+//
+// `volume` de um <audio> só aceita 0..1: acima disso o navegador lança IndexSizeError, e o
+// ajuste inteiro se perde. Para passar de 100%, o som sai pelo Web Audio, com um ganho -- e
+// SÓ enquanto passa: até 100%, o elemento toca sozinho, como sempre tocou.
+//
+// Duas regras, e as duas vêm de defeitos conhecidos:
+//   - no Chromium, o áudio remoto do WebRTC só chega ao Web Audio se um elemento continuar
+//     tocando aquela faixa. O elemento segue tocando, MUDO, e o som sai pelo ganho;
+//   - tocar pelos dois caminhos ao mesmo tempo soma o mesmo som com atrasos diferentes -- um
+//     eco curto, metálico. É um OU o outro.
+//
+// Um volume de 150% lembrado da última sessão chega antes de qualquer toque, com o contexto
+// de áudio ainda bloqueado pelo navegador. Aí o som fica em 100% (e não em silêncio) até o
+// primeiro toque na página, que destrava o contexto e reaplica tudo.
+let contextoDeReforco = null;
+const reforcos = new Map(); // elemento -> { fonte, ganho, trilha }
+
+// Com um fone escolhido nas configurações, o reforço só vale se o contexto também souber
+// tocar nele; senão o som reforçado sairia pelo alto-falante padrão, e o resto pelo fone.
+function podeReforcar() {
+  if (!AudioContextClass) return false;
+  return !dispositivoEscolhido('saida') || 'setSinkId' in AudioContextClass.prototype;
+}
+
+function contextoParaReforco() {
+  if (contextoDeReforco) return contextoDeReforco;
+  try {
+    contextoDeReforco = new AudioContextClass();
+    aplicarSaidaNoReforco();
+    contextoDeReforco.addEventListener('statechange', () => { if (contextoDeReforco?.state === 'running') reaplicarVolumes(); });
+  } catch (_) { contextoDeReforco = null; }
+  return contextoDeReforco;
+}
+
+function aplicarSaidaNoReforco() {
+  const id = dispositivoEscolhido('saida');
+  contextoDeReforco?.setSinkId?.(id).catch(() => { /* dispositivo sumiu: segue no padrão */ });
+}
+
+function desmontarReforco(elemento) {
+  const reforco = reforcos.get(elemento);
+  if (!reforco) return;
+  try { reforco.fonte.disconnect(); reforco.ganho.disconnect(); } catch (_) { /* já desligado */ }
+  reforcos.delete(elemento);
+}
+
+// O único lugar que decide volume e mudo de um elemento de áudio da sala.
+function aplicarVolume(elemento, nivel, mudo) {
+  if (!elemento) return;
+  const trilha = elemento.srcObject instanceof MediaStream ? elemento.srcObject.getAudioTracks()[0] : null;
+  const contexto = nivel > 1 && !mudo && trilha && podeReforcar() ? contextoParaReforco() : null;
+  if (!contexto || contexto.state !== 'running') {
+    desmontarReforco(elemento);
+    if (contexto) contexto.resume().catch(() => {});
+    elemento.volume = Math.min(1, nivel);
+    elemento.muted = mudo;
+    return;
+  }
+  let reforco = reforcos.get(elemento);
+  // A faixa troca numa reconexão, e o nó de origem fica preso à que existia quando nasceu.
+  if (reforco && reforco.trilha !== trilha) { desmontarReforco(elemento); reforco = null; }
+  if (!reforco) {
+    const fonte = contexto.createMediaStreamSource(new MediaStream([trilha]));
+    const ganho = contexto.createGain();
+    fonte.connect(ganho).connect(contexto.destination);
+    reforco = { fonte, ganho, trilha };
+    reforcos.set(elemento, reforco);
+  }
+  // Uma rampa curta: saltar o ganho de uma vez faz um estalo no meio da fala.
+  reforco.ganho.gain.setTargetAtTime(nivel, contexto.currentTime, 0.02);
+  elemento.volume = 1;
+  elemento.muted = true;
+}
+
+function reaplicarVolumes() {
+  tiles.forEach((_refs, id) => { if (id !== 'self') definirAudioDaVoz(id, { lembrar: false }); });
+  atualizarAudioDeTela();
+}
+// O primeiro toque destrava o contexto de áudio -- e com ele os volumes acima de 100%.
+['pointerdown', 'keydown'].forEach(evento => document.addEventListener(evento, () => {
+  if (contextoDeReforco?.state === 'suspended') contextoDeReforco.resume().catch(() => {});
+}, { capture: true, passive: true }));
 
 function telaTemSom(id) {
   const peer = peers.get(id);
@@ -4994,7 +5116,7 @@ function audioDaTela(id) {
 function definirAudioDaTela(id, { nivel, alternarMudo, lembrar = true }) {
   const pref = preferenciaDeTela(id);
   if (nivel !== undefined) {
-    pref.nivel = entre0e1(nivel);
+    pref.nivel = nivelDeVolume(nivel);
     // Arrastar o volume para cima quer dizer "quero ouvir": tira do mudo sozinho.
     if (pref.mudo && pref.nivel > 0) pref.mudo = false;
   }
@@ -5018,15 +5140,14 @@ function definirAudioDaVoz(id, { nivel, alternarMudo, lembrar = true }) {
   const refs = tiles.get(id);
   if (!refs) return;
   if (nivel !== undefined) {
-    refs.volumeDeVoz = entre0e1(nivel);
+    refs.volumeDeVoz = nivelDeVolume(nivel);
     if (refs.localMute && refs.volumeDeVoz > 0) refs.localMute = false;
   }
   if (alternarMudo) refs.localMute = !refs.localMute;
-  refs.peerAudio.volume = refs.volumeDeVoz;
   // Ensurdecer cala por cima, sem apagar o mudo individual: ao voltar a ouvir, quem estava
   // calado continua calado e quem não estava volta a falar.
-  refs.peerAudio.muted = refs.localMute || ensurdecido;
-  if (pinned?.id === id && pinned.source === 'camera') stageVideo.volume = refs.volumeDeVoz;
+  aplicarVolume(refs.peerAudio, refs.volumeDeVoz, refs.localMute || ensurdecido);
+  if (pinned?.id === id && pinned.source === 'camera') stageVideo.volume = Math.min(1, refs.volumeDeVoz);
   sincronizarControlesDeAudio(id);
   // `lembrar: false` e usado ao APLICAR o que ja estava guardado -- senao a aplicacao
   // regravaria a mesma coisa e mexeria na ordem de despejo por nada.
@@ -5087,13 +5208,13 @@ function aplicarAudioLembrado(id) {
   const guardado = window.Preferencias.audioDe(nome);
   const refs = tiles.get(id);
   if (refs) {
-    refs.volumeDeVoz = entre0e1(guardado.voz);
+    refs.volumeDeVoz = nivelDeVolume(guardado.voz);
     refs.localMute = Boolean(guardado.vozMuda);
     definirAudioDaVoz(id, { lembrar: false });
   }
   if (guardado.tela !== 1 || guardado.telaMuda) {
     const pref = preferenciaDeTela(id);
-    pref.nivel = entre0e1(guardado.tela);
+    pref.nivel = nivelDeVolume(guardado.tela);
     pref.mudo = Boolean(guardado.telaMuda);
     definirAudioDaTela(id, { lembrar: false });
   }
@@ -5149,8 +5270,18 @@ function pintarControleDeVolume(slider, muteBtn, estado) {
   const ehTela = slider.dataset.alvo === 'tela';
   const coisa = ehTela ? 'som desta tela' : 'voz desta pessoa';
   const comArtigo = ehTela ? 'o som desta tela' : 'a voz desta pessoa';
-  slider.title = estado.disponivel ? `Volume: ${porcento}%` : `Sem ${coisa} para ajustar`;
+  slider.title = estado.disponivel ? `Volume: ${porcento}%${porcento > 100 ? ' (reforçado)' : ''}` : `Sem ${coisa} para ajustar`;
   slider.setAttribute('aria-label', `Volume ${ehTela ? 'do' : 'da'} ${coisa}`);
+  slider.setAttribute('aria-valuetext', `${porcento}%`);
+  const valor = slider.parentElement?.querySelector('.volume-valor');
+  if (valor) {
+    valor.textContent = `${porcento}%`;
+    valor.classList.toggle('alterado', porcento !== 100);
+    valor.classList.toggle('reforcado', porcento > 100);
+    valor.disabled = !estado.disponivel || porcento === 100;
+    valor.title = porcento === 100 ? 'Volume normal' : 'Voltar a 100%';
+    valor.setAttribute('aria-label', porcento === 100 ? `Volume ${ehTela ? 'do' : 'da'} ${coisa}: 100%` : `Volume em ${porcento}%. Voltar a 100%`);
+  }
   muteBtn.title = !estado.disponivel ? `Sem ${coisa}` : estado.mudo ? `Ouvir ${comArtigo}` : `Silenciar ${comArtigo}`;
   muteBtn.setAttribute('aria-label', muteBtn.title);
 }
@@ -5568,8 +5699,7 @@ function atualizarAudioDeTela() {
     // O mudo do participante vale para a VOZ dele; o som da tela tem o proprio controle, no
     // quadradinho da tela. Antes os dois andavam juntos e nao dava para calar so a tela.
     const pref = preferenciaDeTela(id);
-    refs.screenAudio.volume = pref.nivel;
-    refs.screenAudio.muted = pref.mudo || !deveTocar || ensurdecido;
+    aplicarVolume(refs.screenAudio, pref.nivel, pref.mudo || !deveTocar || ensurdecido);
     if (deveTocar && !pref.mudo && !ensurdecido) garantirReproducao(refs.screenAudio);
   });
 }

@@ -369,6 +369,16 @@ sufixo sorteado a cada entrada (`Ana#3f2a91c0`), então lembrar por ela seria n�
 Pelo nome, o ajuste sobrevive a sair e voltar — e é o mesmo motivo pelo qual o volume do bot
 vale em qualquer sala: o nome dele é sempre o mesmo.
 
+**O volume de cada pessoa (e do bot) vai de 0 a 200%.** O número fica sempre ao lado do
+controle — apagado em 100%, aceso quando mudou, âmbar acima de 100% —, e clicar nele volta a
+100%, que também "gruda" quando a régua passa perto. Até 100% o `<audio>` toca sozinho, como
+sempre; acima disso o som sai pelo Web Audio, com um ganho, e o elemento continua tocando mudo
+(no Chromium, o áudio remoto do WebRTC fica em silêncio no Web Audio se nenhum elemento o
+tocar). Com um fone escolhido nas configurações, o reforço só vale onde o navegador deixa o
+contexto de áudio tocar nele; onde não deixa, fica em 100%. O volume do bot **para a sala
+inteira** (`!volume`) continua indo a 150%: ele é aplicado no próprio servidor, e acima disso
+o corte distorce o som de todo mundo.
+
 Três decisões contêm o tamanho disso. Só se guarda o que foi **mudado** (voltar ao padrão apaga
 a entrada em vez de gravar o padrão); a lista tem **teto de 40 pessoas**, descartando quem foi
 ajustado há mais tempo; e a gravação é **adiada**, porque arrastar um controle de volume dispara
@@ -1309,6 +1319,9 @@ recupera uma conta colando o `.txt` do código inteiro.
 `npm run test:fila` (porta `:3225`, sem servidor de mídia) mexe na fila de música com duas
 pessoas (tocar a seguir, teclado, arrastar, mover para uma posição, tirar, esvaziar), edita o
 perfil de dentro da sala e confere o aviso de atualização de um aplicativo antigo.
+`npm run test:volume` (porta `:3227`, com o servidor de mídia) põe uma pessoa em 150% e mede o
+sinal que sai do ganho, confere que 100% gruda, que o clique no número desfaz o ajuste, que o
+volume é lembrado ao recarregar e que ensurdecer cala o reforço.
 `npm run test:planos` (porta `:3223`, com o servidor de mídia) confere o cadeado do seletor, a
 tela sem conta subindo em 720p e ficando, e a tela acima do plano sendo avisada e desligada — só
 ela. Os testes antigos de mídia rodam com as duas janelas de transição ligadas

@@ -29,6 +29,7 @@ npm run test:painel   # painel de telemetria
 npm run test:soundboard
 npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
+npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
 ```
 
 ## Idioma

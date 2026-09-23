@@ -170,13 +170,13 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 #zoomLevelLabel { min-width:32px; font-size:10px; text-align:center; color:var(--muted); }
 /* O som de quem está no palco se ajusta aqui mesmo. A divisória só existe quando o controle
    existe: [hidden] some da tela, mas continua casando o seletor irmão. */
-.stage-volume { width:106px; margin:0 3px 0 1px; gap:2px; }
+.stage-volume { width:146px; margin:0 3px 0 1px; gap:2px; }
 .stage-volume .volume-slider { height:4px; }
 .stage-controls .mute-peer-btn { padding:5px 7px; color:#cdc6e2; }
 .stage-volume:not([hidden]) + button { margin-left:3px; padding-left:11px; border-left:1px solid #ffffff14; border-radius:0; }
 /* Palco estreito (grade em duas colunas, celular deitado): fica o mudo, que é o controle
    que resolve rápido; o nível continua no quadradinho. */
-@container (max-width:560px) { .stage-volume { width:auto; } .stage-volume .volume-slider { display:none; } }
+@container (max-width:560px) { .stage-volume { width:auto; } .stage-volume .volume-slider,.stage-volume .volume-valor:not(.alterado) { display:none; } }
 .stage.ocioso .stage-label,.stage.ocioso .stage-controls { opacity:0; transform:translateY(6px); pointer-events:none; }
 .stage.ocioso.controles-teclado .stage-controls:focus-within { opacity:1; transform:none; pointer-events:auto; }
 .stage.ocioso:fullscreen,.stage.ocioso:-webkit-full-screen { cursor:none; }
@@ -248,6 +248,16 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 /* Sem áudio nenhum para ajustar, a linha inteira se apaga junta — antes só os controles
    ficavam cinzas e o trilho continuava aceso, como se ainda houvesse o que arrastar. */
 .volume-row:has(.volume-slider:disabled) { opacity:.4; }
+/* O volume escolhido, sempre à vista e sem pedir atenção: apagado em 100%, aceso quando
+   mudou, âmbar quando passa de 100% -- e aí a régua fica âmbar também, porque som reforçado
+   é o que pode distorcer. Clicar volta a 100%. */
+.volume-valor { flex:none; min-width:38px; padding:2px 4px; border-radius:var(--r-xs); background:transparent; color:var(--faint); font-size:var(--fs-meta); font-weight:600; font-variant-numeric:tabular-nums; text-align:center; line-height:1.3; }
+.volume-valor:disabled { opacity:.8; cursor:default; }
+.volume-valor.alterado { color:var(--accent-texto); background:var(--accent-suave); }
+.volume-valor.alterado:hover:not(:disabled) { background:var(--accent-suave-hi); color:#fff; }
+.volume-valor.reforcado { color:var(--aviso); background:var(--aviso-suave); }
+.volume-valor.reforcado:hover:not(:disabled) { background:#e8c07a33; color:#ffe2ad; }
+.volume-row:has(.volume-valor.reforcado) .volume-slider { accent-color:var(--aviso); }
 .peer-audio,.screen-audio { display:none; }
 .status-line { grid-row:4; color:#9b95ac; font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
 .control-bar { grid-area:barra; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--line); background:#191923; padding:12px 16px; }
@@ -818,7 +828,7 @@ button[aria-busy="true"] { cursor:progress; }
 .multi-barra { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
 /* A grade mostra várias telas ao mesmo tempo e cada uma tem o próprio som: sem volume aqui,
    equilibrar duas transmissões exigia fechar a grade e caçar o quadradinho lá embaixo. */
-.multi-volume { flex:1 1 96px; min-width:84px; max-width:170px; margin-top:0; }
+.multi-volume { flex:1 1 130px; min-width:118px; max-width:210px; margin-top:0; }
 .multi-volume .volume-slider { height:4px; }
 .multi-volume .mute-peer-btn { color:#d6cfe9; padding:4px; }
 .multi-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-left:auto; }
