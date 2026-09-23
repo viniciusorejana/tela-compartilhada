@@ -161,7 +161,14 @@ componente('nexo-uso', ({ contabilidade: c, atual: a }) => [
   ...titulo('O tamanho das conversas', 'Distribuição por tempo de sala, sem contar bots. Duração e permanência são das sessões de sinalização concluídas.'),
   e('div', { class: 'metricas' }, metrica('Salas ativas agora', numero(a?.salas.length, 0)), metrica('Duração média de sala', duracao(c?.uso.duracaoMedia)), metrica('Permanência média', duracao(c?.uso.permanenciaMedia))),
   e('div', { class: 'colunas' }, e('div', {}, e('h4', {}, 'Tempo em cada tamanho'), ...barras('Tempo acumulado por tamanho de sala', Object.entries(c?.uso.distribuicao || { '1': 0, '2': 0, '3–6': 0, '7–15': 0, '16+': 0 }).map(([nome, valor]) => ({ nome: `${nome} pessoa${nome === '1' ? '' : 's'}`, valor })), duracao)), e('div', {}, e('h4', {}, 'Salas simultâneas'), serie('Histórico de simultaneidade de salas', c?.uso.serie || [], 'pico', v => numero(v, 0)))),
-  e('p', { class: 'nota' }, 'Salas e sessões ainda abertas não entram na média de duração. Uma queda de conexão encerra a sessão de sinalização; não comprova que a pessoa deixou de assistir.')
+  e('p', { class: 'nota' }, 'Salas e sessões ainda abertas não entram na média de duração. Uma queda de conexão encerra a sessão de sinalização; não comprova que a pessoa deixou de assistir.'),
+  // O teto de pessoas começou em números de partida. É esta linha que diz se eles estão certos.
+  e('h4', {}, `Teto de pessoas · ${numero(a?.teto?.base, 0)} por sala, ${numero(a?.teto?.comAssinante, 0)} com alguém premium`),
+  e('div', { class: 'metricas' },
+    metrica('Salas no teto base agora', numero(a?.teto?.salasNoTetoBase, 0)),
+    metrica('Pico de salas no teto · período', numero(c?.teto?.picoSalasNoTeto, 0)),
+    metrica('Entradas recusadas por lotação · período', numero(c?.teto?.recusasPorLotacao, 0))),
+  e('p', { class: 'nota' }, 'Uma sala de 50 assistindo em tela cheia a uma tela em 1440p são uns 300 Mbps numa sala só. Muitas salas encostando no teto base pedem um número maior; recusas frequentes, também.')
 ]);
 componente('nexo-salas', ({ atual: a, contabilidade: c }) => [
   ...titulo('Publicando agora', 'Vista operacional atual. Nomes e estados desta lista não são persistidos no histórico de uso.'),
@@ -169,7 +176,7 @@ componente('nexo-salas', ({ atual: a, contabilidade: c }) => [
   tabela('Faixas confirmadas pelo SFU', ['Sala', 'Participante', 'Tipo', 'Faixas publicadas'], (a?.sfu.participantesAtuais || []).map(p => [p.sala, p.nome || 'Sem nome', p.bot ? 'Bot' : 'Pessoa', p.faixas.map(f => `${({ camera: 'Câmera', microphone: 'Voz', screen_share: 'Tela', screen_share_audio: 'Som da tela' })[f.fonte] || f.fonte}${f.altura ? ` · ${f.largura}×${f.altura}${f.altura >= 1440 ? ' · 1440p+' : ''}` : ''}${f.muda ? ' · muda' : ''}`).join('; ') || 'Sem faixa'])),
   e('details', {}, e('summary', {}, 'Ver presença e estado declarados no chat'), tabela('Estado informado pelos navegadores', ['Sala', 'Nome', 'Câmera', 'Tela', 'Microfone'], (a?.salas || []).flatMap(s => s.membros.map(m => [s.sala, m.nome, m.estadoDeclarado.camera ? 'Ligada' : 'Desligada', m.estadoDeclarado.screen ? 'Ligada' : 'Desligada', m.estadoDeclarado.micMuted ? 'Mudo' : 'Ativo'])))),
   e('details', {}, e('summary', {}, 'Telas em 1440p no período'), serie('Telas publicadas em 1440p ou mais', c?.telas1440 || [], 'quantidade', v => numero(v, 0)), e('p', { class: 'nota' }, 'Maior quantidade observada em cada janela, sem nomes. A publicação informa o perfil; não prova qual camada foi recebida. Compartilhamentos breves entre coletas podem não aparecer.')),
-  e('p', { class: 'nota' }, `Última reconciliação com o SFU: ${quando(a?.sfu.reconciliadoEm)}. A resolução é a informada na publicação; 1440p é uso legítimo, sem bloqueio por resolução.`)
+  e('p', { class: 'nota' }, `Última reconciliação com o SFU: ${quando(a?.sfu.reconciliadoEm)}. A resolução é a informada na publicação. 1440p é do premium: uma tela acima do plano de quem transmite recebe um aviso e, sem ajuste em poucos segundos, é desligada -- só a tela, não a pessoa.`)
 ]);
 // ---------- O que as pessoas relataram ----------
 //
@@ -253,6 +260,113 @@ class Relatos extends HTMLElement {
   }
 }
 customElements.define('nexo-relatos', Relatos);
+
+// ---------- Contas e planos ----------
+//
+// Busca própria, como os relatos: é uma lista paginada de quem abriu a seção, e não algo que
+// viaja a cada dez segundos para cada painel aberto. O premium marcado aqui é o atalho do
+// roteiro para receber de apoiadores por PIX antes de a integração de pagamento existir.
+const dataCurta = n => n ? new Date(n).toLocaleDateString('pt-BR') : '—';
+const descreverPlano = c => c.nivel === 'premium' ? `premium${c.planoAte ? ` até ${dataCurta(c.planoAte)}` : ' sem prazo'}`
+  : c.plano === 'premium' ? `premium vencido em ${dataCurta(c.planoAte)}` : 'grátis';
+class Contas extends HTMLElement {
+  connectedCallback() {
+    this.dados = null; this.falhou = ''; this.aviso = ''; this.busca = ''; this.paginas = [''];
+    this.escolhida = null;
+    this.buscar();
+  }
+  async buscar(antes = '') {
+    this.carregando = true; this.pintar();
+    try {
+      const resposta = await fetch(`/painel/api/contas?busca=${encodeURIComponent(this.busca)}&antes=${encodeURIComponent(antes)}`);
+      if (resposta.status === 401) { location.assign('/painel/entrar'); return; }
+      if (!resposta.ok) throw new Error();
+      this.dados = await resposta.json(); this.falhou = '';
+      if (this.escolhida) this.escolhida = this.dados.contas.find(c => c.codigo === this.escolhida.codigo) || null;
+    } catch (_) { this.falhou = 'Não foi possível ler as contas.'; }
+    finally { this.carregando = false; this.pintar(); }
+  }
+  async agir(corpo) {
+    const conta = this.escolhida;
+    if (!conta) return;
+    try {
+      const resposta = await fetch(`/painel/api/contas/${encodeURIComponent(conta.codigo)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexo-CSRF': lerEstado().csrf || '' }, body: JSON.stringify(corpo)
+      });
+      const dados = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível alterar a conta.');
+      this.escolhida = dados.conta;
+      this.aviso = `${dados.conta.apelido} (@${dados.conta.usuario}): ${descreverPlano(dados.conta)}${dados.conta.suspensaAte && dados.conta.suspensaAte > Date.now() ? `, suspensa até ${dataCurta(dados.conta.suspensaAte)}` : ''}.`;
+      await this.buscar(this.paginas.at(-1));
+    } catch (erro) { this.aviso = erro.message; this.pintar(); }
+  }
+  pintar() {
+    const abertos = [...this.querySelectorAll('details')].map(d => d.open);
+    this.replaceChildren(...this.desenhar().flat(Infinity).filter(n => n != null));
+    this.querySelectorAll('details').forEach((d, i) => { d.open = abertos[i] || false; });
+  }
+  desenhar() {
+    const cabeca = titulo('Quem tem conta', 'Contas guardadas no banco desta máquina. Nada de senha, sessão ou id interno aparece aqui; a conta é achada pelo código.');
+    if (this.falhou) return [...cabeca, e('p', { class: 'aviso' }, this.falhou)];
+    const d = this.dados;
+    if (d?.ausente) return [...cabeca, vazio('Contas desligadas', 'Este servidor subiu sem o banco de contas.')];
+    const numeros = d?.contagens;
+    const campo = e('input', { type: 'search', placeholder: 'Usuário ou código (K7M2-PQ4X)', 'aria-label': 'Buscar conta por usuário ou código' });
+    campo.value = this.busca;
+    const buscar = e('button', { type: 'submit' }, 'Buscar');
+    const formulario = e('form', { class: 'busca-contas', role: 'search' }, campo, buscar);
+    formulario.addEventListener('submit', evento => { evento.preventDefault(); this.busca = campo.value.trim(); this.paginas = ['']; this.buscar(); });
+    const linhas = (d?.contas || []).map(c => {
+      const tr = e('tr', { class: `linha-conta${this.escolhida?.codigo === c.codigo ? ' escolhida' : ''}`, tabindex: '0' },
+        [c.apelido, `@${c.usuario}`, c.codigo, descreverPlano(c) + (c.suspensaAte && c.suspensaAte > Date.now() ? ' · suspensa' : ''), dataCurta(c.criadaEm), dataCurta(c.vistaEm)].map(v => e('td', {}, v)));
+      const escolher = () => { this.escolhida = c; this.aviso = ''; this.pintar(); };
+      tr.addEventListener('click', escolher);
+      tr.addEventListener('keydown', evento => { if (evento.key === 'Enter') escolher(); });
+      return tr;
+    });
+    const tabelaDeContas = linhas.length
+      ? e('div', { class: 'tabela', tabindex: '0', 'aria-label': 'Contas' }, e('table', {}, e('caption', {}, this.busca ? 'Resultado da busca' : 'Mais recentes primeiro. Clique numa conta para mudar o plano.'),
+        e('thead', {}, e('tr', {}, ['Apelido', 'Usuário', 'Código', 'Plano', 'Criada', 'Vista'].map(n => e('th', { scope: 'col' }, n)))), e('tbody', {}, linhas)))
+      : vazio(this.busca ? 'Nenhuma conta com esse usuário ou código' : 'Nenhuma conta ainda', 'As contas aparecem aqui assim que alguém se cadastrar em /conta.');
+    const paginacao = [];
+    if (!this.busca && this.paginas.length > 1) {
+      const voltar = e('button', { type: 'button', class: 'discreto' }, '← Mais recentes');
+      voltar.addEventListener('click', () => { this.paginas.pop(); this.buscar(this.paginas.at(-1)); });
+      paginacao.push(voltar);
+    }
+    if (!this.busca && d?.proxima) {
+      const seguir = e('button', { type: 'button', class: 'discreto' }, 'Mais antigas →');
+      seguir.addEventListener('click', () => { this.paginas.push(d.proxima); this.buscar(d.proxima); });
+      paginacao.push(seguir);
+    }
+    return [
+      ...cabeca,
+      e('div', { class: 'metricas' }, metrica('Contas', numero(numeros?.total, 0)), metrica('Premium ativos', numero(numeros?.premium, 0)), metrica('Suspensas agora', numero(numeros?.suspensas, 0))),
+      // Com poucos dias o gráfico teria duas barras esticadas até a largura inteira; o
+      // contêiner o mantém do tamanho de uma lista curta.
+      d?.cadastrosPorDia?.length ? e('div', { class: 'grafico-compacto' }, barras('Cadastros por dia · últimos 30 dias', d.cadastrosPorDia.slice(-14).map(x => ({ nome: x.dia.split('-').reverse().slice(0, 2).join('/'), valor: x.total })), v => numero(v, 0))) : null,
+      formulario, this.aviso ? e('p', { class: 'nota', role: 'status' }, this.aviso) : null,
+      this.escolhida ? this.desenharAcoes(this.escolhida) : null,
+      tabelaDeContas, paginacao.length ? e('div', { class: 'busca-contas' }, paginacao) : null,
+      e('p', { class: 'nota' }, 'Premium à mão é o atalho para quem pagar por PIX direto, antes de a integração de pagamento existir. O prazo vence sozinho: vencido, a conta volta a transmitir como grátis, e a qualidade que a pessoa escolheu continua guardada para quando renovar.')
+    ];
+  }
+  desenharAcoes(conta) {
+    const dias = e('input', { type: 'number', min: '1', max: '3650', value: '30', 'aria-label': 'Dias' });
+    const botao = (rotulo, classe, acao) => { const b = e('button', { type: 'button', class: classe }, rotulo); b.addEventListener('click', acao); return b; };
+    const suspensa = conta.suspensaAte && conta.suspensaAte > Date.now();
+    return e('div', { class: 'acoes-conta' },
+      e('strong', {}, `${conta.apelido} · @${conta.usuario} · ${conta.codigo}`),
+      e('div', { class: 'botoes' },
+        dias, e('span', { class: 'nota' }, 'dias'),
+        botao('Premium por estes dias', '', () => this.agir({ acao: 'premium', dias: Number(dias.value) })),
+        botao('Premium sem prazo', 'secundario', () => this.agir({ acao: 'premium' })),
+        conta.plano === 'premium' ? botao('Voltar ao grátis', 'secundario', () => this.agir({ acao: 'gratis' })) : null,
+        suspensa ? botao('Reativar', 'secundario', () => this.agir({ acao: 'reativar' }))
+          : botao('Suspender por estes dias', 'perigo', () => { if (confirm(`Suspender ${conta.apelido}? A conta sai de todos os aparelhos agora.`)) this.agir({ acao: 'suspender', dias: Number(dias.value) }); })));
+  }
+}
+customElements.define('nexo-contas', Contas);
 
 componente('nexo-recursos', ({ atual: a, contabilidade: c }) => {
   const r = a?.recursos, s = a?.sfu;

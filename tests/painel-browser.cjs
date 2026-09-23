@@ -69,6 +69,24 @@ async function primeiroDia() {
     await sala.goto(servidor.origem + '/squad-teste/sala'); await sala.locator('#nameInput').fill('Teste sem mídia'); await sala.locator('#nameConfirmBtn').click();
     await sala.waitForFunction(() => socket?.connected && tiles.has('self'));
     assert.ok(await sala.evaluate(() => Boolean(credencialSessao && myId === identidadeSessao)));
+    // O teto de pessoas aparece em "Salas e uso": é ele que diz se 25 e 50 são os números certos.
+    await pagina.waitForFunction(() => document.querySelector('nexo-uso').textContent.includes('Teto de pessoas · 25 por sala'));
+
+    // ---------- Contas e planos: o atalho de premium à mão ----------
+    const { conta } = await servidor.conta('apoiadora', { apelido: 'Apoiadora' });
+    await pagina.locator('a[href="#contas"]').click();
+    const contas = pagina.locator('nexo-contas');
+    await contas.getByRole('button', { name: 'Buscar' }).click();
+    await contas.locator('.linha-conta').filter({ hasText: '@apoiadora' }).waitFor();
+    assert.equal(await contas.innerText().then(t => t.includes('scrypt')), false, 'nada de hash no painel');
+    await contas.locator('.linha-conta').filter({ hasText: '@apoiadora' }).click();
+    await contas.locator('.acoes-conta input[type="number"]').fill('45');
+    await contas.getByRole('button', { name: 'Premium por estes dias' }).click();
+    await contas.locator('.linha-conta').filter({ hasText: /premium até/ }).waitFor();
+    await contas.screenshot({ path: path.join(saida, 'contas.png') });
+    const lida = await (await contexto.request.get(`${servidor.origem}/painel/api/contas?busca=${conta.codigo}`)).json();
+    assert.equal(lida.contas[0].nivel, 'premium');
+    assert.ok(lida.contas[0].planoAte > Date.now() + 44 * 86400000);
   } finally { await contexto.close(); await servidor.encerrar(); }
 }
 async function midiaReal() {

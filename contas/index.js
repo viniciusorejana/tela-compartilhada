@@ -15,6 +15,7 @@ const regras = require('./regras');
 const { criarAntiabuso, regrasDoAmbiente } = require('../telemetria/abuso');
 const { protegerPasta } = require('../telemetria/autenticacao');
 const perfilComum = require('../public/perfil');
+const planos = require('../public/planos');
 
 const MINUTO = 60000;
 const DIA = 24 * 60 * MINUTO;
@@ -79,8 +80,73 @@ function criarContas({
   function publica(conta) {
     return {
       usuario: conta.usuario, apelido: conta.apelido, codigo: regras.formatarCodigo(conta.codigo),
-      plano: conta.plano, planoAte: conta.planoAte, email: conta.email, criadaEm: conta.criadaEm
+      plano: conta.plano, planoAte: conta.planoAte, nivel: planos.nivelDaConta(conta, agora()),
+      email: conta.email, criadaEm: conta.criadaEm
     };
+  }
+
+  // O nível que vale AGORA para esta conta. Lido do banco a cada pergunta: o painel pode ter
+  // acabado de marcá-la como premium, e o prazo vence sozinho.
+  const nivelDaConta = contaId => planos.nivelDaConta(contaId ? banco.contaPorId(contaId) : null, agora());
+
+  // ---------- O painel ----------
+  //
+  // O que quem administra vê de cada conta: nada de hash, nada de sessão, nada de id interno --
+  // a conta é achada pelo código, que é público de qualquer jeito.
+  function paraOPainel(conta) {
+    return {
+      usuario: conta.usuario, apelido: conta.apelido, codigo: regras.formatarCodigo(conta.codigo),
+      plano: conta.plano, planoAte: conta.planoAte, nivel: planos.nivelDaConta(conta, agora()),
+      criadaEm: conta.criadaEm, vistaEm: conta.vistaEm, suspensaAte: conta.suspensaAte
+    };
+  }
+
+  // Paginado, e só pelo painel: nenhuma varredura no caminho de um pedido de sala. A busca é
+  // exata, pelo usuário ou pelo código -- sem `LIKE`, que não se comporta igual nos dois bancos.
+  function listarParaOPainel({ busca = '', antes = '', porPagina = 25 } = {}) {
+    const instante = agora();
+    const numeros = banco.contagens(instante, instante - 30 * DIA);
+    const porDia = new Map();
+    for (const criada of numeros.criadas) {
+      const dia = new Date(criada).toISOString().slice(0, 10);
+      porDia.set(dia, (porDia.get(dia) || 0) + 1);
+    }
+    let lista, proxima = null;
+    if (String(busca).trim()) {
+      const porUsuario = banco.contaPorUsuario(regras.normalizarUsuario(busca));
+      const codigo = regras.normalizarCodigo(busca);
+      const porCodigo = codigo.length === regras.TAMANHO_DO_CODIGO ? banco.contaPorCodigo(codigo) : null;
+      lista = [...new Map([porUsuario, porCodigo].filter(Boolean).map(c => [c.id, c])).values()];
+    } else {
+      const ultima = antes ? banco.contaPorCodigo(regras.normalizarCodigo(antes)) : null;
+      lista = banco.listarContas({ antesDe: ultima ? { criadaEm: ultima.criadaEm, id: ultima.id } : null, limite: porPagina + 1 });
+      if (lista.length > porPagina) { lista = lista.slice(0, porPagina); proxima = regras.formatarCodigo(lista.at(-1).codigo); }
+    }
+    return {
+      contagens: { total: numeros.total, premium: numeros.premium, suspensas: numeros.suspensas },
+      cadastrosPorDia: [...porDia].map(([dia, total]) => ({ dia, total })),
+      contas: lista.map(paraOPainel), proxima
+    };
+  }
+
+  // O atalho da fase 3: marcar premium à mão, com prazo, para quem pagar por PIX direto. É
+  // `plano` e `plano_ate` -- a mesma superfície que a webhook do pagamento vai mudar depois.
+  function agirPeloPainel(codigo, { acao, dias } = {}) {
+    const conta = banco.contaPorCodigo(regras.normalizarCodigo(codigo));
+    if (!conta) return falha(404, 'Conta não encontrada.');
+    const quantos = Number(dias);
+    const prazo = Number.isFinite(quantos) && quantos > 0 && quantos <= 3650 ? agora() + Math.round(quantos) * DIA : null;
+    if (acao === 'premium') banco.definirPlano(conta.id, 'premium', prazo);
+    else if (acao === 'gratis') banco.definirPlano(conta.id, 'gratis', null);
+    else if (acao === 'suspender') {
+      if (!prazo) return falha(400, 'Diga por quantos dias a conta fica suspensa.');
+      banco.definirSuspensao(conta.id, prazo);
+      // Suspensa, a conta sai de todos os aparelhos agora -- e não na próxima vez que alguém
+      // conferir o prazo.
+      banco.apagarOutrasSessoes(conta.id, '');
+    } else if (acao === 'reativar') banco.definirSuspensao(conta.id, null);
+    else return falha(400, 'Ação desconhecida.');
+    return { ok: true, contaId: conta.id, conta: paraOPainel(banco.contaPorId(conta.id)) };
   }
 
   async function cadastrar({ usuario, apelido, senha, agente }) {
@@ -276,7 +342,7 @@ function criarContas({
 
   return {
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, novaRecuperacao, apagar, publica,
-    perfil, salvarPerfil, salvarAjustes, dados,
+    perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
     banco, senhas, freio, suspensa, csrfDe,
     copiarAgora: () => tarefas ? tarefas.copiarAgora() : Promise.reject(new Error('Manutenção desligada.')),
     manutencao: () => tarefas?.estado() || null,

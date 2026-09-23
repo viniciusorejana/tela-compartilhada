@@ -60,7 +60,10 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
     env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, NEXO_PASTA_CONTAS: path.join(pasta, 'contas'),
       // Os testes anteriores às contas abrem salas sem conta, e é isso que eles testam: a sala.
       // Quem testa "só conta abre sala" desliga esta janela com NEXO_ANONIMO_ABRE_SALA=0.
-      NEXO_ANONIMO_ABRE_SALA: '1', ...ambiente },
+      NEXO_ANONIMO_ABRE_SALA: '1',
+      // Pelo mesmo motivo, os testes de mídia transmitem sem o teto dos planos: eles escolhem
+      // 1080p e 1440p a 60 quadros sem conta. Quem testa os planos liga com NEXO_PLANOS=1.
+      NEXO_PLANOS: '0', ...ambiente },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let erros = ''; filho.stderr.on('data', p => { erros = (erros + p).slice(-16000); });
   async function encerrar() {

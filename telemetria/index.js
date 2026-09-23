@@ -14,7 +14,7 @@ const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
 const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
-function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null }) {
+function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, aoFaixaDeTela = () => {}, tetoDePessoas = null }) {
   const auth = criarAutenticacao();
   const alertas = criarAlertas({ pasta: PASTA_PRIVADA });
   let regras = {};
@@ -42,6 +42,9 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
     if (evento.tipo === 'track_published') eventosSfu.publicacoes++;
     if (!sessao) return;
     sessao.ultimo = Date.now();
+    // A tela publicada segue para a conferência do teto do plano (server.js). O evento já
+    // chega ligado à sessão -- é a sessão que sabe a conta, e a conta que sabe o plano.
+    if (evento.tipo === 'track_published' && evento.fonte === 'screen_share' && evento.faixa) aoFaixaDeTela(sessao, evento.faixa);
     const con = { ...contexto(sessao), fonte: evento.fonte };
     const recente = Date.now() - evento.quando < 15000 && sfu.diagnostico().uptime > 60;
     if (evento.tipo === 'track_published') {
@@ -59,10 +62,10 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
   const recursos = criarRecursos({ pid: () => sfu.diagnostico().pid });
   function vivo() {
     const ativos = [...salas()].slice(0, 512).map(([sala, membros]) => ({ sala, pessoas: membros.size, membros: [...membros.values()].map(m => ({ nome: m.name, estadoDeclarado: m.state })) }));
-    return { em: Date.now(), revisao, salas: ativos, abuso: abuso.resumo(), origens: origens.resumo(), limites: abuso.regras, alertas: alertas.listar(), sfu: { ...sfu.diagnostico(), ...observador.resumo() }, eventosSfu, recursos: recursos.resumo(), soundboard: soundboard.usoGlobal(), coleta: { banda: medicao.estado(), uso: gravadorUso.estado(), alertas: alertas.estado(), relatos: relatos.estado() } };
+    return { em: Date.now(), revisao, salas: ativos, teto: tetoDePessoas?.() || null, abuso: abuso.resumo(), origens: origens.resumo(), limites: abuso.regras, alertas: alertas.listar(), sfu: { ...sfu.diagnostico(), ...observador.resumo() }, eventosSfu, recursos: recursos.resumo(), soundboard: soundboard.usoGlobal(), coleta: { banda: medicao.estado(), uso: gravadorUso.estado(), alertas: alertas.estado(), relatos: relatos.estado() } };
   }
   const relatos = criarRelatos();
-  const rotas = instalarRotas(app, { auth, relatos, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
+  const rotas = instalarRotas(app, { auth, relatos, contas, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
 
   // ---------- "Não está funcionando" chegando até aqui ----------
   //
@@ -256,7 +259,11 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
   const timers = [];
   const repetir = (fn, ms) => { const t = setInterval(() => Promise.resolve(fn()).catch(() => {}), ms); t.unref?.(); timers.push(t); };
   async function fecharJanela() {
-    await gravadorUso.gravar([{ ...uso.fechar(), picoRedeMbps: recursos.retirarPico(), picoLacoMs: recursos.retirarPicoDoLaco(), eventosSfu, telas1440: picoTelas1440 }]);
+    // O teto de pessoas no histórico: quantas salas encostaram nele e quantas entradas ele
+    // recusou. É o que diz se 25 e 50 são os números certos.
+    const teto = tetoDePessoas?.({ zerar: true });
+    await gravadorUso.gravar([{ ...uso.fechar(), picoRedeMbps: recursos.retirarPico(), picoLacoMs: recursos.retirarPicoDoLaco(), eventosSfu, telas1440: picoTelas1440,
+      salasNoTetoBase: teto?.salasNoTetoBase ?? null, recusasPorLotacao: teto?.recusas ?? null }]);
     picoTelas1440 = null;
     eventosSfu = { publicacoes: 0, republicacoes: 0, entradas: 0, saidas: 0 }; revisao++; leitor.invalidar();
     sessoes.limpar(); if (!auth.falha()) await alertas.gravar();
@@ -269,7 +276,17 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
       picoTelas1440 = Math.max(picoTelas1440 || 0, total);
     }
   }, 15000);
-  repetir(observador.reconciliar, 30000); repetir(recursos.disco, 300000); repetir(fecharJanela, 60000);
+  // A reconciliação também confere o teto das telas: a webhook só avisa na publicação, e a
+  // resolução pode subir depois dela.
+  repetir(async () => {
+    await observador.reconciliar();
+    for (const p of observador.resumo().participantesAtuais) {
+      const sessao = sessoes.localizar(p.sala, p.identidade);
+      if (!sessao) continue;
+      for (const faixa of p.faixas) if (faixa.fonte === 'screen_share' && !faixa.muda) aoFaixaDeTela(sessao, faixa);
+    }
+  }, 30000);
+  repetir(recursos.disco, 300000); repetir(fecharJanela, 60000);
   recursos.coletar().catch(() => {}); recursos.disco().catch(() => {});
   return { prepararSessao, instalarSocket, entrou, saiu, soundboardHttp, downloadPermitido, agentePermitido, comecarBusca, limitarOrigem, sessoes,
     alertar: alertas.adicionar,

@@ -52,6 +52,13 @@ function interpretarPrometheus(texto) {
   return resultado;
 }
 
+// A maior dimensão que a faixa declara: a da faixa, ou a da maior camada do simulcast -- a
+// mudança de resolução no meio da transmissão atualiza as camadas, e não sempre a faixa.
+function dimensaoDaFaixa(faixa, eixo) {
+  const camadas = Array.isArray(faixa?.layers) ? faixa.layers.map(c => Number(c?.[eixo]) || 0) : [];
+  return Math.max(Number(faixa?.[eixo]) || 0, ...camadas, 0);
+}
+
 function criarObservador({ sfu, aoEvento = () => {}, agora = Date.now } = {}) {
   const vistos = new Map(), participantes = new Map();
   let coleta = null, reconciliando = null, anterior = null, atual = { disponivel: false }, reconciliadoEm = null, ultimaLimpeza = -Infinity, proximaSala = 0;
@@ -75,11 +82,15 @@ function criarObservador({ sfu, aoEvento = () => {}, agora = Date.now } = {}) {
       if (!p && participantes.size < 2048) { p = { sala, identidade, nome: String(evento.participant.name || '').slice(0, 40), faixas: new Map(), visto: agora() }; participantes.set(chave, p); }
       if (p) {
         p.visto = agora();
-        if (evento.event === 'track_published' && p.faixas.size < 16) p.faixas.set(evento.track?.sid, { fonte: fonte(evento.track?.source), largura: Number(evento.track?.width) || 0, altura: Number(evento.track?.height) || 0, muda: Boolean(evento.track?.muted) });
+        if (evento.event === 'track_published' && p.faixas.size < 16) p.faixas.set(evento.track?.sid, { sid: evento.track?.sid, fonte: fonte(evento.track?.source), largura: Number(evento.track?.width) || 0, altura: Number(evento.track?.height) || 0, muda: Boolean(evento.track?.muted) });
         if (evento.event === 'track_unpublished') p.faixas.delete(evento.track?.sid);
       }
     }
-    aoEvento({ tipo: evento.event, sala, identidade, fonte: fonte(evento.track?.source), quando: Number(evento.createdAt) * 1000 }); return true;
+    // Largura e altura seguem adiante: é com elas que o teto do plano é conferido no
+    // servidor (server.js). Elas vêm da publicação, e é o que o servidor de mídia registra.
+    aoEvento({ tipo: evento.event, sala, identidade, fonte: fonte(evento.track?.source), quando: Number(evento.createdAt) * 1000,
+      faixa: evento.track ? { sid: String(evento.track.sid || ''), largura: dimensaoDaFaixa(evento.track, 'width'), altura: dimensaoDaFaixa(evento.track, 'height'), muda: Boolean(evento.track.muted) } : null });
+    return true;
   }
   async function coletar() {
     if (coleta) return coleta;
@@ -118,7 +129,7 @@ function criarObservador({ sfu, aoEvento = () => {}, agora = Date.now } = {}) {
           for (const p of (resposta.participants || []).slice(0, 2048)) {
             const chave = `${sala.name}|${p.identity}`; presentes.add(chave);
             if (!participantes.has(chave) && participantes.size >= 2048) continue;
-            participantes.set(chave, { sala: sala.name, identidade: p.identity, nome: String(p.name || '').slice(0, 40), visto: agora(), faixas: new Map((p.tracks || []).slice(0, 16).map(t => [t.sid, { fonte: fonte(t.source), largura: t.width || 0, altura: t.height || 0, muda: Boolean(t.muted) }])) });
+            participantes.set(chave, { sala: sala.name, identidade: p.identity, nome: String(p.name || '').slice(0, 40), visto: agora(), faixas: new Map((p.tracks || []).slice(0, 16).map(t => [t.sid, { sid: t.sid, fonte: fonte(t.source), largura: dimensaoDaFaixa(t, 'width'), altura: dimensaoDaFaixa(t, 'height'), muda: Boolean(t.muted) }])) });
           }
         }
       }
@@ -136,4 +147,4 @@ function criarObservador({ sfu, aoEvento = () => {}, agora = Date.now } = {}) {
   }
   return { receber, coletar, reconciliar, resumo, validar: (corpo, auth) => sfu.validarWebhook(corpo, auth), tamanho: () => vistos.size };
 }
-module.exports = { pedir, validarWebhook, interpretarPrometheus, criarObservador };
+module.exports = { pedir, validarWebhook, interpretarPrometheus, criarObservador, dimensaoDaFaixa };

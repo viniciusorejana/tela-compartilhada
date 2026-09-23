@@ -95,6 +95,37 @@ afirma que uma rajada de 20 logins não segura o laço de eventos por 100 ms.
 - **Nomes que se repetem** ganham um trecho do código na lista (`Ana · K7M2`); clicar na pessoa
   mostra o cartão de perfil com o código inteiro.
 
+### Os três níveis
+
+| | sem conta | conta grátis | premium |
+|---|:--:|:--:|:--:|
+| Transmitir tela | 720p a 30 quadros | 720p a 60 quadros | 1080p e 1440p a 60 |
+| Assistir telas | na qualidade de quem transmite | igual | igual |
+| Pessoas na sala | 25 | 25 | **leva a sala a 50** |
+
+Cobra-se resolução porque é o que custa no servidor — ele manda uma cópia por espectador — e
+nunca segurança. Quem assiste nunca é limitado: um assinante no grupo faz todo mundo ver a tela
+dele em 1080p, inclusive quem não tem conta. As regras moram em `public/planos.js`, lido igual
+pela página e pelo servidor.
+
+- **O seletor mostra o que o plano não libera, com cadeado**, em vez de esconder. A escolha da
+  pessoa fica guardada mesmo acima do plano: quem deixou o premium vencer transmite em 720p e
+  volta sozinho ao 1440p ao renovar.
+- **O teto é conferido no servidor**, contra a resolução que o servidor de mídia registra (a
+  webhook de cada publicação e a reconciliação a cada 30 s), com **10% de folga**. Acima dele, o
+  servidor avisa pelo socket, espera 5 s para a página republicar menor e só então desliga a
+  **tela** com `MutePublishedTrack` — voz, câmera e chat continuam. O limite honesto disto: um
+  cliente modificado que declare 720 e mande 1440 não é pego, porque nenhuma API do servidor de
+  mídia mede a resolução que chega.
+- **O teto de pessoas** sobe quando há alguém premium presente; quem entra conta a si mesmo, e a
+  saída do assinante não remove ninguém — as novas entradas é que esperam.
+- **Premium à mão, pelo painel** (`/painel`, "Contas e planos"): com prazo em dias ou sem prazo, e
+  também suspender e reativar. É o atalho para receber de apoiadores por PIX direto antes de a
+  integração de pagamento existir; quem está numa sala recebe o plano novo na hora.
+- **Duas janelas de transição**, para o grupo que já usa o Nexo não perder nada no dia em que
+  isto subir: `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo
+  transmite como premium). A alternativa prevista no roteiro é o premium de cortesia pelo painel.
+
 ### O perfil, os dados e o apagar
 
 Em `/conta` a pessoa também edita o perfil (apelido, uma cor e uma marca de um conjunto pronto
@@ -971,6 +1002,9 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `CORS_ORIGIN` | vazio | Origens EXTRAS (separadas por vírgula) que podem abrir o Socket.IO e escrever na conta. A página servida por este servidor e a origem do `PUBLIC_URL` já valem sem configurar nada; qualquer outra é recusada |
 | `NEXO_PASTA_CONTAS` | `native/contas` | Onde fica o banco das contas (`nexo.db`) e as cópias diárias |
 | `NEXO_ANONIMO_ABRE_SALA` | `0` | `1` deixa quem não tem conta abrir sala. É a janela de transição do roteiro: o grupo que já usa continua abrindo salas enquanto cria as contas. Desligue quando todos tiverem conta |
+| `NEXO_PLANOS` | `1` | `0` desliga os tetos de resolução e de quadros dos planos: todo mundo transmite como premium. A outra janela de transição; o teto de pessoas continua valendo |
+| `NEXO_PESSOAS_POR_SALA` | `25,50` | Teto de pessoas por sala, sem e com alguém premium presente |
+| `NEXO_ESPERA_TETO_MS` | `5000` | Quanto tempo uma tela acima do plano tem para republicar menor antes de ser desligada |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
 | `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
@@ -1175,6 +1209,7 @@ tela-compartilhada/
     ├── conta.html, conta.css, conta.js # entrar, criar, recuperar, perfil, baixar e apagar
     ├── conta-cliente.js            # a conta dentro da sala: apelido e ajustes que seguem a pessoa
     ├── perfil.js                   # cores, marcas e a lista FECHADA do que sincroniza (servidor e página)
+    ├── planos.js                   # os três níveis e o teto de pessoas (servidor e página)
     ├── preferencias.js             # o leitor único das escolhas guardadas no navegador
     ├── sala.html, sala.css          # interface da sala
     ├── sala.js                     # captura, sinalização, chat e reprodução
@@ -1195,6 +1230,7 @@ npm test
 npm run test:browser
 npm run test:soundboard
 npm run test:contas
+npm run test:planos
 $env:TEST_BROWSER="webkit"
 npm run test:browser
 Remove-Item Env:TEST_BROWSER
@@ -1208,6 +1244,14 @@ de quem executa. As imagens de revisão ficam em `test-results/`, ignorado pelo 
 fontes de áudio ficam vivas ao mesmo tempo** — a única forma de verificar a regra de um som por
 pessoa, que só existe dentro da Web Audio de quem ouve. O tom de teste é sintetizado pelo
 próprio teste; não depende de arquivo no repositório nem do `ffmpeg`.
+
+`npm run test:contas` (porta `:3221`, sem servidor de mídia) cria conta pela tela, guarda o
+código de recuperação, muda o perfil, leva os ajustes a um segundo navegador (e confere que o
+microfone não vai junto), baixa e apaga os dados, e faz alguém sem conta esperar a sala abrir.
+`npm run test:planos` (porta `:3223`, com o servidor de mídia) confere o cadeado do seletor, a
+tela sem conta subindo em 720p e ficando, e a tela acima do plano sendo avisada e desligada — só
+ela. Os testes antigos de mídia rodam com as duas janelas de transição ligadas
+(`NEXO_ANONIMO_ABRE_SALA=1`, `NEXO_PLANOS=0`), porque testam a sala, e não os planos.
 
 `tests/musica.test.js` e `tests/soundboard.test.js` rodam sem rede: fixam o que não pode mudar
 sem alguém perceber — que o token do bot **não** autoriza receber mídia, que a mesa de sons

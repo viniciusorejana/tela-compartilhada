@@ -29,7 +29,7 @@ const iguais = (a, b) => {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 };
 
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false }) {
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
 
   app.use('/api/conta', (req, res, next) => {
@@ -81,8 +81,9 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     const achada = sessaoDoPedido(req, res);
     // `abrirSemConta` diz à página inicial se "Criar minha sala" pede conta: na janela de
     // transição (NEXO_ANONIMO_ABRE_SALA) ainda não pede.
-    if (!achada) return res.json({ conta: null, abrirSemConta });
-    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta });
+    // `planosLigados` diz à sala se ela deve mostrar os cadeados antes mesmo de entrar.
+    if (!achada) return res.json({ conta: null, abrirSemConta, planosLigados });
+    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta, planosLigados });
   });
 
   app.put('/api/conta/perfil', json, autenticada, (req, res) => {

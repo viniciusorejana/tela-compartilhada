@@ -169,9 +169,16 @@ carrega.
 Publicações e churn vêm de webhooks assinados: emissor, prazo e SHA-256 do corpo são
 conferidos; eventos repetidos são descartados. Primeiro minuto após subir o SFU e eventos
 atrasados não geram alertas de churn, para acomodar recuperação coletiva. Trocar codec ou
-qualidade continua permitido. 1440p é legítimo: a lista mostra resolução e o histórico guarda
-somente quantidade observada de telas. Publicar um perfil não prova qual camada foi recebida;
-compartilhamentos breves entre coletas podem não aparecer.
+qualidade continua permitido. A lista mostra resolução e o histórico guarda somente quantidade
+observada de telas. Publicar um perfil não prova qual camada foi recebida; compartilhamentos
+breves entre coletas podem não aparecer.
+
+A mesma webhook alimenta o **teto do plano** (server.js, `conferirTela`): uma tela publicada
+acima do plano de quem transmite, com 10% de folga, recebe um aviso pelo socket e, se continuar
+acima depois de `NEXO_ESPERA_TETO_MS` (5 s), é desligada com `MutePublishedTrack` — só a tela. A
+reconciliação de 30 s confere de novo, porque a resolução pode subir depois da publicação. A
+resolução conferida é a que o cliente declara ao servidor de mídia; um cliente modificado que
+declare menos do que manda não é pego.
 
 Flood persistente acima de 900 eventos/min pode desconectar a sessão no Socket.IO e no SFU,
 com bloqueio de um minuto. Sessões e origens novas continuam possíveis: a proteção do
@@ -191,6 +198,31 @@ npm run dev
 Veja os demais tetos, incluindo agente de áudio, em **Consultar os limites em vigor**.
 O download portátil preserva ETag/revalidação, Range, até três transferências simultâneas
 e 20 inícios em dez minutos por origem; seu mapa agora também tem teto de 2.048 origens.
+
+## Contas e planos no painel
+
+A seção **Contas e planos** busca por conta própria, paginada (25 por página, do cadastro mais
+novo para o mais antigo), como os relatos: não viaja no resumo de dez em dez segundos. Mostra
+quantas contas existem, quantas estão premium e quantas suspensas, os cadastros por dia dos
+últimos 30 dias, e a lista com apelido, usuário, código, plano, criação e último uso. Nada de
+senha, sessão ou id interno: a conta é achada pelo **código** (ou pelo usuário, na busca exata —
+sem `LIKE`, que se comporta diferente no SQLite e no Postgres).
+
+As ações, todas com CSRF como o resto das escritas do painel:
+
+- **Premium por N dias** ou **sem prazo** — o atalho do roteiro para receber por PIX direto antes
+  da integração de pagamento. Grava `conta.plano` e `conta.plano_ate`, a mesma superfície que a
+  webhook do pagamento vai mudar depois. Vencido o prazo, a conta volta sozinha ao grátis.
+- **Voltar ao grátis.**
+- **Suspender por N dias** e **reativar**. Suspender apaga as sessões da conta e a tira da sala em
+  que estiver — sinalização e mídia.
+
+Quem está numa sala recebe o plano novo na hora, pelo socket.
+
+**O teto de pessoas** aparece em **Salas e uso**: o teto em vigor (base e com alguém premium),
+quantas salas estão no teto base agora, o pico no período e quantas entradas foram recusadas por
+lotação. Os dois últimos vão para `uso.jsonl` a cada minuto (`salasNoTetoBase`,
+`recusasPorLotacao`), sem nome e sem sala. É esta linha que diz se 25 e 50 são os números certos.
 
 ## Coleta, retenção e recursos
 

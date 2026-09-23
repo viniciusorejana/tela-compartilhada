@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('node:path');
 const { origemDoPainel } = require('./origem');
 
-function instalarRotas(app, { auth, consultar, instante, relatos, pasta = path.join(__dirname, '..', 'painel') }) {
+function instalarRotas(app, { auth, consultar, instante, relatos, contas = null, pasta = path.join(__dirname, '..', 'painel') }) {
   const clientes = new Set();
   const periodos = ['hoje', '7d', '30d', 'tudo'];
   // A porta fecha antes de tudo: antes da chave, antes do cookie, antes de servir a própria
@@ -44,6 +44,22 @@ function instalarRotas(app, { auth, consultar, instante, relatos, pasta = path.j
   app.get('/painel/api/relatos', async (_req, res, next) => {
     if (!relatos) return res.json({ relatos: [], ausente: true, total: 0 });
     try { res.json(await relatos.listar()); } catch (erro) { next(erro); }
+  });
+  // As contas, como os relatos, ficam fora do resumo periódico: é uma busca de quem abriu a
+  // seção, paginada, e não algo que viaja a cada dez segundos para cada painel aberto.
+  app.get('/painel/api/contas', (req, res, next) => {
+    if (!contas) return res.json({ ausente: true, contas: [], contagens: null, cadastrosPorDia: [] });
+    try { res.json(contas.listar({ busca: String(req.query.busca || '').slice(0, 64), antes: String(req.query.antes || '').slice(0, 16) })); }
+    catch (erro) { next(erro); }
+  });
+  // Marcar premium à mão (o atalho que deixa receber de apoiadores por PIX antes da
+  // integração de pagamento), voltar ao grátis, suspender e reativar. A CSRF e a origem já
+  // foram conferidas por `auth.exigir`, como em toda escrita do painel.
+  app.post('/painel/api/contas/:codigo', express.json({ limit: 1024, strict: true }), (req, res) => {
+    if (!contas) return res.status(404).json({ erro: 'Contas indisponíveis.' });
+    const r = contas.agir(String(req.params.codigo || '').slice(0, 16), req.body || {});
+    if (!r.ok) return res.status(r.status || 400).json({ erro: r.error });
+    res.json({ conta: r.conta });
   });
   app.get('/painel/api/eventos', (req, res) => {
     if (clientes.size >= 10 || [...clientes].filter(c => c.id === req.sessaoPainel.id).length >= 3) return res.status(429).json({ erro: 'Há painéis demais abertos.' });

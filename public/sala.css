@@ -394,6 +394,10 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .gate-conta-link { display:block; text-align:center; margin-top:16px; color:#cbbcff; font-size:11px; }
 /* A marca escolhida no perfil é um símbolo de texto, não um emoji: a fonte de símbolos
    desenha todos no mesmo traço, e o avatar não vira um adesivo colorido no meio da lista. */
+/* O que o plano libera, dito antes da escolha. O cadeado nas opções é a oferta; esta linha é
+   a explicação dela. */
+.plano-dica { font-size:11.5px; line-height:1.6; color:#d8cdea; background:#8879f614; border:1px solid #8879f633; border-radius:10px; padding:10px 12px; margin:0 0 14px; }
+.plano-dica a { color:#cbbcff; }
 .perfil-topo { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
 .perfil-topo h2 { margin:0; word-break:break-word; }
 .perfil-topo .modal-sub { margin:4px 0 0; font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }

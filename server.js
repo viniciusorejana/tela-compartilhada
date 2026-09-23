@@ -32,11 +32,13 @@ const soundboard = require('./soundboard');
 const medicao = require('./medicao');
 const { criarModeracao } = require('./moderacao');
 const { criarSalas } = require('./salas');
+const planos = require('./public/planos');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
 const { instalarRotasDeContas } = require('./contas/rotas');
 const { formatarCodigo } = require('./contas/regras');
 const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/origem');
+const { dimensaoDaFaixa } = require('./telemetria/livekit');
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
 const moderacao = criarModeracao();
@@ -47,6 +49,21 @@ const moderacao = criarModeracao();
 // padrão.
 const ANONIMO_ABRE_SALA = (process.env.NEXO_ANONIMO_ABRE_SALA || '').trim() === '1';
 const salas = criarSalas({ anonimoAbre: ANONIMO_ABRE_SALA });
+// O teto de pessoas por sala: base e com um assinante presente. Os números de partida são 25
+// e 50 (public/planos.js); NEXO_PESSOAS_POR_SALA="base,comAssinante" ajusta sem mexer no código.
+const PESSOAS_POR_SALA = (() => {
+  const [base, comAssinante] = String(process.env.NEXO_PESSOAS_POR_SALA || '').split(',').map(Number);
+  return Number.isInteger(base) && base > 0 && Number.isInteger(comAssinante) && comAssinante >= base
+    ? { base, comAssinante } : planos.PESSOAS;
+})();
+// NEXO_PLANOS=0 desliga os tetos de RESOLUÇÃO e de quadros: todo mundo transmite como premium.
+// É a segunda janela de transição do roteiro -- o grupo atual transmite hoje em 1440p de graça,
+// e o premium de cortesia pelo painel é o caminho previsto; esta chave cobre o intervalo. O
+// teto de pessoas não depende dela.
+const PLANOS_LIGADOS = (process.env.NEXO_PLANOS || '').trim() !== '0';
+// Quanto tempo quem transmite acima do plano tem para republicar menor antes de a tela cair.
+// É o que um cliente honesto e desatualizado precisa; os testes encurtam.
+const MS_PARA_AJUSTAR_A_TELA = Number(process.env.NEXO_ESPERA_TETO_MS) > 0 ? Number(process.env.NEXO_ESPERA_TETO_MS) : 5000;
 // roomCode -> Map<socketId, { name, state, identidade, contaId, perfil }>. É o mapa do ciclo de
 // vida: quem entra e sai passa por `salas`, e o resto do servidor só o lê.
 const roomMembers = salas.mapa;
@@ -84,8 +101,12 @@ const io = new Server(server, {
 // vão para a telemetria, que só existe uma linha abaixo -- daí o `telemetria?.`.
 let telemetria = null;
 const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) });
-telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA });
+telemetria = iniciarTelemetria({
+  app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers,
+  contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
+  aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto
+});
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
@@ -222,6 +243,13 @@ app.get('/api/sala-config', (req, res) => {
   const { sessao, credencial: credencialSessao } = preparada;
   const identidade = sessao.identidade;
   res.set('Cache-Control', 'no-store');
+  // O plano vai para a página, que mostra o cadeado e não pede o que ele não libera. Quem
+  // confere de verdade é `conferirTela`, aqui no servidor.
+  const nivel = nivelDaSessao(sessao);
+  const plano = planoPublico(nivel);
+  if (!cabeNaSala(sala, { identidade, nivel })) {
+    return res.status(403).json({ error: MENSAGEM_SALA_CHEIA(), motivo: 'sala-cheia', publicUrl });
+  }
 
   // Consultar uma sala inexistente não cria estado permanente: bots varrendo códigos não
   // podem fazer estes mapas crescerem. O estado só nasce quando alguém efetivamente entra.
@@ -246,14 +274,14 @@ app.get('/api/sala-config', (req, res) => {
   }
 
   if (!sfu.estado.ativo) {
-    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, nome, credencialSessao });
+    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, nome, plano, credencialSessao });
   }
 
   // A retomada agora apresenta uma credencial privada da sessão. O sufixo visível aos
   // pares continua estável, mas conhecê-lo não permite assumir a sessão de outra pessoa.
   // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
   res.set('Cache-Control', 'no-store');
-  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, nome, publicUrl, credencialSessao });
+  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, nome, plano, publicUrl, credencialSessao });
 });
 
 // O que a sala vê de quem tem conta: cor, marca e o código permanente. O id da conta nunca
@@ -642,6 +670,102 @@ salas.aoFechar(sala => {
   moderacao.fechou(sala);
 });
 
+// ---------- Os planos ----------
+//
+// O que cada nível libera mora em public/planos.js, lido igual pela página e por aqui. A
+// página mostra o cadeado; quem CONFERE é o servidor -- limite só no cliente é sugestão, e no
+// dia em que resolução é o que se cobra, sugestão não serve.
+
+// O nível vale AGORA: lido da conta a cada pergunta, porque o painel pode ter acabado de
+// marcá-la premium e o prazo vence sozinho.
+const nivelDaSessao = sessao => (sessao?.contaId ? contas.nivelDaConta(sessao.contaId) : 'anonimo');
+// O nível que vale para a TELA: o da conta, ou premium para todos com os planos desligados.
+const nivelDaTela = nivel => (PLANOS_LIGADOS ? nivel : 'premium');
+const planoPublico = nivel => ({ nivel: nivelDaTela(nivel), nome: planos.NOMES[nivel], limites: planos.limites(nivelDaTela(nivel)), livre: !PLANOS_LIGADOS });
+
+// O teto de pessoas. Quem entra conta a si mesmo -- um assinante entra numa sala que está no
+// teto base, porque é a presença dele que o aumenta --, e quem já está (uma reconexão) nunca
+// é barrado por ele. Quando o assinante sai, ninguém é removido.
+let recusasPorLotacao = 0;
+function cabeNaSala(sala, { identidade, nivel }) {
+  const membros = [...(roomMembers.get(sala)?.values() || [])];
+  if (membros.some(m => m.identidade === identidade) || identidadesConhecidasPorSala.get(sala)?.has(identidade)) return true;
+  const cabe = planos.cabeNaSala({ presentes: salas.pessoas(sala), algumAssinante: membros.some(m => m.premium), entraAssinante: nivel === 'premium' }, PESSOAS_POR_SALA);
+  if (!cabe) recusasPorLotacao++;
+  return cabe;
+}
+const MENSAGEM_SALA_CHEIA = () => `A sala está cheia: ${PESSOAS_POR_SALA.base} pessoas. Com alguém premium na sala, o teto sobe para ${PESSOAS_POR_SALA.comAssinante}.`;
+
+// Para o painel: quantas salas encostam no teto é o que diz se os números de partida estão
+// certos. `zerar` fecha a janela de um minuto do histórico.
+function estadoDoTeto({ zerar = false } = {}) {
+  let noTetoBase = 0, cheias = 0;
+  for (const [sala, membros] of roomMembers) {
+    const pessoas = salas.pessoas(sala);
+    if (pessoas >= PESSOAS_POR_SALA.base) noTetoBase++;
+    if (pessoas >= planos.tetoDePessoas({ comAssinante: [...membros.values()].some(m => m.premium) }, PESSOAS_POR_SALA)) cheias++;
+  }
+  const estado = { ...PESSOAS_POR_SALA, salasNoTetoBase: noTetoBase, salasCheias: cheias, recusas: recusasPorLotacao };
+  if (zerar) recusasPorLotacao = 0;
+  return estado;
+}
+
+// O teto de resolução, conferido no servidor contra o que o servidor de mídia registra da
+// publicação (a webhook e a reconciliação periódica). Três passos, nesta ordem:
+//
+//   1. Folga de 10% (planos.js): a captura raramente entrega exatamente 720.
+//   2. Avisar primeiro, pelo socket, e dar alguns segundos para republicar menor. É o que um
+//      cliente honesto e desatualizado precisa -- o atual já não passa do teto sozinho.
+//   3. Só então desligar a faixa, com MutePublishedTrack. Desliga a TELA, não a pessoa: voz,
+//      câmera e chat continuam. A câmera já é capturada a 720p e não entra aqui.
+//
+// O que isto não pega: um cliente modificado que declare 720 e mande 1440. O servidor de mídia
+// registra a resolução declarada, e nenhuma API dele mede a que chega. É um limite conhecido.
+const avisosDeTela = new Map();   // sid da faixa -> timer
+function conferirTela(sessao, faixa) {
+  if (!PLANOS_LIGADOS || !sessao || !faixa?.sid || faixa.muda || avisosDeTela.has(faixa.sid)) return;
+  const nivel = nivelDaSessao(sessao);
+  if (!planos.excedeTeto(nivel, faixa.largura, faixa.altura)) return;
+  sessao.socket?.emit('limite-do-plano', { ...planoPublico(nivel), largura: faixa.largura, altura: faixa.altura, segundos: Math.ceil(MS_PARA_AJUSTAR_A_TELA / 1000) });
+  const timer = setTimeout(() => {
+    desligarTelaSeContinuar(sessao, faixa.sid).catch(() => { /* a próxima reconciliação confere de novo */ })
+      .finally(() => avisosDeTela.delete(faixa.sid));
+  }, MS_PARA_AJUSTAR_A_TELA);
+  timer.unref?.();
+  avisosDeTela.set(faixa.sid, timer);
+}
+async function desligarTelaSeContinuar(sessao, sid) {
+  const resposta = await sfu.consultar('ListParticipants', { room: sessao.sala });
+  const publicada = (resposta.participants || []).find(p => p.identity === sessao.identidade)?.tracks?.find(t => t.sid === sid);
+  // Republicou menor (outra faixa), parou de compartilhar ou já está muda: nada a fazer.
+  if (!publicada || publicada.muted) return;
+  const nivel = nivelDaSessao(sessao);
+  if (!planos.excedeTeto(nivel, dimensaoDaFaixa(publicada, 'width'), dimensaoDaFaixa(publicada, 'height'))) return;
+  await sfu.consultar('MutePublishedTrack', { room: sessao.sala, identity: sessao.identidade, track_sid: sid, muted: true });
+  sessao.socket?.emit('tela-desligada-pelo-plano', planoPublico(nivel));
+}
+
+// O atalho do painel (premium à mão, suspender) vale na hora para quem está numa sala: o plano
+// novo chega pelo socket, e a conta suspensa sai da sala -- sinalização e mídia.
+function agirNaContaPeloPainel(codigo, pedido) {
+  const r = contas.agirPeloPainel(codigo, pedido);
+  if (!r.ok) return r;
+  const nivel = contas.nivelDaConta(r.contaId);
+  const suspensa = Boolean(r.conta.suspensaAte && r.conta.suspensaAte > Date.now());
+  for (const membros of roomMembers.values()) {
+    for (const membro of membros.values()) if (membro.contaId === r.contaId) membro.premium = nivel === 'premium';
+  }
+  for (const socket of io.sockets.sockets.values()) {
+    const sessao = socket.data.sessaoNexo;
+    if (sessao?.contaId !== r.contaId) continue;
+    if (!suspensa) { socket.emit('plano-atualizado', planoPublico(nivel)); continue; }
+    socket.emit('removido-da-sala', { motivo: 'suspensa' });
+    sfu.consultar('RemoveParticipant', { room: sessao.sala, identity: sessao.identidade }).catch(() => {});
+    setTimeout(() => { try { socket.disconnect(true); } catch (_) { /* já saiu */ } }, MS_ATE_FECHAR_O_SOCKET);
+  }
+  return r;
+}
+
 // Quanto tempo o aviso de remoção tem para chegar antes de o socket ser fechado. Curto o
 // bastante para ninguém continuar na sala de verdade, longo o bastante para uma mensagem
 // atravessar a conexão -- ver o comentário no handler de `moderar`.
@@ -993,6 +1117,12 @@ io.on('connection', (socket) => {
       if (typeof callback === 'function') callback({ ok: false, error: 'A sala está trancada e sua entrada ainda não foi aprovada.' });
       return;
     }
+    // O teto de pessoas, de novo: entre a configuração e esta entrada a sala pode ter enchido.
+    const nivel = nivelDaSessao(sessao);
+    if (!cabeNaSala(roomCode, { identidade: sessao.identidade, nivel })) {
+      if (typeof callback === 'function') callback({ ok: false, motivo: 'sala-cheia', error: MENSAGEM_SALA_CHEIA() });
+      return;
+    }
     aprovadosDaSala(roomCode).delete(sessao.identidade);
     pedidosDaSala(roomCode).delete(sessao.identidade);
 
@@ -1009,7 +1139,7 @@ io.on('connection', (socket) => {
     // O perfil vai junto (cor, marca e código de quem tem conta); a conta, não -- ela fica no
     // membro, só no servidor, para a moderação e a mesa de sons saberem quem é quem.
     const peers = Array.from(salas.da(roomCode)?.entries() || []).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null }));
-    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null });
+    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium' });
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     // A conta também: é ela que deixa quem tem conta voltar de um F5 numa sala trancada, já
     // com outra identidade, sem pedir aprovação para entrar na própria sala.
@@ -1023,7 +1153,7 @@ io.on('connection', (socket) => {
       // com musica no ar e nao ver o que e (nem conseguir tocar um som que ja esta la)
       // faria parecer que aquilo nao e desta sala.
       callback({
-        ok: true, roomCode, selfId: socket.id, peers, perfil: sessao.perfil || null,
+        ok: true, roomCode, selfId: socket.id, peers, perfil: sessao.perfil || null, plano: planoPublico(nivel),
         // Quem manda na sala, e o que ESTA pessoa pode fazer. As duas coisas separadas: a
         // primeira desenha o selo na lista, a segunda decide se as ações aparecem. Mandar só
         // a primeira obrigaria o cliente a deduzir a segunda comparando identidades -- e a

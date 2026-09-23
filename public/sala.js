@@ -218,6 +218,7 @@ async function pedirConfigDaSala(nome) {
       const dados = await resposta.json().catch(() => ({}));
       if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
       if (dados.nome) nomeDaSessao = dados.nome;
+      if (dados.plano) aplicarPlano(dados.plano);
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) { esperandoAbrir = false; return dados; }
       if (dados.motivo === 'sala-fechada') {
@@ -322,7 +323,10 @@ document.getElementById('gateContaLink').href = `/conta?voltar=${encodeURICompon
 // Com conta, o nome da sala é o apelido da conta -- o servidor usa ele de qualquer jeito, e o
 // campo livre só faria a pessoa achar que entrou com outro nome.
 let contaNaSala = null;
-window.NexoConta?.pronto.then(({ conta, perfil }) => {
+window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
+  // O cadeado aparece antes de entrar, pelo plano da conta; a entrada na sala confirma.
+  const livre = planosLigados === false;
+  aplicarPlano({ nivel: livre ? 'premium' : conta?.nivel || 'anonimo', livre });
   if (!conta) return;
   contaNaSala = conta;
   meuPerfil = { conta: true, codigo: conta.codigo, cor: perfil?.cor || null, marca: perfil?.marca || null };
@@ -499,6 +503,7 @@ async function iniciarConexao() {
       // O próprio perfil primeiro: o quadradinho, a lista e as permissões da mesa de sons
       // dependem dele, e todos são desenhados logo abaixo.
       if (response.perfil) meuPerfil = response.perfil;
+      if (response.plano) aplicarPlano(response.plano);
       criarTileLocal();
       donoDaSala = response.dono || null;
       podeModerar = Boolean(response.podeModerar);
@@ -629,6 +634,27 @@ async function iniciarConexao() {
   });
 
   socket.on('sala-configuracao', aplicarConfiguracaoDaSala);
+
+  // ---------- O teto do plano, conferido no servidor ----------
+  //
+  // O aviso vem antes do desligamento, e dá alguns segundos: é o que um cliente desatualizado
+  // precisa para republicar menor. Este já não passa do teto sozinho; se chegou aqui, é porque
+  // o plano mudou no meio da transmissão -- e ele se encaixa.
+  socket.on('limite-do-plano', plano => {
+    aplicarPlano(plano);
+    encaixarTelaNoPlano();
+    status.textContent = `Sua tela passava do seu plano (${plano.nome}: até ${plano.limites.altura}p). Ajustando para ${plano.limites.altura}p…`;
+  });
+  // Desliga a tela, não a pessoa: voz, câmera e chat continuam.
+  socket.on('tela-desligada-pelo-plano', plano => {
+    aplicarPlano(plano);
+    if (screenStream) pararTela();
+    status.textContent = `Sua tela foi desligada: ela passava do seu plano (${plano.nome}: até ${plano.limites.altura}p). Compartilhe de novo que ela sobe em ${plano.limites.altura}p.`;
+  });
+  socket.on('plano-atualizado', plano => {
+    aplicarPlano(plano);
+    status.textContent = plano.nivel === 'premium' ? 'Seu plano agora é premium: 1080p e 1440p liberados.' : `Seu plano agora é ${plano.nome}.`;
+  });
   socket.on('pedido-entrada', adicionarPedidoDeEntrada);
   socket.on('pedido-entrada-resolvido', ({ identidade }) => removerPedidoDeEntrada(identidade));
   socket.on('pedido-entrada-cancelado', ({ identidade }) => removerPedidoDeEntrada(identidade));
@@ -647,7 +673,8 @@ async function iniciarConexao() {
     fuiRemovido = true;
     const frase = motivo === 'banir'
       ? `Você foi removido desta sala e não pode voltar por ${minutos || 60} min.`
-      : 'Você foi removido desta sala por quem a abriu.';
+      : motivo === 'suspensa' ? 'Sua conta foi suspensa, e por isso você saiu da sala.'
+      : 'Você foi removido desta sala por quem a modera.';
     status.textContent = frase;
     // `desconectar` e não só encerrar as capturas: ele marca a saída como deliberada, e sem
     // isso o transporte trataria a queda como oscilação e tentaria voltar para a sala de que
@@ -875,8 +902,21 @@ function avisarSeFaltaDegrauBarato() {
 // entrega a cada pessoa a camada que a conexao dela aguenta (simulcast). Por isso sairam a
 // medicao de banda por par, o orcamento, a histerese de resolucao e o limite de upload --
 // eles brigariam com o controle de congestionamento do proprio servidor.
-let perfilDeQualidade = Preferencias.lerAjuste('qualidade', 'high');
-if (!RoomQuality.profiles[perfilDeQualidade]) perfilDeQualidade = 'high';
+//
+// Duas variáveis, e não uma: `qualidadeEscolhida` é o que a pessoa escolheu e fica guardado
+// mesmo quando o plano não o permite; `perfilDeQualidade` é o que vale agora, com o teto do
+// plano. Quem assinou, escolheu 1440p e deixou vencer continua com 1440p guardado e transmite
+// em 720p; renovou, volta sozinho ao que tinha (public/planos.js).
+let nivelDoPlano = 'anonimo';
+let planosLivres = false;
+const ALTURAS_DOS_PERFIS = Object.values(RoomQuality.profiles).map(p => p.height);
+function perfilPermitido(escolhido) {
+  const altura = NexoPlanos.alturaEfetiva(nivelDoPlano, RoomQuality.profiles[escolhido]?.height || 720, ALTURAS_DOS_PERFIS);
+  return Object.keys(RoomQuality.profiles).find(nome => RoomQuality.profiles[nome].height === altura) || 'economical';
+}
+let qualidadeEscolhida = Preferencias.lerAjuste('qualidade', 'high');
+if (!RoomQuality.profiles[qualidadeEscolhida]) qualidadeEscolhida = 'high';
+let perfilDeQualidade = perfilPermitido(qualidadeEscolhida);
 const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 
 // ---------- Publicacao das proprias fontes ----------
@@ -952,7 +992,9 @@ function quadrosGuardados() {
   // metade dos quadros para quem já usava o Nexo para jogar.
   return Preferencias.lerAjuste('prioridade', '') === 'fluidez' ? 60 : 30;
 }
-let quadrosDaTela = quadrosGuardados();
+// A mesma separação da qualidade: o que foi escolhido, e o que o plano deixa valer.
+let quadrosEscolhidos = quadrosGuardados();
+let quadrosDaTela = NexoPlanos.quadrosEfetivos(nivelDoPlano, quadrosEscolhidos);
 const seletoresDeQuadros = [...document.querySelectorAll('[data-screen-fps]')];
 
 async function definirPrioridadeDaTela(escolha) {
@@ -984,8 +1026,11 @@ async function definirPrioridadeDaTela(escolha) {
 // onde tirar quadros a mais -- e escolher 30 continuaria codificando 60 para jogar metade
 // fora, gastando processador de quem transmite em quadros que ninguém veria.
 async function definirQuadrosDaTela(escolha) {
-  const quadros = Number(escolha);
-  if (!QUADROS_DA_TELA.includes(quadros) || quadros === quadrosDaTela) return;
+  // O seletor já desliga o que o plano não libera; a conta aqui é a mesma, para a escolha
+  // nunca pedir à captura o que o servidor vai recusar.
+  const quadros = NexoPlanos.quadrosEfetivos(nivelDoPlano, Number(escolha));
+  if (!QUADROS_DA_TELA.includes(Number(escolha)) || quadros === quadrosDaTela) return;
+  quadrosEscolhidos = quadros;
   quadrosDaTela = quadros;
   esquecerHistoricoDoEnvio();
   Preferencias.gravarAjuste('quadros', quadros);
@@ -2368,12 +2413,25 @@ function tetoAnunciado(perfil) {
 // aquela escolha custaria AGORA, com esta fonte, esta taxa e este codec -- e escolher entre
 // elas é comparar números reais em vez de rótulos.
 function atualizarRotulosDeQualidade() {
+  // O que o plano não libera aparece com cadeado, e não some: uma opção escondida é uma
+  // funcionalidade que ninguém sabe que existe; uma opção com cadeado é a oferta.
   seletoresDeQualidade.forEach(select => {
     [...select.options].forEach(opcao => {
       const perfil = RoomQuality.profiles[opcao.value];
-      if (perfil) opcao.textContent = `${perfil.label} · até ${emMegabits(tetoAnunciado(perfil))}`;
+      if (!perfil) return;
+      const liberada = NexoPlanos.alturaPermitida(nivelDoPlano, perfil.height);
+      opcao.disabled = !liberada;
+      opcao.textContent = liberada ? `${perfil.label} · até ${emMegabits(tetoAnunciado(perfil))}` : `🔒 ${perfil.label} · premium`;
     });
   });
+  seletoresDeQuadros.forEach(select => {
+    [...select.options].forEach(opcao => {
+      const liberada = NexoPlanos.quadrosPermitidos(nivelDoPlano, Number(opcao.value));
+      opcao.disabled = !liberada;
+      opcao.textContent = liberada ? `${opcao.value} quadros` : `🔒 ${opcao.value} quadros · conta grátis`;
+    });
+  });
+  pintarDicaDoPlano();
   const dica = document.getElementById('fpsDica');
   const dicaDoEnvio = document.getElementById('shareFpsDica');
   // Os dois tetos da MESMA resolução, lado a lado: é a comparação que decide a escolha, e
@@ -3018,6 +3076,9 @@ seletoresDeQualidade.forEach(select => {
     const anterior = perfilDeQualidade;
     const novo = select.value;
     if (!RoomQuality.profiles[novo]) return;
+    // A opção acima do plano aparece com cadeado e desligada; se chegar aqui mesmo assim, não
+    // vale -- o servidor recusaria a tela alguns segundos depois.
+    if (!NexoPlanos.alturaPermitida(nivelDoPlano, RoomQuality.profiles[novo].height)) { select.value = perfilDeQualidade; return; }
     seletoresDeQualidade.forEach(el => { el.disabled = true; });
     try {
       const perfil = RoomQuality.profiles[novo];
@@ -3043,6 +3104,7 @@ seletoresDeQualidade.forEach(select => {
         }
       }
       perfilDeQualidade = novo;
+      qualidadeEscolhida = novo;
       esquecerHistoricoDoEnvio();
       Preferencias.gravarAjuste('qualidade', novo);
       // O teto de envio entra nas opcoes de publicacao, entao a faixa precisa subir de novo.
@@ -3091,9 +3153,11 @@ function recarregarAjustes() {
   const codec = Preferencias.lerAjuste('codec', 'auto');
   codecDeVideo = RoomMedia.CODEC_PREFERENCES.includes(codec) ? codec : 'auto';
   const qualidade = Preferencias.lerAjuste('qualidade', 'high');
-  if (!screenStream) perfilDeQualidade = RoomQuality.profiles[qualidade] ? qualidade : 'high';
+  qualidadeEscolhida = RoomQuality.profiles[qualidade] ? qualidade : 'high';
+  if (!screenStream) perfilDeQualidade = perfilPermitido(qualidadeEscolhida);
   prioridadeDaTela = prioridadeGuardada();
-  quadrosDaTela = quadrosGuardados();
+  quadrosEscolhidos = quadrosGuardados();
+  quadrosDaTela = NexoPlanos.quadrosEfetivos(nivelDoPlano, quadrosEscolhidos);
   ladoPreferido = ladoGuardado();
   if (!cameraStream) ladoDaCamera = ladoPreferido || LADO_PADRAO;
   pushToTalkAtivo = Preferencias.lerAjuste('pushToTalk', false);
@@ -3105,6 +3169,63 @@ function recarregarAjustes() {
   seletoresDePrioridade.forEach(select => { select.value = prioridadeDaTela; });
   seletoresDeQuadros.forEach(select => { select.value = String(quadrosDaTela); });
   atualizarBotaoDeQualidade();
+}
+
+// ---------- O plano ----------
+//
+// O plano chega de três lugares: da conta (antes de entrar), da entrada na sala (o servidor
+// decide) e do painel, quando alguém marca a conta como premium com a sala aberta. Em todos, o
+// que muda é o que VALE; a escolha guardada da pessoa fica onde estava.
+function aplicarPlano(plano) {
+  if (!plano?.nivel) return;
+  const antes = nivelDoPlano;
+  nivelDoPlano = plano.nivel;
+  planosLivres = Boolean(plano.livre);
+  perfilDeQualidade = perfilPermitido(qualidadeEscolhida);
+  quadrosDaTela = NexoPlanos.quadrosEfetivos(nivelDoPlano, quadrosEscolhidos);
+  seletoresDeQualidade.forEach(select => { select.value = perfilDeQualidade; });
+  seletoresDeQuadros.forEach(select => { select.value = String(quadrosDaTela); });
+  atualizarBotaoDeQualidade();
+  // Transmitindo acima do plano novo (um premium que venceu no meio da conversa): a tela se
+  // encaixa sozinha, em vez de esperar o servidor desligá-la.
+  if (antes !== nivelDoPlano && screenStream) encaixarTelaNoPlano();
+}
+
+function pintarDicaDoPlano() {
+  const limites = NexoPlanos.limites(nivelDoPlano);
+  const guardadaAcima = RoomQuality.profiles[qualidadeEscolhida] && !NexoPlanos.alturaPermitida(nivelDoPlano, RoomQuality.profiles[qualidadeEscolhida].height);
+  const texto = planosLivres ? ''
+    : nivelDoPlano === 'premium' ? 'Premium: 1080p e 1440p a 60 quadros. Quem assiste vê na sua qualidade, com conta ou sem.'
+    : nivelDoPlano === 'gratis' ? `Conta grátis: até ${limites.altura}p a ${limites.quadros} quadros. 1080p e 1440p são do premium.`
+      + (guardadaAcima ? ` Sua escolha de ${RoomQuality.profiles[qualidadeEscolhida].label.split(' · ')[0]} está guardada e volta quando o premium estiver ativo.` : '')
+    : `Sem conta: até ${limites.altura}p a ${limites.quadros} quadros. Com uma conta grátis, 60 quadros; no premium, 1080p e 1440p.`;
+  document.querySelectorAll('[data-plano-dica]').forEach(el => {
+    el.hidden = !texto;
+    el.replaceChildren(document.createTextNode(texto));
+    if (texto && nivelDoPlano === 'anonimo') {
+      const link = document.createElement('a');
+      link.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+      link.textContent = 'Criar conta grátis';
+      el.append(document.createTextNode(' '), link);
+    }
+  });
+}
+
+// Traz a tela que está no ar para dentro do plano: a captura e a publicação, na mesma ordem
+// que a troca de qualidade usa. É o caminho do cliente honesto -- o aviso do servidor dá
+// alguns segundos, e este é o ajuste que os usa.
+async function encaixarTelaNoPlano() {
+  const faixa = screenStream?.getVideoTracks()[0];
+  if (!faixa) return;
+  const perfil = perfilAtual();
+  try {
+    await faixa.applyConstraints({ ...faixa.getConstraints(), width: { ideal: perfil.width, max: perfil.width },
+      height: { ideal: perfil.height, max: perfil.height }, frameRate: { ideal: quadrosDaTela, max: quadrosDaTela } });
+  } catch (_) { /* a fonte recusou: a republicação abaixo ainda declara o teto certo */ }
+  await sequenciaDePublicacao('screen', async () => {
+    await aplicarPublicacao('screen', null);
+    await aplicarPublicacao('screen', faixa);
+  });
 }
 
 // ---------- Câmera ----------

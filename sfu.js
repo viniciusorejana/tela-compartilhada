@@ -570,8 +570,11 @@ function tokenDeServidor(video) {
   const corpo = base64url(JSON.stringify({ iss: apiKey, nbf: agora - 5, exp: agora + 60, video }));
   return `${cabecalho}.${corpo}.${crypto.createHmac('sha256', apiSecret).update(`${cabecalho}.${corpo}`).digest('base64url')}`;
 }
+// Lista fechada: cada método aqui é um poder do servidor sobre a sala. `MutePublishedTrack`
+// entrou com os planos -- é ele que desliga a TELA de quem transmite acima do teto do plano,
+// sem tirar a pessoa, a voz nem a câmera.
 async function consultar(metodo, corpo) {
-  if (!['ListRooms', 'ListParticipants', 'RemoveParticipant'].includes(metodo)) throw new Error('Método não permitido.');
+  if (!['ListRooms', 'ListParticipants', 'RemoveParticipant', 'MutePublishedTrack'].includes(metodo)) throw new Error('Método não permitido.');
   const video = metodo === 'ListRooms' ? { roomList: true } : { roomAdmin: true, room: corpo.room };
   return JSON.parse(await telemetriaLivekit.pedir({ porta: PORTA_LOCAL, caminho: `/twirp/livekit.RoomService/${metodo}`, corpo: JSON.stringify(corpo), autorizacao: `Bearer ${tokenDeServidor(video)}` }));
 }

@@ -28,6 +28,8 @@ const sessao = await fetch('/painel/api/sessao');
 if (!sessao.ok) location.assign('/painel/entrar');
 else {
   csrf = (await sessao.json()).csrf;
+  // As escritas do painel que moram em componentes (as contas) precisam do mesmo CSRF.
+  atualizarEstado({ csrf });
   await carregar();
   const fluxo = new EventSource('/painel/api/eventos');
   fluxo.addEventListener('atualizacao', evento => {
