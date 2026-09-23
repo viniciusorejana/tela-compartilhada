@@ -40,8 +40,8 @@
   <div id="conteudo"><p class="vazio">Procurando telas e janelas...</p></div>
 
 <script>
-  // Página local do próprio aplicativo, sem nada remoto: aqui o Node é seguro.
-  const { ipcRenderer } = require('electron');
+  // Página local, mas isolada como a sala: os nomes das janelas vêm de qualquer programa
+  // aberto. A ponte `seletor` (preload-escolher.js) é tudo o que ela alcança do aplicativo.
   const conteudo = document.getElementById('conteudo');
 
   function montarGrupo(titulo, fontes) {
@@ -64,14 +64,14 @@
       const nome = document.createElement('span');
       nome.textContent = fonte.nome;
       botao.append(imagem, nome);
-      botao.onclick = () => ipcRenderer.send('escolher:pronto', fonte.id);
+      botao.onclick = () => window.seletor.escolher(fonte.id);
       grade.appendChild(botao);
     }
     bloco.appendChild(grade);
     return bloco;
   }
 
-  ipcRenderer.on('escolher:fontes', (evento, fontes) => {
+  window.seletor.aoReceber(fontes => {
     conteudo.innerHTML = '';
     if (!fontes.length) {
       conteudo.innerHTML = '<p class="vazio">Nenhuma tela ou janela foi encontrada.</p>';

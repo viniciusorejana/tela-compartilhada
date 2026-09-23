@@ -19,6 +19,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "preload-escolher.js",
       "endereco.html",
       "escolher.html",
       "package.json",

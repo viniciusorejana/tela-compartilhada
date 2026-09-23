@@ -19,6 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
+const { pathToFileURL } = require('url');
 const executar = promisify(execFile);
 
 const ARQUIVO_DE_CONFIG = () => path.join(app.getPath('userData'), 'config.json');
@@ -39,6 +40,24 @@ let janela = null;
 let agente = null;
 // Endereço que está sendo tentado agora. Só vira configuração se a página carregar.
 let enderecoPendente = null;
+// A única origem em que a janela pode ficar, e a única que fala com as funções nativas. Ela
+// nasce do endereço que a PESSOA escolheu -- digitado na tela local ou salvo de uma vez
+// anterior -- e nunca de um pedido da página, que é conteúdo remoto.
+//
+// Antes, a página conseguia trocar o servidor salvo, a janela podia navegar para qualquer
+// lugar levando a ponte nativa junto, e as funções nativas aceitavam qualquer página http(s).
+// Somadas, bastava uma falha de XSS na sala -- ou um servidor malicioso aberto uma vez -- para
+// prender o aplicativo num endereço de fora e, de lá, ligar o agente de áudio desta máquina.
+let origemDaSala = null;
+
+function origemHttp(endereco) {
+  try {
+    const alvo = new URL(String(endereco));
+    return alvo.protocol === 'http:' || alvo.protocol === 'https:' ? alvo.origin : null;
+  } catch (_) { return null; }
+}
+
+const PAGINA_DE_ENDERECO = pathToFileURL(path.join(__dirname, 'endereco.html')).pathname;
 
 function mostrarTelaDeEndereco(erro, anterior) {
   if (!janela) return;
@@ -52,6 +71,7 @@ function mostrarTelaDeEndereco(erro, anterior) {
 function irParaEndereco(url) {
   if (!janela) return;
   enderecoPendente = url;
+  origemDaSala = origemHttp(url);
   janela.loadURL(url);
 }
 
@@ -96,6 +116,26 @@ function criarJanela() {
     mostrarTelaDeEndereco(`${descricao || 'falha ao carregar'} (${codigo})`, tentado);
   });
 
+  // O próprio endereço escolhido pode redirecionar ao abrir -- http para https, o domínio sem
+  // "www" para o com --, e aí a origem certa é a de chegada. Só enquanto o endereço está sendo
+  // aberto: depois disso, a origem só muda pela tela de endereço.
+  janela.webContents.on('did-navigate', (_evento, url) => {
+    if (enderecoPendente) origemDaSala = origemHttp(url);
+  });
+
+  // A janela fica na origem da sala. Qualquer outro destino abre no navegador de verdade, como
+  // os links do chat já abrem: é lá que um site de fora deve rodar, longe da ponte nativa.
+  const manterNaSala = detalhes => {
+    if (origemDaSala && origemHttp(detalhes.url) === origemDaSala) return;
+    detalhes.preventDefault();
+    if (origemHttp(detalhes.url)) shell.openExternal(detalhes.url);
+  };
+  janela.webContents.on('will-navigate', manterNaSala);
+  janela.webContents.on('will-redirect', detalhes => {
+    if (!detalhes.isMainFrame || enderecoPendente) return;
+    manterNaSala(detalhes);
+  });
+
   const config = lerConfig();
   if (config.endereco) irParaEndereco(config.endereco);
   else janela.loadFile(path.join(__dirname, 'endereco.html'));
@@ -123,9 +163,11 @@ function escolherFonte(fontes) {
       autoHideMenuBar: true,
       title: 'O que você quer compartilhar?',
       webPreferences: {
-        // Página local, nossa, sem nada remoto: aqui o Node é seguro e evita mais um preload.
-        nodeIntegration: true,
-        contextIsolation: false
+        // Isolada como a sala, mesmo sendo página nossa: os nomes que ela mostra vêm de qualquer
+        // programa aberto (ver preload-escolher.js).
+        preload: path.join(__dirname, 'preload-escolher.js'),
+        contextIsolation: true,
+        nodeIntegration: false
       }
     });
 
@@ -163,8 +205,16 @@ let capturaPendente = null;
 let ultimaCaptura = null;
 let selecionandoCaptura = false;
 function remetenteDaSala(evento) {
-  return janela && evento.sender === janela.webContents && evento.senderFrame === janela.webContents.mainFrame
-    && /^https?:/.test(evento.senderFrame.url);
+  if (!janela || !origemDaSala || evento.sender !== janela.webContents || evento.senderFrame !== janela.webContents.mainFrame) return false;
+  return origemHttp(evento.senderFrame.url) === origemDaSala;
+}
+// A tela de endereço é a única página que troca o servidor.
+function remetenteLocal(evento) {
+  if (!janela || evento.sender !== janela.webContents || evento.senderFrame !== janela.webContents.mainFrame) return false;
+  try {
+    const pagina = new URL(evento.senderFrame.url);
+    return pagina.protocol === 'file:' && pagina.pathname === PAGINA_DE_ENDERECO;
+  } catch (_) { return false; }
 }
 // Fechar o aplicativo compartilhado deveria encerrar a transmissão, e não encerrava: a
 // faixa de vídeo continuava "viva", congelada no último quadro, e a sala seguia pagando
@@ -292,6 +342,10 @@ ipcMain.handle('agente:iniciar', (evento, url) => {
   // A sala é conteúdo remoto, e isto aqui lança um processo. O endereço tem de ser um
   // WebSocket do MESMO servidor que a janela está mostrando -- senão uma página qualquer
   // poderia apontar o agente desta máquina para onde quisesse.
+  //
+  // E a própria página tem de ser a da sala escolhida. Sozinha, a trava do endereço não
+  // servia: uma página de outro servidor apontava o agente para ela mesma e passava.
+  if (!remetenteDaSala(evento)) return { rodando: false, motivo: 'outro-servidor' };
   let alvo;
   try { alvo = new URL(String(url)); } catch (_) { return { rodando: false, motivo: 'url-invalida' }; }
   if (alvo.protocol !== 'ws:' && alvo.protocol !== 'wss:') return { rodando: false, motivo: 'url-invalida' };
@@ -327,6 +381,10 @@ ipcMain.handle('agente:estado', () => ({
 }));
 
 ipcMain.handle('endereco:definir', (evento, endereco) => {
+  // Só a tela local troca o servidor. O endereço vira configuração assim que carrega, e vale
+  // nas próximas aberturas: se a sala pudesse chamar isto, o aplicativo ficaria preso para
+  // sempre onde uma página remota mandasse.
+  if (!remetenteLocal(evento)) return { ok: false };
   let alvo;
   try { alvo = new URL(String(endereco)); } catch (_) { return { ok: false }; }
   if (alvo.protocol !== 'http:' && alvo.protocol !== 'https:') return { ok: false };
@@ -335,10 +393,23 @@ ipcMain.handle('endereco:definir', (evento, endereco) => {
 });
 
 // Serve para voltar à tela de endereço sem precisar apagar arquivo nenhum.
-ipcMain.handle('endereco:esquecer', () => {
+ipcMain.handle('endereco:esquecer', evento => {
+  if (!remetenteDaSala(evento) && !remetenteLocal(evento)) return { ok: false };
   mostrarTelaDeEndereco('', lerConfig().endereco || '');
   return { ok: true };
 });
+
+// ---------------------------------------------------------------- permissões
+// Sem isto, o Electron concede a qualquer página tudo o que ela pedir -- câmera, microfone,
+// notificações --, sem perguntar a ninguém. A sala precisa dessas permissões; um conteúdo de
+// outra origem que entrasse nela, como um iframe injetado, não pode herdá-las.
+function instalarPermissoes() {
+  const daSala = endereco => Boolean(origemDaSala) && origemHttp(endereco) === origemDaSala;
+  session.defaultSession.setPermissionRequestHandler((_conteudo, _permissao, responder, detalhes) => {
+    responder(daSala(detalhes?.requestingUrl));
+  });
+  session.defaultSession.setPermissionCheckHandler((_conteudo, _permissao, origem) => daSala(origem));
+}
 
 // ---------------------------------------------------------------- menu
 // A barra fica escondida (Alt mostra), mas os atalhos valem sempre. Sem isto, um endereço
@@ -390,6 +461,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     instalarMenu();
     instalarSeletorDeTela();
+    instalarPermissoes();
     criarJanela();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
   });
