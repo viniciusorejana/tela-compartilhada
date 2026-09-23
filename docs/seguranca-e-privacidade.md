@@ -128,7 +128,11 @@ reescrita. O cuidado é ligar a política primeiro em modo relatório
 (`Content-Security-Policy-Report-Only`): o RNNoise compila WebAssembly
 (`'wasm-unsafe-eval'`), as imagens do chat são `data:`, e há workers. **Meio dia.**
 
-### 3. O Socket.IO aceita conexão de qualquer origem
+### 3. O Socket.IO aceitava conexão de qualquer origem — corrigido
+
+**Corrigido em `5b03c4a`**, junto com o cookie da conta, como pedido abaixo: o aperto de mão do
+Socket.IO e toda escrita da conta aceitam só a página deste servidor, a origem do `PUBLIC_URL` e
+as que `CORS_ORIGIN` acrescentar (`telemetria/origem.js`). O registro fica.
 
 `cors: { origin: process.env.CORS_ORIGIN || true }`. Hoje isso não é explorável: a credencial
 da sessão mora na memória da página, e outro site não tem como apresentá-la. **No dia em que a
@@ -138,7 +142,10 @@ e o README a recomenda para produção; a correção é o padrão deixar de ser 
 a origem do `PUBLIC_URL`, para que esquecer a variável não abra a porta. Entra na etapa A —
 junto com o cookie, não depois.
 
-### 4. O plano de contas ficou sem identificador de login
+### 4. O plano de contas ficou sem identificador de login — decidido e feito
+
+**Feito em `5b03c4a`**: nome de usuário único para entrar, e as quatro regras abaixo, com teste.
+O `scrypt` usa N = 2^15 (55 ms nesta máquina), um por vez, numa fila de 16.
 
 Com o apelido repetível, "apelido + senha" deixou de conseguir identificar quem está entrando:
 três Anas com senha, e o servidor não sabe qual delas testar. Falta um **nome de usuário
@@ -361,8 +368,8 @@ A lista de endurecimento do VPS, toda operação, nenhuma linha de código:
 |---|---|---|
 | ~~agora~~ **feito** (`ae0c9db`) | aplicativo de desktop preso à origem escolhida; permissões só para ela; seletor sem Node | — |
 | **em seguida** | gerar os instaladores de novo, para a correção chegar a quem usa | operação |
-| etapa A | origem no Socket.IO; usuário único para login; política de senha; freio por conta; resposta única no login | +meio dia |
-| etapa B | "baixar meus dados" | +meio dia |
+| ~~etapa A~~ **feito** (`5b03c4a`) | origem no Socket.IO; usuário único para login; política de senha; freio por conta; resposta única no login | — |
+| ~~etapa B~~ **feito** (`899e056`) | "baixar meus dados" | — |
 | fase 2 | cabeçalhos de segurança, com a CSP primeiro em modo relatório | meio dia |
 | fase 2 | VPS endurecido; TLS no Caddy; painel pelo túnel SSH | operação |
 | fase 2 | backups cifrados fora da máquina, com restauração testada | meio dia |
@@ -379,9 +386,8 @@ operação e a parte jurídica.
 
 ## Decisões que são suas
 
-1. **Identificador de login.** Recomendação: **nome de usuário único**, como o `@` do Discord,
-   ao lado do apelido livre e do código imutável. A alternativa — entrar pelo código de 8
-   caracteres — obriga a pessoa a decorar `K7M2-PQ4X`.
+1. ~~**Identificador de login.**~~ **Decidido e feito:** nome de usuário único, como o `@` do
+   Discord, ao lado do apelido livre e do código imutável.
 2. **Parecer jurídico sobre o ECA Digital antes de abrir ao público.** Recomendação: sim. Nada
    da fase 1 depende dele; o lançamento depende.
 3. **Região do servidor.** Recomendação: medir a latência da Europa com a própria sala antes de

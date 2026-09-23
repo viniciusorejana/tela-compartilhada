@@ -1,6 +1,7 @@
 # Contas, perfis e planos
 
-Escrito em 20/09/2026 e revisado em 22/09/2026, depois das decisões abaixo. É o degrau 3 do
+Escrito em 20/09/2026, revisado em 22/09/2026 depois das decisões abaixo, e **implementado em
+23/09/2026** — o que a implementação decidiu está no fim. É o degrau 3 do
 `docs/lancamento.md`, aberto inteiro: o que uma conta é, onde ela mora, o que ela sincroniza,
 e o que separa quem não tem conta de quem tem conta grátis e de quem paga.
 
@@ -235,9 +236,9 @@ Exigir e-mail no cadastro arrastaria junto um **remetente transacional** (confir
 recuperação): serviço externo, com cota e com reputação de domínio. Seria o único custo fixo
 mensal do lançamento inteiro, para resolver um problema que ainda não existe.
 
-- **Cadastro:** apelido + senha. Quinze segundos, sem sair da página.
-  **Em aberto:** com o apelido repetível (seção 4), ele não identifica ninguém no login — falta
-  um nome de usuário único para entrar. Ver `seguranca-e-privacidade.md`, decisão 1.
+- **Cadastro:** nome de usuário + apelido + senha. Quinze segundos, sem sair da página.
+  **Decidido:** com o apelido repetível (seção 4), ele não identifica ninguém no login — por isso
+  existe um nome de usuário único para entrar (`seguranca-e-privacidade.md`, decisão 1).
 - **Recuperação:** um **código de recuperação** mostrado uma vez, com botão de copiar e um
   aviso honesto: *perdeu a senha e o código, perdeu a conta*.
 - **E-mail:** campo opcional no perfil.
@@ -823,3 +824,34 @@ seção 1.
   mudam só a tentação, porque agora parece perto.
 - **Banimento por origem de rede.** Recusado em `moderacao.js`, e o motivo continua valendo.
 - **2FA no lançamento.** Faz sentido quando uma conta valer dinheiro.
+
+---
+
+## O que a implementação decidiu
+
+Implementado em 22–23/09/2026, nas etapas A a D (`docs/roteiro.md` tem os commits). O desenho
+acima valeu inteiro; o que a implementação precisou decidir, e que o plano não dizia:
+
+- **`scrypt` com N = 2^15**, 55 ms nesta máquina — o dobro dos 27 ms medidos com o padrão do Node.
+  A fila de um por vez é o que protege as salas, então o custo maior cai só em quem está entrando.
+  Os parâmetros vão dentro da senha guardada, e o login deriva de novo as senhas antigas.
+- **O teto base de pessoas entrou na etapa D**, e não na fase 2 do roteiro: o aumento pelo
+  assinante dependia dele. Os números (25 e 50) são ajustáveis por `NEXO_PESSOAS_POR_SALA`.
+- **Duas janelas de transição**, para o grupo atual não perder nada no dia em que isto subir:
+  `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo transmite como
+  premium). O premium de cortesia pelo painel continua sendo o caminho previsto; as chaves cobrem
+  o intervalo.
+- **O que o servidor confere é a resolução, e a declarada.** O teto de quadros (30 sem conta) vale
+  só na página: a webhook do servidor de mídia não traz a taxa de quadros. E a resolução conferida
+  é a que o cliente declara ao publicar — um cliente modificado que declare menos do que manda
+  passa. Se um dia isso importar, o caminho é conferir o bitrate declarado de cada camada, que é
+  o que de fato custa.
+- **O dono ausente passa os poderes pela mesma regra da sucessão** — a conta presente mais antiga
+  primeiro —, e os retoma ao voltar.
+- **A tranca vale também durante a carência de 60 s**, e quem tem conta volta à própria sala
+  trancada sem pedir aprovação: a sala lembra a conta, e não só a identidade.
+- **Banir quem tinha conta e acabou de sair acerta a conta**: a moderação lembra as últimas 256
+  identidades que passaram pela sala.
+- **Suspender pelo painel tira a conta da sala na hora**, e o premium marcado lá chega a quem está
+  transmitindo sem precisar sair e voltar.
+- **A carência guarda também a música e a mesa de sons**: quem apertou F5 sozinho volta com tudo.

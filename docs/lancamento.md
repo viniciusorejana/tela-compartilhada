@@ -340,7 +340,8 @@ O botão de copiar **fica**. Ele continua sendo o caminho de quem quer pedir aju
 Hoje o link é o convite e não há identidade. É o que a comunidade pede e o que o pagamento
 exige.
 
-> **Este degrau está aberto inteiro em [`plano-contas.md`](plano-contas.md)**, com as
+> **Feito em 23/09/2026** — a fase 1 do [`roteiro.md`](roteiro.md), com os commits de cada
+> etapa. **Este degrau está aberto inteiro em [`plano-contas.md`](plano-contas.md)**, com as
 > decisões tomadas em 21/09/2026 — modelo de dados, etapas, os três níveis, banimento e
 > salas. O que mudou em relação a esta seção: o banco é **SQLite embutido** (zero dependência,
 > zero processo a mais), o **e-mail é opcional no cadastro** (ele arrastava junto o único
@@ -410,8 +411,9 @@ degrau 1. Como oferta permanente, é uma dívida que cresce.
 - **Sala com dono, expulsar e banir.** **Feito** (`bd73c01`, `e18dc5f`): dono, expulsar,
   banir por 60 minutos, desbanir e transferir. O que as contas mudam nisso está em
   [`plano-contas.md`](plano-contas.md).
-- **Limite de pessoas por sala.** Hoje existe teto de 6 câmeras; o de pessoas, não. Uma sala
-  de 15 em 1440p é ~90 Mbps sozinha.
+- **Limite de pessoas por sala.** **Feito** na fase 1, etapa D: 25 por sala, e 50 quando há
+  alguém premium presente; o painel mostra quantas salas encostam no teto. Uma sala de 15 em
+  1440p é ~90 Mbps sozinha.
 - **Um caminho para relatar abuso**, que reusa a rota dos relatos do degrau 2.
 
 #### Sobre virar um Discord: a recomendação é não
