@@ -15,14 +15,22 @@ function criarSessoes({ agora = Date.now, maximo = 2048, ociosidade = 10 * 60000
     if (!sessao.socket && agora() - sessao.ultimo > ociosidade) { limpar(); return null; }
     sessao.ultimo = agora(); return sessao;
   }
-  function emitir({ sala, nome, credencial }) {
+  // `conta` é `{ id, perfil }` de quem entrou logado. O id fica SÓ aqui, no servidor: a
+  // identidade de mídia continua sorteada, porque é ela que vai para o token do LiveKit, para
+  // as webhooks e para os relatos -- e com a conta dentro, tudo isso viraria um histórico de
+  // quem esteve onde. A ligação entre as duas não sai desta sessão.
+  function emitir({ sala, nome, credencial, conta = null }) {
     const anterior = obter(credencial);
-    if (anterior && anterior.sala === sala && anterior.nome === nome) return { sessao: anterior, credencial };
+    // Entrar ou sair da conta muda quem é a pessoa na sala: a sessão antiga não serve mais.
+    if (anterior && anterior.sala === sala && anterior.nome === nome && anterior.contaId === (conta?.id || null)) {
+      anterior.perfil = conta?.perfil || null;
+      return { sessao: anterior, credencial };
+    }
     limpar();
     if (sessoes.size >= maximo) return null;
     const segredo = crypto.randomBytes(32).toString('base64url');
     const identidade = `${nome}#${crypto.randomBytes(8).toString('hex')}`;
-    const sessao = { id: crypto.randomBytes(16).toString('hex'), sala, nome, identidade, ultimo: agora(), socket: null, sequencia: -1 };
+    const sessao = { id: crypto.randomBytes(16).toString('hex'), sala, nome, identidade, ultimo: agora(), socket: null, sequencia: -1, contaId: conta?.id || null, perfil: conta?.perfil || null };
     sessoes.set(hash(segredo), sessao); porIdentidade.set(`${sala}|${identidade}`, sessao);
     return { sessao, credencial: segredo };
   }

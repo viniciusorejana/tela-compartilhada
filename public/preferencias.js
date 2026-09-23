@@ -160,8 +160,89 @@
     return { pessoas, salas, chaves };
   }
 
+  // ---------- O leitor único das escolhas da sala ----------
+  //
+  // Eram umas dez chaves de `localStorage` lidas e gravadas em pontos diferentes de sala.js,
+  // cada uma no seu formato. Antes de sincronizar qualquer coisa com a conta, isso precisava
+  // de um lugar só: é daqui que sai a lista do que sobe, e é aqui que se garante que o que
+  // não deve subir -- aparelhos, volume por pessoa -- não sobe.
+  //
+  // As chaves antigas continuam as mesmas, de propósito: quem já usa o Nexo não perde nada
+  // guardado por causa desta arrumação.
+  const AJUSTES = {
+    qualidade: ['nexoQuality', 'texto'],
+    codec: ['nexoCodec', 'texto'],
+    prioridade: ['nexoPrioridade', 'texto'],
+    quadros: ['nexoFps', 'numero'],
+    ladoCamera: ['nexoLadoCamera', 'texto'],
+    pushToTalk: ['sala.pushToTalk', 'um-ou-zero'],
+    reducaoDeRuido: [PREFIXO + 'reducaoDeRuido', 'json'],
+    // Daqui para baixo, só deste navegador. Ver o porquê em perfil.js.
+    nome: ['salaNome', 'texto'],
+    economiaDeDados: ['sala.economiaDados', 'um-ou-zero'],
+    microfone: ['sala.dispositivo.microfone', 'texto'],
+    saida: ['sala.dispositivo.saida', 'texto'],
+    camera: ['sala.dispositivo.camera', 'texto']
+  };
+  const ouvintes = new Set();
+  // O que sincroniza vem de perfil.js, que o servidor também usa: uma lista só, e não duas
+  // que acabariam discordando. Sem ele carregado, nada sincroniza -- o lado seguro.
+  const sincronizados = () => Object.keys(root.NexoPerfil?.AJUSTES_SINCRONIZADOS || {});
+
+  function lerAjuste(nome, padrao) {
+    const [chave, formato] = AJUSTES[nome] || [];
+    if (!chave) return padrao;
+    let bruto;
+    try { bruto = localStorage.getItem(chave); } catch (_) { return padrao; }
+    if (bruto === null || bruto === '') return padrao;
+    if (formato === 'numero') { const n = Number(bruto); return Number.isFinite(n) ? n : padrao; }
+    if (formato === 'um-ou-zero') return bruto === '1';
+    if (formato === 'json') { try { return JSON.parse(bruto); } catch (_) { return padrao; } }
+    return bruto;
+  }
+
+  function escrever(nome, valor) {
+    const [chave, formato] = AJUSTES[nome] || [];
+    if (!chave) return false;
+    try {
+      if (valor === undefined || valor === null || valor === '') localStorage.removeItem(chave);
+      else localStorage.setItem(chave, formato === 'um-ou-zero' ? (valor ? '1' : '0') : formato === 'json' ? JSON.stringify(valor) : String(valor));
+      return true;
+    } catch (_) { return false; }
+  }
+
+  // Gravar um ajuste que sincroniza avisa quem estiver ouvindo -- é assim que a conta fica
+  // sabendo que tem o que subir, sem que cada ponto de sala.js precise lembrar disso.
+  function gravarAjuste(nome, valor) {
+    const gravou = escrever(nome, valor);
+    if (gravou && sincronizados().includes(nome)) ouvintes.forEach(ouvir => { try { ouvir(nome, valor); } catch (_) { /* um ouvinte não derruba os outros */ } });
+    return gravou;
+  }
+
+  // O que sobe para a conta: só a lista fechada, e só valores válidos.
+  function ajustesSincronizaveis() {
+    const brutos = {};
+    for (const nome of sincronizados()) {
+      const valor = lerAjuste(nome, undefined);
+      if (valor !== undefined) brutos[nome] = valor;
+    }
+    return root.NexoPerfil ? root.NexoPerfil.limparAjustes(brutos) : {};
+  }
+
+  // O que desce da conta. Vale o que o servidor tem; o que ele não tem fica como está neste
+  // navegador. Não avisa os ouvintes: isto não é uma escolha nova, é a escolha de sempre
+  // chegando de outro aparelho.
+  function aplicarAjustesDaConta(ajustes) {
+    const limpos = root.NexoPerfil ? root.NexoPerfil.limparAjustes(ajustes) : {};
+    for (const [nome, valor] of Object.entries(limpos)) escrever(nome, valor);
+    return Object.keys(limpos);
+  }
+
+  function aoMudarAjuste(ouvir) { ouvintes.add(ouvir); return () => ouvintes.delete(ouvir); }
+
   root.Preferencias = {
     ler, gravar, audioDe, guardarAudioDe, daSala, guardarDaSala,
-    esquecerTudo, resumo, PESSOAS_LEMBRADAS, SALAS_LEMBRADAS
+    esquecerTudo, resumo, PESSOAS_LEMBRADAS, SALAS_LEMBRADAS,
+    lerAjuste, gravarAjuste, ajustesSincronizaveis, aplicarAjustesDaConta, aoMudarAjuste, AJUSTES
   };
 })(window);

@@ -14,6 +14,7 @@ const { criarSenhas, FilaCheia } = require('./senha');
 const regras = require('./regras');
 const { criarAntiabuso, regrasDoAmbiente } = require('../telemetria/abuso');
 const { protegerPasta } = require('../telemetria/autenticacao');
+const perfilComum = require('../public/perfil');
 
 const MINUTO = 60000;
 const DIA = 24 * 60 * MINUTO;
@@ -201,6 +202,69 @@ function criarContas({
     return { ok: true, recuperacao: regras.formatarRecuperacao(recuperacao) };
   }
 
+  // ---------- O perfil ----------
+  //
+  // O que a sala mostra de quem tem conta: apelido, cor e marca. Os ajustes são a outra metade
+  // -- o que dá trabalho refazer em cada aparelho --, e a lista do que pode entrar neles é
+  // FECHADA (public/perfil.js): o que não está nela é descartado aqui, venha de onde vier.
+  function perfil(conta) {
+    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, ajustes: {} };
+    return { cor: perfilComum.corValida(guardado.cor), marca: perfilComum.marcaValida(guardado.marca), ajustes: perfilComum.limparAjustes(guardado.ajustes) };
+  }
+
+  function salvarPerfil(conta, { apelido, cor, marca } = {}) {
+    if (!permitido(conta.id, 'conta-escrever')) return falha(429, 'Muitas alterações seguidas. Aguarde alguns minutos.', null, 600);
+    // Tudo é conferido antes de qualquer escrita: um apelido bom com uma cor ruim não pode
+    // salvar metade do pedido e recusar a outra metade.
+    const nome = apelido === undefined ? null : regras.limparApelido(apelido);
+    if (apelido !== undefined && !nome) return falha(400, 'O apelido não pode ficar vazio.', 'apelido');
+    // `null` volta ao padrão (cor sorteada pelo nome, iniciais no lugar da marca); um nome fora
+    // do conjunto é recusado, e não trocado em silêncio pelo padrão.
+    const atual = banco.perfil(conta.id) || {};
+    const novaCor = cor === undefined ? atual.cor : cor === null ? null : perfilComum.corValida(cor);
+    const novaMarca = marca === undefined ? atual.marca : marca === null ? null : perfilComum.marcaValida(marca);
+    if (cor && !novaCor) return falha(400, 'Essa cor não está entre as disponíveis.', 'cor');
+    if (marca && !novaMarca) return falha(400, 'Essa marca não está entre as disponíveis.', 'marca');
+    if (nome) banco.trocarApelido(conta.id, nome);
+    banco.salvarAparencia(conta.id, { cor: novaCor, marca: novaMarca });
+    const atualizada = banco.contaPorId(conta.id);
+    return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
+  }
+
+  // A escolha de qualidade é guardada mesmo quando o plano não a permite: quem assinou,
+  // escolheu 1440p e deixou vencer continua com 1440p guardado, e recebe de volta ao renovar.
+  // Quem aplica o teto é a sala, não este arquivo.
+  function salvarAjustes(conta, brutos) {
+    if (!permitido(conta.id, 'conta-ajustes')) return falha(429, 'Ajustes demais em pouco tempo. Eles continuam guardados neste navegador.', null, 60);
+    const limpos = perfilComum.limparAjustes(brutos);
+    if (Buffer.byteLength(JSON.stringify(limpos)) > perfilComum.BYTES_MAXIMOS_DOS_AJUSTES) return falha(413, 'Ajustes grandes demais.');
+    banco.salvarAjustes(conta.id, limpos);
+    return { ok: true, ajustes: limpos };
+  }
+
+  // "Baixar meus dados": o direito de acesso e de portabilidade (LGPD, art. 18). Tudo o que o
+  // Nexo guarda ligado à pessoa, num formato que outro programa lê. Os hashes de senha e de
+  // recuperação ficam de fora -- não servem a ninguém fora daqui, e são a única coisa desta
+  // lista que, vazada, ajudaria alguém a atacar a conta.
+  function dados(conta) {
+    const atual = banco.contaPorId(conta.id);
+    return {
+      formato: 'nexo-dados-da-conta/1',
+      geradoEm: new Date(agora()).toISOString(),
+      conta: {
+        usuario: atual.usuario, apelido: atual.apelido, codigo: regras.formatarCodigo(atual.codigo),
+        email: atual.email, plano: atual.plano, planoAte: atual.planoAte ? new Date(atual.planoAte).toISOString() : null,
+        criadaEm: new Date(atual.criadaEm).toISOString(), vistaEm: new Date(atual.vistaEm).toISOString(),
+        senha: 'guardada só como scrypt; não incluída', codigoDeRecuperacao: 'guardado só como scrypt; não incluído'
+      },
+      perfil: perfil(atual),
+      sessoes: banco.sessoesDaConta(conta.id).map(s => ({
+        aparelho: s.aparelho, criadaEm: new Date(s.criadaEm).toISOString(), usadaEm: new Date(s.ultimaEm).toISOString(), expiraEm: new Date(s.expiraEm).toISOString()
+      })),
+      oQueNaoGuardamos: 'Conversas, sons, telas, voz, câmera e as salas em que você esteve não são guardados em lugar nenhum.'
+    };
+  }
+
   // Apagar pede a senha: é irreversível, e uma aba esquecida aberta num computador emprestado
   // não pode bastar para isso.
   async function apagar(conta, { senha }) {
@@ -212,6 +276,7 @@ function criarContas({
 
   return {
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, novaRecuperacao, apagar, publica,
+    perfil, salvarPerfil, salvarAjustes, dados,
     banco, senhas, freio, suspensa, csrfDe,
     copiarAgora: () => tarefas ? tarefas.copiarAgora() : Promise.reject(new Error('Manutenção desligada.')),
     manutencao: () => tarefas?.estado() || null,

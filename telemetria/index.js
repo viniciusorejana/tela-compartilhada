@@ -130,9 +130,9 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
   function limitarOrigem(req, tipo = 'origem-http') {
     return origens.permitirGlobal() && origens.verificar(chaveDaOrigem(req), tipo).ok;
   }
-  function prepararSessao(req, res, sala, nome) {
+  function prepararSessao(req, res, sala, nome, conta = null) {
     if (!limitarOrigem(req, 'origem-token')) { res.status(429).set('Retry-After', '60').json({ error: 'Muitas entradas. Aguarde um minuto.' }); return null; }
-    const emitida = sessoes.emitir({ sala, nome, credencial: req.headers['x-nexo-sessao'] });
+    const emitida = sessoes.emitir({ sala, nome, credencial: req.headers['x-nexo-sessao'], conta });
     if (!emitida) { res.status(503).json({ error: 'O servidor atingiu a capacidade de sessões.' }); return null; }
     if (!abuso.verificar(emitida.sessao.id, 'sala-token', contexto(emitida.sessao)).ok || emitida.sessao.bloqueadaAte > Date.now()) { res.status(429).set('Retry-After', '60').json({ error: 'Aguarde antes de reconectar.' }); return null; }
     return emitida;

@@ -41,4 +41,18 @@ button:disabled:hover { background:#ad9aee; }
 .conta-acoes > * { flex:1 1 180px; }
 .botao-link { display:flex; align-items:center; justify-content:center; background:#ad9aee; color:#221b33; padding:12px 18px; border-radius:9px; font-size:12px; font-weight:650; }
 .botao-link:hover { background:#c4b3ff; }
+.botao-link.secundario { background:#b5a0d606; border:1px solid #bfaad732; color:#d2c3e3; margin:4px 0 8px; }
+.botao-link.secundario:hover { background:#b5a0d615; }
+.escolhas { border:0; padding:0; margin:18px 0 0; display:flex; flex-wrap:wrap; gap:8px; }
+.escolhas legend { font-size:11px; font-weight:600; color:#c6bcd1; margin-bottom:9px; padding:0; }
+.escolhas label { position:relative; margin:0!important; cursor:pointer; }
+.escolhas input { position:absolute; opacity:0; width:1px; height:1px; }
+.escolha { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; border:2px solid transparent; font-size:17px; color:#15121f; font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; }
+.escolha.texto { width:auto; padding:0 12px; border-radius:18px; font:600 11px/1 "Segoe UI",system-ui,sans-serif; background:#ffffff0d; color:#d8cdea; }
+.escolhas input:checked + .escolha { border-color:#f1ebff; box-shadow:0 0 0 2px #8879f6; }
+.escolhas input:focus-visible + .escolha { outline:2px solid #ad9aee; outline-offset:2px; }
+.conta-avatar.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; font-size:26px; }
+.conta-secao.perigo summary { color:#ffb3bf; }
+button.perigo { background:#e5798b; color:#2a1016; }
+button.perigo:hover { background:#f191a1; }
 @media(max-width:760px) { .conta-card { padding:23px; } .conta-abas button { padding:9px 8px; font-size:11px; } .codigo-recuperacao { flex-direction:column; align-items:stretch; } .codigo-recuperacao button { width:100%; } }

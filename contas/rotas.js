@@ -68,7 +68,9 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
   const autenticada = (req, res, next) => {
     const achada = sessaoDoPedido(req, res);
     if (!achada) return res.status(401).json({ error: 'Sua sessão terminou. Entre na conta de novo.' });
-    if (!iguais(req.headers['x-nexo-csrf'], achada.csrf)) return res.status(403).json({ error: 'Pedido recusado. Recarregue a página.' });
+    // Leitura não pede CSRF: o cookie Strict não vai num pedido de outro site, e nenhum site de
+    // fora consegue ler a resposta de um GET daqui.
+    if (req.method !== 'GET' && !iguais(req.headers['x-nexo-csrf'], achada.csrf)) return res.status(403).json({ error: 'Pedido recusado. Recarregue a página.' });
     req.contaNexo = achada;
     next();
   };
@@ -78,7 +80,26 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
   app.get('/api/conta/eu', (req, res) => {
     const achada = sessaoDoPedido(req, res);
     if (!achada) return res.json({ conta: null });
-    res.json({ conta: contas.publica(achada.conta), csrf: achada.csrf });
+    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf });
+  });
+
+  app.put('/api/conta/perfil', json, autenticada, (req, res) => {
+    const { apelido, cor, marca } = req.body || {};
+    const r = contas.salvarPerfil(req.contaNexo.conta, { apelido, cor, marca });
+    if (!r.ok) return recusar(res, r);
+    res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
+  });
+
+  app.put('/api/conta/ajustes', json, autenticada, (req, res) => {
+    const r = contas.salvarAjustes(req.contaNexo.conta, req.body?.ajustes);
+    if (!r.ok) return recusar(res, r);
+    res.json({ ajustes: r.ajustes });
+  });
+
+  app.get('/api/conta/dados', autenticada, (req, res) => {
+    const dia = new Date().toISOString().slice(0, 10);
+    res.set('Content-Disposition', `attachment; filename="nexo-meus-dados-${dia}.json"`);
+    res.type('application/json').send(JSON.stringify(contas.dados(req.contaNexo.conta), null, 2));
   });
 
   app.post('/api/conta/cadastrar', limitada('cadastrar'), json, tratar(async (req, res) => {
@@ -96,7 +117,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
     // Entrar de novo no mesmo navegador troca a sessão, em vez de acumular duas.
     contas.sair(tokenDoPedido(req));
     gravarCookie(req, res, r.token);
-    res.json({ conta: contas.publica(r.conta), csrf: contas.csrfDe(r.token) });
+    res.json({ conta: contas.publica(r.conta), perfil: contas.perfil(r.conta), csrf: contas.csrfDe(r.token) });
   }));
 
   app.post('/api/conta/recuperar', limitada('recuperar'), json, tratar(async (req, res) => {
@@ -105,7 +126,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true }) {
     if (!r.ok) return recusar(res, r);
     if (r.suspensa) return res.json({ conta: null, recuperacao: r.recuperacao, suspensa: true });
     gravarCookie(req, res, r.token);
-    res.json({ conta: contas.publica(r.conta), csrf: contas.csrfDe(r.token), recuperacao: r.recuperacao });
+    res.json({ conta: contas.publica(r.conta), perfil: contas.perfil(r.conta), csrf: contas.csrfDe(r.token), recuperacao: r.recuperacao });
   }));
 
   // Sair não exige CSRF: o pior que um site de fora conseguiria é deslogar alguém, e exigir o

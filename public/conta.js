@@ -90,7 +90,7 @@
     const r = await api('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: valor(formulario, 'usuario'), senha: valor(formulario, 'senha') } });
     if (!r.ok) { falhou(formulario, r); return; }
     formulario.reset();
-    concluir(r.dados.conta);
+    concluir(r.dados.conta, r.dados.perfil);
   });
 
   aoEnviar($('formCriar'), async formulario => {
@@ -108,6 +108,7 @@
     } });
     if (!r.ok) { falhou(formulario, r); return; }
     formulario.reset();
+    if (r.dados.perfil) perfil = r.dados.perfil;
     mostrarCodigo(r.dados.recuperacao, r.dados.conta);
   });
 
@@ -142,13 +143,51 @@
   };
 
   // ---------- Com conta ----------
-  function corDoNome(nome) {
-    let hash = 0;
-    for (let i = 0; i < nome.length; i++) hash = (hash * 31 + nome.charCodeAt(i)) >>> 0;
-    return `hsl(${hash % 360}, 55%, 62%)`;
+  let perfil = { cor: null, marca: null };
+
+  function pintarAvatar(el, nome, dados) {
+    const aparencia = NexoPerfil.aparencia(nome, dados);
+    el.textContent = aparencia.texto;
+    el.style.background = aparencia.cor;
+    el.classList.toggle('com-marca', aparencia.marca);
   }
-  // Por ponto de código, e não por unidade: `p[0]` de um emoji é meia letra, e aparece como "�".
-  const iniciais = nome => nome.trim().split(/\s+/).slice(0, 2).map(p => [...p][0]?.toUpperCase() || '').join('') || '?';
+
+  // As opções vêm do mesmo conjunto que o servidor aceita (perfil.js), e cada uma é um rádio
+  // de verdade: dá para escolher pelo teclado, e o leitor de tela diz o nome da cor.
+  const NOMES_DAS_CORES = { lilas: 'Lilás', menta: 'Menta', ambar: 'Âmbar', coral: 'Coral', ceu: 'Céu', rosa: 'Rosa', limao: 'Limão', areia: 'Areia', turquesa: 'Turquesa', ameixa: 'Ameixa' };
+  const NOMES_DAS_MARCAS = { brilho: 'Brilho', losango: 'Losango', estrela: 'Estrela', lua: 'Lua', raio: 'Raio', flor: 'Flor', cavalo: 'Cavalo', nota: 'Nota', coracao: 'Coração', sol: 'Sol', trevo: 'Trevo', circulo: 'Círculo' };
+  function opcao(grupo, valor, rotulo, desenhar) {
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = grupo; radio.value = valor;
+    radio.setAttribute('aria-label', rotulo);
+    const amostra = document.createElement('span');
+    amostra.className = 'escolha';
+    amostra.title = rotulo;
+    desenhar(amostra);
+    label.append(radio, amostra);
+    return label;
+  }
+  function montarEscolhas() {
+    const cores = $('perfilCores'), marcas = $('perfilMarcas');
+    cores.append(opcao('cor', '', 'A cor do meu nome', el => { el.classList.add('texto'); el.textContent = 'Do nome'; }));
+    for (const [nome, cor] of Object.entries(NexoPerfil.CORES)) cores.append(opcao('cor', nome, NOMES_DAS_CORES[nome] || nome, el => { el.style.background = cor; }));
+    marcas.append(opcao('marca', '', 'As iniciais do apelido', el => { el.classList.add('texto'); el.textContent = 'Iniciais'; }));
+    for (const [nome, simbolo] of Object.entries(NexoPerfil.MARCAS)) marcas.append(opcao('marca', nome, NOMES_DAS_MARCAS[nome] || nome, el => { el.textContent = simbolo; el.style.background = '#ffffff14'; el.style.color = '#e4dcf6'; }));
+    $('formPerfil').addEventListener('input', previa);
+  }
+  const escolhido = grupo => $('formPerfil').querySelector(`input[name="${grupo}"]:checked`)?.value || null;
+  // O avatar do topo acompanha a escolha antes de salvar: é ali que se vê como vai ficar.
+  function previa() {
+    pintarAvatar($('contaAvatar'), $('perfilApelido').value.trim() || conta.apelido, { cor: escolhido('cor'), marca: escolhido('marca') });
+  }
+  function preencherPerfil() {
+    $('perfilApelido').value = conta.apelido;
+    for (const grupo of ['cor', 'marca']) {
+      const atual = perfil[grupo] || '';
+      $('formPerfil').querySelectorAll(`input[name="${grupo}"]`).forEach(r => { r.checked = r.value === atual; });
+    }
+  }
 
   function descreverPlano(c) {
     if (c.plano !== 'premium') return 'plano grátis';
@@ -161,15 +200,16 @@
     $('contaUsuario').textContent = `@${conta.usuario}`;
     $('contaCodigo').textContent = conta.codigo;
     $('contaPlano').textContent = descreverPlano(conta);
-    $('contaAvatar').textContent = iniciais(conta.apelido);
-    $('contaAvatar').style.background = corDoNome(conta.apelido);
+    pintarAvatar($('contaAvatar'), conta.apelido, perfil);
+    preencherPerfil();
     $('voltarParaSala').hidden = !voltar;
     if (voltar) $('voltarParaSala').href = voltar;
   }
 
   // Quem veio de uma sala volta para ela: é para isso que entrou.
-  function concluir(novaConta) {
+  function concluir(novaConta, novoPerfil) {
     conta = novaConta;
+    if (novoPerfil) perfil = novoPerfil;
     if (voltar) { location.assign(voltar); return; }
     pintarConta();
     mostrar('comConta');
@@ -179,6 +219,33 @@
     $('contaStatus').textContent = texto;
     $('contaStatus').classList.toggle('problema', problema);
   }
+
+  aoEnviar($('formPerfil'), async formulario => {
+    const r = await api('/api/conta/perfil', { metodo: 'PUT', corpo: { apelido: $('perfilApelido').value, cor: escolhido('cor'), marca: escolhido('marca') } });
+    if (!r.ok) { falhou(formulario, r); return; }
+    conta = r.dados.conta;
+    perfil = r.dados.perfil;
+    pintarConta();
+    dizer('Perfil salvo. Ele vale na próxima vez que você entrar numa sala.');
+  });
+
+  $('apagarCerteza').onchange = () => { $('formApagar').querySelector('button').disabled = !$('apagarCerteza').checked; };
+  $('formApagar').addEventListener('submit', async evento => {
+    evento.preventDefault();
+    const formulario = $('formApagar');
+    const botao = formulario.querySelector('button');
+    if (botao.disabled) return;
+    botao.disabled = true;
+    avisar(formulario, '');
+    const r = await api('/api/conta/apagar', { metodo: 'POST', corpo: { senha: $('apagarSenha').value } });
+    if (!r.ok) { avisar(formulario, r.dados.error || 'Não foi possível apagar a conta.'); botao.disabled = !$('apagarCerteza').checked; return; }
+    formulario.reset();
+    conta = null;
+    csrf = '';
+    $('motivoDaVisita').textContent = 'Sua conta foi apagada, com o perfil e as sessões. Para entrar numa sala você não precisa de conta.';
+    mostrar('semConta');
+    abrirAba('abaEntrar', false);
+  });
 
   aoEnviar($('formSenha'), async formulario => {
     const r = await api('/api/conta/senha', { metodo: 'POST', corpo: { atual: $('senhaAtual').value, nova: $('senhaNova').value } });
@@ -204,9 +271,10 @@
     abrirAba('abaEntrar');
   };
 
+  montarEscolhas();
   (async () => {
     const r = await api('/api/conta/eu');
-    if (r.ok && r.dados.conta) { conta = r.dados.conta; pintarConta(); mostrar('comConta'); return; }
+    if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; pintarConta(); mostrar('comConta'); return; }
     mostrar('semConta');
   })();
 })();

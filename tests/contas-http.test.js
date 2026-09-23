@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocket } = require('ws');
-const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
+const { iniciarServidor, conectarSocket } = require('./helpers/servidor-telemetria.cjs');
 
 const SENHA = 'cafe com pao no sabado';
 
@@ -76,6 +76,60 @@ test('criar conta tem teto diário por origem de rede', async t => {
     situacoes.push(r.status);
   }
   assert.deepEqual(situacoes, [201, 201, 201, 429]);
+});
+
+// A identidade de mídia vai para o token do LiveKit, para as webhooks e para os relatos. Se
+// ela carregasse a conta, tudo isso viraria um histórico de quem esteve onde.
+test('com conta, a sala usa o apelido da conta; a identidade de mídia continua sorteada', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'ana.silva', apelido: 'Ana', senha: SENHA } });
+  const perfil = await ana.pedir('/api/conta/perfil', { metodo: 'PUT', corpo: { cor: 'menta', marca: 'lua' } });
+  assert.equal(perfil.status, 200, JSON.stringify(perfil.dados));
+  const codigo = perfil.dados.conta.codigo;
+
+  const config = await ana.pedir('/api/sala-config?sala=squad-teste&nome=Nome%20digitado');
+  assert.equal(config.dados.nome, 'Ana', 'o apelido da conta vence o campo de nome');
+  assert.match(config.dados.identidade, /^Ana#[a-f0-9]{16}$/);
+  const a = await conectarSocket(servidor.origem, config.dados.credencialSessao); t.after(a.fechar);
+  const entradaDela = await a.pedir('join-room', 'squad-teste', 'forjado', 'forjado');
+  assert.deepEqual(entradaDela.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua' });
+
+  const bia = await servidor.credencial('Bia');
+  const b = await conectarSocket(servidor.origem, bia.credencialSessao); t.after(b.fechar);
+  const entrada = await b.pedir('join-room', 'squad-teste', 'Bia', bia.identidade);
+  const anaNaLista = entrada.peers.find(p => p.name === 'Ana');
+  assert.deepEqual(anaNaLista.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua' });
+  const texto = JSON.stringify(entrada);
+  assert.equal(texto.includes('ana.silva'), false, 'o nome de usuário não é mostrado à sala');
+  assert.equal(texto.includes('contaId'), false, 'a conta fica no servidor');
+  assert.equal(entrada.perfil, null, 'quem não tem conta não tem perfil');
+});
+
+test('baixar meus dados é um anexo JSON, e pede a sessão', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  assert.equal((await fetch(servidor.origem + '/api/conta/dados')).status, 401);
+  const ana = cliente(servidor.origem);
+  await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
+  const r = await fetch(servidor.origem + '/api/conta/dados', { headers: { Cookie: ana.cookie() } });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-disposition'), /^attachment; filename="nexo-meus-dados-\d{4}-\d{2}-\d{2}\.json"$/);
+  const dados = await r.json();
+  assert.equal(dados.conta.usuario, 'ana');
+  assert.equal(JSON.stringify(dados).includes('scrypt$'), false);
+});
+
+test('apagar a conta pelo HTTP pede a senha, apaga e desfaz o cookie', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
+  assert.equal((await ana.pedir('/api/conta/apagar', { metodo: 'POST', corpo: { senha: 'nao e a senha dela' } })).status, 401);
+  const apagada = await ana.pedir('/api/conta/apagar', { metodo: 'POST', corpo: { senha: SENHA } });
+  assert.equal(apagada.status, 200);
+  assert.match(apagada.definido, /Max-Age=0/);
+  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null });
+  const outra = cliente(servidor.origem);
+  assert.equal((await outra.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } })).status, 401);
 });
 
 function abrirSocket(origem, cabecalhoOrigin) {

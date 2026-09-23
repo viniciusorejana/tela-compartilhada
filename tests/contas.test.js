@@ -207,6 +207,54 @@ test('apagar a conta pede a senha e leva perfil e sessões junto', async t => {
   assert.equal(contas.sessao(token), null);
 });
 
+// O servidor é a segunda tranca da lista fechada: mesmo um cliente modificado não consegue
+// guardar, ligado à conta, o aparelho de alguém ou a lista de quem ele silenciou.
+test('os ajustes guardados são só os da lista fechada, e a qualidade escolhida fica mesmo acima do plano', async t => {
+  const { contas } = comContas(t);
+  const { conta } = await contas.cadastrar({ usuario: 'ana', senha: SENHA });
+  const r = contas.salvarAjustes(conta, {
+    qualidade: 'ultra', quadros: 60, pushToTalk: true, codec: 'av1',
+    microfone: 'mic-123', camera: 'cam-456', audioPorPessoa: { bia: { voz: 0 } }, tokenAgenteAudio: 'a'.repeat(32), quadrosQualquer: 999
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(contas.perfil(conta).ajustes, { qualidade: 'ultra', codec: 'av1', quadros: 60, pushToTalk: true });
+  assert.deepEqual(contas.salvarAjustes(conta, 'não é objeto').ajustes, {});
+});
+
+test('cor e marca só do conjunto pronto; o apelido muda, o código não', async t => {
+  const { contas } = comContas(t);
+  const { conta } = await contas.cadastrar({ usuario: 'ana', apelido: 'Ana', senha: SENHA });
+  assert.equal(contas.salvarPerfil(conta, { cor: 'javascript:alert(1)' }).status, 400);
+  assert.equal(contas.salvarPerfil(conta, { marca: '<img>' }).status, 400);
+  assert.equal(contas.salvarPerfil(conta, { apelido: '   ' }).status, 400);
+  const salvo = contas.salvarPerfil(conta, { apelido: 'Aninha', cor: 'menta', marca: 'lua' });
+  assert.equal(salvo.ok, true);
+  assert.equal(salvo.conta.apelido, 'Aninha');
+  assert.equal(salvo.conta.codigo, conta.codigo);
+  assert.deepEqual({ cor: salvo.perfil.cor, marca: salvo.perfil.marca }, { cor: 'menta', marca: 'lua' });
+  // `null` volta ao padrão; ausente, mantém.
+  const voltou = contas.salvarPerfil(conta, { cor: null });
+  assert.deepEqual({ cor: voltou.perfil.cor, marca: voltou.perfil.marca }, { cor: null, marca: 'lua' });
+});
+
+// O direito de acesso e de portabilidade (LGPD, art. 18): tudo o que se guarda ligado à
+// pessoa -- menos o que só serviria para atacar a conta.
+test('baixar meus dados traz conta, perfil, ajustes e sessões, e nenhum hash', async t => {
+  const { contas } = comContas(t);
+  const { conta } = await contas.cadastrar({ usuario: 'ana', apelido: 'Ana', senha: SENHA, agente: 'Mozilla/5.0 (Linux; Android 14) Chrome/140.0 Mobile' });
+  contas.salvarPerfil(conta, { cor: 'coral' });
+  contas.salvarAjustes(conta, { qualidade: 'economical' });
+  const dados = contas.dados(conta);
+  assert.equal(dados.conta.usuario, 'ana');
+  assert.match(dados.conta.codigo, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal(dados.perfil.cor, 'coral');
+  assert.deepEqual(dados.perfil.ajustes, { qualidade: 'economical' });
+  assert.equal(dados.sessoes[0].aparelho, 'Chrome · Android');
+  const texto = JSON.stringify(dados);
+  assert.equal(texto.includes('scrypt$'), false);
+  assert.equal(texto.includes(conta.id), false, 'o id interno não sai do servidor, nem para a própria pessoa');
+});
+
 // Por CONTA, além da origem: uma tentativa por IP a partir de mil IPs passaria por baixo de
 // qualquer limite só por origem.
 test('tentativas demais numa conta são recusadas, e as de outra conta continuam', async t => {

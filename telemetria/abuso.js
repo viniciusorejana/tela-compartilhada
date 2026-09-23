@@ -23,6 +23,9 @@ const REGRAS = Object.freeze({
   // O servidor inteiro. É mais ou menos o que a fila de derivação atende sem crescer.
   'entrar-global': { sessao: 120 },
   'conta-escrever': { sessao: 20, longa: [120, 60 * MINUTO] },
+  // Os ajustes sobem sozinhos, dois segundos depois da última mudança. Têm balde próprio para
+  // que mexer muito na qualidade nunca impeça ninguém de trocar a senha.
+  'conta-ajustes': { sessao: 30, longa: [300, 60 * MINUTO] },
   'soundboard-tocar': { sessao: 30, sala: 90, intervalo: 400 },
   'soundboard-upload': { sessao: 6, sala: 24 },
   'soundboard-bytes': { sessao: 12 * MiB, sala: 48 * MiB },

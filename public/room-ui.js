@@ -113,8 +113,7 @@
     const seconds = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
     $('sessionClock').textContent = joined ? `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')} nesta sessão` : 'Sua sessão começa aqui';
     $('selfName').textContent = myName || 'Seu perfil';
-    $('selfAvatar').textContent = iniciais(myName || '?');
-    $('selfAvatar').style.background = corDoNome(myName || 'Nexo');
+    pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
     $('selfState').textContent = !joined ? 'Pronto para entrar' : micMuted ? 'Microfone desligado' : 'Microfone ligado';
     for (const id of ['memberTotal', 'sidebarCount', 'tileCount']) $(id).textContent = total;
     const live = [...peers.values()].filter(p => p.state.screen).length + Number(Boolean(screenStream));
@@ -128,7 +127,9 @@
       : live ? `${live} ${live === 1 ? 'tela ao vivo agora.' : 'telas ao vivo agora.'}`
       : total > 1 ? 'Ninguém transmitindo ainda.' : 'Chame alguém para a sala.';
     const members = joined ? [{ id: 'self', name: myName, state: meuEstado() }, ...peers.values()] : [];
-    const signature = JSON.stringify(members.map(p => [p.id, p.name, p.state, Boolean(p.semConexao)]));
+    // O perfil entra na assinatura porque ele chega pela sinalização, depois de a pessoa já
+    // estar na lista pela mídia: sem isso a cor escolhida só apareceria na próxima mudança.
+    const signature = JSON.stringify(members.map(p => [p.id, p.name, p.state, Boolean(p.semConexao), perfilDe(p.id)]));
     if (signature !== memberSignature) {
       memberSignature = signature;
       $('memberList').replaceChildren(...members.map(person => {
@@ -137,8 +138,7 @@
         row.dataset.memberId = person.id;
         const avatar = document.createElement('span');
         avatar.className = 'member-avatar';
-        avatar.style.background = corDoNome(person.name);
-        avatar.textContent = iniciais(person.name);
+        pintarAvatar(avatar, person.name, perfilDe(person.id));
         const name = document.createElement('span');
         name.className = 'member-name';
         name.textContent = person.name + (person.id === 'self' ? ' (você)' : '');

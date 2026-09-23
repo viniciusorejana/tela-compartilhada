@@ -385,6 +385,14 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .gate-card input { font-size:16px; }
 .gate-card button { width:100%; padding:13px; margin-top:16px; }
 .gate-back { display:block; text-align:center; margin-top:20px; color:#aaa0bc; font-size:11px; text-decoration:none; }
+/* Com conta, o nome é o apelido da conta: o campo fica só para leitura, e esta linha diz por quê. */
+.gate-card p.gate-conta { margin:10px 0 0; font-size:11px; color:#c9bfd9; line-height:1.6; }
+.gate-card p.gate-conta a { color:#cbbcff; }
+.gate-card input:read-only { color:#cfc6e0; background:#1b1a26; cursor:default; }
+.gate-conta-link { display:block; text-align:center; margin-top:16px; color:#cbbcff; font-size:11px; }
+/* A marca escolhida no perfil é um símbolo de texto, não um emoji: a fonte de símbolos
+   desenha todos no mesmo traço, e o avatar não vira um adesivo colorido no meio da lista. */
+.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; }
 .modal-card { width:min(100%,470px); max-height:88vh; max-height:88dvh; overflow-y:auto; border:1px solid #b9a9e024; border-radius:18px; background:#23222f; padding:26px; box-shadow:0 25px 80px #0005; }
 .modal-card h2 { font-size:23px; letter-spacing:-.04em; margin:0 0 7px; }
 .modal-sub { display:block; color:#aaa2ba; font-size:12px; margin:0 0 22px; line-height:1.7; }

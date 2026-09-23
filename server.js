@@ -34,6 +34,7 @@ const { criarModeracao } = require('./moderacao');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
 const { instalarRotasDeContas } = require('./contas/rotas');
+const { formatarCodigo } = require('./contas/regras');
 const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/origem');
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
@@ -147,7 +148,12 @@ app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res) => {
 // nao escolhe nada disso, e o segredo que o assina nunca sai desta maquina.
 app.get('/api/sala-config', (req, res) => {
   const sala = String(req.query.sala || '').toLowerCase();
-  const nome = nomeQueNaoSeFingeDeBot(String(req.query.nome || 'Convidado').trim().slice(0, 40) || 'Convidado');
+  // Com conta, o apelido da conta vence o campo de nome: é ele que a pessoa escolheu para ser
+  // reconhecida, e deixá-lo trocar a cada entrada desfaria o motivo de ter um.
+  const naConta = rotasDeContas.sessaoDoPedido(req, res);
+  const conta = naConta?.conta || null;
+  const nomeEscolhido = conta ? conta.apelido : String(req.query.nome || 'Convidado').trim().slice(0, 40);
+  const nome = nomeQueNaoSeFingeDeBot(nomeEscolhido || 'Convidado');
   if (!/^[a-z0-9_-]{4,32}$/.test(sala)) return res.status(400).json({ error: 'Codigo de sala invalido.' });
 
   let publicUrl = null;
@@ -173,7 +179,7 @@ app.get('/api/sala-config', (req, res) => {
     return res.status(403).json({ error: `Você foi removido desta sala. Tente novamente em ${castigo.minutos} min.`, motivo: 'removido' });
   }
 
-  const preparada = telemetria.prepararSessao(req, res, sala, nome);
+  const preparada = telemetria.prepararSessao(req, res, sala, nome, conta ? { id: conta.id, perfil: perfilNaSala(conta) } : null);
   if (!preparada) return;
   const { sessao, credencial: credencialSessao } = preparada;
   const identidade = sessao.identidade;
@@ -203,15 +209,22 @@ app.get('/api/sala-config', (req, res) => {
   }
 
   if (!sfu.estado.ativo) {
-    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, credencialSessao });
+    return res.status(503).json({ error: 'servidor-de-midia-indisponivel', motivo: sfu.estado.motivo, publicUrl, identidade, nome, credencialSessao });
   }
 
   // A retomada agora apresenta uma credencial privada da sessão. O sufixo visível aos
   // pares continua estável, mas conhecê-lo não permite assumir a sessão de outra pessoa.
   // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
   res.set('Cache-Control', 'no-store');
-  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, publicUrl, credencialSessao });
+  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, nome, publicUrl, credencialSessao });
 });
+
+// O que a sala vê de quem tem conta: cor, marca e o código permanente. O id da conta nunca
+// entra aqui -- ele não sai do servidor.
+function perfilNaSala(conta) {
+  const { cor, marca } = contas.perfil(conta);
+  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca };
+}
 
 // Quem desistiu na tela de espera precisa sumir da fila imediatamente. `keepalive` permite
 // que este DELETE termine inclusive quando o clique já está levando o navegador de volta
@@ -943,8 +956,10 @@ io.on('connection', (socket) => {
     const membros = membrosDaSala(roomCode);
     // A identidade vai em cada par porque é por ela que a moderação funciona: a lista da
     // sala é desenhada a partir da mídia, que é chaveada por identidade, e não por socket.
-    const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null }));
-    membros.set(socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade });
+    // O perfil vai junto (cor, marca e código de quem tem conta); a conta, não -- ela fica no
+    // membro, só no servidor, para a moderação e a mesa de sons saberem quem é quem.
+    const peers = Array.from(membros.entries()).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null }));
+    membros.set(socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null });
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     moderacao.entrou(roomCode, sessao.identidade);
     telemetria.entrou(socket);
@@ -955,7 +970,7 @@ io.on('connection', (socket) => {
       // com musica no ar e nao ver o que e (nem conseguir tocar um som que ja esta la)
       // faria parecer que aquilo nao e desta sala.
       callback({
-        ok: true, roomCode, selfId: socket.id, peers,
+        ok: true, roomCode, selfId: socket.id, peers, perfil: sessao.perfil || null,
         // Quem manda na sala, e o que ESTA pessoa pode fazer. As duas coisas separadas: a
         // primeira desenha o selo na lista, a segunda decide se as ações aparecem. Mandar só
         // a primeira obrigaria o cliente a deduzir a segunda comparando identidades -- e a
@@ -974,7 +989,7 @@ io.on('connection', (socket) => {
     // ela, uma oscilacao de socket -- em que a pessoa NAO saiu e a midia dela nunca caiu --
     // dispara o "peer-left", tira a pessoa da lista de todo mundo, e nada a traz de volta
     // ate o luto vencer, porque a sessao de midia continua sendo a mesma.
-    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null });
+    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null, perfil: sessao.perfil || null });
     // Depois do "peer-joined": o primeiro a entrar numa sala vazia é o dono, e o aviso tem
     // de chegar a ele também -- daí `io.to` dentro de anunciarDono, e não `socket.to`.
     anunciarDono(roomCode);

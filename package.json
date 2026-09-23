@@ -12,6 +12,7 @@
     "test:download": "node tests/download-browser.cjs",
     "test:soundboard": "node tests/soundboard-browser.cjs",
     "test:painel": "node tests/painel-browser.cjs",
+    "test:contas": "node tests/contas-browser.cjs",
     "banda": "node scripts/relatorio-de-banda.cjs",
     "painel:chave": "node scripts/painel-chave.cjs",
     "build:icon": "node scripts/build-icon.cjs",

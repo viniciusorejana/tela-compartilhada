@@ -18,7 +18,9 @@
     <p>Escolha como quer aparecer para o resto do squad. O microfone e a câmera começam desligados.</p>
     <label for="nameInput">Seu nome</label>
     <input id="nameInput" type="text" maxlength="40" placeholder="Seu nome ou nickname" autocomplete="nickname" autofocus>
+    <p id="gateConta" class="gate-conta" hidden></p>
     <button id="nameConfirmBtn">Entrar na sala →</button>
+    <a class="gate-conta-link" id="gateContaLink" href="/conta">Tem conta? Entre para usar seu apelido e seus ajustes</a>
     <a class="gate-back" href="/">Voltar ao início</a>
   </div>
 </div>
@@ -360,7 +362,9 @@
 <div id="joinRequestNotice" class="join-request-notice" role="status" hidden><div><strong id="joinRequestNoticeTitle">Alguém quer entrar</strong><span>Abra a moderação para aceitar ou recusar.</span></div><button id="joinRequestNoticeOpen" type="button">Ver pedido</button></div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/livekit-client.js"></script>
+<script src="/perfil.js"></script>
 <script src="/preferencias.js"></script>
+<script src="/conta-cliente.js"></script>
 <script src="/media-utils.js"></script>
 <script src="/room-transport.js"></script>
 <script src="/quality-utils.js"></script>

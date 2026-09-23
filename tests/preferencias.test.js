@@ -8,6 +8,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const fonte = fs.readFileSync(path.join(__dirname, '..', 'public', 'preferencias.js'), 'utf8');
+// A lista do que sincroniza mora em perfil.js, que a sala carrega antes: sem ele, o leitor
+// não sincroniza nada.
+const fonteDoPerfil = fs.readFileSync(path.join(__dirname, '..', 'public', 'perfil.js'), 'utf8');
 
 // Objetos criados dentro do `vm` têm outro Object.prototype, e `deepStrictEqual` recusa
 // dois objetos de contextos diferentes mesmo com o conteúdo idêntico. Comparar o conteúdo
@@ -34,6 +37,7 @@ function comArmazenamento(inicial = {}) {
   const janela = { localStorage: alvo };
   janela.window = janela;      // o módulo se registra em `window`
   vm.createContext(janela);
+  vm.runInContext(fonteDoPerfil, janela);
   vm.runInContext(fonte, janela);
   return { Preferencias: janela.Preferencias, dados };
 }
@@ -166,4 +170,59 @@ test('esquecer tudo leva junto o que era de cada sala', () => {
   Preferencias.esquecerTudo();
   assert.equal(Preferencias.resumo().pessoas, 0);
   assert.equal(Preferencias.resumo().salas, 0);
+});
+
+// ---------- O que segue a conta, e o que fica neste navegador ----------
+//
+// Os dois testes abaixo protegem uma decisão de ser desfeita sem querer: aparelho e volume por
+// pessoa NÃO sobem para a conta. O primeiro é identificador de hardware; o segundo seria a
+// lista de quem a pessoa silenciou, guardada em disco e ligada a ela.
+
+test('o leitor único continua lendo as chaves que já existiam', () => {
+  const { Preferencias } = comArmazenamento({
+    nexoQuality: 'ultra', nexoCodec: 'vp9', nexoFps: '60', 'sala.pushToTalk': '1',
+    'nexo.pref.reducaoDeRuido': 'false', 'sala.dispositivo.microfone': 'mic-123', salaNome: 'Ana'
+  });
+  assert.equal(Preferencias.lerAjuste('qualidade'), 'ultra');
+  assert.equal(Preferencias.lerAjuste('codec'), 'vp9');
+  assert.equal(Preferencias.lerAjuste('quadros'), 60);
+  assert.equal(Preferencias.lerAjuste('pushToTalk'), true);
+  assert.equal(Preferencias.lerAjuste('reducaoDeRuido'), false);
+  assert.equal(Preferencias.lerAjuste('microfone'), 'mic-123');
+  assert.equal(Preferencias.lerAjuste('nome'), 'Ana');
+  assert.equal(Preferencias.lerAjuste('ladoCamera', 'padrão'), 'padrão');
+});
+
+test('sobe para a conta o que é da pessoa, e nunca aparelho, volume por pessoa ou pareamento', () => {
+  const { Preferencias } = comArmazenamento({
+    nexoQuality: 'high', nexoPrioridade: 'nitidez', 'sala.pushToTalk': '0',
+    'sala.dispositivo.microfone': 'mic-123', 'sala.dispositivo.camera': 'cam-456', 'sala.dispositivo.saida': 'fone',
+    tokenAgenteAudio: 'a'.repeat(32), nexoRecentRooms: '["squad"]', salaNome: 'Ana', 'sala.economiaDados': '1'
+  });
+  Preferencias.guardarAudioDe('Bia', { voz: 0.2, vozMuda: false, tela: 1, telaMuda: false });
+  mesmoConteudo(Preferencias.ajustesSincronizaveis(), { qualidade: 'high', prioridade: 'nitidez', pushToTalk: false });
+});
+
+test('o que desce da conta só escreve o que está na lista, mesmo que o servidor mande mais', () => {
+  const { Preferencias, dados } = comArmazenamento({ 'sala.dispositivo.microfone': 'mic-daqui' });
+  const aplicados = Preferencias.aplicarAjustesDaConta({
+    qualidade: 'ultra', quadros: 60, microfone: 'mic-de-outro-aparelho', audioPorPessoa: { bia: { voz: 0 } }, codec: 'inventado'
+  });
+  mesmoConteudo([...aplicados].sort(), ['quadros', 'qualidade']);
+  assert.equal(dados.get('nexoQuality'), 'ultra');
+  assert.equal(dados.get('nexoFps'), '60');
+  assert.equal(dados.get('sala.dispositivo.microfone'), 'mic-daqui', 'o aparelho deste navegador não é trocado pelo de outro');
+  assert.equal(dados.has('nexo.pref.audioPorPessoa'), false);
+  assert.equal(dados.has('nexoCodec'), false, 'um valor inválido não é escrito');
+});
+
+test('só a mudança de um ajuste que sincroniza avisa a conta', () => {
+  const { Preferencias } = comArmazenamento();
+  const avisos = [];
+  Preferencias.aoMudarAjuste(nome => avisos.push(nome));
+  Preferencias.gravarAjuste('qualidade', 'economical');
+  Preferencias.gravarAjuste('microfone', 'mic-123');
+  Preferencias.gravarAjuste('nome', 'Ana');
+  Preferencias.aplicarAjustesDaConta({ codec: 'h264' });
+  mesmoConteudo(avisos, ['qualidade']);
 });

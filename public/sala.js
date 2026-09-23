@@ -103,6 +103,9 @@ const suportaTelaCheia = Boolean(
 let socket = null;
 let credencialSessao = null;
 let identidadeSessao = null;
+// O nome que o servidor deu a esta sessão. Com conta, é o apelido dela -- e ele vale mesmo
+// quando a mídia está fora do ar e a configuração volta sem token.
+let nomeDaSessao = null;
 let sequenciaMedicao = 0;
 window.NexoSessao = { cabecalhos: () => credencialSessao ? { 'X-Nexo-Sessao': credencialSessao } : {} };
 // A credencial privada retoma a mesma identidade de mídia durante uma oscilação.
@@ -195,6 +198,7 @@ async function pedirConfigDaSala(nome) {
       const resposta = await fetch(`/api/sala-config?sala=${encodeURIComponent(roomCode)}&nome=${encodeURIComponent(nome)}`, { signal: controle.signal, headers: window.NexoSessao.cabecalhos() });
       const dados = await resposta.json().catch(() => ({}));
       if (dados.credencialSessao) { credencialSessao = dados.credencialSessao; identidadeSessao = dados.identidade; }
+      if (dados.nome) nomeDaSessao = dados.nome;
       if (dados.publicUrl) publicInviteUrl = dados.publicUrl;
       if (resposta.ok) return dados;
       if (dados.motivo === 'aguardando') {
@@ -247,26 +251,61 @@ async function cancelarPedidoDeEntrada(redirecionar = false) {
 document.getElementById('waitingCancel').onclick = () => cancelarPedidoDeEntrada(true);
 window.addEventListener('pagehide', () => { if (aguardandoEntrada) cancelarPedidoDeEntrada(false); });
 
-function corDoNome(nome) {
-  let hash = 0;
-  for (let i = 0; i < nome.length; i++) hash = (hash * 31 + nome.charCodeAt(i)) >>> 0;
-  return `hsl(${hash % 360}, 55%, 62%)`;
+// A cor sorteada pelo nome e as iniciais moram em perfil.js, junto da cor e da marca que quem
+// tem conta escolhe: as duas formas de aparecer saem do mesmo lugar.
+const corDoNome = nome => NexoPerfil.corDoNome(nome);
+const iniciais = nome => NexoPerfil.iniciais(nome);
+
+// O perfil de cada pessoa na sala, pela identidade de mídia. Chega no `join-room` e no
+// `peer-joined`; quem não tem conta não tem entrada aqui, e aparece com a cor do nome.
+const perfisPorIdentidade = new Map();
+let meuPerfil = null;
+function perfilDe(id) {
+  return id === 'self' ? meuPerfil : perfisPorIdentidade.get(id) || null;
 }
-function iniciais(nome) {
-  return nome.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || '?';
+// Pinta um avatar com a cor e a marca da pessoa, ou com a cor do nome e as iniciais.
+function pintarAvatar(el, nome, perfil) {
+  const aparencia = NexoPerfil.aparencia(nome || '?', perfil);
+  el.textContent = aparencia.texto;
+  el.style.background = aparencia.cor;
+  el.classList.toggle('com-marca', aparencia.marca);
 }
 
 // ---------- Entrada / nome ----------
-const nomeSalvo = (() => { try { return localStorage.getItem('salaNome'); } catch (_) { return ''; } })();
+const nomeSalvo = Preferencias.lerAjuste('nome', '');
 if (nomeSalvo) {
   nameInput.value = nomeSalvo;
 }
 nameGate.classList.remove('hidden');
+document.getElementById('gateContaLink').href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+
+// Com conta, o nome da sala é o apelido da conta -- o servidor usa ele de qualquer jeito, e o
+// campo livre só faria a pessoa achar que entrou com outro nome.
+let contaNaSala = null;
+window.NexoConta?.pronto.then(({ conta, perfil }) => {
+  if (!conta) return;
+  contaNaSala = conta;
+  meuPerfil = { conta: true, codigo: conta.codigo, cor: perfil?.cor || null, marca: perfil?.marca || null };
+  recarregarAjustes();
+  if (socket) return;
+  nameInput.value = conta.apelido;
+  nameInput.readOnly = true;
+  const aviso = document.getElementById('gateConta');
+  aviso.replaceChildren(document.createTextNode(`Você entra como ${conta.apelido} (@${conta.usuario}). `));
+  const trocar = document.createElement('a');
+  trocar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+  trocar.textContent = 'Trocar o apelido';
+  aviso.append(trocar);
+  aviso.hidden = false;
+  document.getElementById('gateContaLink').hidden = true;
+});
 
 function entrar() {
   if (socket) return;
   const nome = nameInput.value.trim().slice(0, 40) || `Convidado-${Math.floor(Math.random() * 1000)}`;
-  try { localStorage.setItem('salaNome', nome); } catch (_) { /* The room works without persistence. */ }
+  // O apelido da conta não vira o "último nome usado" deste navegador: quem sair da conta
+  // continua com o nome que tinha escolhido para entrar sem ela.
+  if (!contaNaSala) Preferencias.gravarAjuste('nome', nome);
   myName = nome;
   nameGate.classList.add('hidden');
   iniciarConexao();
@@ -296,6 +335,9 @@ async function iniciarConexao() {
   }
   if (saindoDaSala) return;
   myId = salaConfig?.identidade || identidadeSessao || `local-${Math.random().toString(36).slice(2)}`;
+  // Quem decide o nome na sala é o servidor: com conta, é o apelido dela, mesmo que o campo
+  // tenha sido preenchido antes de a conta terminar de carregar.
+  if (nomeDaSessao) myName = nomeDaSessao;
   aguardandoEntrada = false;
   document.getElementById('waitingPanel')?.classList.add('hidden');
 
@@ -415,13 +457,17 @@ async function iniciarConexao() {
       podeModerar = Boolean(response.podeModerar);
       aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
       desenharPedidosDeEntrada(response.pedidosEntrada || []);
+      if (response.perfil) meuPerfil = response.perfil;
       for (const participante of response.peers || []) {
         if (!participante.identidade) continue;
+        if (participante.perfil) perfisPorIdentidade.set(participante.identidade, participante.perfil);
         presencasPorIdentidade.set(participante.identidade, participante.state?.presenca || '');
         const par = peers.get(participante.identidade);
         if (par) { par.state.presenca = participante.state?.presenca || ''; atualizarTile(par.id); }
       }
       if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
+      // Os quadradinhos de quem já estava na mídia nasceram antes de os perfis chegarem.
+      repintarAvatares();
       atualizarSelosDeDono();
       // Entrar na sala já liga a proteção contra throttling. Antes ela só aparecia no
       // primeiro clique no microfone ou na câmera -- quem entrava para assistir ficava sem
@@ -512,8 +558,11 @@ async function iniciarConexao() {
   // pessoa não saiu de lugar nenhum, e a mídia dela nunca chegou a cair. Sem este aviso, a
   // anotação de saída a manteria fora da lista de todos por um minuto e meio, porque a
   // sessão de mídia continua sendo a mesma e a anotação só sabe distinguir sessões.
-  socket.on('peer-joined', ({ identidade }) => {
-    if (!identidade || !transporte) return;
+  socket.on('peer-joined', ({ identidade, perfil }) => {
+    if (!identidade) return;
+    if (perfil) perfisPorIdentidade.set(identidade, perfil); else perfisPorIdentidade.delete(identidade);
+    repintarAvatares();
+    if (!transporte) return;
     transporte.readmitir(identidade);
     atualizarContador();
     avaliarDestaque();
@@ -626,7 +675,7 @@ function enviarEstado() {
 // espectador, e se o degrau barato existe naquele servidor. As duas primeiras passaram a ser
 // medidas agora (ver medirEnvio); a terceira depende da 1.13.7. Escolher antes disso seria
 // adivinhar -- e o erro de adivinhar aqui nao e imagem feia, e gente caindo da sala.
-let codecDeVideo = (() => { try { return localStorage.getItem('nexoCodec') || 'auto'; } catch (_) { return 'auto'; } })();
+let codecDeVideo = Preferencias.lerAjuste('codec', 'auto');
 if (!RoomMedia.CODEC_PREFERENCES.includes(codecDeVideo)) codecDeVideo = 'auto';
 const seletoresDeCodec = [...document.querySelectorAll('[data-video-codec]')];
 function codecDeVideoEscolhido() { return codecDeVideo; }
@@ -640,7 +689,7 @@ function definirCodecDeVideo(escolha) {
   // Outro codec tem outro custo por quadro: comparar o antes com o depois seria comparar
   // duas coisas diferentes.
   esquecerHistoricoDoEnvio();
-  try { localStorage.setItem('nexoCodec', escolha); } catch (_) { /* Vale so nesta sessão. */ }
+  Preferencias.gravarAjuste('codec', escolha);
   seletoresDeCodec.forEach(select => { select.value = escolha; });
   status.textContent = escolha === 'auto'
     ? 'Codec automático: H.264 na tela, o que todo aparelho da sala decodifica por hardware.'
@@ -780,7 +829,7 @@ function avisarSeFaltaDegrauBarato() {
 // entrega a cada pessoa a camada que a conexao dela aguenta (simulcast). Por isso sairam a
 // medicao de banda por par, o orcamento, a histerese de resolucao e o limite de upload --
 // eles brigariam com o controle de congestionamento do proprio servidor.
-let perfilDeQualidade = (() => { try { return localStorage.getItem('nexoQuality') || 'high'; } catch (_) { return 'high'; } })();
+let perfilDeQualidade = Preferencias.lerAjuste('qualidade', 'high');
 if (!RoomQuality.profiles[perfilDeQualidade]) perfilDeQualidade = 'high';
 const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 
@@ -838,30 +887,26 @@ const PRIORIDADES_DE_TELA = {
   nitidez: { rotulo: 'Nitidez', dica: 'código e texto parados; os quadros cedem antes da resolução', pista: 'detail', degradacao: 'maintain-resolution' }
 };
 const PRIORIDADE_PADRAO = 'fluidez';
-let prioridadeDaTela = (() => {
-  try {
-    const guardada = localStorage.getItem('nexoPrioridade');
-    // Quem tinha "automatico" salvo herda o padrão novo. Ele era o pior dos três, então
-    // migrar é devolver quadros a quem nunca soube que os estava perdendo.
-    if (guardada && PRIORIDADES_DE_TELA[guardada]) return guardada;
-  } catch (_) { /* Sem armazenamento: vale o padrão desta sessão. */ }
-  return PRIORIDADE_PADRAO;
-})();
+// Quem tinha "automatico" salvo herda o padrão novo. Ele era o pior dos três, então migrar é
+// devolver quadros a quem nunca soube que os estava perdendo.
+function prioridadeGuardada() {
+  const guardada = Preferencias.lerAjuste('prioridade', '');
+  return PRIORIDADES_DE_TELA[guardada] ? guardada : PRIORIDADE_PADRAO;
+}
+let prioridadeDaTela = prioridadeGuardada();
 const seletoresDePrioridade = [...document.querySelectorAll('[data-screen-priority]')];
 
 // Quadros por segundo da tela, agora uma escolha própria.
 const QUADROS_DA_TELA = [30, 60];
-let quadrosDaTela = (() => {
-  try {
-    const guardado = Number(localStorage.getItem('nexoFps'));
-    if (QUADROS_DA_TELA.includes(guardado)) return guardado;
-    // Quem já tinha escolhido "Fluidez máxima" escolheu 60 quadros -- era o que aquela opção
-    // significava. Herdar isso é o que impede a separação de virar uma perda silenciosa de
-    // metade dos quadros para quem já usava o Nexo para jogar.
-    if (localStorage.getItem('nexoPrioridade') === 'fluidez') return 60;
-  } catch (_) { /* Sem armazenamento: vale o padrão desta sessão. */ }
-  return 30;
-})();
+function quadrosGuardados() {
+  const guardado = Preferencias.lerAjuste('quadros', 0);
+  if (QUADROS_DA_TELA.includes(guardado)) return guardado;
+  // Quem já tinha escolhido "Fluidez máxima" escolheu 60 quadros -- era o que aquela opção
+  // significava. Herdar isso é o que impede a separação de virar uma perda silenciosa de
+  // metade dos quadros para quem já usava o Nexo para jogar.
+  return Preferencias.lerAjuste('prioridade', '') === 'fluidez' ? 60 : 30;
+}
+let quadrosDaTela = quadrosGuardados();
 const seletoresDeQuadros = [...document.querySelectorAll('[data-screen-fps]')];
 
 async function definirPrioridadeDaTela(escolha) {
@@ -870,7 +915,7 @@ async function definirPrioridadeDaTela(escolha) {
   // A prioridade decide se cede a resolução ou os quadros: depois de trocá-la, uma queda de
   // quadros pode ser exatamente o que foi pedido.
   esquecerHistoricoDoEnvio();
-  try { localStorage.setItem('nexoPrioridade', escolha); } catch (_) { /* Vale so nesta sessão. */ }
+  Preferencias.gravarAjuste('prioridade', escolha);
   seletoresDePrioridade.forEach(select => { select.value = escolha; });
   const prioridade = PRIORIDADES_DE_TELA[escolha];
   const faixa = screenStream?.getVideoTracks()[0];
@@ -897,7 +942,7 @@ async function definirQuadrosDaTela(escolha) {
   if (!QUADROS_DA_TELA.includes(quadros) || quadros === quadrosDaTela) return;
   quadrosDaTela = quadros;
   esquecerHistoricoDoEnvio();
-  try { localStorage.setItem('nexoFps', String(quadros)); } catch (_) { /* Vale so nesta sessão. */ }
+  Preferencias.gravarAjuste('quadros', quadros);
   seletoresDeQuadros.forEach(select => { select.value = String(quadros); });
   const faixa = screenStream?.getVideoTracks()[0];
   if (faixa) {
@@ -1453,10 +1498,11 @@ const suportaLadoDaCamera = Boolean(navigator.mediaDevices?.getSupportedConstrai
 const LADO_PADRAO = 'user';
 // "ladoPreferido" so existe depois que a pessoa vira a camera. Sem isso, uma webcam de mesa
 // receberia um facingMode que ninguem pediu; o comportamento de quem nunca virou fica igual.
-let ladoPreferido = (() => {
-  try { const salvo = localStorage.getItem('nexoLadoCamera'); return salvo === 'user' || salvo === 'environment' ? salvo : ''; }
-  catch (_) { return ''; }
-})();
+function ladoGuardado() {
+  const salvo = Preferencias.lerAjuste('ladoCamera', '');
+  return salvo === 'user' || salvo === 'environment' ? salvo : '';
+}
+let ladoPreferido = ladoGuardado();
 // Lado da imagem que esta no ar agora, para o botao saber para onde virar.
 let ladoDaCamera = ladoPreferido || LADO_PADRAO;
 
@@ -1504,7 +1550,7 @@ function guardarLadoDaCamera(lado, escolhido) {
   ladoDaCamera = lado;
   if (!escolhido) return;
   ladoPreferido = lado;
-  try { localStorage.setItem('nexoLadoCamera', lado); } catch (_) { /* Vale so nesta sessão. */ }
+  Preferencias.gravarAjuste('ladoCamera', lado);
 }
 
 // Virar a camera no celular. Dois caminhos, nesta ordem:
@@ -1621,7 +1667,7 @@ async function abrirMicrofone(forcarDispositivo) {
 // Quem desliga a reducao de ruido costuma ter um motivo que nao muda de uma sessao para
 // a outra -- um microfone bom, um instrumento, uma placa que ja limpa o som. Religar
 // sozinho a cada entrada desfaz essa decisao todo dia.
-let filtroDeRuidoLigado = window.Preferencias ? window.Preferencias.ler('reducaoDeRuido', true) !== false : true;
+let filtroDeRuidoLigado = Preferencias.lerAjuste('reducaoDeRuido', true) !== false;
 let cadeiaDeRuido = null;
 let faixaEnviadaDoMic = null;
 let geracaoDoFiltro = 0;
@@ -1725,7 +1771,7 @@ function liberarContextoDeAudio() {
 
 noiseBtn.onclick = () => {
   filtroDeRuidoLigado = !filtroDeRuidoLigado;
-  window.Preferencias?.gravar('reducaoDeRuido', filtroDeRuidoLigado);
+  Preferencias.gravarAjuste('reducaoDeRuido', filtroDeRuidoLigado);
   if (filtroDeRuidoLigado) montarFiltroDeRuido();
   else desmontarFiltroDeRuido();
   liberarContextoDeAudio();
@@ -1874,11 +1920,11 @@ function alternarEnsurdecimento() {
 deafenBtn.onclick = alternarEnsurdecimento;
 
 const pushToTalk = document.getElementById('pushToTalk');
-try { pushToTalkAtivo = localStorage.getItem('sala.pushToTalk') === '1'; } catch (_) {}
+pushToTalkAtivo = Preferencias.lerAjuste('pushToTalk', false);
 pushToTalk.checked = pushToTalkAtivo;
 pushToTalk.addEventListener('change', () => {
   pushToTalkAtivo = pushToTalk.checked;
-  try { localStorage.setItem('sala.pushToTalk', pushToTalkAtivo ? '1' : '0'); } catch (_) {}
+  Preferencias.gravarAjuste('pushToTalk', pushToTalkAtivo);
   if (pushToTalkAtivo && micTrack && !micMuted) alternarMic();
 });
 function alvoEditavel(alvo) { return Boolean(alvo?.closest?.('input,textarea,select,[contenteditable="true"]')); }
@@ -2036,22 +2082,14 @@ document.addEventListener('keydown', evento => {
 // O navegador so revela o NOME dos dispositivos depois de conceder permissao a um deles.
 // Antes disso a lista existe, mas vem anonima -- e por isso ela e refeita assim que o
 // microfone ou a camera abrem pela primeira vez.
-const CHAVES_DE_DISPOSITIVO = {
-  microfone: 'sala.dispositivo.microfone',
-  saida: 'sala.dispositivo.saida',
-  camera: 'sala.dispositivo.camera'
-};
-
+// Os aparelhos passam pelo mesmo leitor das outras escolhas, e ficam de fora da conta: o id
+// da webcam do desktop não existe no celular (ver perfil.js).
 function dispositivoEscolhido(tipo) {
-  try { return localStorage.getItem(CHAVES_DE_DISPOSITIVO[tipo]) || ''; }
-  catch (_) { return ''; }   // navegacao privada, armazenamento bloqueado
+  return Preferencias.lerAjuste(tipo, '');
 }
 
 function guardarDispositivo(tipo, valor) {
-  try {
-    if (valor) localStorage.setItem(CHAVES_DE_DISPOSITIVO[tipo], valor);
-    else localStorage.removeItem(CHAVES_DE_DISPOSITIVO[tipo]);
-  } catch (_) { /* sem armazenamento: vale so nesta sessao */ }
+  Preferencias.gravarAjuste(tipo, valor || '');
 }
 
 // setSinkId so existe em navegadores baseados no Chromium. Onde nao existe, quem escolhe a
@@ -2211,9 +2249,14 @@ function mostrarOQueELembrado() {
   const partes = [];
   if (pessoas) partes.push(`volume ajustado para ${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`);
   if (salas) partes.push(`a mesa de sons de ${salas} ${salas === 1 ? 'sala' : 'salas'}`);
+  // Com conta, "tudo fica só neste navegador" deixa de ser verdade para uma parte -- e a frase
+  // precisa dizer qual, porque é justamente o volume por pessoa que continua privado.
+  const ondeFica = contaNaSala
+    ? ' Qualidade, codec, quadros, push-to-talk e redução de ruído seguem a sua conta; volumes e aparelhos ficam só neste navegador.'
+    : ' Tudo fica só neste navegador.';
   texto.textContent = partes.length
-    ? `Guardado: ${partes.join(' e ')}, além dos aparelhos e da qualidade escolhidos. Tudo fica só neste navegador.`
-    : 'Só os aparelhos e a qualidade escolhidos. Volumes ajustados por pessoa aparecem aqui.';
+    ? `Guardado: ${partes.join(' e ')}, além dos aparelhos e da qualidade escolhidos.${ondeFica}`
+    : `Só os aparelhos e a qualidade escolhidos. Volumes ajustados por pessoa aparecem aqui.${contaNaSala ? ondeFica : ''}`;
   botao.disabled = !partes.length;
 }
 
@@ -2955,7 +2998,7 @@ seletoresDeQualidade.forEach(select => {
       }
       perfilDeQualidade = novo;
       esquecerHistoricoDoEnvio();
-      try { localStorage.setItem('nexoQuality', novo); } catch (_) {}
+      Preferencias.gravarAjuste('qualidade', novo);
       // O teto de envio entra nas opcoes de publicacao, entao a faixa precisa subir de novo.
       // Despublicar e publicar vão na MESMA tarefa da fila: eram duas, e a fresta entre elas
       // deixava outra mudança entrar e apagar a faixa que acabara de subir.
@@ -2992,6 +3035,31 @@ seletoresDeQuadros.forEach(select => {
   select.onchange = () => definirQuadrosDaTela(select.value);
 });
 atualizarBotaoDeQualidade();
+
+// Os ajustes da conta chegam depois de a página já ter lido os deste navegador: o pedido da
+// conta é assíncrono, e a sala não pode esperar por ele para existir. Quando chegam, as
+// escolhas são relidas pelo mesmo leitor. Quase sempre isto acontece antes de a pessoa
+// entrar; se ela já estiver transmitindo, vale a partir da próxima publicação -- republicar
+// a tela no meio da conversa por causa de um ajuste de outro aparelho seria pior.
+function recarregarAjustes() {
+  const codec = Preferencias.lerAjuste('codec', 'auto');
+  codecDeVideo = RoomMedia.CODEC_PREFERENCES.includes(codec) ? codec : 'auto';
+  const qualidade = Preferencias.lerAjuste('qualidade', 'high');
+  if (!screenStream) perfilDeQualidade = RoomQuality.profiles[qualidade] ? qualidade : 'high';
+  prioridadeDaTela = prioridadeGuardada();
+  quadrosDaTela = quadrosGuardados();
+  ladoPreferido = ladoGuardado();
+  if (!cameraStream) ladoDaCamera = ladoPreferido || LADO_PADRAO;
+  pushToTalkAtivo = Preferencias.lerAjuste('pushToTalk', false);
+  pushToTalk.checked = pushToTalkAtivo;
+  const ruido = Preferencias.lerAjuste('reducaoDeRuido', true) !== false;
+  if (ruido !== filtroDeRuidoLigado && !micStream) { filtroDeRuidoLigado = ruido; atualizarBotaoDeRuido(); }
+  seletoresDeQualidade.forEach(select => { select.value = perfilDeQualidade; });
+  seletoresDeCodec.forEach(select => { select.value = codecDeVideo; });
+  seletoresDePrioridade.forEach(select => { select.value = prioridadeDaTela; });
+  seletoresDeQuadros.forEach(select => { select.value = String(quadrosDaTela); });
+  atualizarBotaoDeQualidade();
+}
 
 // ---------- Câmera ----------
 async function alternarCamera() {
@@ -4523,8 +4591,7 @@ function criarTileBase(id, name, state, isSelf) {
   const linhaDoNome = el.querySelector('.participant-name');
   linhaDoNome.textContent = `${name}${isSelf ? ' (você)' : ''}`;
   linhaDoNome.append(elemento('span', 'dono-selo hidden', 'abriu a sala'));
-  el.querySelector('.avatar-fallback').textContent = iniciais(name);
-  el.querySelector('.avatar-fallback').style.background = corDoNome(name);
+  pintarAvatar(el.querySelector('.avatar-fallback'), name, perfilDe(id));
   const volumeRow = el.querySelector('.volume-row');
   if (!isSelf) volumeRow.innerHTML = LINHA_DE_VOLUME('voz');
   participantsEl.appendChild(el);
@@ -4588,6 +4655,13 @@ function criarTileBase(id, name, state, isSelf) {
   // moderá-la: quem entra depois de mim chega sem selo nenhum se isto não for aplicado aqui.
   atualizarSelosDeDono();
   atualizarTile(id);
+}
+
+// Os perfis chegam pela sinalização, e os quadradinhos nascem pela mídia -- quase sempre
+// antes. Repintar todos é barato numa sala de dezenas, e a lista lateral vem junto.
+function repintarAvatares() {
+  tiles.forEach((refs, id) => pintarAvatar(refs.avatar, id === 'self' ? myName : peers.get(id)?.name, perfilDe(id)));
+  document.dispatchEvent(new Event('room-update'));
 }
 
 function removerTile(id) {
@@ -5516,7 +5590,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) atua
 const dataSaver = document.getElementById('dataSaver');
 const dataSaverField = document.getElementById('dataSaverField');
 dataSaverField.hidden = !ehCelular;
-try { dataSaver.checked = ehCelular && localStorage.getItem('sala.economiaDados') === '1'; } catch (_) {}
+dataSaver.checked = ehCelular && Preferencias.lerAjuste('economiaDeDados', false);
 function aplicarEconomiaDeDados() {
   const ativa = ehCelular && dataSaver.checked;
   economiaDeDadosAtiva = ativa;
@@ -5526,7 +5600,7 @@ function aplicarEconomiaDeDados() {
   // pessoa continua podendo preparar 1080p/60 para quando desligá-lo, sem o primeiro clique
   // reescrever ou travar os selects.
   ajustarEnvioPelaQualidade(transporte?.qualidade || 'excellent');
-  try { localStorage.setItem('sala.economiaDados', ativa ? '1' : '0'); } catch (_) {}
+  Preferencias.gravarAjuste('economiaDeDados', ativa);
   atualizarIndicadorDeConexao();
 }
 dataSaver.addEventListener('change', aplicarEconomiaDeDados);
@@ -5685,8 +5759,8 @@ function mostrarMensagem(msg) {
   el.classList.toggle('mencionou', mencionou);
   const avatar = document.createElement('span');
   avatar.className = 'msg-avatar';
-  avatar.textContent = iniciais(msg.autor || '?');
-  avatar.style.background = corDoNome(msg.autor || '');
+  const perfilDoAutor = msg.autorId === myId ? meuPerfil : perfisPorIdentidade.get(msg.autorId);
+  pintarAvatar(avatar, msg.autor || '?', perfilDoAutor);
   avatar.setAttribute('aria-hidden', 'true');
 
   const topo = document.createElement('div');
@@ -5694,7 +5768,7 @@ function mostrarMensagem(msg) {
   const autor = document.createElement('span');
   autor.className = 'msg-autor';
   autor.textContent = msg.autor || 'Alguém';
-  autor.style.color = corDoNome(msg.autor || '');
+  autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfilDoAutor).cor;
   const hora = document.createElement('span');
   hora.className = 'msg-hora';
   hora.textContent = horaCurta(msg.em || Date.now());

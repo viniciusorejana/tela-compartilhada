@@ -73,6 +73,13 @@ A senha e o código de recuperação são derivados com `scrypt` assíncrono, **
 fila de até 16: assim um pico de logins espera na fila, e as salas não. `tests/contas.test.js`
 afirma que uma rajada de 20 logins não segura o laço de eventos por 100 ms.
 
+Em `/conta` a pessoa também edita o perfil (apelido, uma cor e uma marca de um conjunto pronto
+— avatar por arquivo fica para depois, porque aceitar imagem pede moderação de imagem), **baixa
+os próprios dados** num JSON (conta, perfil, ajustes e sessões, sem os hashes) e **apaga a
+conta**, com a senha: o `ON DELETE CASCADE` leva perfil e sessões junto, e as cópias de
+segurança expiram em até 30 dias. `npm run test:contas` percorre isso tudo pela tela, com
+navegadores de verdade.
+
 ## Requisitos
 
 - Windows 10/11 para executar o helper nativo de captura de audio por aplicativo.
@@ -274,9 +281,21 @@ E uma que **não** fica no navegador de ninguém, porque não é de ninguém: o 
 sala** (`!volume`) é da sala, vale para todo mundo e vive no servidor enquanto a sala existir —
 ver [Bot de música](#bot-de-música-canal--música).
 
-Tudo vive no `localStorage` do navegador de cada um. **Nada disso vai para o servidor nem é
-visto por outra pessoa** — abaixar o volume de alguém é uma decisão privada, e continua sendo.
-Numa janela anônima, ou com armazenamento bloqueado, a sala funciona igual: apenas não lembra.
+Tudo vive no `localStorage` do navegador de cada um. **Sem conta, nada disso vai para o
+servidor nem é visto por outra pessoa** — abaixar o volume de alguém é uma decisão privada, e
+continua sendo. Numa janela anônima, ou com armazenamento bloqueado, a sala funciona igual:
+apenas não lembra.
+
+**Com conta, uma parte segue a pessoa para outros aparelhos**: qualidade, codec, prioridade,
+quadros, lado da câmera, push-to-talk e redução de ruído. Sobe dois segundos depois da última
+mudança, e ao abrir a sala noutro aparelho a escolha da conta vale. O que **não** sobe, de
+propósito e com teste que protege a decisão: o microfone, o fone e a câmera escolhidos (o id da
+webcam do desktop não existe no celular), o **volume por pessoa** (seria guardar em disco,
+ligada à conta, a lista de quem você silenciou), as salas recentes e o pareamento com o agente.
+A lista do que sobe é fechada e mora em `public/perfil.js`, usada pela página e pelo servidor —
+o servidor descarta qualquer outra chave, venha de onde vier. O apelido da conta vence o campo
+de nome da sala; o código permanente, a cor e a marca escolhidos em `/conta` aparecem para a
+sala.
 
 O volume é guardado pelo **nome**, e não pela identidade. A identidade de mídia carrega um
 sufixo sorteado a cada entrada (`Ana#3f2a91c0`), então lembrar por ela seria não lembrar nada.
@@ -1120,7 +1139,10 @@ tela-compartilhada/
 │   └── escolher.html               # seletor de tela/janela com miniaturas, isolado do Node
 └── public/
     ├── index.html, home.css, home.js # criar/entrar e salas recentes
-    ├── conta.html, conta.css, conta.js # entrar, criar e recuperar a conta
+    ├── conta.html, conta.css, conta.js # entrar, criar, recuperar, perfil, baixar e apagar
+    ├── conta-cliente.js            # a conta dentro da sala: apelido e ajustes que seguem a pessoa
+    ├── perfil.js                   # cores, marcas e a lista FECHADA do que sincroniza (servidor e página)
+    ├── preferencias.js             # o leitor único das escolhas guardadas no navegador
     ├── sala.html, sala.css          # interface da sala
     ├── sala.js                     # captura, sinalização, chat e reprodução
     ├── media-utils.js              # identidade das faixas, codecs e streams de vídeo
@@ -1139,6 +1161,7 @@ npx playwright install chromium webkit
 npm test
 npm run test:browser
 npm run test:soundboard
+npm run test:contas
 $env:TEST_BROWSER="webkit"
 npm run test:browser
 Remove-Item Env:TEST_BROWSER
