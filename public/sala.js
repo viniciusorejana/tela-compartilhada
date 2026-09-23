@@ -4646,6 +4646,11 @@ function abrirModeracao(id) {
   document.getElementById('moderarNome').textContent = par ? (par.name || 'Participante') : 'esta sala';
   document.getElementById('moderarAcoes').hidden = !par;
   document.getElementById('moderarRessalva').hidden = !par;
+  // A sala só passa para quem tem conta (moderacao.js). O botão fica à vista e desligado, com
+  // o motivo embaixo: sumir com ele faria a pessoa procurar a opção que "sumiu".
+  const semConta = Boolean(par) && !perfilDe(id)?.conta;
+  document.getElementById('moderarTransferir').disabled = semConta;
+  document.getElementById('moderarTransferirDica').hidden = !semConta;
   document.getElementById('roomSecurity').hidden = Boolean(par);
   document.getElementById('moderarStatus').textContent = '';
   document.getElementById('moderarPanel').classList.remove('hidden');

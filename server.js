@@ -1279,6 +1279,7 @@ io.on('connection', (socket) => {
         'nao-em-si-mesmo': 'Essa ação não se aplica a você.',
         'alvo-desconhecido': 'Não encontrei essa pessoa na sala.',
         'alvo-fora-da-sala': 'Essa pessoa não está mais na sala.',
+        'alvo-sem-conta': 'Só dá para passar a sala para quem entrou com uma conta.',
         'banidos-demais': 'Já há remoções demais nesta sala.',
         'sala-desconhecida': 'Esta sala não está mais ativa.'
       };

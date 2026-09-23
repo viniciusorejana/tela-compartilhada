@@ -34,8 +34,10 @@
 // passasse a um anônimo com uma conta ali dentro. O anônimo continua na regra para que a sala
 // nunca fique sem moderação.
 //
-// A TRANSFERÊNCIA explícita é respeitada como foi feita, inclusive para quem não tem conta:
-// foi uma escolha de quem era dono. E quem transferiu não retoma nada ao voltar.
+// A TRANSFERÊNCIA explícita só vai para quem tem conta. Passar a sala a um anônimo desfazia
+// "só conta abre sala" por outra porta, e entregava moderação a quem não tem como ser
+// reconhecido: um F5 dele sorteia outra identidade, e a sala fica com um dono que não existe
+// mais. Feita, ela é respeitada, e quem transferiu não retoma nada ao voltar.
 //
 // ---------- Banimento que acerta a pessoa certa ----------
 //
@@ -266,14 +268,15 @@ function criarModeracao({ agora = Date.now, maximoDeSalas = 512, msDeAusencia = 
     return { ok: true };
   }
 
-  // Passar a sala para outra pessoa. É respeitada como foi feita -- inclusive para quem não
-  // tem conta --, e quem passou não retoma nada ao voltar.
+  // Passar a sala para outra pessoa -- que tenha conta (ver o topo). É respeitada como foi
+  // feita, e quem passou não retoma nada ao voltar.
   function transferir(sala, quemPede, alvo) {
     const decisao = decidir(sala, quemPede, alvo, 'transferir');
     if (!decisao.ok) return decisao;
     const item = salas.get(sala);
     const m = membroDaIdentidade(item, alvo);
     if (!presente(m)) return { ok: false, motivo: 'alvo-fora-da-sala' };
+    if (!m.contaId) return { ok: false, motivo: 'alvo-sem-conta' };
     item.dono = m.chave;
     return { ok: true };
   }

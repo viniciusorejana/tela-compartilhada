@@ -97,7 +97,7 @@ test('cada recusa diz a sua razão', () => {
 test('ninguém remove o dono, nem ele a si mesmo', () => {
   const m = criarModeracao();
   m.entrou('sala', 'ana#1');
-  m.entrou('sala', 'bia#2');
+  m.entrou('sala', 'bia#2', { contaId: 'conta-bia' });
   m.transferir('sala', 'ana#1', 'bia#2');
   assert.equal(m.dono('sala'), 'bia#2');
   assert.equal(m.expulsar('sala', 'bia#2', 'bia#2').motivo, 'nao-em-si-mesmo');
@@ -265,11 +265,16 @@ test('a sucessão prefere a conta presente mais antiga; sem conta, o anônimo ma
   assert.equal(s.dono('sala'), 'Caio#2');
 });
 
-// A transferência foi uma escolha de quem era dono, e vale como foi feita.
-test('a transferência vale mesmo para quem não tem conta, e quem transferiu não retoma', () => {
+// A transferência foi uma escolha de quem era dono, e vale como foi feita -- mas só para quem
+// tem conta: um anônimo não tem como ser reconhecido depois de um F5, e a sala ficaria com um
+// dono que não existe mais.
+test('a sala só passa para quem tem conta, e quem transferiu não retoma', () => {
   const m = criarModeracao();
   m.entrou('sala', 'Ana#1', ANA);
-  m.entrou('sala', 'Caio#2');
+  m.entrou('sala', 'Bia#3');
+  m.entrou('sala', 'Caio#2', { contaId: 'conta-caio' });
+  assert.equal(m.transferir('sala', 'Ana#1', 'Bia#3').motivo, 'alvo-sem-conta');
+  assert.equal(m.dono('sala'), 'Ana#1', 'a recusa não mexe em nada');
   assert.equal(m.transferir('sala', 'Ana#1', 'Caio#2').ok, true);
   m.saiu('sala', 'Ana#1');
   m.entrou('sala', 'Ana#9', ANA);

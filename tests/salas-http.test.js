@@ -58,17 +58,22 @@ test('o dono com conta que aperta F5 volta dono; quem estava assume só enquanto
   assert.equal(volta.entrada.podeModerar, true);
 });
 
-test('quem transferiu a sala não a retoma ao voltar', async t => {
+test('a sala só passa para quem tem conta, e quem transferiu não a retoma ao voltar', async t => {
   const servidor = await semJanela(); t.after(servidor.encerrar);
   const ana = await servidor.conta('ana', { apelido: 'Ana', sala: SALA });
   const primeira = await entrar(servidor, t, ana);
-  const bia = await servidor.credencial('Bia', SALA);
+  const caio = await servidor.credencial('Caio', SALA);
+  await entrar(servidor, t, caio);
+  const recusa = await primeira.socket.pedir('moderar', { acao: 'transferir', identidade: caio.identidade });
+  assert.equal(recusa.ok, false);
+  assert.match(recusa.error, /quem entrou com uma conta/, 'a recusa diz por quê');
+  const bia = await servidor.conta('bia', { apelido: 'Bia', sala: SALA });
   await entrar(servidor, t, bia);
   assert.equal((await primeira.socket.pedir('moderar', { acao: 'transferir', identidade: bia.identidade })).ok, true);
   primeira.socket.fechar();
   await esperarSaida();
   const volta = await entrar(servidor, t, await servidor.credencial('Ana', SALA, '', ana.cookie));
-  assert.equal(volta.entrada.dono, bia.identidade, 'a transferência vale como foi feita, mesmo para quem não tem conta');
+  assert.equal(volta.entrada.dono, bia.identidade, 'a transferência vale como foi feita');
 });
 
 // As regras 1, 2 e 3 do banimento, com homônimos de verdade.

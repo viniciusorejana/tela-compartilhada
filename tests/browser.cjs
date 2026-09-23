@@ -1100,6 +1100,15 @@ async function esperarCodec(page, fonte, esperado) {
       { acao: 'expulsar', identidade: [...peers.keys()][0] }, r))),
     { ok: false, error: 'Só quem abriu a sala pode fazer isso.' });
 
+  // A sala só passa para quem tem conta. O botão fica à vista, desligado e com o motivo; e o
+  // servidor recusa do mesmo jeito se o pedido vier direto.
+  await dono.evaluate(() => abrirModeracao([...peers.keys()][0]));
+  assert.equal(await dono.locator('#moderarTransferir').isDisabled(), true, 'passar a sala para quem não tem conta fica desligado');
+  assert.equal(await dono.locator('#moderarTransferirDica').isVisible(), true, 'e o painel diz por quê');
+  await dono.keyboard.press('Escape');
+  const passagem = await dono.evaluate(() => new Promise(r => socket.emit('moderar', { acao: 'transferir', identidade: [...peers.keys()][0] }, r)));
+  assert.equal(passagem.ok, false, 'o servidor não passa a sala para quem não tem conta');
+
   const bloqueio = await dono.evaluate(() => new Promise(r => socket.emit('moderar',
     { acao: 'banir', identidade: [...peers.keys()][0] }, r)));
   assert.equal(bloqueio.ok, true, `o banimento falhou: ${JSON.stringify(bloqueio)}`);
