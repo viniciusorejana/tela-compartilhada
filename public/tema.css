@@ -1,7 +1,80 @@
+/* O vocabulário visual do Nexo, único para a sala, a página inicial, a conta e o painel.
+ *
+ * Antes cada página tinha o seu: a inicial usava lilás com texto escuro, a sala um violeta
+ * com texto branco a 3,5:1 de contraste (abaixo dos 4,5:1 que texto pequeno pede), e havia
+ * botões de 30, 34, 38, 44 e 46 px de altura lado a lado. Aqui ficam os números; cada página
+ * só escolhe entre eles. */
 :root {
   color-scheme: dark;
-  --bg:#191a24; --bg-2:#20212d; --bg-3:#2a2b3a; --bg-4:#353647;
-  --line:#ffffff0d; --text:#eeeef5; --muted:#a2a2b8;
-  --accent:#8879f6; --accent-hi:#a092ff; --online:#90dfb3; --danger:#f07583;
+
+  /* Superfícies, da mais funda para a mais alta. */
+  --bg:#191a24; --bg-2:#20212d; --bg-3:#2a2b3a; --bg-4:#353647; --bg-5:#40415a;
+  --line:#ffffff0d; --line-2:#ffffff17; --line-3:#ffffff26;
+
+  /* Texto: quatro níveis, todos legíveis sobre --bg-2 (o mais fraco dá 5,2:1). */
+  --text:#eeeef5; --text-2:#cfcde0; --muted:#a2a2b8; --faint:#8f8ea6;
+
+  /* O violeta. `--accent-forte` é o de preencher botão com texto branco: 4,6:1, como o
+     "blurple" do Discord. Os outros são de destaque -- borda, ícone, texto sobre fundo escuro. */
+  --accent:#8879f6; --accent-hi:#a092ff; --accent-forte:#6c5ce7; --accent-forte-hi:#7b6cf0;
+  --accent-suave:#8879f61f; --accent-suave-hi:#8879f633; --accent-texto:#c7bcff;
+  --online:#90dfb3; --online-suave:#90dfb31f;
+  /* `--danger-forte` também é de preencher com texto branco: 4,8:1. */
+  --danger:#f07583; --danger-forte:#c93a4f; --danger-suave:#ef6f7d20; --danger-texto:#ff98a4;
+  --aviso:#e8c07a; --aviso-suave:#e8c07a1f;
+
+  /* Escala de texto. O piso é 10 px, e só para rótulos em caixa-alta espaçados; texto que se
+     lê de verdade começa em 11. */
+  --fs-rotulo:10px; --fs-meta:11px; --fs-sm:12px; --fs-md:13px; --fs-lg:15px; --fs-xl:19px; --fs-2xl:26px;
+
+  /* Três alturas de controle, e só três. */
+  --ctl-p:30px; --ctl-m:36px; --ctl-g:44px;
+
+  /* Raios. */
+  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:14px; --r-xl:20px; --r-pilula:999px;
   --raio:16px;
+
+  /* Sombras e o anel de foco -- o mesmo em todo lugar que recebe teclado. */
+  --sombra-menu:0 14px 36px #00000073, 0 0 0 1px var(--line-2);
+  --sombra-modal:0 30px 80px #0000009c, 0 0 0 1px var(--line-2);
+  --anel-foco:0 0 0 2px var(--bg), 0 0 0 4px #b6abff;
+
+  /* Movimento: rápido para o que responde ao dedo, um pouco mais para o que aparece. */
+  --dur-rapida:110ms; --dur:170ms; --dur-lenta:240ms;
+  --curva:cubic-bezier(.2,.8,.2,1); --curva-mola:cubic-bezier(.34,1.4,.64,1);
 }
+
+/* Entradas: o que surge desliza pouco e cresce pouco. Nada de pular na cara de ninguém. */
+@keyframes nexo-surgir { from { opacity:0; transform:translateY(6px) scale(.985); } to { opacity:1; transform:none; } }
+@keyframes nexo-aparecer { from { opacity:0; } to { opacity:1; } }
+@keyframes nexo-descer { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+@keyframes nexo-pulso { 0% { box-shadow:0 0 0 0 var(--accent-suave-hi); } 100% { box-shadow:0 0 0 10px transparent; } }
+@keyframes nexo-girar { to { transform:rotate(360deg); } }
+
+/* Um só lugar para quem pediu menos movimento ao sistema: vale para as quatro páginas. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; scroll-behavior:auto!important; }
+}
+
+/* Texto que só o leitor de tela lê: o rótulo continua lá, a tela mostra só o ícone. */
+.so-leitor { position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
+/* Cor e marca do perfil, na página da conta e no editor de dentro da sala (perfil.js monta). */
+.escolhas { border:0; padding:0; margin:18px 0 0; display:flex; flex-wrap:wrap; gap:8px; min-width:0; }
+.escolhas legend { font-size:var(--fs-sm); font-weight:600; color:#c6bcd1; margin-bottom:9px; padding:0; }
+.escolhas label { position:relative; margin:0!important; cursor:pointer; }
+.escolhas input { position:absolute; opacity:0; width:1px; height:1px; }
+.escolha { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; border:2px solid transparent; font-size:17px; color:#15121f; font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; transition:transform var(--dur-rapida) var(--curva),box-shadow var(--dur) var(--curva),background-color var(--dur) var(--curva); }
+.escolhas label:hover .escolha { transform:scale(1.08); }
+.escolha.simbolo { background:#ffffff14; color:#e4dcf6; }
+.escolha.texto { width:auto; padding:0 12px; border-radius:18px; font:600 var(--fs-meta)/1 "Segoe UI",system-ui,sans-serif; background:#ffffff0d; color:#d8cdea; }
+.escolhas label:hover .escolha.texto { transform:none; background:#ffffff17; }
+.escolhas input:checked + .escolha { border-color:#f1ebff; box-shadow:0 0 0 2px var(--accent); }
+.escolhas input:checked + .escolha.simbolo { background:var(--accent-suave-hi); }
+.escolhas input:focus-visible + .escolha { outline:2px solid #b6abff; outline-offset:2px; }
+
+/* Ícones em SVG no lugar dos glifos: ✎, ⌁ e ⚙ mudavam de desenho, de tamanho e de linha de
+   base a cada fonte do sistema. */
+.ico { display:inline-block; flex:none; width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
+.ico.ico-p { width:15px; height:15px; }
+.ico.ico-g { width:21px; height:21px; }

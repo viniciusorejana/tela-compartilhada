@@ -4,55 +4,57 @@
 .conta-carregando { color:var(--muted); text-align:center; }
 .conta-card { border-radius:20px; padding:31px; background:linear-gradient(140deg,#282432,#21212d); border:1px solid #ac9ac326; box-shadow:0 30px 70px #0002; margin-bottom:24px; }
 .conta-card h1 { font-size:27px; letter-spacing:-.04em; line-height:1.2; margin:0 0 8px; font-weight:650; }
-.conta-sub { font-size:12px; color:#b5a9c4; margin:0 0 18px; line-height:1.7; }
+.conta-sub { font-size:var(--fs-sm); color:#b5a9c4; margin:0 0 18px; line-height:1.7; }
 .conta-card form { display:flex; flex-direction:column; }
 .conta-card label { margin:14px 0 7px; }
 .conta-card label:first-child { margin-top:4px; }
-.conta-card input:not([type="checkbox"]):not([type="radio"]) { border:1px solid #af9cbe33; background:#181822; }
-.conta-card input:focus-visible { outline:2px solid #ad9aee; outline-offset:1px; }
-.conta-card small { display:block; color:#a499af; font-size:10.5px; margin-top:6px; line-height:1.6; }
+.conta-card input:not([type="checkbox"]):not([type="radio"]) { border:1px solid #af9cbe33; background:#181822; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.conta-card input:not([type="checkbox"]):not([type="radio"]):hover { border-color:#af9cbe55; }
+.conta-card input:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.conta-card small { display:block; color:#a499af; font-size:var(--fs-meta); margin-top:6px; line-height:1.6; }
 .conta-card form > button { margin-top:20px; }
 .conta-card .error { margin:14px 0 0; }
-.opcional { font-weight:400; color:#9588a5; margin-left:6px; font-size:10px; }
+.opcional { font-weight:400; color:#9588a5; margin-left:6px; font-size:var(--fs-meta); }
 .conta-abas { display:flex; gap:6px; margin-bottom:18px; border-bottom:1px solid #ffffff10; }
-.conta-abas button { width:auto; background:none; color:#b5a9c4; border-radius:8px 8px 0 0; padding:9px 12px; border-bottom:2px solid transparent; font-weight:600; }
-.conta-abas button:hover { background:#ffffff08; transform:none; }
-.conta-abas button[aria-selected="true"] { color:#e4dcf6; border-bottom-color:#ad9aee; }
-.conta-aviso { font-size:11px; color:#e2d3b3; background:#c9a86b14; border:1px solid #c9a86b33; border-radius:10px; padding:11px 13px; margin:18px 0 0; line-height:1.7; }
+.conta-abas button { width:auto; min-height:var(--ctl-m); background:none; color:#b5a9c4; border-radius:var(--r-sm) var(--r-sm) 0 0; padding:0 12px; border-bottom:2px solid transparent; font-weight:600; }
+.conta-abas button:hover { background:#ffffff08; color:var(--text); transform:none; }
+.conta-abas button[aria-selected="true"] { color:#e4dcf6; border-bottom-color:var(--accent); }
+.conta-aviso { font-size:var(--fs-sm); color:#e2d3b3; background:#c9a86b14; border:1px solid #c9a86b33; border-radius:var(--r-md); padding:11px 13px; margin:18px 0 0; line-height:1.7; }
 .codigo-recuperacao { display:flex; gap:10px; align-items:center; margin:8px 0 4px; }
 .codigo-recuperacao code { flex:1; font:600 17px/1.4 ui-monospace,Consolas,monospace; letter-spacing:.06em; background:#181822; border:1px dashed #ad9aee66; border-radius:10px; padding:14px; text-align:center; word-break:break-all; }
 .codigo-recuperacao button { width:auto; }
+.codigo-acoes { display:flex; flex-direction:column; gap:8px; }
+.conta-card form > .conta-link-texto { align-self:center; width:auto; min-height:var(--ctl-p); margin-top:12px; padding:0 10px; background:none; color:var(--accent-texto); font-size:var(--fs-sm); font-weight:600; }
+.conta-card form > .conta-link-texto:hover { background:#ffffff08; text-decoration:underline; transform:none; }
+.conta-card small.codigo-dica.certo { color:#a7d8b8; }
+.conta-card small.codigo-dica.problema { color:#ffacba; }
 .conta-confirma { display:flex!important; align-items:center; gap:9px; margin:18px 0 0!important; font-weight:500; cursor:pointer; }
 .conta-confirma input { width:auto; accent-color:#ad9aee; }
 #seguirDoCodigo { margin-top:16px; }
 button:disabled { opacity:.45; cursor:default; transform:none; }
-button:disabled:hover { background:#ad9aee; }
+button:disabled:hover { background:var(--accent-forte); }
 .conta-identidade { display:flex; gap:16px; align-items:center; margin-bottom:12px; }
 .conta-identidade h1 { margin:0; }
 .conta-identidade .conta-sub { margin:4px 0 0; }
 .conta-avatar { flex:none; display:grid; place-items:center; width:56px; height:56px; border-radius:50%; background:#8879f6; color:#15121f; font-size:22px; font-weight:700; }
 .conta-card code { font-family:ui-monospace,Consolas,monospace; color:#d8ceff; }
 .conta-secao { border-top:1px solid #ffffff10; padding:14px 0 4px; }
-.conta-secao summary { cursor:pointer; font-weight:600; font-size:13px; color:#d8cdea; padding:4px 0; }
+.conta-secao summary { cursor:pointer; font-weight:600; font-size:var(--fs-md); color:#d8cdea; padding:6px 0; border-radius:var(--r-sm); transition:color var(--dur) var(--curva); }
+.conta-secao summary:hover { color:var(--text); }
 .conta-secao[open] summary { margin-bottom:10px; }
-.conta-status { min-height:1em; font-size:12px; color:#a7d8b8; margin:0 0 6px; }
+.conta-secao[open] > :not(summary) { animation:nexo-descer var(--dur) var(--curva); }
+.conta-status { min-height:1em; font-size:var(--fs-sm); color:#a7d8b8; margin:0 0 6px; }
 .conta-status.problema { color:#ffacba; }
 .conta-acoes { display:flex; gap:10px; margin-top:22px; flex-wrap:wrap; }
 .conta-acoes > * { flex:1 1 180px; }
-.botao-link { display:flex; align-items:center; justify-content:center; background:#ad9aee; color:#221b33; padding:12px 18px; border-radius:9px; font-size:12px; font-weight:650; }
-.botao-link:hover { background:#c4b3ff; }
-.botao-link.secundario { background:#b5a0d606; border:1px solid #bfaad732; color:#d2c3e3; margin:4px 0 8px; }
-.botao-link.secundario:hover { background:#b5a0d615; }
-.escolhas { border:0; padding:0; margin:18px 0 0; display:flex; flex-wrap:wrap; gap:8px; }
-.escolhas legend { font-size:11px; font-weight:600; color:#c6bcd1; margin-bottom:9px; padding:0; }
-.escolhas label { position:relative; margin:0!important; cursor:pointer; }
-.escolhas input { position:absolute; opacity:0; width:1px; height:1px; }
-.escolha { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; border:2px solid transparent; font-size:17px; color:#15121f; font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; }
-.escolha.texto { width:auto; padding:0 12px; border-radius:18px; font:600 11px/1 "Segoe UI",system-ui,sans-serif; background:#ffffff0d; color:#d8cdea; }
-.escolhas input:checked + .escolha { border-color:#f1ebff; box-shadow:0 0 0 2px #8879f6; }
-.escolhas input:focus-visible + .escolha { outline:2px solid #ad9aee; outline-offset:2px; }
+.botao-link { display:flex; align-items:center; justify-content:center; min-height:var(--ctl-g); background:var(--accent-forte); color:#fff; padding:0 18px; border-radius:var(--r-md); font-size:var(--fs-md); font-weight:650; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.botao-link:hover { background:var(--accent-forte-hi); }
+.botao-link:active { transform:scale(.985); }
+.botao-link.secundario { min-height:var(--ctl-m); background:#ffffff08; border:1px solid var(--line-3); color:var(--text-2); margin:4px 0 8px; }
+.botao-link.secundario:hover { background:#ffffff12; }
 .conta-avatar.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; font-size:26px; }
 .conta-secao.perigo summary { color:#ffb3bf; }
-button.perigo { background:#e5798b; color:#2a1016; }
-button.perigo:hover { background:#f191a1; }
-@media(max-width:760px) { .conta-card { padding:23px; } .conta-abas button { padding:9px 8px; font-size:11px; } .codigo-recuperacao { flex-direction:column; align-items:stretch; } .codigo-recuperacao button { width:100%; } }
+button.perigo { background:var(--danger-forte); color:#fff; }
+button.perigo:hover { background:#d8475c; }
+button.perigo:disabled:hover { background:var(--danger-forte); }
+@media(max-width:760px) { .conta-card { padding:23px; } .conta-abas button { padding:9px 8px; font-size:11px; } .codigo-recuperacao { flex-direction:column; align-items:stretch; } .codigo-acoes { flex-direction:row; } .codigo-acoes button { flex:1; } }
