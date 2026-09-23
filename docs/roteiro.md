@@ -8,8 +8,8 @@ Atualizado em 22/09/2026. Junta num lugar só a ordem e o estado dos planos:
 
 Este arquivo muda quando uma etapa fecha. Os planos mudam quando uma decisão muda.
 
-**Ordem:** feito → **agora: o aplicativo** → **1. contas** → **2. antes de abrir** →
-*lançamento* → **3. pagamento** → **4. guiado pelo uso**
+**Ordem:** feito → **1. contas** → **2. antes de abrir** → *lançamento* → **3. pagamento** →
+**4. guiado pelo uso**
 
 O pagamento fica **depois** do lançamento de propósito: o uso real diz se R$ 10 converte antes
 de se gastar dias numa integração, e o atalho da fase 3 permite receber de apoiadores antes
@@ -27,29 +27,22 @@ dela.
 | Sugestões com caminho próprio, em lista separada | `e18dc5f` |
 | Sala com dono: expulsar, banir, desbanir, transferir (primeiro item do degrau 6) | `bd73c01`, `e18dc5f` |
 | Apagar sons da mesa virou moderação: só quem abriu a sala, até as contas existirem | `5e81f75` |
+| O aplicativo de desktop fica preso ao servidor escolhido — janela, funções nativas e permissões; o seletor de tela roda isolado | `ae0c9db` |
 | Aplicativo para Linux e macOS; a página oferece só o que existe | `3668834`, `92740d6` |
 | `npm start` roda no Linux (era pendência do degrau 1) | `540fc6c` |
 | Melhorias de sala: chat, layout, controles, latência desde a entrada | `779dc3e` a `633265c` |
 | Planos: custo e lançamento, contas, segurança e privacidade, WebCodecs | `docs/` |
 
-### Esperando confirmação
+### Os instaladores
 
-- **Build do Linux** depois da correção do ícone — rodar `npm --prefix app run empacotar:linux`
-  no Linux e conferir que o `.AppImage` abre.
-- **Build do macOS** — nunca rodou, e só sai de um Mac. Sem a assinatura paga da Apple, o
-  macOS bloqueia a primeira abertura até a pessoa liberar nas configurações de segurança.
+A correção do aplicativo (`ae0c9db`) só chega a quem usa quando o instalador é gerado de novo.
 
----
-
-## Agora — o aplicativo de desktop · meia tarde
-
-Antes de qualquer fase, porque é código que já está sendo distribuído. Detalhe em
-[`seguranca-e-privacidade.md`](seguranca-e-privacidade.md), item 1.
-
-- A página da sala consegue trocar o servidor do aplicativo, e a janela pode navegar para
-  qualquer lugar levando junto as funções nativas — inclusive a que liga o agente de áudio.
-  Três mudanças em `app/main.js` prendem o aplicativo à origem que a pessoa escolheu.
-- A janelinha do seletor de tela deixa de rodar com Node ligado.
+- **Windows:** gerar de novo com `npm --prefix app run empacotar` e substituir em `app/dist`. O
+  `.exe` que o servidor oferece hoje ainda é o antigo.
+- **Linux:** depois da correção do ícone, rodar `npm --prefix app run empacotar:linux` no Linux e
+  conferir que o `.AppImage` abre. O build novo já sai com a correção.
+- **macOS:** nunca rodou, e só sai de um Mac. Sem a assinatura paga da Apple, o macOS bloqueia a
+  primeira abertura até a pessoa liberar nas configurações de segurança.
 
 ---
 

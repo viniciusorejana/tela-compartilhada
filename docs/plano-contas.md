@@ -346,6 +346,11 @@ Vale a pena — o público está lá, o cadastro vira um clique, e vem apelido e
 terceiro no caminho do login. A tabela `identidade_externa` já nasce no esquema: ligar o
 Discord depois é preenchê-la e acrescentar duas rotas.
 
+No aplicativo de desktop, esse login acontece **no navegador externo**: desde `ae0c9db` a janela
+não sai da origem da sala, e a autorização acontece em `discord.com`. A volta ao aplicativo
+precisa ser desenhada junto — um protocolo próprio do aplicativo, ou um código de uso único
+colado nele.
+
 ---
 
 ## Quem abre a sala, e quanto o link vale

@@ -1,6 +1,7 @@
 # Segurança e privacidade
 
-Escrito em 22/09/2026, antes de começar a implementação das contas. Responde três perguntas —
+Escrito em 22/09/2026, antes de começar a implementação das contas, e atualizado no mesmo dia
+com a correção do aplicativo de desktop (`ae0c9db`). Responde três perguntas —
 o Nexo resiste a invasão? pode vazar dado de alguém? está de acordo com a LGPD? — a partir do
 código e da lei, não de suposição. O que aparece como "já existe" foi conferido no código nesta
 data; o que é lei tem a fonte no fim do documento.
@@ -13,8 +14,9 @@ funcionalidade nova que guarda algo é um lugar novo por onde vazar.
 
 - **Muito já está feito, e bem feito.** A mídia nunca é gravada, o chat morre com a sala, o IP
   nunca toca o disco, a telemetria é agregada, e o painel só abre na própria máquina.
-- **Há uma falha real a corrigir antes de distribuir o aplicativo a desconhecidos** — no
-  aplicativo de desktop, que roda na máquina de quem usa e sabe ligar captura de áudio.
+- **Havia uma falha real no aplicativo de desktop**, que roda na máquina de quem usa e sabe ligar
+  captura de áudio. **Corrigida em `ae0c9db`** — e ela só chega a quem usa quando os
+  instaladores forem gerados de novo.
 - **Para contas e para abrir ao público faltam peças conhecidas:** cabeçalhos de segurança nas
   páginas, origem conferida no Socket.IO, um identificador de login, prazo para os relatos,
   backups criptografados, os documentos da LGPD e um plano de incidente.
@@ -41,50 +43,72 @@ funcionalidade nova que guarda algo é um lugar novo por onde vazar.
 | Servidor de mídia com versão e SHA-256 fixos no código | `scripts/baixar-livekit.cjs` |
 | Nenhuma vulnerabilidade conhecida nas dependências de produção (`npm audit`, 22/09/2026: 0) | `package-lock.json` |
 | Preferências — inclusive volume por pessoa — só no navegador de cada um | `public/preferencias.js` |
-| Aplicativo: a sala roda isolada do Node, janelas novas são negadas, e o agente só aponta para o mesmo servidor da página | `app/main.js` |
+| Aplicativo: a sala roda isolada do Node; a janela, as funções nativas e as permissões ficam presas ao servidor escolhido; só a tela local troca o servidor; o seletor de tela roda isolado | `app/main.js`, `ae0c9db` |
 | Token de pareamento do agente com 128 bits aleatórios | `public/sala.js` |
 
 ---
 
 ## O que precisa ser corrigido
 
-### 1. O aplicativo de desktop deixa a página trocar de servidor — grave
+### 1. O aplicativo de desktop deixava a página trocar de servidor — corrigido
 
-A cadeia, peça por peça:
+**Corrigido em `ae0c9db`.** O registro fica porque explica por que o aplicativo é desenhado
+como é, e o que não pode voltar.
+
+A cadeia, peça por peça, como era:
 
 1. `appNativo.definirEndereco()` existe para a tela local onde a pessoa digita o endereço
-   (`app/endereco.html`). Só que o preload a entrega a **toda** página carregada na janela —
-   inclusive à sala, que é conteúdo remoto —, e o handler (`endereco:definir`,
-   `app/main.js:329`) não confere quem chama.
-2. O endereço vira configuração assim que a página carrega (`did-finish-load`), e vale para as
-   próximas aberturas do aplicativo.
-3. Nada restringe para onde a janela principal navega (não existe `will-navigate`), e as
-   funções nativas (`remetenteDaSala`, `app/main.js:165`) aceitam qualquer página `http(s)`.
+   (`app/endereco.html`). O preload a entregava a **toda** página da janela — inclusive à sala,
+   que é conteúdo remoto —, e o handler (`endereco:definir`) não conferia quem chamava.
+2. O endereço vira configuração assim que a página carrega, e vale para as próximas aberturas.
+3. Nada restringia para onde a janela navegava, e as funções nativas aceitavam qualquer página
+   `http(s)`.
 4. O agente de áudio sobe na entrada da sala (`sala.js:472`) e captura quando o servidor ao
-   qual está ligado manda. A trava que existe — o agente só aponta para o mesmo servidor da
-   página (`app/main.js:301`) — não ajuda quando a própria página é de outro servidor.
+   qual está ligado manda. A trava que já existia — o agente só aponta para o mesmo servidor da
+   página — não ajudava quando a própria página era de outro servidor.
 
-Juntando: **uma falha de XSS no Nexo, ou um servidor malicioso aberto uma única vez, consegue
-prender o aplicativo num endereço de fora e, de lá, ligar o agente e mandar capturar o som da
-máquina.** É o pior dano que o Nexo pode causar a alguém, e hoje ele fica a uma falha de
-distância.
+Juntando: **uma falha de XSS no Nexo, ou um servidor malicioso aberto uma única vez, prendia o
+aplicativo num endereço de fora e, de lá, ligava o agente e mandava capturar o som da
+máquina.** É o pior dano que o Nexo pode causar a alguém, e ficava a uma falha de distância.
 
-A correção cabe em três mudanças no `app/main.js`:
+O que mudou em `app/main.js`:
 
-- `endereco:definir` só aceita a página local (`file:`), nunca a sala.
-- `will-navigate` e `will-redirect` mantêm a janela na origem escolhida; qualquer outra abre no
-  navegador de verdade, como os links do chat já abrem.
-- `remetenteDaSala` passa a conferir que a origem é a do servidor escolhido, e não "qualquer
-  `http(s)`".
+- Existe uma **origem da sala**, que nasce só do endereço que a pessoa escolheu. Um
+  redirecionamento do próprio endereço ao abrir (`http` para `https`, com ou sem `www`)
+  atualiza a origem; depois disso, só a tela local muda o servidor.
+- `endereco:definir` só aceita a tela local. `endereco:esquecer`, a tela local ou a sala.
+- `will-navigate` e `will-redirect` mantêm a janela na origem; qualquer outro destino abre no
+  navegador de verdade. Dentro da origem, a navegação continua livre.
+- As funções nativas conferem a origem, e `agente:iniciar` passou a conferir também a página.
+- **Permissões:** o Electron concede a qualquer página tudo o que ela pede — câmera, microfone,
+  notificações — sem perguntar. Isso não estava no levantamento original e apareceu ao ler o
+  código para corrigir: agora só a origem da sala recebe, e um iframe injetado de outra origem,
+  não.
+- O seletor de tela deixou de rodar com Node ligado. Ele escrevia os nomes com `textContent`,
+  mas os nomes são títulos de janela, que qualquer programa escolhe — um `innerHTML` descuidado
+  ali seria execução de código na máquina. Ganhou isolamento e uma ponte de duas funções
+  (`app/preload-escolher.js`).
 
-E uma de brinde: a janelinha do seletor de tela roda com `nodeIntegration: true`. Hoje ela é
-segura porque escreve os nomes das janelas com `textContent` — e o título de uma janela é
-escolhido por qualquer programa, inclusive por uma aba de navegador. Um `innerHTML` descuidado
-ali, um dia, seria execução de código na máquina de quem usa. Passa a usar isolamento e
-preload, como a janela principal.
+O que o teste real do Electron (`tests/electron.cjs`) passou a cobrir: as permissões continuam
+valendo para a sala; a sala pedindo outro servidor é recusada e o servidor salvo não muda; um
+destino de fora abre no navegador e a janela não sai; a ponte segue respondendo à sala; a
+navegação dentro da origem continua livre; e a tela local ainda troca o servidor — o caminho de
+quem abre o aplicativo pela primeira vez. Contra o código antigo, o teste falha em "a sala não
+pode trocar o servidor do aplicativo". Um build de conferência confirmou a ponte nova dentro do
+pacote.
 
-**Meia tarde, com um caso novo em `tests/electron.cjs`. Vem antes de tudo o mais**, porque é
-código que já está sendo distribuído.
+**O que não tem teste automático:** a permissão **negada** a outra origem. Provocá-la exige um
+iframe de outra origem pedindo câmera ou microfone no Electron de teste, e o resultado depende
+de como o Chromium delega permissão a iframes. A regra é uma linha, conferida lendo.
+
+Três consequências:
+
+- **A correção só chega a quem usa quando os instaladores forem gerados de novo** e
+  substituídos em `app/dist` — o `.exe` que o servidor oferece hoje ainda é o antigo.
+- **O login com Discord, quando vier, acontece no navegador externo.** O fluxo de autorização
+  sai para `discord.com`, e a janela do aplicativo não sai mais da origem da sala.
+- Um indicador nativo enquanto o agente captura continua sendo uma boa ideia para depois: se o
+  próprio servidor for invadido, quem invadiu controla a página.
 
 ### 2. As páginas públicas não têm cabeçalhos de segurança
 
@@ -109,8 +133,10 @@ reescrita. O cuidado é ligar a política primeiro em modo relatório
 `cors: { origin: process.env.CORS_ORIGIN || true }`. Hoje isso não é explorável: a credencial
 da sessão mora na memória da página, e outro site não tem como apresentá-la. **No dia em que a
 conta viajar num cookie**, um site de terceiros aberto por quem tem conta conseguiria abrir um
-socket em nome dela (sequestro de WebSocket entre sites). A correção é fixar a origem no
-`PUBLIC_URL`, e entra na etapa A — junto com o cookie, não depois.
+socket em nome dela (sequestro de WebSocket entre sites). A variável `CORS_ORIGIN` já existe,
+e o README a recomenda para produção; a correção é o padrão deixar de ser `true` e passar a ser
+a origem do `PUBLIC_URL`, para que esquecer a variável não abra a porta. Entra na etapa A —
+junto com o cookie, não depois.
 
 ### 4. O plano de contas ficou sem identificador de login
 
@@ -333,7 +359,8 @@ A lista de endurecimento do VPS, toda operação, nenhuma linha de código:
 
 | quando | o quê | esforço |
 |---|---|---|
-| **agora** | aplicativo de desktop preso à origem escolhida; seletor sem Node | meia tarde |
+| ~~agora~~ **feito** (`ae0c9db`) | aplicativo de desktop preso à origem escolhida; permissões só para ela; seletor sem Node | — |
+| **em seguida** | gerar os instaladores de novo, para a correção chegar a quem usa | operação |
 | etapa A | origem no Socket.IO; usuário único para login; política de senha; freio por conta; resposta única no login | +meio dia |
 | etapa B | "baixar meus dados" | +meio dia |
 | fase 2 | cabeçalhos de segurança, com a CSP primeiro em modo relatório | meio dia |
@@ -345,8 +372,8 @@ A lista de endurecimento do VPS, toda operação, nenhuma linha de código:
 | fase 3 | checkout do provedor; assinatura da webhook conferida | já na estimativa da fase |
 | depois | ponta a ponta opcional; 2FA; indicador nativo enquanto o agente captura | — |
 
-Somando: **uns 3,5 dias de código** espalhados pelas fases que já existem, mais operação e a
-parte jurídica.
+Somando o que falta: **uns 3 dias de código** espalhados pelas fases que já existem, mais
+operação e a parte jurídica.
 
 ---
 

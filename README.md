@@ -88,7 +88,7 @@ Para uma conferência da interface na mesma rede, o IP local do servidor permite
    [Bot de música](#bot-de-música-canal--música) e [Mesa de sons](#mesa-de-sons-soundboard).
 6. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS do Funnel para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
 
-Cada participante conecta diretamente com cada outro (mesh P2P) -- funciona bem em salas pequenas (ate 4-5 pessoas); o servidor nao retransmite midia, so a sinalizacao.
+A mídia passa pelo servidor de mídia (SFU): cada pessoa envia uma cópia só, e o servidor entrega a cada um a camada que a conexão dele aguenta. Os detalhes estão em [`docs/servidor-de-midia.md`](docs/servidor-de-midia.md).
 
 ### Como o audio da tela e escolhido (automatico)
 
@@ -629,6 +629,13 @@ ar, endereco errado --, o aplicativo volta para a tela de endereco dizendo o mot
 foi digitado ja preenchido. Para trocar de servidor a qualquer momento: **Ctrl+Shift+S** (a barra
 de menu fica escondida; `Alt` mostra).
 
+O aplicativo fica **preso ao servidor escolhido**. A sala é conteúdo remoto, e ele liga um
+programa que captura áudio nesta máquina -- então uma página não pode levá-lo para outro lugar:
+links e navegação para fora da origem abrem no navegador de verdade, só a tela de endereço troca
+o servidor, e câmera, microfone e notificações só são concedidos a esse servidor. Um endereço que
+redireciona ao abrir (de `http` para `https`, ou para o domínio com `www`) continua funcionando:
+vale a origem de chegada.
+
 ### Gerar o executavel
 
 ```bash
@@ -1026,15 +1033,22 @@ O TURN embutido fica desligado de propósito: ele existe para servidores sem IP 
 alternativa por TCP já cobre quem bloqueia UDP. Para o cenário sem IP público, o caminho continua
 documentado em [`docs/turn.md`](docs/turn.md).
 
-## Seguranca e privacidade
+## Segurança e privacidade
 
-- HTTPS e necessario para captura de tela fora de `localhost`; nunca instrua usuarios a ignorar alertas de certificado.
-- O servidor atual nao possui autenticacao, lista de convidados, expiracao de salas ou controle de acesso. Nao publique links sensiveis sem adicionar uma camada de autenticacao.
-- A sinalizacao passa pelo servidor, mas a midia e peer-to-peer quando possivel; com TURN, a midia pode passar pelo relay.
-- Um endereco fixo (Tailscale Funnel, dominio proprio) fica exposto na internet enquanto estiver ligado, e mais facil de achar do que uma URL sorteada. Como nao ha autenticacao, desligue o Funnel quando nao estiver usando: `tailscale funnel --https=443 off`.
-- A captura nativa de audio so e liberada para quem abre a pagina em `localhost` na propria maquina do servidor. Atras de um proxy toda conexao chega como `127.0.0.1`, entao a checagem olha tambem os cabecalhos de proxy e o `Host` -- e sempre falha para o lado seguro.
-- Nao inclua tokens, credenciais TURN, arquivos `.cloudflared` ou certificados no Git.
-- Para producao, defina `CORS_ORIGIN` para o dominio exato, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs.
+O levantamento completo -- o que já protege, o que falta, o que se guarda e por quanto tempo,
+LGPD e ECA Digital -- está em [`docs/seguranca-e-privacidade.md`](docs/seguranca-e-privacidade.md).
+O essencial:
+
+- HTTPS é necessário para captura de tela fora de `localhost`; nunca instrua usuários a ignorar alertas de certificado.
+- Ainda não há contas: quem tem o link entra numa sala aberta. Quem abriu a sala pode trancá-la (a entrada passa a depender de aprovação), expulsar, banir e liberar; a sala e tudo o que ela tinha -- chat, sons, fila de música -- somem quando ela esvazia. As contas estão planejadas em [`docs/plano-contas.md`](docs/plano-contas.md).
+- A mídia passa pelo servidor de mídia, cifrada (DTLS-SRTP) entre cada pessoa e o servidor, que a decifra para distribuir -- como Discord e Meet fazem por padrão. Nada é gravado. O TURN embutido fica desligado.
+- O IP de quem entra nunca vai para o disco: os limites por origem usam um HMAC com segredo sorteado a cada início do processo.
+- O painel só abre na própria máquina do servidor; acesso remoto só com `NEXO_PAINEL_REMOTO=1` e HTTPS.
+- O aplicativo de mesa fica preso ao servidor escolhido: navegar para fora abre no navegador de verdade, só a tela de endereço troca o servidor, e câmera, microfone e notificações só valem para ele.
+- Um endereço fixo (Tailscale Funnel, domínio próprio) fica exposto na internet enquanto estiver ligado, e é mais fácil de achar do que uma URL sorteada. Como ainda não há contas, desligue o Funnel quando não estiver usando: `tailscale funnel --https=443 off`.
+- A captura nativa de áudio só é liberada para quem abre a página em `localhost` na própria máquina do servidor. Atrás de um proxy toda conexão chega como `127.0.0.1`, então a checagem olha também os cabeçalhos de proxy e o `Host` -- e sempre falha para o lado seguro.
+- Não inclua tokens, credenciais TURN, arquivos `.cloudflared` ou certificados no Git.
+- Para produção, defina `CORS_ORIGIN` para o domínio exato, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs. Sem `CORS_ORIGIN`, o Socket.IO aceita conexão de qualquer origem -- inofensivo enquanto a credencial vive na memória da página, e um problema no dia em que ela viajar num cookie.
 
 ## Solucao de problemas
 
@@ -1044,7 +1058,7 @@ documentado em [`docs/turn.md`](docs/turn.md).
 - **Audio sem som:** marque a opcao de audio no seletor do navegador; a disponibilidade depende da fonte, navegador e sistema operacional.
 - **Tela preta no iPhone:** use **Ativar reprodução** se aparecer. Se a imagem não chegar, use **Reproduzir vídeo** e **Ver diagnóstico** no palco, ou o botão de diagnóstico na lateral. Consulte o [roteiro de validação](docs/revisao-safari.md#validacao-em-um-iphone-real).
 - **O jogo perde FPS ao compartilhar, ou aparece uma tarja amarela:** compartilhe a **tela inteira** em vez de uma janela. O custo e a tarja vêm do caminho de captura de janela do Windows, não do Nexo; a explicação e as alternativas estão em [`docs/captura-de-tela.md`](docs/captura-de-tela.md).
-- **Atraso crescente ou muitos participantes:** ajuste resolução, FPS ou bitrate em `public/sala.js`; como a conexão é mesh (todos com todos), salas grandes pesam mais na banda de upload de cada um.
+- **Atraso crescente ou muitos participantes:** reduza a resolução ou os quadros no painel de qualidade; o Diagnóstico mostra se o limite é processador, banda ou captura. Com o servidor de mídia cada pessoa envia uma cópia só, então o peso de uma sala grande cai na banda do servidor, e não no upload de cada um.
 - **Tunnel nao abre:** confirme que o Node responde em `http://localhost:3000`, que o `cloudflared` esta no `PATH` e que a janela do tunnel continua aberta.
 
 ## Estrutura
@@ -1063,9 +1077,10 @@ tela-compartilhada/
 ├── app/                            # aplicativo de mesa (Electron): a sala fora do navegador
 │   ├── main.js                     # janela, seletor de tela e ciclo de vida do agente
 │   ├── preload.js                  # a ponte estreita entre a sala e o aplicativo
+│   ├── preload-escolher.js         # a ponte do seletor: receber as fontes, devolver a escolha
 │   ├── lancar.js                   # sobe o Electron com o ambiente limpo
 │   ├── endereco.html               # onde fica o servidor (perguntado uma vez)
-│   └── escolher.html               # seletor de tela/janela com miniaturas
+│   └── escolher.html               # seletor de tela/janela com miniaturas, isolado do Node
 └── public/
     ├── index.html, home.css, home.js # criar/entrar e salas recentes
     ├── sala.html, sala.css          # interface da sala
@@ -1134,7 +1149,10 @@ npm --prefix app run empacotar
 ```
 
 `npm run test:electron` verifica o preload e o seletor em um perfil temporário, sem capturar
-seus dispositivos. Exige as dependências de `app` e o agente compilado; usa a porta 3219.
+seus dispositivos, e que o aplicativo fica preso ao servidor escolhido: a sala não consegue
+trocar o servidor, um destino de fora abre no navegador (o teste só anota, não abre nada), e a
+tela de endereço continua trocando. Exige as dependências de `app` e o agente compilado; usa a
+porta 3219.
 O ícone Windows é derivado de `public/mark.svg`; `npm run build:icon` o regenera usando o
 Chromium do Playwright quando a marca for alterada.
 
