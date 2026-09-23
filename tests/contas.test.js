@@ -196,6 +196,75 @@ test('o código de recuperação vale uma vez, é trocado ao ser usado e derruba
   assert.equal((await contas.entrar({ usuario: 'ana', senha: 'recuperei a minha conta' })).ok, true);
 });
 
+// O código volta de onde a pessoa o guardou. Antes, "Nexo: 3XB2-..." perdia o O e virava
+// "NEX3XB2...": 23 caracteres, e a pessoa com o código certo na mão ouvia "não conferem".
+test('o código de recuperação é achado no meio do que a pessoa anotou, e o erro diz o que falta', () => {
+  const recuperacao = require('../public/recuperacao');
+  assert.equal(recuperacao.ALFABETO, ALFABETO, 'o mesmo alfabeto dos códigos gerados');
+  const codigo = '3XB2Y9CTWHT4EXJ2G6EY';
+  const formatado = '3XB2-Y9CT-WHT4-EXJ2-G6EY';
+  for (const anotado of [
+    formatado, formatado.toLowerCase(), codigo, '3xb2 y9ct wht4 exj2 g6ey', `Nexo: ${formatado}`,
+    `código de recuperação do Nexo -> ${formatado} (guardar!)`, '3XB2–Y9CT—WHT4‐EXJ2−G6EY', 'nexo: 3xb2 y9ct wht4 exj2 g6ey',
+    '３XB2-Y9CT-WHT4-EXJ2-G6EY',
+    `Nexo · código de recuperação\r\n\r\nConta: @ana\r\nCódigo: ${formatado}  (vale uma vez)\r\nGerado em: 23/09/2026 12:30:00\r\n`,
+    // O mesmo arquivo depois de um campo de uma linha apagar as quebras.
+    `Nexo · código de recuperaçãoConta: @anaCódigo: ${formatado}  (vale uma vez)Gerado em: 23/09/2026 12:30:00`
+  ]) assert.equal(regras.lerRecuperacao(anotado).codigo, codigo, anotado);
+  assert.equal(regras.lerRecuperacao('').problema, 'vazio');
+  assert.equal(regras.lerRecuperacao('3XB2-Y9CT-WHT4-EXJ2-G6E').problema, 'tamanho');
+  assert.match(regras.mensagemDaRecuperacao(regras.lerRecuperacao('3XB2-Y9CT-WHT4-EXJ2-G6E')), /tem 19/);
+  assert.equal(regras.lerRecuperacao('3XB2-Y9CT-WHT4-EXJ2-G6EO').problema, 'caracteres', 'O, I, L, 0 e 1 não existem no código');
+  assert.equal(regras.lerRecuperacao(`para ${codigo.match(/.{4}/g).join(' ')}`).problema, 'misturado', 'seis grupos: adivinhar qual sobra não é ler');
+  assert.equal(regras.lerRecuperacao(`${formatado} ${formatado.replace('3', '4')}`).problema, 'misturado', 'dois códigos colados juntos');
+});
+
+test('código malformado e senha nova fraca não gastam as tentativas da conta', async t => {
+  const { contas } = comContas(t);
+  const cadastro = await contas.cadastrar({ usuario: 'ana', senha: SENHA });
+  for (let i = 0; i < 12; i++) {
+    assert.equal((await contas.recuperar({ usuario: 'ana', codigo: 'ABCD', nova: 'recuperei a minha conta' })).campo, 'codigo');
+    assert.equal((await contas.recuperar({ usuario: 'ana', codigo: cadastro.recuperacao, nova: 'curta' })).campo, 'nova');
+  }
+  const certo = await contas.recuperar({ usuario: 'ana', codigo: `Nexo: ${cadastro.recuperacao}`, nova: 'recuperei a minha conta' });
+  assert.equal(certo.ok, true, certo.error);
+});
+
+// Quem esqueceu a senha tenta entrar algumas vezes antes de lembrar do código. Com um balde
+// só para login e recuperação, essas tentativas trancavam justamente a saída.
+test('errar o login até o freio não tranca a recuperação', async t => {
+  const { contas } = comContas(t);
+  const cadastro = await contas.cadastrar({ usuario: 'ana', senha: SENHA });
+  for (let i = 0; i < 12; i++) await contas.entrar({ usuario: 'ana', senha: `nao lembro mais ${i}` });
+  assert.equal((await contas.entrar({ usuario: 'ana', senha: SENHA })).status, 429, 'o login está no freio');
+  const r = await contas.recuperar({ usuario: 'ana', codigo: cadastro.recuperacao, nova: 'recuperei a minha conta' });
+  assert.equal(r.ok, true, r.error);
+});
+
+test('a senha nova não pode ser o apelido, e isso só é dito a quem acertou o código', async t => {
+  const { contas } = comContas(t);
+  const cadastro = await contas.cadastrar({ usuario: 'ana', apelido: 'Ana Paula Souza', senha: SENHA });
+  const semCodigo = await contas.recuperar({ usuario: 'ana', codigo: 'ABCD-EFGH-JKMN-PQRS-TUVW', nova: 'Ana Paula Souza' });
+  assert.equal(semCodigo.status, 401, 'sem o código certo, a regra do apelido não fala');
+  const comCodigo = await contas.recuperar({ usuario: 'ana', codigo: cadastro.recuperacao, nova: 'Ana Paula Souza' });
+  assert.equal(comCodigo.campo, 'nova');
+  assert.equal((await contas.recuperar({ usuario: 'ana', codigo: cadastro.recuperacao, nova: 'uma frase bem diferente' })).ok, true, 'o código não foi gasto pela recusa');
+});
+
+// O teto diário da rede é de contas criadas. Pedido recusado pela validação não é conta.
+test('o teto de criação só é perguntado quando o pedido criaria uma conta', async t => {
+  const { contas } = comContas(t);
+  let perguntas = 0;
+  const permitirCriacao = () => { perguntas++; return perguntas <= 1; };
+  assert.equal((await contas.cadastrar({ usuario: 'a', senha: SENHA, permitirCriacao })).campo, 'usuario');
+  assert.equal((await contas.cadastrar({ usuario: 'ana', senha: 'curta', permitirCriacao })).campo, 'senha');
+  assert.equal(perguntas, 0);
+  assert.equal((await contas.cadastrar({ usuario: 'ana', senha: SENHA, permitirCriacao })).ok, true);
+  assert.equal((await contas.cadastrar({ usuario: 'ana', senha: SENHA, permitirCriacao })).status, 409, 'usuário ocupado também não pergunta');
+  assert.equal(perguntas, 1);
+  assert.equal((await contas.cadastrar({ usuario: 'bia', senha: SENHA, permitirCriacao })).status, 429);
+});
+
 test('apagar a conta pede a senha e leva perfil e sessões junto', async t => {
   const { contas } = comContas(t);
   const { conta, token } = await contas.cadastrar({ usuario: 'ana', senha: SENHA });

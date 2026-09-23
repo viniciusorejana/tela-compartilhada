@@ -145,10 +145,12 @@ erro quando há callback e aviso com intervalo mínimo de dois segundos.
 | Republicação da mesma fonte | 4 | — | 12 em 5 min; observar e alertar |
 | Publicar/despublicar faixa | 12 | — | Observar e alertar |
 | Entrar/sair do SFU | 12 | — | Observar e alertar |
-| Criar conta | 3 por origem | — | 3 por origem **por dia** |
+| Criar conta | 3 contas criadas por origem | — | 3 por origem **por dia**; pedido recusado pela validação não conta |
+| Pedidos de cadastro | 15 por origem | — | 60 por origem em 1 h; segura quem varre nomes de usuário |
 | Entrar na conta | 10 por origem | — | 30 por origem em 15 min |
-| Recuperar a conta | 5 por origem | — | 10 por origem em 1 h |
-| Tentativas numa mesma conta | 5 | — | 10 em 15 min; entrar e recuperar somam juntos |
+| Recuperar a conta | 5 por origem | — | 10 por origem em 1 h; código malformado e senha nova fraca não contam |
+| Tentativas de entrar numa conta | 5 | — | 10 em 15 min |
+| Tentativas de recuperar uma conta | 5 | — | 10 em 15 min; balde próprio, para o login errado não trancar a recuperação |
 | Tentativas no servidor inteiro | 120 | — | Vem antes da fila de derivação de senha |
 | Alterar a conta (senha, perfil, apagar) | 20 por conta | — | 120 em 1 h |
 

@@ -149,7 +149,10 @@ function criarContas({
     return { ok: true, contaId: conta.id, conta: paraOPainel(banco.contaPorId(conta.id)) };
   }
 
-  async function cadastrar({ usuario, apelido, senha, agente }) {
+  // `permitirCriacao` é o teto diário da rede (rotas.js). Ele é perguntado só aqui embaixo, com
+  // o pedido já conferido: uma senha curta ou um usuário ocupado não é conta criada, e antes
+  // três erros de digitação trancavam o cadastro da rede inteira até o dia seguinte.
+  async function cadastrar({ usuario, apelido, senha, agente, permitirCriacao = () => true }) {
     const chave = regras.normalizarUsuario(usuario);
     const problemaDoUsuario = regras.problemaDoUsuario(chave);
     if (problemaDoUsuario) return falha(400, regras.MENSAGENS_DO_USUARIO[problemaDoUsuario], 'usuario');
@@ -161,6 +164,7 @@ function criarContas({
     // serviço que tem um. O que não pode virar consulta é o LOGIN, e lá a resposta é única.
     // Recusar antes de derivar poupa 110 ms de fila a um pedido que já sabemos que falha.
     if (banco.contaPorUsuario(chave)) return falha(409, 'Esse nome de usuário já tem dono. Escolha outro.', 'usuario');
+    if (!permitirCriacao()) return falha(429, 'Muitas contas criadas a partir desta rede hoje. Tente amanhã.', null, 3600);
 
     const recuperacao = regras.gerarRecuperacao();
     const senhaGuardada = await senhas.derivar(senha);
@@ -237,18 +241,40 @@ function criarContas({
     return { ok: true };
   }
 
+  // O que dá para conferir sem abrir conta nenhuma: o formato do código e a senha nova contra
+  // as regras gerais. Erro de digitação aqui não gasta tentativa -- nem da conta, nem da rede
+  // (rotas.js pergunta isto antes do freio) --, e dizer "o código tem 19 caracteres" não revela
+  // nada sobre quem tem conta.
+  function problemaNaRecuperacao({ usuario, codigo, nova } = {}) {
+    const chave = regras.normalizarUsuario(usuario).slice(0, 64);
+    if (!chave) return falha(400, 'Digite o seu nome de usuário.', 'usuario');
+    const lido = regras.lerRecuperacao(codigo);
+    if (lido.problema) return falha(400, regras.mensagemDaRecuperacao(lido), 'codigo');
+    const problema = regras.problemaDaSenha(nova, { usuario: chave });
+    if (problema) return falha(400, regras.MENSAGENS_DA_SENHA[problema], 'nova');
+    return null;
+  }
+
+  // Quem chega aqui já conferiu tudo o que a página mostra; o que sobra é a dúvida de verdade.
+  const NAO_CONFERE_RECUPERACAO = 'Usuário ou código de recuperação não conferem. Confira o nome de usuário (o de entrar, não o apelido) e se este é o código mais recente: cada código vale uma vez, e gerar outro cancela o anterior.';
+
   // O código vale UMA vez. Usado, ele troca: um código que continuasse valendo seria uma
   // segunda senha permanente, anotada num papel qualquer.
   async function recuperar({ usuario, codigo, nova, agente }) {
+    const problema = problemaNaRecuperacao({ usuario, codigo, nova });
+    if (problema) return problema;
     const chave = regras.normalizarUsuario(usuario).slice(0, 64);
     if (!permitido('*', 'entrar-global')) return falha(429, 'Muita gente tentando entrar agora. Aguarde um minuto.', null, 60);
-    if (!chave || !permitido(`entrar:${chave}`, 'entrar-conta')) return falha(429, 'Muitas tentativas para este usuário. Aguarde alguns minutos.', null, 600);
+    // Balde próprio, e não o do login: quem esqueceu a senha erra o login algumas vezes antes de
+    // lembrar do código, e isso não pode trancar justamente a saída.
+    if (!permitido(`recuperar:${chave}`, 'recuperar-conta')) return falha(429, 'Muitas tentativas de recuperar esta conta. Aguarde alguns minutos.', null, 600);
     const conta = banco.contaPorUsuario(chave);
-    const limpo = regras.normalizarCodigo(codigo);
-    const { ok } = await senhas.conferir(limpo.length === regras.TAMANHO_DA_RECUPERACAO ? limpo : '', conta?.recuperacao);
-    if (!ok) return falha(401, 'Usuário ou código de recuperação não conferem.');
-    const problema = regras.problemaDaSenha(nova, { usuario: conta.usuario, apelido: conta.apelido });
-    if (problema) return falha(400, regras.MENSAGENS_DA_SENHA[problema], 'nova');
+    const { ok } = await senhas.conferir(regras.lerRecuperacao(codigo).codigo, conta?.recuperacao);
+    if (!ok) return falha(401, NAO_CONFERE_RECUPERACAO);
+    // A regra que depende da conta -- a senha não pode ser o apelido -- só depois do código
+    // certo: antes, ela diria a qualquer um qual é o apelido de quem tem aquele usuário.
+    const pessoal = regras.problemaDaSenha(nova, { usuario: conta.usuario, apelido: conta.apelido });
+    if (pessoal) return falha(400, regras.MENSAGENS_DA_SENHA[pessoal], 'nova');
     const recuperacao = regras.gerarRecuperacao();
     banco.trocarSenha(conta.id, await senhas.derivar(nova));
     banco.trocarRecuperacao(conta.id, await senhas.derivar(recuperacao));
@@ -341,7 +367,7 @@ function criarContas({
   }
 
   return {
-    cadastrar, entrar, sessao, sair, trocarSenha, recuperar, novaRecuperacao, apagar, publica,
+    cadastrar, entrar, sessao, sair, trocarSenha, recuperar, problemaNaRecuperacao, novaRecuperacao, apagar, publica,
     perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
     banco, senhas, freio, suspensa, csrfDe,
     copiarAgora: () => tarefas ? tarefas.copiarAgora() : Promise.reject(new Error('Manutenção desligada.')),

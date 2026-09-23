@@ -14,12 +14,21 @@ const REGRAS = Object.freeze({
   // minuto é o que tornaria qualquer banimento inútil. Atrás de um túnel sem
   // NEXO_PROXIES_CONFIAVEIS, todo mundo tem a mesma origem -- e o teto passa a ser do
   // servidor inteiro. Ver docs/telemetria.md.
+  //
+  // O teto conta CONTAS CRIADAS, não pedidos: contas.cadastrar pergunta por ele depois de
+  // conferir usuário e senha. Contando pedidos, três erros de digitação trancavam a rede até
+  // o dia seguinte -- medido. Os pedidos têm o balde deles, folgado, contra quem varre nomes.
   'cadastrar': { sessao: 3, longa: [3, DIA] },
+  'cadastrar-tentativa': { sessao: 15, longa: [60, 60 * MINUTO] },
   'entrar': { sessao: 10, longa: [30, 15 * MINUTO] },
+  // Só pedidos bem formados chegam aqui: código com o tamanho certo e senha nova aceitável.
   'recuperar': { sessao: 5, longa: [10, 60 * MINUTO] },
   // Por CONTA, além da origem. Sem isto, uma tentativa por IP a partir de mil IPs passaria
   // por baixo de todo limite por origem.
   'entrar-conta': { sessao: 5, longa: [10, 15 * MINUTO] },
+  // A recuperação tem o balde dela: quem esqueceu a senha erra o login antes de lembrar do
+  // código, e com um balde só esse erro trancava justamente a saída.
+  'recuperar-conta': { sessao: 5, longa: [10, 15 * MINUTO] },
   // O servidor inteiro. É mais ou menos o que a fila de derivação atende sem crescer.
   'entrar-global': { sessao: 120 },
   'conta-escrever': { sessao: 20, longa: [120, 60 * MINUTO] },
@@ -37,6 +46,9 @@ const REGRAS = Object.freeze({
   'soundboard-remover': { sessao: 30, sala: 90 },
   'soundboard-lista': { sessao: 30, sala: 300 },
   'musica-comando': { sessao: 20, sala: 60 },
+  // Arrastar faixas é um gesto de muitos passos seguidos, mas cada um é barato: nenhum baixa
+  // nada nem procura nada. O teto coletivo é o que impede uma pessoa de sequestrar a fila.
+  'musica-fila': { sessao: 40, sala: 120 },
   'musica-busca': { sessao: 6, sala: 24 },
   'musica-estado': { sessao: 30, sala: 300 },
   'musica-saude': { sessao: 30, sala: 300 },

@@ -10,6 +10,7 @@
 const crypto = require('node:crypto');
 const { ALFABETO } = require('../telemetria/relatos');
 const { SENHAS_COMUNS, PALAVRAS_COMUNS } = require('./senhas-comuns');
+const recuperacao = require('../public/recuperacao');
 
 const USUARIO_MINIMO = 3;
 const USUARIO_MAXIMO = 20;
@@ -115,9 +116,14 @@ function normalizarCodigo(texto) {
   return String(texto ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').split('').filter(c => ALFABETO.includes(c)).join('');
 }
 
+// O código de recuperação volta de onde a pessoa o guardou, com o que estiver em volta. A
+// leitura é a mesma da página (public/recuperacao.js), para as duas nunca discordarem.
+const lerRecuperacao = recuperacao.ler;
+const mensagemDaRecuperacao = recuperacao.mensagem;
+
 module.exports = {
   normalizarUsuario, problemaDoUsuario, MENSAGENS_DO_USUARIO, limparApelido,
   problemaDaSenha, MENSAGENS_DA_SENHA, gerarCodigo, gerarRecuperacao, formatarCodigo,
-  formatarRecuperacao, normalizarCodigo,
+  formatarRecuperacao, normalizarCodigo, lerRecuperacao, mensagemDaRecuperacao,
   USUARIO_MINIMO, USUARIO_MAXIMO, APELIDO_MAXIMO, SENHA_MINIMA, SENHA_MAXIMA, TAMANHO_DO_CODIGO, TAMANHO_DA_RECUPERACAO
 };

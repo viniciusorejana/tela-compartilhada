@@ -68,14 +68,37 @@ test('a mesma resposta para usuário inexistente e senha errada, também pelo HT
   assert.deepEqual([errada.status, errada.dados], [inexistente.status, inexistente.dados]);
 });
 
-test('criar conta tem teto diário por origem de rede', async t => {
+// O teto conta contas criadas. Antes contava pedidos, e três erros de digitação -- senha
+// curta, senha comum, usuário inválido -- trancavam a rede até o dia seguinte.
+test('criar conta tem teto diário por origem de rede, e erro de digitação não conta', async t => {
   const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const cadastrar = corpo => cliente(servidor.origem).pedir('/api/conta/cadastrar', { metodo: 'POST', corpo }).then(r => r.status);
+  assert.deepEqual([
+    await cadastrar({ usuario: 'pessoa0', senha: 'curta' }),
+    await cadastrar({ usuario: 'pessoa0', senha: '1234567890' }),
+    await cadastrar({ usuario: 'p', senha: SENHA })
+  ], [400, 400, 400]);
   const situacoes = [];
-  for (let i = 0; i < 4; i++) {
-    const r = await cliente(servidor.origem).pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: `pessoa${i}`, senha: SENHA } });
-    situacoes.push(r.status);
-  }
+  for (let i = 0; i < 4; i++) situacoes.push(await cadastrar({ usuario: `pessoa${i}`, senha: SENHA }));
   assert.deepEqual(situacoes, [201, 201, 201, 429]);
+});
+
+test('recuperar pelo HTTP: código colado com rótulo entra, e malformado não gasta a cota da rede', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  const { dados } = await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
+  await ana.pedir('/api/conta/sair', { metodo: 'POST' });
+  const outro = cliente(servidor.origem);
+  for (let i = 0; i < 8; i++) {
+    const malformado = await outro.pedir('/api/conta/recuperar', { metodo: 'POST', corpo: { usuario: 'ana', codigo: dados.recuperacao.slice(0, -2), nova: 'recuperei a minha conta' } });
+    assert.equal(malformado.status, 400);
+    assert.equal(malformado.dados.campo, 'codigo');
+    assert.match(malformado.dados.error, /tem 18/);
+  }
+  const certo = await outro.pedir('/api/conta/recuperar', { metodo: 'POST', corpo: { usuario: 'ana', codigo: `Nexo: ${dados.recuperacao}`, nova: 'recuperei a minha conta' } });
+  assert.equal(certo.status, 200, JSON.stringify(certo.dados));
+  assert.match(certo.dados.recuperacao, /^([A-Z2-9]{4}-){4}[A-Z2-9]{4}$/);
+  assert.equal((await outro.pedir('/api/conta/eu')).dados.conta.usuario, 'ana', 'a recuperação abre a sessão');
 });
 
 // A identidade de mídia vai para o token do LiveKit, para as webhooks e para os relatos. Se

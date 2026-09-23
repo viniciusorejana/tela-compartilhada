@@ -29,7 +29,9 @@ const iguais = (a, b) => {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 };
 
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true }) {
+// `aoMudarPerfil(conta)` é chamado depois de salvar apelido, cor ou marca: server.js leva a
+// mudança às salas em que essa conta está agora, sem ninguém precisar sair e voltar.
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, aoMudarPerfil = () => {} }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
 
   app.use('/api/conta', (req, res, next) => {
@@ -54,7 +56,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     return res.status(r.status || 400).json({ error: r.error, campo: r.campo || undefined });
   };
   const limitada = tipo => (req, res, next) => {
-    if (!limitarOrigem(req, tipo)) return res.status(429).set('Retry-After', '60').json({ error: tipo === 'cadastrar' ? 'Muitas contas criadas a partir desta rede. Tente amanhã.' : 'Muitas tentativas desta rede. Aguarde alguns minutos.' });
+    if (!limitarOrigem(req, tipo)) return res.status(429).set('Retry-After', '60').json({ error: 'Muitas tentativas desta rede. Aguarde alguns minutos.' });
     next();
   };
 
@@ -90,6 +92,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     const { apelido, cor, marca } = req.body || {};
     const r = contas.salvarPerfil(req.contaNexo.conta, { apelido, cor, marca });
     if (!r.ok) return recusar(res, r);
+    try { aoMudarPerfil(r.conta); } catch (erro) { console.error('Perfil nas salas:', erro?.message || erro); }
     res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
   });
 
@@ -105,9 +108,12 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     res.type('application/json').send(JSON.stringify(contas.dados(req.contaNexo.conta), null, 2));
   });
 
-  app.post('/api/conta/cadastrar', limitada('cadastrar'), json, tratar(async (req, res) => {
+  // Duas contas diferentes: `cadastrar-tentativa` segura quem varre nomes de usuário, e o teto
+  // diário (`cadastrar`) conta só as contas que de fato seriam criadas -- contas.cadastrar
+  // pergunta por ele depois de conferir o pedido.
+  app.post('/api/conta/cadastrar', limitada('cadastrar-tentativa'), json, tratar(async (req, res) => {
     const { usuario, apelido, senha } = req.body || {};
-    const r = await contas.cadastrar({ usuario, apelido, senha, agente: req.headers['user-agent'] });
+    const r = await contas.cadastrar({ usuario, apelido, senha, agente: req.headers['user-agent'], permitirCriacao: () => limitarOrigem(req, 'cadastrar') });
     if (!r.ok) return recusar(res, r);
     gravarCookie(req, res, r.token);
     res.status(201).json({ conta: contas.publica(r.conta), csrf: contas.csrfDe(r.token), recuperacao: r.recuperacao });
@@ -123,7 +129,14 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     res.json({ conta: contas.publica(r.conta), perfil: contas.perfil(r.conta), csrf: contas.csrfDe(r.token) });
   }));
 
-  app.post('/api/conta/recuperar', limitada('recuperar'), json, tratar(async (req, res) => {
+  // O formato do código e a senha nova são conferidos ANTES do freio da rede: são erros de
+  // digitação, e antes três deles gastavam a cota de quem estava com o código certo na mão.
+  const recuperacaoBemFormada = (req, res, next) => {
+    const problema = contas.problemaNaRecuperacao(req.body || {});
+    if (problema) return recusar(res, problema);
+    next();
+  };
+  app.post('/api/conta/recuperar', json, recuperacaoBemFormada, limitada('recuperar'), tratar(async (req, res) => {
     const { usuario, codigo, nova } = req.body || {};
     const r = await contas.recuperar({ usuario, codigo, nova, agente: req.headers['user-agent'] });
     if (!r.ok) return recusar(res, r);
