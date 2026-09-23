@@ -1,0 +1,98 @@
+// As contas pelo lado de fora: o servidor de verdade, com cookie, origem e CSRF. O que se
+// afirma aqui é o que o navegador faz sozinho com um cookie -- e por isso não se testa sem HTTP.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { WebSocket } = require('ws');
+const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
+
+const SENHA = 'cafe com pao no sabado';
+
+function cliente(origem) {
+  let cookie = '';
+  let csrf = '';
+  async function pedir(caminho, { metodo = 'GET', corpo, origemDoPedido = origem, semCsrf = false } = {}) {
+    const cabecalhos = { 'Content-Type': 'application/json' };
+    if (cookie) cabecalhos.Cookie = cookie;
+    if (origemDoPedido) cabecalhos.Origin = origemDoPedido;
+    if (csrf && !semCsrf) cabecalhos['X-Nexo-CSRF'] = csrf;
+    const r = await fetch(origem + caminho, { method: metodo, headers: cabecalhos, body: corpo ? JSON.stringify(corpo) : undefined });
+    const definido = r.headers.get('set-cookie');
+    if (definido) cookie = /Max-Age=0/.test(definido) ? '' : definido.split(';')[0];
+    const dados = await r.json().catch(() => ({}));
+    if (dados.csrf) csrf = dados.csrf;
+    return { status: r.status, dados, definido };
+  }
+  return { pedir, cookie: () => cookie };
+}
+
+test('cadastrar e entrar põem a sessão num cookie HttpOnly, SameSite=Strict, e "eu" a reconhece', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null }, 'sem conta é o estado normal, e responde 200');
+  const cadastro = await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'Ana', apelido: 'Ana', senha: SENHA } });
+  assert.equal(cadastro.status, 201, JSON.stringify(cadastro.dados));
+  assert.match(cadastro.definido, /^nexo_conta=[\w-]{43}; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000$/);
+  assert.ok(cadastro.dados.recuperacao);
+  const eu = await ana.pedir('/api/conta/eu');
+  assert.equal(eu.dados.conta.usuario, 'ana');
+  assert.match(eu.dados.conta.codigo, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal(JSON.stringify(eu.dados).includes('scrypt'), false, 'nenhum hash sai do servidor');
+  assert.equal((await ana.pedir('/api/conta/sair', { metodo: 'POST' })).status, 200);
+  assert.deepEqual((await ana.pedir('/api/conta/eu')).dados, { conta: null });
+  const entrada = await ana.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
+  assert.equal(entrada.status, 200);
+  assert.equal((await ana.pedir('/api/conta/eu')).dados.conta.usuario, 'ana');
+});
+
+// SameSite=Strict é a primeira tranca; esta é a segunda, e a que vale num navegador antigo.
+test('escrever na conta exige a origem de uma página deste servidor, e o CSRF da sessão', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  const corpo = { usuario: 'ana', senha: SENHA };
+  assert.equal((await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo, origemDoPedido: '' })).status, 403, 'sem Origin');
+  assert.equal((await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo, origemDoPedido: 'https://mal.example' })).status, 403, 'Origin de fora');
+  assert.equal((await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo })).status, 201);
+  const semCsrf = await ana.pedir('/api/conta/senha', { metodo: 'POST', corpo: { atual: SENHA, nova: 'outra frase para a conta' }, semCsrf: true });
+  assert.equal(semCsrf.status, 403, 'a sessão sozinha não basta para trocar a senha');
+  const comCsrf = await ana.pedir('/api/conta/senha', { metodo: 'POST', corpo: { atual: SENHA, nova: 'outra frase para a conta' } });
+  assert.equal(comCsrf.status, 200, JSON.stringify(comCsrf.dados));
+});
+
+test('a mesma resposta para usuário inexistente e senha errada, também pelo HTTP', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = cliente(servidor.origem);
+  await ana.pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: SENHA } });
+  const outro = cliente(servidor.origem);
+  const errada = await outro.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'ana', senha: 'nao e esta a senha' } });
+  const inexistente = await outro.pedir('/api/conta/entrar', { metodo: 'POST', corpo: { usuario: 'fantasma', senha: 'nao e esta a senha' } });
+  assert.deepEqual([errada.status, errada.dados], [inexistente.status, inexistente.dados]);
+});
+
+test('criar conta tem teto diário por origem de rede', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const situacoes = [];
+  for (let i = 0; i < 4; i++) {
+    const r = await cliente(servidor.origem).pedir('/api/conta/cadastrar', { metodo: 'POST', corpo: { usuario: `pessoa${i}`, senha: SENHA } });
+    situacoes.push(r.status);
+  }
+  assert.deepEqual(situacoes, [201, 201, 201, 429]);
+});
+
+function abrirSocket(origem, cabecalhoOrigin) {
+  return new Promise(resolve => {
+    const ws = new WebSocket(origem.replace('http:', 'ws:') + '/socket.io/?EIO=4&transport=websocket', cabecalhoOrigin ? { origin: cabecalhoOrigin } : {});
+    const fim = aberto => { ws.terminate(); resolve(aberto); };
+    ws.once('message', dados => fim(String(dados).startsWith('0')));
+    ws.once('unexpected-response', () => fim(false));
+    ws.once('error', () => fim(false));
+  });
+}
+
+// O ataque que isto fecha: um site qualquer, aberto por quem tem conta, abrindo o chat em
+// nome dela. O WebSocket não passa por CORS, então a conferência é no aperto de mão.
+test('o Socket.IO recusa página de outra origem e aceita a deste servidor', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  assert.equal(await abrirSocket(servidor.origem, 'https://mal.example'), false);
+  assert.equal(await abrirSocket(servidor.origem, servidor.origem), true);
+  assert.equal(await abrirSocket(servidor.origem, null), true, 'sem Origin não é navegador, e não carrega cookie sozinho');
+});

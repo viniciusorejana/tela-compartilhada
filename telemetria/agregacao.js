@@ -118,7 +118,7 @@ function agregar(brutos, observacoes = [], { periodo = '7d', agora = Date.now(),
   const uso = { distribuicao: { '1': 0, '2': 0, '3–6': 0, '7–15': 0, '16+': 0 }, salasConcluidas: 0, segundosSalas: 0, sessoesConcluidas: 0, segundosPermanencia: 0, serie: [] };
   const vistosUso = new Set();
   const eventosSfu = { publicacoes: 0, republicacoes: 0, entradas: 0, saidas: 0 }, telas1440 = [];
-  let picoRedeMbps = null;
+  let picoRedeMbps = null, picoLacoMs = null;
   for (const r of observacoes) {
     const faixa = intervalo(r); if (!faixa || vistosUso.has(r.t)) continue;
     vistosUso.add(r.t);
@@ -131,6 +131,7 @@ function agregar(brutos, observacoes = [], { periodo = '7d', agora = Date.now(),
     for (const f of Object.keys(uso.distribuicao)) uso.distribuicao[f] += (finito(r.distribuicao?.[f]) ? r.distribuicao[f] : 0) * fracao;
     for (const f of ['salasConcluidas', 'segundosSalas', 'sessoesConcluidas', 'segundosPermanencia']) uso[f] += (finito(r[f]) ? r[f] : 0) * fracao;
     if (finito(r.picoRedeMbps)) picoRedeMbps = Math.max(picoRedeMbps || 0, r.picoRedeMbps);
+    if (finito(r.picoLacoMs)) picoLacoMs = Math.max(picoLacoMs || 0, r.picoLacoMs);
     uso.serie.push({ t: fim, simultaneas: finito(r.simultaneas) ? r.simultaneas : 0, pico: finito(r.picoSimultaneas) ? r.picoSimultaneas : 0 });
   }
   for (const [inicio, fim] of coberturaUnida) for (let t = inicio; t < fim;) {
@@ -158,7 +159,7 @@ function agregar(brutos, observacoes = [], { periodo = '7d', agora = Date.now(),
   return {
     periodo, fuso, total, entrada, fontes, legado, amostras, invalidos, vazio: !vistos.size,
     primeiro: Number.isFinite(primeiro) ? primeiro : null, ultimo: ultimo || null,
-    segundosObservados, segundosComDados, mediaMbps, picoMbps, picoRedeMbps,
+    segundosObservados, segundosComDados, mediaMbps, picoMbps, picoRedeMbps, picoLacoMs,
     coberturaConhecida: segundosObservados > 0, projecao: { confianca: podeProjetar ? confianca : 'insuficiente', bytesMensais: podeProjetar ? total / segundosObservados * 30 * 86400 : null },
     salas: [...porSala.values()].map(({ intervalos, ...r }) => ({ ...r, segundos: uniao(intervalos), mediaMbps: mbps(r.total, uniao(intervalos)) })).sort((a, b) => b.total - a.total),
     serie: [...porHora.values()].sort((a, b) => a.t - b.t), horas, semana, eventosSfu, telas1440: telas1440.sort((a, b) => a.t - b.t),

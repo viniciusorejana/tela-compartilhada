@@ -57,7 +57,7 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
   if (midia) { await fs.mkdir(pastaSfu); binarioSfu = await binarioDeTeste(); }
   const [portaSfu, portaMetricas, portaTcp, portaUdp] = await portasLivres();
   const filho = spawn(process.execPath, ['tests/helpers/iniciar-telemetria.cjs'], { cwd: path.join(__dirname, '..', '..'), windowsHide: true,
-    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, ...ambiente },
+    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PUBLIC_URL: '', NEXO_PROXIES_CONFIAVEIS: '', NEXO_SEM_MIDIA: midia ? '0' : '1', NEXO_PASTA_SFU: pastaSfu, NEXO_BINARIO_SFU: binarioSfu, SFU_PORT: String(portaSfu), SFU_METRICAS_PORT: String(portaMetricas), SFU_TCP_PORT: String(portaTcp), SFU_UDP_PORTS: String(portaUdp), SFU_IPS: '', NEXO_IP_PUBLICO: '127.0.0.1', NEXO_ANUNCIAR_LAN: '1', NEXO_DADOS_TELEMETRIA: medicao, NEXO_PASTA_PAINEL: painel, NEXO_PASTA_CONTAS: path.join(pasta, 'contas'), ...ambiente },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let erros = ''; filho.stderr.on('data', p => { erros = (erros + p).slice(-16000); });
   async function encerrar() {

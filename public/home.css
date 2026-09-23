@@ -12,6 +12,9 @@ button { cursor:pointer; }
 .brand small { color:#a69caf; font-size:11px; }
 .nav-note { color:#9990a9; font-size:9px; font-weight:650; letter-spacing:.12em; display:flex; align-items:center; gap:10px; }
 .nav-note i { width:6px; height:6px; background:#98c9a9; border-radius:50%; }
+.nav-acoes { display:flex; align-items:center; gap:22px; }
+.nav-link { color:#d2c3e3; font-size:12px; font-weight:600; border:1px solid #bfaad732; border-radius:9px; padding:8px 14px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-link:hover { background:#b5a0d615; }
 main { max-width:1160px; margin:0 auto; padding:0 40px; }
 .hero { display:grid; grid-template-columns:1.15fr 1fr; align-items:center; gap:90px; padding:63px 0 68px; }
 .hero-copy { position:relative; }

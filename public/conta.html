@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#161720">
+  <title>Sua conta · Nexo</title>
+  <meta name="description" content="Crie sua conta no Nexo para abrir salas, transmitir a 60 quadros e ter um perfil que segue você.">
+  <link rel="icon" href="/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/home.css">
+  <link rel="stylesheet" href="/conta.css">
+</head>
+<body>
+  <header class="home-nav"><a class="brand" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="38" height="38" alt=""><strong>NEXO<span> / </span></strong><small>sua conta</small></a><a class="nav-link" href="/">Voltar ao início</a></header>
+  <main class="conta-main">
+    <p id="carregando" class="conta-carregando" role="status">Carregando…</p>
+
+    <!-- Sem conta: entrar, criar ou recuperar. Três formulários, um visível por vez. -->
+    <section id="semConta" class="conta-card" aria-labelledby="semContaTitulo" hidden>
+      <h1 id="semContaTitulo">Sua conta no Nexo</h1>
+      <p class="conta-sub" id="motivoDaVisita">Entrar numa sala continua sem cadastro. Com conta, você abre salas, transmite a 60 quadros e tem um perfil que segue você.</p>
+      <div class="conta-abas" role="tablist" aria-label="Entrar ou criar conta">
+        <button type="button" role="tab" id="abaEntrar" aria-controls="formEntrar" aria-selected="true">Entrar</button>
+        <button type="button" role="tab" id="abaCriar" aria-controls="formCriar" aria-selected="false" tabindex="-1">Criar conta</button>
+        <button type="button" role="tab" id="abaRecuperar" aria-controls="formRecuperar" aria-selected="false" tabindex="-1">Esqueci a senha</button>
+      </div>
+
+      <form id="formEntrar" role="tabpanel" aria-labelledby="abaEntrar" novalidate>
+        <label for="entrarUsuario">Nome de usuário</label>
+        <input id="entrarUsuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
+        <label for="entrarSenha">Senha</label>
+        <input id="entrarSenha" name="senha" type="password" autocomplete="current-password" maxlength="128" required>
+        <p class="error" role="alert" hidden></p>
+        <button type="submit">Entrar <span aria-hidden="true">→</span></button>
+      </form>
+
+      <form id="formCriar" role="tabpanel" aria-labelledby="abaCriar" novalidate hidden>
+        <label for="criarUsuario">Nome de usuário</label>
+        <input id="criarUsuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required aria-describedby="criarUsuarioDica">
+        <small id="criarUsuarioDica">É com ele que você entra, e ninguém mais pode usá-lo. De 3 a 20 caracteres: letras sem acento, números, ponto e sublinhado.</small>
+        <label for="criarApelido">Apelido <span class="opcional">opcional</span></label>
+        <input id="criarApelido" name="apelido" autocomplete="nickname" maxlength="40" aria-describedby="criarApelidoDica">
+        <small id="criarApelidoDica">É o nome que a sala mostra. Pode repetir o de outra pessoa e pode ser trocado quando quiser.</small>
+        <label for="criarSenha">Senha</label>
+        <input id="criarSenha" name="senha" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="criarSenhaDica">
+        <small id="criarSenhaDica">Pelo menos 10 caracteres. Uma frase curta é mais fácil de lembrar e mais difícil de adivinhar do que "Senha@123".</small>
+        <p class="conta-aviso"><strong>Sem e-mail, por enquanto.</strong> No lugar dele você recebe um código de recuperação, mostrado uma vez só. Perdeu a senha e o código, perdeu a conta.</p>
+        <p class="error" role="alert" hidden></p>
+        <button type="submit">Criar minha conta <span aria-hidden="true">→</span></button>
+      </form>
+
+      <form id="formRecuperar" role="tabpanel" aria-labelledby="abaRecuperar" novalidate hidden>
+        <p class="conta-sub">Use o código de recuperação que apareceu quando você criou a conta. Ele vale uma vez: depois de usado, você recebe outro.</p>
+        <label for="recuperarUsuario">Nome de usuário</label>
+        <input id="recuperarUsuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
+        <label for="recuperarCodigo">Código de recuperação</label>
+        <input id="recuperarCodigo" name="codigo" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="40" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX">
+        <label for="recuperarSenha">Senha nova</label>
+        <input id="recuperarSenha" name="nova" type="password" autocomplete="new-password" maxlength="128" required>
+        <p class="error" role="alert" hidden></p>
+        <button type="submit">Recuperar a conta <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+
+    <!-- O código de recuperação aparece aqui uma vez, e só segue quem disser que guardou. -->
+    <section id="codigoNovo" class="conta-card" aria-labelledby="codigoNovoTitulo" hidden>
+      <h1 id="codigoNovoTitulo">Guarde este código</h1>
+      <p class="conta-sub">É o único jeito de voltar à conta se você esquecer a senha. Ele não aparece de novo, e o Nexo não guarda uma cópia que dê para ler.</p>
+      <div class="codigo-recuperacao"><code id="codigoNovoValor"></code><button type="button" id="copiarCodigo" class="secondary">Copiar</button></div>
+      <p class="conta-aviso"><strong>Perdeu a senha e o código, perdeu a conta.</strong> Anote num lugar seu: um gerenciador de senhas, um papel guardado.</p>
+      <label class="conta-confirma"><input type="checkbox" id="guardeiCodigo"> Guardei o código</label>
+      <button type="button" id="seguirDoCodigo" disabled>Continuar <span aria-hidden="true">→</span></button>
+    </section>
+
+    <!-- Com conta. -->
+    <section id="comConta" class="conta-card" aria-labelledby="comContaTitulo" hidden>
+      <div class="conta-identidade">
+        <span class="conta-avatar" id="contaAvatar" aria-hidden="true">?</span>
+        <div>
+          <h1 id="comContaTitulo"><span id="contaApelido"></span></h1>
+          <p class="conta-sub"><span id="contaUsuario"></span> · código <code id="contaCodigo"></code> · <span id="contaPlano"></span></p>
+        </div>
+      </div>
+      <p class="conta-sub">O código é permanente e é o que distingue você de outras pessoas com o mesmo apelido. Ele aparece para quem abre o seu perfil numa sala.</p>
+      <p id="contaStatus" class="conta-status" role="status"></p>
+
+      <details class="conta-secao">
+        <summary>Trocar a senha</summary>
+        <form id="formSenha" novalidate>
+          <label for="senhaAtual">Senha atual</label>
+          <input id="senhaAtual" type="password" autocomplete="current-password" maxlength="128" required>
+          <label for="senhaNova">Senha nova</label>
+          <input id="senhaNova" type="password" autocomplete="new-password" maxlength="128" required>
+          <small>Trocar a senha encerra a conta nos outros aparelhos.</small>
+          <p class="error" role="alert" hidden></p>
+          <button type="submit">Trocar a senha</button>
+        </form>
+      </details>
+
+      <details class="conta-secao">
+        <summary>Novo código de recuperação</summary>
+        <form id="formRecuperacao" novalidate>
+          <p class="conta-sub">Perdeu o papel com o código? Gere outro. O anterior deixa de valer na hora.</p>
+          <label for="recuperacaoSenha">Senha</label>
+          <input id="recuperacaoSenha" type="password" autocomplete="current-password" maxlength="128" required>
+          <p class="error" role="alert" hidden></p>
+          <button type="submit" class="secondary">Gerar outro código</button>
+        </form>
+      </details>
+
+      <div class="conta-acoes">
+        <a id="voltarParaSala" class="botao-link" href="/" hidden>Voltar para a sala</a>
+        <button type="button" id="sair" class="secondary">Sair da conta</button>
+      </div>
+    </section>
+  </main>
+  <script src="/conta.js"></script>
+</body>
+</html>

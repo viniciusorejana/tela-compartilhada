@@ -81,3 +81,17 @@ test('alertas têm teto e nomes expirados são retirados também do disco', asyn
   agora += 8 * 86400000; await a.gravar(); assert.equal(a.listar().length, 0);
   assert.ok(!(await fs.readFile(path.join(pasta, 'alertas.jsonl'), 'utf8')).includes('Ana'));
 });
+// A limpeza esquecia qualquer contador parado há dez minutos -- e com ele o teto diário de
+// cadastros, que voltava a três depois de dez minutos de silêncio.
+test('um contador com janela de um dia sobrevive à limpeza de dez minutos', () => {
+  let agora = 100000; const a = criarAntiabuso({ agora: () => agora });
+  for (let i = 0; i < 3; i++) assert.equal(a.verificar('origem', 'cadastrar').ok, true);
+  agora += 60001;
+  assert.equal(a.verificar('origem', 'cadastrar').ok, false, 'o quarto cadastro do dia é recusado');
+  agora += 30 * 60000; a.limpar(); a.resumo();
+  assert.equal(a.verificar('origem', 'cadastrar').ok, false, 'meia hora depois, o teto diário continua valendo');
+  // A janela é fatiada em doze pedaços de duas horas, e a fatia da borda fica inteira: o
+  // teto de um dia pode valer até 26 horas.
+  agora += 27 * 3600000; a.limpar();
+  assert.equal(a.verificar('origem', 'cadastrar').ok, true, 'no dia seguinte, volta');
+});

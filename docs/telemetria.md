@@ -144,6 +144,27 @@ erro quando há callback e aviso com intervalo mínimo de dois segundos.
 | Republicação da mesma fonte | 4 | — | 12 em 5 min; observar e alertar |
 | Publicar/despublicar faixa | 12 | — | Observar e alertar |
 | Entrar/sair do SFU | 12 | — | Observar e alertar |
+| Criar conta | 3 por origem | — | 3 por origem **por dia** |
+| Entrar na conta | 10 por origem | — | 30 por origem em 15 min |
+| Recuperar a conta | 5 por origem | — | 10 por origem em 1 h |
+| Tentativas numa mesma conta | 5 | — | 10 em 15 min; entrar e recuperar somam juntos |
+| Tentativas no servidor inteiro | 120 | — | Vem antes da fila de derivação de senha |
+| Alterar a conta (senha, perfil, apagar) | 20 por conta | — | 120 em 1 h |
+
+Os tetos das contas vêm **antes** da fila de derivação de senha (uma por vez, até 16
+esperando; cheia, responde 429 na hora). Uma enxurrada é recusada sem ocupar lugar na fila de
+quem está tentando entrar de verdade. O alerta de tentativas numa conta não leva o nome de
+usuário: ele ficaria sete dias em disco dizendo quem foi alvo.
+
+**Atenção com o teto diário de cadastros atrás de um túnel.** Sem `NEXO_PROXIES_CONFIAVEIS`,
+toda conexão chega como `127.0.0.1` e todo mundo divide a mesma origem — o teto de três
+cadastros por dia passa a ser do servidor inteiro. No dia de chamar o grupo para criar
+contas, ou declare o proxy, ou suba o teto por `NEXO_LIMITES` (`{"cadastrar":{"sessao":20,"longa":[20,86400000]}}`).
+
+Uma correção que as contas exigiram: a limpeza dos contadores esquecia qualquer um parado
+havia dez minutos, e com ele qualquer janela mais longa — o teto diário voltava a três depois
+de dez minutos de silêncio. Agora cada contador vive até acabar a janela mais longa que ele
+carrega.
 
 Publicações e churn vêm de webhooks assinados: emissor, prazo e SHA-256 do corpo são
 conferidos; eventos repetidos são descartados. Primeiro minuto após subir o SFU e eventos
@@ -180,6 +201,13 @@ e 20 inícios em dez minutos por origem; seu mapa agora também tem teto de 2.04
   conforme [ForwardStats 1.13.6](https://github.com/livekit/livekit/blob/v1.13.6/pkg/sfu/forwardstats.go).
 - CPU/RAM de Node/SFU e métricas: 15 s. Windows usa uma consulta PowerShell assíncrona
   por coleta, com prazo de cinco segundos. 100% CPU representa um núcleo.
+- Laço de eventos do Node: pior atraso e p99 da janela de 15 s (`monitorEventLoopDelay`) e a
+  fração do tempo ocupado (`eventLoopUtilization`). O pior de cada minuto vai para `uso.jsonl`
+  como `picoLacoMs`, e o painel mostra o pior do período. É por esse laço que passam chat,
+  entrada e sinalização da mídia de todas as salas. **No Windows o relógio tem granularidade de
+  ~15,6 ms**, e esse é o piso do histograma: o laço ocioso mede 15,5. Qualquer valor até ~16 ms
+  significa "nada"; no Linux do VPS o piso é ~1 ms. Acima de 100 ms, algo síncrono está
+  segurando as salas — é o mesmo limite que `tests/contas.test.js` impõe a uma rajada de logins.
 - Presença/faixas: webhook e reconciliação a cada 30 s, duas consultas simultâneas e
   orçamento de seis segundos por rodada. Confirmações com mais de 90 s saem da lista.
   Mute pode aguardar reconciliação. Webhook perdido não é reconstruído como churn.

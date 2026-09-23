@@ -32,17 +32,26 @@ const soundboard = require('./soundboard');
 const medicao = require('./medicao');
 const { criarModeracao } = require('./moderacao');
 const { iniciarTelemetria } = require('./telemetria');
+const { criarContas } = require('./contas');
+const { instalarRotasDeContas } = require('./contas/rotas');
+const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/origem');
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
 const moderacao = criarModeracao();
 
 const app = express();
+// O Express se anuncia em todo cabeçalho; ninguém de fora precisa saber o que roda aqui.
+app.disable('x-powered-by');
 const server = http.createServer(app);
 // Precisa vir antes do Socket.IO: os dois escutam "upgrade" no mesmo servidor, e cada um
 // so atende o proprio caminho.
 sfu.instalarProxy(app, server);
 const io = new Server(server, {
-  cors: { origin: process.env.CORS_ORIGIN || true },
+  // A origem é conferida no aperto de mão, e não só por CORS: o WebSocket não passa por CORS
+  // nenhum. Sem isto, no dia em que a conta viaja num cookie, qualquer site aberto por quem
+  // tem conta abriria um socket em nome dela. Ver telemetria/origem.js.
+  allowRequest: (req, callback) => callback(null, origemDaPaginaPermitida(req)),
+  cors: origensConfiguradas().length ? { origin: origensConfiguradas(), credentials: true } : undefined,
   // Por padrao o Socket.IO encerra QUALQUER upgrade que nao seja dele um segundo depois,
   // supondo que ninguem mais o tratou. Neste servidor ha mais dois: o agente de audio e a
   // sinalizacao do servidor de midia -- e era esse encerramento que derrubava a sala no
@@ -59,7 +68,12 @@ const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 25000
 });
-const telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
+// As contas nascem antes da telemetria porque o painel precisa delas; os alertas das contas
+// vão para a telemetria, que só existe uma linha abaixo -- daí o `telemetria?.`.
+let telemetria = null;
+const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) });
+telemetria = iniciarTelemetria({ app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers });
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
@@ -110,6 +124,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/sala', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sala.html'));
+});
+
+app.get('/conta', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'conta.html'));
 });
 
 app.get('/:roomCode/sala', (req, res) => {
@@ -1503,7 +1521,7 @@ let encerrandoServidor = false;
 function encerrarServidor() {
   if (encerrandoServidor) return;
   encerrandoServidor = true; sfu.encerrarSfu();
-  Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo()]).finally(() => process.exit(0));
+  Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo(), contas.encerrar()]).finally(() => process.exit(0));
 }
 for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sinal, encerrarServidor);
 // Supervisores locais e as fixtures podem pedir a mesma saída limpa pelo canal IPC.

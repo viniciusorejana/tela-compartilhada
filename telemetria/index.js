@@ -256,7 +256,7 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
   const timers = [];
   const repetir = (fn, ms) => { const t = setInterval(() => Promise.resolve(fn()).catch(() => {}), ms); t.unref?.(); timers.push(t); };
   async function fecharJanela() {
-    await gravadorUso.gravar([{ ...uso.fechar(), picoRedeMbps: recursos.retirarPico(), eventosSfu, telas1440: picoTelas1440 }]);
+    await gravadorUso.gravar([{ ...uso.fechar(), picoRedeMbps: recursos.retirarPico(), picoLacoMs: recursos.retirarPicoDoLaco(), eventosSfu, telas1440: picoTelas1440 }]);
     picoTelas1440 = null;
     eventosSfu = { publicacoes: 0, republicacoes: 0, entradas: 0, saidas: 0 }; revisao++; leitor.invalidar();
     sessoes.limpar(); if (!auth.falha()) await alertas.gravar();
@@ -272,7 +272,8 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
   repetir(observador.reconciliar, 30000); repetir(recursos.disco, 300000); repetir(fecharJanela, 60000);
   recursos.coletar().catch(() => {}); recursos.disco().catch(() => {});
   return { prepararSessao, instalarSocket, entrou, saiu, soundboardHttp, downloadPermitido, agentePermitido, comecarBusca, limitarOrigem, sessoes,
-    async encerrar() { timers.forEach(clearInterval); rotas.encerrar(); await leitor.encerrar(); await Promise.all([medicao.encerrar(), fecharJanela()]); await Promise.all([gravadorUso.concluir(), relatos.concluir()]); },
+    alertar: alertas.adicionar,
+    async encerrar() { timers.forEach(clearInterval); rotas.encerrar(); recursos.encerrar(); await leitor.encerrar(); await Promise.all([medicao.encerrar(), fecharJanela()]); await Promise.all([gravadorUso.concluir(), relatos.concluir()]); },
     estado: vivo };
 }
 module.exports = { iniciarTelemetria };

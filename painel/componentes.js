@@ -254,10 +254,20 @@ class Relatos extends HTMLElement {
 }
 customElements.define('nexo-relatos', Relatos);
 
-componente('nexo-recursos', ({ atual: a }) => {
+componente('nexo-recursos', ({ atual: a, contabilidade: c }) => {
   const r = a?.recursos, s = a?.sfu;
   return [...titulo('A máquina por trás da sala', 'CPU de cada processo: 100% representa um núcleo. RAM inclui os buffers do processo.'),
     tabela('Recursos dos processos', ['Processo', 'CPU', 'Memória', 'Uptime'], [['Node.js', r?.node?.cpu !== null ? `${numero(r?.node?.cpu)}%` : 'Aguardando intervalo', bytes(r?.node?.memoria), duracao(r?.node?.uptime)], ['LiveKit SFU', r?.sfu ? `${numero(r.sfu.cpu)}%` : 'Indisponível', bytes(r?.sfu?.memoria), duracao(s?.uptime)]]),
+    // O laço de eventos é por onde passam chat, entrada e sinalização da mídia de TODAS as
+    // salas. Um número alto aqui é gente que não consegue começar a ver uma tela.
+    e('h4', {}, 'Laço de eventos do Node · últimos 15 s'),
+    e('div', { class: 'metricas' },
+      metrica('Pior atraso', r?.laco?.piorMs != null ? `${numero(r.laco.piorMs)} ms` : '—'),
+      metrica('Atraso p99', r?.laco?.p99Ms != null ? `${numero(r.laco.p99Ms)} ms` : '—'),
+      metrica('Tempo ocupado', r?.laco ? `${numero(r.laco.ocupacao * 100)}%` : '—'),
+      metrica('Pior atraso no período', c?.picoLacoMs != null ? `${numero(c.picoLacoMs)} ms` : '—')),
+    e('p', { class: 'nota' }, `O relógio desta máquina não mede menos que ${numero(r?.laco?.pisoMs ?? 15.6)} ms: um atraso até aí significa "nada".`
+      + ' No Windows o piso é ~15,6 ms e o laço ocioso mede 15,5; no Linux do VPS, ~1 ms. Acima de 100 ms, alguma coisa síncrona está segurando as salas.'),
     e('div', { class: 'metricas' }, metrica('Disco em native/', `${bytes(r?.disco?.bytes)}${r?.disco?.parcial ? ' · parcial' : ''}`), metrica('Soundboard em RAM', bytes(a?.soundboard.contabilizado)), metrica('Reinícios do SFU neste Node', numero(s?.reinicios, 0)), metrica('Tentativas consecutivas', numero(s?.tentativasSeguidas, 0))),
     e('p', { class: 'nota' }, `Disco conferido em ${quando(r?.disco?.em)}. Sons são temporários em RAM; músicas são transmitidas por pipelines. CPU de ferramentas auxiliares não está atribuída aos dois processos acima.`),
     tabela('Saída por interface de rede', ['Interface', 'Saída média no intervalo'], (r?.redes || []).map(n => [n.nome, `${numero(n.saidaMbps, 2)} Mbps`])),

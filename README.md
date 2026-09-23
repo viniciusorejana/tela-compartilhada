@@ -38,6 +38,41 @@ Na máquina do servidor, execute `npm run painel:chave` para consultar a chave d
 Consulte [acesso remoto, contabilidade, limites e testes](docs/telemetria.md) para configurar
 HTTPS/proxy e entender a cobertura dos números. Verificações: `npm test` e `npm run test:painel`.
 
+O painel mostra também o **laço de eventos do Node** — o pior atraso e o p99 a cada 15 s. No
+Windows o relógio não mede menos que ~15,6 ms, e o laço ocioso marca 15,5: até aí, é "nada". No
+Linux o piso é ~1 ms.
+
+## Contas
+
+Criar conta é opcional para entrar numa sala, e fica em `/conta`: nome de usuário (único, é com
+ele que se entra), apelido (livre e repetível, é o que a sala mostra) e senha de 10 caracteres
+ou mais. Não há e-mail: no lugar dele, um **código de recuperação** aparece uma vez, no
+cadastro, e vale uma vez. Perdeu a senha e o código, perdeu a conta — a tela diz isso antes.
+O plano inteiro, com o porquê de cada decisão, está em [`docs/plano-contas.md`](docs/plano-contas.md).
+
+O banco é SQLite embutido no próprio Node (`node:sqlite`, sem dependência), em
+`native/contas/nexo.db`, com a mesma proteção de pasta da chave do painel. É o primeiro dado
+insubstituível do projeto, então:
+
+- **Cópia local diária**, feita por uma worker com conexão própria, em `native/contas/copias/`
+  (as sete mais recentes). Ela protege contra erro e arquivo corrompido — não contra perder a
+  máquina.
+- **Cópia fora da máquina** é operação, e é obrigatória antes de abrir ao público: cifre a
+  cópia do dia antes de ela sair (a chave fica fora do lugar do backup) e mande para um
+  armazenamento barato; ou use [Litestream](https://litestream.io) replicando o `nexo.db`
+  continuamente — é um binário à parte, sem mudar uma linha de código. Guarde 30 dias.
+- **Restaurar**: pare o servidor, troque `native/contas/nexo.db` pela cópia (apague o
+  `nexo.db-wal` e o `nexo.db-shm` que sobrarem) e suba de novo. Um backup que nunca foi
+  restaurado é esperança; faça o teste uma vez. `tests/contas.test.js` já confere que a cópia
+  abre e tem as contas.
+- **Incidente**: apagar todas as sessões derruba todas as contas logadas de uma vez. Com o
+  servidor parado:
+  `node -e "new (require('node:sqlite').DatabaseSync)('native/contas/nexo.db').exec('DELETE FROM sessao')"`.
+
+A senha e o código de recuperação são derivados com `scrypt` assíncrono, **um por vez**, numa
+fila de até 16: assim um pico de logins espera na fila, e as salas não. `tests/contas.test.js`
+afirma que uma rajada de 20 logins não segura o laço de eventos por 100 ms.
+
 ## Requisitos
 
 - Windows 10/11 para executar o helper nativo de captura de audio por aplicativo.
@@ -884,7 +919,8 @@ As variaveis sao opcionais e devem ser definidas antes de `npm start` no mesmo t
 | `PORT` | `3000` | Porta HTTP do servidor |
 | `HOST` | `::` | Endereco onde o servidor escuta; `::` atende IPv4 e IPv6, e cai para IPv4 sozinho se a maquina nao tiver IPv6 |
 | `PUBLIC_URL` | origem aberta no navegador para convites; localhost nos logs | Origem HTTP(S) pública usada nos convites e nos logs |
-| `CORS_ORIGIN` | qualquer origem | Origem permitida pelo Socket.IO; defina uma origem exata em producao |
+| `CORS_ORIGIN` | vazio | Origens EXTRAS (separadas por vírgula) que podem abrir o Socket.IO e escrever na conta. A página servida por este servidor e a origem do `PUBLIC_URL` já valem sem configurar nada; qualquer outra é recusada |
+| `NEXO_PASTA_CONTAS` | `native/contas` | Onde fica o banco das contas (`nexo.db`) e as cópias diárias |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
 | `SFU_UDP_PORTS` | `7882-7891` | Portas UDP da midia |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
@@ -907,7 +943,6 @@ Exemplo:
 $env:PORT="3000"
 $env:HOST="0.0.0.0"
 $env:PUBLIC_URL="https://stream.exemplo.com"
-$env:CORS_ORIGIN="https://stream.exemplo.com"
 npm start
 ```
 
@@ -1048,7 +1083,7 @@ O essencial:
 - Um endereço fixo (Tailscale Funnel, domínio próprio) fica exposto na internet enquanto estiver ligado, e é mais fácil de achar do que uma URL sorteada. Como ainda não há contas, desligue o Funnel quando não estiver usando: `tailscale funnel --https=443 off`.
 - A captura nativa de áudio só é liberada para quem abre a página em `localhost` na própria máquina do servidor. Atrás de um proxy toda conexão chega como `127.0.0.1`, então a checagem olha também os cabeçalhos de proxy e o `Host` -- e sempre falha para o lado seguro.
 - Não inclua tokens, credenciais TURN, arquivos `.cloudflared` ou certificados no Git.
-- Para produção, defina `CORS_ORIGIN` para o domínio exato, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs. Sem `CORS_ORIGIN`, o Socket.IO aceita conexão de qualquer origem -- inofensivo enquanto a credencial vive na memória da página, e um problema no dia em que ela viajar num cookie.
+- Para produção, defina `PUBLIC_URL`, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs. O Socket.IO e as escritas da conta só aceitam a página deste servidor e a origem do `PUBLIC_URL` (e as que `CORS_ORIGIN` acrescentar): a conta viaja num cookie, e sem essa conferência qualquer site aberto por quem tem conta falaria em nome dela. O cookie é `HttpOnly`, `SameSite=Strict` e `Secure` atrás de HTTPS; o `Secure` depende de o `PUBLIC_URL` estar em `https` quando há um túnel no meio.
 
 ## Solucao de problemas
 
@@ -1071,6 +1106,8 @@ tela-compartilhada/
 ├── sfu.js                          # sobe o servidor de midia e emite os tokens de acesso
 ├── musica.js                       # o bot: fila por sala, yt-dlp/ffmpeg e a faixa publicada
 ├── soundboard.js                   # a mesa de sons de cada sala, so na memoria
+├── contas/                         # contas: todo o SQL (banco.js), senha, regras, rotas e a worker de manutencao
+│   └── migracoes/                  # uma migracao numerada por arquivo, em PRAGMA user_version
 ├── build-helper.ps1                # build Release x64 do helper C++
 ├── native/audio-helper/            # captura de audio por processo no Windows
 ├── native/audio-agent/             # agente que cada participante roda no proprio PC
@@ -1083,6 +1120,7 @@ tela-compartilhada/
 │   └── escolher.html               # seletor de tela/janela com miniaturas, isolado do Node
 └── public/
     ├── index.html, home.css, home.js # criar/entrar e salas recentes
+    ├── conta.html, conta.css, conta.js # entrar, criar e recuperar a conta
     ├── sala.html, sala.css          # interface da sala
     ├── sala.js                     # captura, sinalização, chat e reprodução
     ├── media-utils.js              # identidade das faixas, codecs e streams de vídeo

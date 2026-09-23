@@ -2,7 +2,27 @@ const crypto = require('node:crypto');
 
 const MiB = 1024 * 1024;
 const MINUTO = 60000;
+const DIA = 24 * 60 * MINUTO;
 const REGRAS = Object.freeze({
+  // ---------- Contas ----------
+  //
+  // O freio vem ANTES da fila de derivação de senha (contas/senha.js): uma enxurrada é
+  // recusada aqui, sem ocupar lugar na fila de quem está tentando entrar de verdade.
+  //
+  // Criar conta tem teto diário por origem de rede. É uma TAXA, não um bloqueio: banir por
+  // origem continua recusado (moderacao.js explica por quê), mas uma identidade nova a cada
+  // minuto é o que tornaria qualquer banimento inútil. Atrás de um túnel sem
+  // NEXO_PROXIES_CONFIAVEIS, todo mundo tem a mesma origem -- e o teto passa a ser do
+  // servidor inteiro. Ver docs/telemetria.md.
+  'cadastrar': { sessao: 3, longa: [3, DIA] },
+  'entrar': { sessao: 10, longa: [30, 15 * MINUTO] },
+  'recuperar': { sessao: 5, longa: [10, 60 * MINUTO] },
+  // Por CONTA, além da origem. Sem isto, uma tentativa por IP a partir de mil IPs passaria
+  // por baixo de todo limite por origem.
+  'entrar-conta': { sessao: 5, longa: [10, 15 * MINUTO] },
+  // O servidor inteiro. É mais ou menos o que a fila de derivação atende sem crescer.
+  'entrar-global': { sessao: 120 },
+  'conta-escrever': { sessao: 20, longa: [120, 60 * MINUTO] },
   'soundboard-tocar': { sessao: 30, sala: 90, intervalo: 400 },
   'soundboard-upload': { sessao: 6, sala: 24 },
   'soundboard-bytes': { sessao: 12 * MiB, sala: 48 * MiB },
@@ -80,9 +100,12 @@ function criarAntiabuso({ agora = Date.now, aoAlertar = () => {}, maximo = 2048,
   const configuradas = Object.fromEntries(Object.entries(REGRAS).map(([k, v]) => [k, { ...v, ...regras[k] }]));
   let saturacoes = 0;
   let global = { partes: [] };
+  // Um contador parado há dez minutos era esquecido -- o que zerava, sem ninguém ver, qualquer
+  // janela mais longa que isso: o teto diário de cadastros voltava a três a cada dez minutos
+  // de silêncio. Agora cada contador vive até a janela mais longa que ele carrega acabar.
   function limpar() {
-    const limite = agora() - 10 * MINUTO;
-    for (const mapa of [sessoes, salas]) for (const [chave, valor] of mapa) if (valor.ultimo < limite) mapa.delete(chave);
+    const instante = agora(), limite = instante - 10 * MINUTO;
+    for (const mapa of [sessoes, salas]) for (const [chave, valor] of mapa) if (valor.ultimo < limite && (valor.ate || 0) <= instante) mapa.delete(chave);
   }
   function estado(mapa, chave, teto) {
     let item = mapa.get(chave);
@@ -96,6 +119,7 @@ function criarAntiabuso({ agora = Date.now, aoAlertar = () => {}, maximo = 2048,
   function contar(item, chave, quantidade, periodo = MINUTO) {
     const contador = item.baldes.get(chave) || { partes: [] };
     item.baldes.set(chave, contador);
+    item.ate = Math.max(item.ate || 0, agora() + periodo);
     return somar(contador, quantidade, agora(), periodo);
   }
   function alerta(item, regra, contexto, quantidade, teto, periodo, acao) {
@@ -176,4 +200,12 @@ function criarAntiabuso({ agora = Date.now, aoAlertar = () => {}, maximo = 2048,
   }
   return { verificar, contarEvento, permitirGlobal, resumo, limpar, regras: configuradas };
 }
-module.exports = { criarAntiabuso, REGRAS };
+// Os tetos ajustados por NEXO_LIMITES, ou `null` se a variável estiver ilegível -- quem chama
+// decide se avisa. Mais de uma instância lê isto, e todas precisam ler igual.
+function regrasDoAmbiente(texto = process.env.NEXO_LIMITES) {
+  try {
+    const regras = JSON.parse(texto || '{}');
+    return regras && typeof regras === 'object' && !Array.isArray(regras) ? regras : null;
+  } catch (_) { return null; }
+}
+module.exports = { criarAntiabuso, REGRAS, regrasDoAmbiente };

@@ -20,6 +20,17 @@
     openRoom(input.value.trim() || `sala-${random}`);
   };
   input.addEventListener('input', () => { error.hidden = true; input.removeAttribute('aria-invalid'); });
+  // Quem já tem conta vê o próprio apelido no lugar do "Entrar". O pedido não segura nada da
+  // página: sem resposta, o link continua dizendo "Entrar" e leva ao mesmo lugar.
+  fetch('/api/conta/eu', { credentials: 'same-origin' })
+    .then(resposta => (resposta.ok ? resposta.json() : null))
+    .then(dados => {
+      if (!dados?.conta) return;
+      const link = document.getElementById('contaLink');
+      link.textContent = dados.conta.apelido;
+      link.title = `Sua conta · @${dados.conta.usuario}`;
+    })
+    .catch(() => { /* Sem conta ou sem rede: o "Entrar" continua valendo. */ });
   try {
     const recent = JSON.parse(localStorage.getItem('nexoRecentRooms') || '[]');
     if (!Array.isArray(recent)) return;
