@@ -1226,6 +1226,45 @@ function assinaturaDePublicacao(opcoes) {
 // O que foi combinado com o servidor na última publicação de cada fonte.
 const assinaturasPublicadas = { mic: null, camera: null, screen: null, screenAudio: null };
 
+// Quem assiste sem decodificar o codec principal recebe a tela num codec reserva, e para
+// isso o servidor de mídia CLONA a faixa da captura. O clone é dele, mas ninguém o encerra:
+// com o "false" do despublicar, o servidor só esquece o clone, e parar a captura original
+// não para as cópias. Enquanto uma cópia vive, o navegador mantém a captura aberta -- a
+// tarja amarela seguia em volta da janela depois do "parar", e quem assistia pelo codec
+// reserva continuava vendo a janela ANTIGA depois de uma troca de tela.
+//
+// Por isso cada faixa publicada anota as próprias cópias, e parar a faixa para junto tudo
+// o que foi copiado dela -- inclusive o que sobrou de uma queda, em que é o próprio
+// servidor que despublica.
+const copiasDaFaixa = new WeakMap();
+
+function vigiarCopias(faixa) {
+  if (!faixa || copiasDaFaixa.has(faixa)) return;
+  const copias = new Set();
+  copiasDaFaixa.set(faixa, copias);
+  const clonar = faixa.clone;
+  const parar = faixa.stop;
+  faixa.clone = function () {
+    const copia = clonar.call(this);
+    copias.add(copia);
+    return copia;
+  };
+  faixa.stop = function () {
+    encerrarCopias(this);
+    return parar.call(this);
+  };
+}
+
+function encerrarCopias(faixa) {
+  copiasDaFaixa.get(faixa)?.forEach(copia => copia.stop());
+}
+
+// Encerrar não apaga a lembrança, e é de propósito: ao trocar de tela, a captura antiga é
+// encerrada ANTES de a publicação nova rodar na fila. Se encerrar esquecesse as cópias, a
+// troca achava que não havia reserva e voltava ao `replaceTrack` -- com o reserva preso numa
+// cópia morta.
+const temCopias = faixa => Boolean(faixa && copiasDaFaixa.get(faixa)?.size);
+
 // O corpo de uma publicação, FORA da fila. Só deve ser chamado de dentro de `naFila`.
 async function aplicarPublicacao(fonte, faixa) {
   if (!transporte?.conectada) return;
@@ -1236,7 +1275,10 @@ async function aplicarPublicacao(fonte, faixa) {
   // Quem manda no ciclo de vida das capturas e esta pagina -- sem isto, trocar o perfil
   // de qualidade (que despublica e publica de novo) matava a tela compartilhada.
   const despublicar = async publicacao => {
+    const faixaPublicada = publicacao.track?.mediaStreamTrack;
     await local.unpublishTrack(publicacao.track ?? publicacao, false).catch(() => {});
+    // Sem publicação, a cópia do codec reserva não serve a mais ninguém.
+    encerrarCopias(faixaPublicada);
     publicacoesLocais[fonte] = null;
     assinaturasPublicadas[fonte] = null;
   };
@@ -1246,6 +1288,7 @@ async function aplicarPublicacao(fonte, faixa) {
     return;
   }
 
+  vigiarCopias(faixa);
   const opcoes = opcoesDePublicacao(fonte, faixa);
   const assinatura = assinaturaDePublicacao(opcoes);
 
@@ -1257,7 +1300,13 @@ async function aplicarPublicacao(fonte, faixa) {
   // máxima ficam como foram publicados. Trocar de câmera depois de escolher outro codec
   // mantinha o codec antigo no ar, calado, e o painel passava a anunciar uma configuração
   // que não era a que estava sendo enviada.
-  if (anterior?.track && typeof anterior.track.replaceTrack === 'function' && assinaturasPublicadas[fonte] === assinatura) {
+  //
+  // E só sem cópia no codec reserva: `replaceTrack` troca a faixa do remetente principal e
+  // deixa o reserva com a cópia da captura anterior. Republicar é o que faz o servidor
+  // pedir uma cópia da captura nova.
+  const podeTrocar = anterior?.track && typeof anterior.track.replaceTrack === 'function'
+    && assinaturasPublicadas[fonte] === assinatura && !temCopias(anterior.track.mediaStreamTrack);
+  if (podeTrocar) {
     try { await anterior.track.replaceTrack(faixa); return; }
     catch (_) { await despublicar(anterior); }
   } else if (anterior) {
@@ -1367,6 +1416,9 @@ function republicarTudo() {
       ['screenAudio', viva(appAudioTrack) ? appAudioTrack : screenStream?.getAudioTracks()[0]]];
     for (const [fonte, faixa] of fontes) {
       if (!viva(faixa)) continue;
+      // As cópias do codec reserva eram da sessão que caiu, e o servidor as esqueceu sem
+      // encerrar. A sessão nova pede as dela, se precisar.
+      encerrarCopias(faixa);
       try {
         await aplicarPublicacao(fonte, faixa);
         if (fonte === 'mic') await aplicarMudoDoMic();

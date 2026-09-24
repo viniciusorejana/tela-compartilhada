@@ -583,6 +583,35 @@ async function esperarCodec(page, fonte, esperado) {
   await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0);
   console.log('PASS: replace, stop, and restart screen sharing while camera remains active');
 
+  // Quem não decodifica o codec principal recebe a tela num codec reserva, e a biblioteca
+  // clona a captura para isso. Quando o servidor de mídia ainda não pediu a cópia, ela é
+  // pedida aqui pelo mesmo método que ele aciona.
+  const copiarParaReserva = () => host.evaluate(() => {
+    const faixa = publicacoesLocais.screen.track;
+    window.capturaCopiada = screenStream.getVideoTracks()[0];
+    const reserva = faixa.simulcastCodecs.get('vp8') || faixa.addSimulcastTrack('vp8', [{ maxBitrate: 300_000 }]);
+    window.copiaReserva = reserva.mediaStreamTrack;
+    return window.copiaReserva.readyState;
+  });
+  assert.equal(await copiarParaReserva(), 'live');
+  await host.evaluate(() => { window.publicacaoAntes = publicacoesLocais.screen; });
+  await host.locator('#updateScreenBtn').click();
+  await host.locator('#confirmScreenBtn').click();
+  await host.waitForFunction(() => screenStream && screenStream.getVideoTracks()[0] !== window.capturaCopiada
+    && publicacoesLocais.screen?.track?.mediaStreamTrack === screenStream.getVideoTracks()[0]);
+  // Com cópia no ar, trocar de tela republica: o reserva não pode seguir mostrando a janela antiga.
+  assert.equal(await host.evaluate(() => window.copiaReserva.readyState), 'ended');
+  assert.equal(await host.evaluate(() => publicacoesLocais.screen === window.publicacaoAntes), false);
+  await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0 && !stageVideo.paused);
+  assert.equal(await copiarParaReserva(), 'live');
+  await host.locator('#screenBtn').click();
+  await host.waitForFunction(() => !screenStream);
+  // Era aqui que a captura seguia aberta depois do "parar", com a tarja amarela em volta.
+  assert.equal(await host.evaluate(() => window.copiaReserva.readyState), 'ended');
+  await share(host);
+  await viewer.waitForFunction(() => pinned?.source === 'screen' && stageVideo.videoWidth > 0);
+  console.log('PASS: reserve-codec copies of the capture end with it, on replace and on stop');
+
   await Promise.all([viewer.locator('#cameraBtn').click(), host.locator('#micBtn').click()]);
   await share(viewer);
   // A tela de quem chegou nao se impoe a ninguem: o host so recebe depois de pedir.
