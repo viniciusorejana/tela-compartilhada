@@ -158,3 +158,56 @@ true` para H.264, VP9 e AV1. Quem assiste já usa a placa. O problema é só de 
 
 O que fazer com essa abertura está em [`plano-webcodecs.md`](plano-webcodecs.md): usar o
 WebCodecs exige sair do `RTCPeerConnection`, e portanto um transporte próprio para a tela.
+
+---
+
+# O som da tela pelo agente: dois relógios e um chiado
+
+Relato: depois de vários minutos compartilhando com som, a transmissão passava a chiar, todo
+mundo ouvia, e mutar a tela fazia parar.
+
+O agente captura no relógio do Windows e entrega PCM de 44,1 kHz em blocos de ~10 ms; a sala o
+toca num `AudioContext`, que anda no relógio da saída do navegador. O reprodutor antigo guardava
+10 a 20 ms e não corrigia a diferença entre os dois relógios: a folga acabava em minutos e o som
+passava a picotar sem parar. Medido com o agente real e uma deriva de 300 ppm: **243 buracos em
+dois minutos**. Cada engasgo da página, por onde o PCM passava, também virava buraco.
+
+## O que mudou
+
+- **`public/agente-local-worker.js`**: a conexão direta com o agente mora num Worker e entrega o
+  PCM ao reprodutor por uma `MessagePort`, sem passar pelo fio principal. Se cair, é refeita
+  (1, 2, 5, 10, 30 s, ou na hora em que o agente reanuncia a porta).
+- **`public/pcm-worklet.js`**: o reprodutor novo. Testado em `tests/pcm-worklet.test.js`.
+
+## Sincronia: por que a fila é medida pelo pior momento
+
+O LiveKit agrupa `screen_share` e `screen_share_audio` no mesmo stream, e quem assiste
+sincroniza som e imagem pelos carimbos de tempo. Só que o carimbo do áudio é dado quando ele
+**entra** no WebRTC — depois do reprodutor. Todo milissegundo guardado na fila é som atrasado em
+relação à imagem, e quem assiste não tem como descontar.
+
+Por isso o reprodutor não mira uma fila média: ele mede o **pior momento** de uma janela de três
+segundos e segura esse mínimo em 5 ms. A média fica em ~10 ms no caminho direto — igual ou
+abaixo do reprodutor antigo — e só cresce quando a entrega exige (caminho pelo servidor, rede
+oscilando). Cada buraco ensina até 20 ms a mais, e a folga volta a encolher sem buracos.
+
+## Qualquer diferença de relógio
+
+- A velocidade de leitura tem uma parte rápida, limitada a ±0,1% (inaudível), e uma integral
+  que aprende a diferença real entre os relógios, até ±10%. Com a velocidade certa, o tom
+  também fica certo: é o som tocado no ritmo do relógio de quem capturou.
+- Uma diferença grosseira (≥ 0,5% — taxa de amostragem errada, não deriva de cristal) é medida
+  direto pela chegada dos blocos, entre chegadas, em 30 s sem pausa da fonte, e corrigida de
+  uma vez.
+- A leitura fracionária usa um sinc de 16 pontos (Kaiser β = 6): o erro fica 72 dB abaixo do
+  sinal de 1 a 15 kHz. Interpolação linear abafaria 2,4 dB a 10 kHz, oscilando com a posição.
+
+Simulado por 5 min em cada cenário: sem deriva, ±100 a ±3000 ppm, −2%, +8,8%, entrega com 0 a
+40 ms de atraso, rajadas de 80 ms pelo servidor, pausa de 5 s da fonte e saída a 48 kHz —
+nenhum buraco depois do primeiro minuto.
+
+## Diagnóstico
+
+O reprodutor manda a própria contagem a cada dois segundos. O relatório de diagnóstico ganhou a
+linha "Som da tela pelo agente" (caminho, fila, buracos, saltos e a diferença de relógio
+aprendida), e o registro de segundo plano anota `audioAgente.*` quando algo piora.

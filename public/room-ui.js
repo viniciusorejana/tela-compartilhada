@@ -390,6 +390,10 @@
         // compressão em cada sentido, mais cem mensagens por segundo, e nada na tela dizia
         // qual dos dois estava no ar.
         `Áudio do sistema: ${typeof planoDeAudio === 'function' ? planoDeAudio() : 'desconhecido'}`,
+        // Quando o som da tela vem do agente: por qual caminho, quanto fica na fila (é o
+        // atraso do som em relação à imagem) e quantas vezes ele falhou. Um relato de chiado
+        // sem esta linha é palpite.
+        `Som da tela pelo agente: ${(typeof resumoDoAudioDoAgente === 'function' && resumoDoAudioDoAgente()) || 'inativo'}`,
         `Aplicativo: ${window.NexoAtualizacao?.situacao()?.texto || 'navegador'}`,
         `Vídeo no palco: ${stageVideo.videoWidth} × ${stageVideo.videoHeight}; ${stageVideo.paused ? 'pausado' : 'reproduzindo'}; readyState=${stageVideo.readyState}`,
         `Reprodução bloqueada: ${midiasBloqueadas.size} elemento(s)`,
@@ -549,6 +553,8 @@
       }
       anotar(maquina, 'Codec escolhido', `${codecDeVideoEscolhido()} na tela · H.264 na câmera`);
       if (typeof planoDeAudio === 'function') anotar(maquina, 'Áudio do sistema', planoDeAudio());
+      const somDaTela = typeof resumoDoAudioDoAgente === 'function' ? resumoDoAudioDoAgente() : '';
+      if (somDaTela) anotar(maquina, 'Som da tela', somDaTela, estatisticasDoAudioDoAgente?.buracos ? 'alerta' : 'ok');
       // A versão do aplicativo é a primeira pergunta de todo relato de defeito que vem dele.
       const versaoDoApp = window.NexoAtualizacao?.situacao();
       if (versaoDoApp) anotar(maquina, 'Aplicativo', versaoDoApp.texto, versaoDoApp.desatualizado ? 'alerta' : 'ok');

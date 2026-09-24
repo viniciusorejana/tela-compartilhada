@@ -145,7 +145,6 @@ let appAudioNode = null;
 let appAudioTrack = null;
 let audioCaptureVersion = 0;
 let testAudioContext = null;
-let pendingPcm = new Uint8Array(0);
 let settingsMode = 'start'; // 'start' | 'update'
 let audioCapabilities = { podeUsarHelper: false, motivo: 'remoto', agenteDisponivel: false, agenteConectado: false };
 
@@ -586,6 +585,14 @@ async function iniciarConexao() {
     if (conectado) setTimeout(enviarEscolhaDeAudio, 0);
     audioCapabilities.agenteConectado = Boolean(conectado);
     audioCapabilities.portaLocalDoAgente = portaLocal || null;
+    // Agente reaberto no meio da transmissão escuta noutra porta, e agente que voltou não
+    // precisa esperar a próxima tentativa: a conexão direta é refeita na hora.
+    if (conexaoDireta && conexaoDireta.porta !== audioCapabilities.portaLocalDoAgente) encerrarConexaoDireta();
+    if (!conexaoDireta && audioCapabilities.portaLocalDoAgente) {
+      clearTimeout(religarConexaoDireta);
+      religarConexaoDireta = null;
+      conectarAgenteLocal();
+    }
     status.textContent = conectado
       ? 'Agente de áudio conectado: você já pode compartilhar o som do seu computador.'
       : 'Agente de áudio desconectado.';
@@ -3818,24 +3825,29 @@ usarTelaInteiraBtn.onclick = () => {
   atualizarExplicacaoDeAudio();
 };
 
-let wsAgenteLocal = null;
 // Distingue a primeira conexao da reconexao automatica do Socket.IO.
 let sessaoIniciada = false;
 
-// O PCM chega por dois caminhos possíveis e é tratado igual nos dois: pelo WebSocket
-// local do agente (curto) ou pelo servidor da sala (reserva).
+// O formato que o agente e o helper entregam: 16 bits, estéreo, 44,1 kHz.
+const TAXA_DO_AGENTE = 44100;
+// De onde vem o som do sistema agora: 'agente' (programa nativo neste computador), 'local'
+// (helper do servidor, para quem está na máquina dele) ou null.
+let origemDoAudioDoSistema = null;
+let conexaoDireta = null;
+let religarConexaoDireta = null;
+let tentativasDaConexaoDireta = 0;
+let workerIndisponivel = false;
+let estatisticasDoAudioDoAgente = null;
+let ultimoRelatoDoAudio = { falhas: 0, quando: 0 };
+
+// O PCM que chega pelo servidor da sala: a reserva do agente, e o helper de quem está na
+// máquina do servidor. O recorte de quadro partido entre mensagens, que morava aqui, foi para
+// o reprodutor -- o único ponto por onde os dois caminhos passam.
 function receberPcm(data) {
   if (!appAudioNode) return;
-  const incoming = new Uint8Array(data);
-  const combined = new Uint8Array(pendingPcm.length + incoming.length);
-  combined.set(pendingPcm);
-  combined.set(incoming, pendingPcm.length);
-  const usableLength = combined.length - (combined.length % 4);
-  if (usableLength) {
-    const pcm = combined.slice(0, usableLength).buffer;
-    appAudioNode.port.postMessage(pcm, [pcm]);
-  }
-  pendingPcm = combined.slice(usableLength);
+  const pcm = data instanceof ArrayBuffer ? data
+    : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null;
+  if (pcm?.byteLength) appAudioNode.port.postMessage(pcm, [pcm]);
 }
 
 // Conecta direto ao agente que roda NESTE computador, cortando a volta pela internet: sem
@@ -3843,93 +3855,121 @@ function receberPcm(data) {
 //
 // Se não der certo (agente antigo, porta ocupada, navegador que bloqueie loopback), não há
 // prejuízo: o agente continua enviando pelo servidor e o áudio funciona igual, só com mais
-// atraso. Por isso nada aqui interrompe a transmissão em caso de falha.
+// atraso. E se cair no meio, a conexão é refeita: antes a transmissão seguia pelo servidor
+// até o fim, com o atraso e a oscilação da volta pela internet.
 function conectarAgenteLocal() {
   const porta = audioCapabilities.portaLocalDoAgente;
-  if (!porta || wsAgenteLocal) return;
+  if (!porta || !appAudioNode || origemDoAudioDoSistema !== 'agente' || conexaoDireta) return;
+  const url = `ws://127.0.0.1:${porta}/?token=${encodeURIComponent(tokenDoAgente)}`;
+  // O reprodutor recebe a ponta dele antes de a conexão abrir: o som que chegar já tem para
+  // onde ir, sem passar pela página.
+  const canal = new MessageChannel();
+  appAudioNode.port.postMessage({ porta: canal.port1 }, [canal.port1]);
+  const conexao = { porta, aberta: false, encerrar: null };
+  conexaoDireta = conexao;
+  conexao.encerrar = abrirConexaoDireta(url, canal.port2, evento => {
+    if (conexaoDireta !== conexao) return;
+    if (evento === 'aberto') {
+      conexao.aberta = true;
+      tentativasDaConexaoDireta = 0;
+      registrarDiagnostico('audioAgente.direto');
+      return;
+    }
+    if (conexao.aberta) registrarDiagnostico('audioAgente.caiu', 'o som segue pelo servidor');
+    encerrarConexaoDireta();
+    agendarConexaoDireta();
+  });
+}
+
+// Um Worker por tentativa (agente-local-worker.js), e o fio principal só onde não houver
+// Worker: ali cada engasgo da página volta a segurar o som, mas é melhor que a volta pela
+// internet.
+function abrirConexaoDireta(url, destino, aoMudar) {
+  if (!workerIndisponivel && typeof Worker === 'function') {
+    try {
+      const worker = new Worker('/agente-local-worker.js');
+      worker.onmessage = ({ data }) => aoMudar(data?.evento);
+      // Erro do próprio Worker (o arquivo não carregou, por exemplo) não se resolve tentando
+      // de novo do mesmo jeito: as próximas tentativas vão pelo fio principal.
+      worker.onerror = () => { workerIndisponivel = true; aoMudar('fechado'); };
+      worker.postMessage({ url, porta: destino }, [destino]);
+      return () => worker.terminate();
+    } catch (_) { workerIndisponivel = true; }
+  }
   let ws;
-  try { ws = new WebSocket(`ws://127.0.0.1:${porta}/?token=${encodeURIComponent(tokenDoAgente)}`); }
-  catch (_) { return; }
+  try { ws = new WebSocket(url); }
+  catch (_) { setTimeout(() => aoMudar('fechado'), 0); return () => destino.close(); }
   ws.binaryType = 'arraybuffer';
-  ws.onopen = () => { wsAgenteLocal = ws; console.info('Áudio do sistema vindo direto do agente, sem passar pelo servidor.'); };
-  ws.onmessage = (event) => receberPcm(event.data);
-  ws.onclose = () => { if (wsAgenteLocal === ws) wsAgenteLocal = null; };
-  ws.onerror = () => { if (wsAgenteLocal === ws) wsAgenteLocal = null; };
+  ws.onopen = () => aoMudar('aberto');
+  ws.onmessage = ({ data }) => { if (data instanceof ArrayBuffer) destino.postMessage(data, [data]); };
+  ws.onclose = () => aoMudar('fechado');
+  return () => {
+    ws.onclose = null;
+    try { ws.close(); } catch (_) { /* já estava fechado */ }
+    destino.close();
+  };
+}
+
+function agendarConexaoDireta() {
+  if (religarConexaoDireta || !appAudioNode || origemDoAudioDoSistema !== 'agente') return;
+  // Rápido nas primeiras, espaçado depois: o agente pode ter sido fechado de vez, e aí o som
+  // segue pelo servidor, que continua funcionando.
+  const espera = [1000, 2000, 5000, 10000, 30000][Math.min(tentativasDaConexaoDireta, 4)];
+  tentativasDaConexaoDireta++;
+  religarConexaoDireta = setTimeout(() => { religarConexaoDireta = null; conectarAgenteLocal(); }, espera);
+}
+
+function encerrarConexaoDireta() {
+  const conexao = conexaoDireta;
+  conexaoDireta = null;
+  conexao?.encerrar?.();
 }
 
 function fecharAgenteLocal() {
-  if (!wsAgenteLocal) return;
-  try { wsAgenteLocal.close(); } catch (_) { /* já estava fechado */ }
-  wsAgenteLocal = null;
+  clearTimeout(religarConexaoDireta);
+  religarConexaoDireta = null;
+  tentativasDaConexaoDireta = 0;
+  encerrarConexaoDireta();
 }
 
-// O PCM chega pelo evento 'audio-data' (do agente local ou do helper do servidor) e vira
-// uma faixa de audio comum, que entra na transmissao WebRTC como qualquer outra.
+// O reprodutor manda a própria contagem a cada dois segundos. Ela vai para o diagnóstico só
+// quando piora, e no máximo a cada trinta segundos: é a resposta para o próximo "chiado".
+function anotarAudioDoAgente(estatisticas) {
+  estatisticasDoAudioDoAgente = estatisticas;
+  const falhas = estatisticas.buracos + estatisticas.saltos;
+  if (falhas <= ultimoRelatoDoAudio.falhas || Date.now() - ultimoRelatoDoAudio.quando < 30000) return;
+  registrarDiagnostico('audioAgente.falhas', resumoDoAudioDoAgente());
+  ultimoRelatoDoAudio = { falhas, quando: Date.now() };
+}
+
+function resumoDoAudioDoAgente() {
+  const e = estatisticasDoAudioDoAgente;
+  if (!e || !appAudioNode) return '';
+  const caminho = origemDoAudioDoSistema !== 'agente' ? 'helper do servidor'
+    : conexaoDireta?.aberta ? 'direto do agente' : 'pelo servidor';
+  return `${caminho} · fila ${e.nivelMs} ms · ${e.buracos} buraco(s), ${e.saltos} salto(s)`
+    + ` · relógio ${e.relogioPpm >= 0 ? '+' : ''}${e.relogioPpm} ppm`;
+}
+
+// O PCM do agente (ou do helper do servidor) vira uma faixa de áudio comum, que entra na
+// transmissão WebRTC como qualquer outra. O reprodutor que faz a ponte entre os dois relógios
+// está em pcm-worklet.js.
 async function iniciarAudioDoSistema(targetStream, origem) {
   // latencyHint 'interactive' pede o menor buffer possivel de saida.
-  appAudioContext = new AudioContextClass({ sampleRate: 44100, latencyHint: 'interactive' });
-  const workletCode = `
-    class PcmPlayer extends AudioWorkletProcessor {
-      constructor() {
-        super();
-        this.blocos = [];
-        this.offset = 0;    // posicao dentro de blocos[0], em amostras
-        this.total = 0;     // soma do tamanho de todos os blocos da fila
-        // Este audio ja chega atrasado: ele sai do PC de quem compartilha, vai ate o
-        // servidor e volta. Guardar mais um tanto aqui so aumentaria o atraso, entao o
-        // alvo e curto e o teto e rigido.
-        this.alvo = Math.round(sampleRate * 0.04) * 2;
-        this.teto = Math.round(sampleRate * 0.12) * 2;
-        this.port.onmessage = event => {
-          const bloco = new Int16Array(event.data);
-          if (!bloco.length) return;
-          this.blocos.push(bloco);
-          this.total += bloco.length;
-          this.descartarExcesso();
-        };
-      }
-
-      // Sem isto a fila so cresce. Qualquer engasgo da rede (ou a diferenca minima entre o
-      // relogio da placa de som e o do navegador) vira atraso PERMANENTE, porque tudo que
-      // entrou na fila precisa ser tocado em tempo real. Preferimos um pulo curto agora a
-      // carregar o atraso para o resto da transmissao.
-      descartarExcesso() {
-        if (this.total - this.offset <= this.teto) return;
-        while (this.blocos.length > 1 && this.total - this.offset > this.alvo) {
-          this.total -= this.blocos.shift().length;
-          this.offset = 0;
-        }
-        const sobra = this.total - this.offset - this.alvo;
-        if (sobra > 0) this.offset += sobra - (sobra % 2);  // par: nao trocar os canais
-      }
-
-      process(inputs, outputs) {
-        const left = outputs[0][0];
-        const right = outputs[0][1] || left;
-        for (let i = 0; i < left.length; i++) {
-          while (this.blocos.length && this.offset + 1 >= this.blocos[0].length) {
-            this.total -= this.blocos.shift().length;
-            this.offset = 0;
-          }
-          const bloco = this.blocos[0];
-          if (!bloco) { left[i] = 0; right[i] = 0; continue; }
-          left[i] = bloco[this.offset++] / 32768;
-          right[i] = bloco[this.offset++] / 32768;
-        }
-        return true;
-      }
-    }
-    registerProcessor('pcm-player', PcmPlayer);
-  `;
-  const moduleUrl = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
-  await appAudioContext.audioWorklet.addModule(moduleUrl);
-  URL.revokeObjectURL(moduleUrl);
-  appAudioNode = new AudioWorkletNode(appAudioContext, 'pcm-player', { outputChannelCount: [2] });
+  appAudioContext = new AudioContextClass({ sampleRate: TAXA_DO_AGENTE, latencyHint: 'interactive' });
+  await appAudioContext.audioWorklet.addModule('/pcm-worklet.js');
+  appAudioNode = new AudioWorkletNode(appAudioContext, 'pcm-player', {
+    numberOfInputs: 0,
+    outputChannelCount: [2],
+    processorOptions: { taxaEntrada: TAXA_DO_AGENTE }
+  });
+  appAudioNode.port.onmessage = ({ data }) => { if (data?.estatisticas) anotarAudioDoAgente(data.estatisticas); };
   const destination = appAudioContext.createMediaStreamDestination();
   appAudioNode.connect(destination);
   appAudioTrack = destination.stream.getAudioTracks()[0];
   targetStream.addTrack(appAudioTrack);
   await appAudioContext.resume();
+  origemDoAudioDoSistema = origem;
   if (origem === 'agente') conectarAgenteLocal();
   socket.emit('audio-start', { origem, familia: familiaDoNavegador(), version: audioCaptureVersion });
 }
@@ -3937,14 +3977,16 @@ async function iniciarAudioDoSistema(targetStream, origem) {
 async function limparAudioDoAplicativo() {
   audioDaJanela = null;
   audioCaptureVersion += 1;
+  origemDoAudioDoSistema = null;
   fecharAgenteLocal();
+  estatisticasDoAudioDoAgente = null;
+  ultimoRelatoDoAudio = { falhas: 0, quando: 0 };
   socket?.emit('audio-stop');
   if (appAudioTrack) appAudioTrack.stop();
   if (appAudioContext) await appAudioContext.close();
   appAudioTrack = null;
   appAudioContext = null;
   appAudioNode = null;
-  pendingPcm = new Uint8Array(0);
 }
 
 async function capturarTela() {

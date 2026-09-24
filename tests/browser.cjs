@@ -5,7 +5,7 @@ const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { WebSocket } = require('ws');
+const { WebSocket, WebSocketServer } = require('ws');
 
 const port = process.env.TEST_BROWSER === 'webkit' ? 3218 : 3217;
 const origin = `http://localhost:${port}`;
@@ -1019,9 +1019,103 @@ async function esperarCodec(page, fonte, esperado) {
   assert.equal(unsupportedCapture.tracks, 0);
   assert.match(unsupportedCapture.warning, /atualize/);
   assert.equal(commands.filter(c => c.acao === 'iniciar').length, startsBefore);
+  console.log('PASS: selected window PID reaches agent before capture; an old agent never falls back to system-wide audio');
+
+  // O som do agente de ponta a ponta, até a faixa que a sala publica: pela conexão direta
+  // (num Worker), pelo servidor quando ela cai, e de volta pela direta.
+  const blocoSenoidal = (freq, primeiro) => {
+    const bloco = Buffer.alloc(441 * 4);
+    for (let i = 0; i < 441; i++) {
+      const s = Math.round(Math.sin(2 * Math.PI * freq * (primeiro + i) / 44100) * 16000);
+      bloco.writeInt16LE(s, i * 4);
+      bloco.writeInt16LE(s, i * 4 + 2);
+    }
+    return bloco;
+  };
+  // No ritmo do relógio, não do temporizador: no Windows ele só acorda a cada ~15,6 ms.
+  const transmitir = (enviar, freq) => {
+    const inicio = performance.now();
+    let enviados = 0;
+    const timer = setInterval(() => {
+      while (enviados < (performance.now() - inicio) / 10) enviar(blocoSenoidal(freq, 441 * enviados++));
+    }, 5);
+    return () => clearInterval(timer);
+  };
+  let aceitarDireto = true, tokenDireto = null;
+  const agenteLocal = new WebSocketServer({ host: '127.0.0.1', port: 0, verifyClient: ({ req }) => {
+    tokenDireto = new URL(req.url, 'http://local').searchParams.get('token');
+    return aceitarDireto;
+  } });
+  await new Promise(resolve => agenteLocal.once('listening', resolve));
+  agenteLocal.on('connection', socket => {
+    const parar = transmitir(bloco => { if (socket.readyState === 1) socket.send(bloco); }, 1000);
+    socket.on('close', parar);
+  });
+  const portaDireta = agenteLocal.address().port;
+  const anunciarPorta = () => nativeAgent.send(JSON.stringify({ evento: 'porta-local', porta: portaDireta }));
+  anunciarPorta();
+  await nativePage.waitForFunction(porta => audioCapabilities.portaLocalDoAgente === porta, portaDireta);
+  // A frequência dominante e o volume da faixa que iria para a sala.
+  const medirSom = () => nativePage.evaluate(async () => {
+    const contexto = new AudioContext();
+    const analisador = contexto.createAnalyser();
+    analisador.fftSize = 8192;
+    contexto.createMediaStreamSource(new MediaStream([appAudioTrack])).connect(analisador);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const espectro = new Float32Array(analisador.frequencyBinCount);
+    analisador.getFloatFrequencyData(espectro);
+    let pico = 1;
+    for (let i = 2; i < espectro.length; i++) if (espectro[i] > espectro[pico]) pico = i;
+    const onda = new Float32Array(analisador.fftSize);
+    analisador.getFloatTimeDomainData(onda);
+    const hz = Math.round(pico * contexto.sampleRate / analisador.fftSize);
+    await contexto.close();
+    return { hz, rms: Math.sqrt(onda.reduce((soma, x) => soma + x * x, 0) / onda.length) };
+  });
+  const esperarNoNode = async (condicao, descricao) => {
+    for (const limite = Date.now() + 5000; !condicao();) {
+      if (Date.now() > limite) throw new Error(`Tempo esgotado: ${descricao}`);
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  };
+
+  await nativePage.evaluate(async () => {
+    captureMode.value = 'monitor';
+    atualizarExplicacaoDeAudio();
+    window.telaComSom = await capturarTela();
+  });
+  await nativePage.waitForFunction(() => conexaoDireta?.aberta);
+  assert.equal(tokenDireto, nativeToken);
+  const direto = await medirSom();
+  assert.ok(Math.abs(direto.hz - 1000) <= 12 && direto.rms > 0.1, `conexão direta: ${JSON.stringify(direto)}`);
+  await nativePage.waitForFunction(() => /direto do agente/.test(resumoDoAudioDoAgente()));
+
+  aceitarDireto = false;
+  agenteLocal.clients.forEach(socket => socket.terminate());
+  await nativePage.waitForFunction(() => !conexaoDireta?.aberta);
+  const pararServidor = transmitir(bloco => nativeAgent.send(bloco), 600);
+  const peloServidor = await medirSom();
+  pararServidor();
+  assert.ok(Math.abs(peloServidor.hz - 600) <= 12 && peloServidor.rms > 0.1, `pelo servidor: ${JSON.stringify(peloServidor)}`);
+
+  // O agente reanuncia a porta (é o que ele faz ao reconectar): a página não espera a próxima
+  // tentativa agendada.
+  aceitarDireto = true;
+  anunciarPorta();
+  await nativePage.waitForFunction(() => conexaoDireta?.aberta, null, { timeout: 10000 });
+  const deVolta = await medirSom();
+  assert.ok(Math.abs(deVolta.hz - 1000) <= 12 && deVolta.rms > 0.1, `de volta à conexão direta: ${JSON.stringify(deVolta)}`);
+
+  await nativePage.evaluate(async () => {
+    telaComSom.getTracks().forEach(t => t.stop());
+    await limparAudioDoAplicativo();
+  });
+  assert.equal(await nativePage.evaluate(() => conexaoDireta), null);
+  await esperarNoNode(() => agenteLocal.clients.size === 0, 'a conexão direta fecha junto com a captura');
+  agenteLocal.close();
   nativeAgent.close();
   await nativeContext.close();
-  console.log('PASS: selected window PID reaches agent before capture; an old agent never falls back to system-wide audio');
+  console.log('PASS: agent audio reaches the published track through the direct Worker link and through the server, and the direct link comes back');
 
   const fallbackContext = await browser.newContext();
   await syntheticCapture(fallbackContext);
