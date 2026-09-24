@@ -31,17 +31,25 @@ const { execFileSync } = require('node:child_process');
 
 const VERSAO_PADRAO = '1.13.6';
 
-// Hash de cada arquivo que pode entrar nesta maquina. O do Linux da 1.13.7 esta ausente de
-// proposito: nao foi conferido aqui, e um `null` faz o download recusar -- que e o que deve
-// acontecer. Inventar um hash, ou aceitar sem conferir, e pior do que nao ter a versao.
+// Hash de cada arquivo que pode entrar nesta maquina, por sistema e processador. Os do Linux
+// da 1.13.7 estao ausentes de proposito: nao foram conferidos aqui, e um `null` faz o download
+// recusar -- que e o que deve acontecer. Inventar um hash, ou aceitar sem conferir, e pior do
+// que nao ter a versao.
+//
+// O `linux-arm64` existe pelo Oracle Cloud grátis, que é ARM (Ampere). Conferido em duas
+// fontes que concordam -- o checksums.txt do release e o digest que a API do GitHub mostra de
+// cada arquivo --, e as mesmas duas fontes dão exatamente os hashes de x64 e Windows que já
+// estavam aqui.
 const VERSOES = {
   '1.13.6': {
-    win32: '9df299b6c6c32f1be88d3d106a9a63f8f921b424b353cc59f57d6b84532a4475',
-    linux: '2b61abef2b9ba14b4b8ca38b37de9a37ffc682b9931d5fc03ceca2f0b77d3e33'
+    'win32-x64': '9df299b6c6c32f1be88d3d106a9a63f8f921b424b353cc59f57d6b84532a4475',
+    'linux-x64': '2b61abef2b9ba14b4b8ca38b37de9a37ffc682b9931d5fc03ceca2f0b77d3e33',
+    'linux-arm64': '5c75f09173199f3f8fe0c3c0d5a41171f9b306ffce6843d752c276d11e77d19b'
   },
   '1.13.7': {
-    win32: 'e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f',
-    linux: null
+    'win32-x64': 'e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f',
+    'linux-x64': null,
+    'linux-arm64': null
   }
 };
 
@@ -55,8 +63,9 @@ const VERSAO = (() => {
 })();
 
 const ARQUIVOS = {
-  win32: { arquivo: `livekit_${VERSAO}_windows_amd64.zip`, binario: 'livekit-server.exe' },
-  linux: { arquivo: `livekit_${VERSAO}_linux_amd64.tar.gz`, binario: 'livekit-server' }
+  'win32-x64': { arquivo: `livekit_${VERSAO}_windows_amd64.zip`, binario: 'livekit-server.exe' },
+  'linux-x64': { arquivo: `livekit_${VERSAO}_linux_amd64.tar.gz`, binario: 'livekit-server' },
+  'linux-arm64': { arquivo: `livekit_${VERSAO}_linux_arm64.tar.gz`, binario: 'livekit-server' }
 };
 const PACOTES = Object.fromEntries(Object.entries(ARQUIVOS)
   .map(([plataforma, dados]) => [plataforma, { ...dados, sha256: VERSOES[VERSAO][plataforma] }]));
@@ -64,9 +73,8 @@ const PACOTES = Object.fromEntries(Object.entries(ARQUIVOS)
 const PASTA = path.join(__dirname, '..', 'native', 'livekit');
 
 function pacoteDestaMaquina() {
-  const pacote = PACOTES[process.platform];
-  if (!pacote) throw new Error(`Sem pacote do LiveKit para ${process.platform}. Baixe manualmente em https://github.com/livekit/livekit/releases/tag/v${VERSAO}`);
-  if (process.arch !== 'x64') throw new Error(`Sem pacote do LiveKit para ${process.arch}. Baixe manualmente em https://github.com/livekit/livekit/releases/tag/v${VERSAO}`);
+  const pacote = PACOTES[`${process.platform}-${process.arch}`];
+  if (!pacote) throw new Error(`Sem pacote do LiveKit para ${process.platform}/${process.arch}. Baixe manualmente em https://github.com/livekit/livekit/releases/tag/v${VERSAO}`);
   // Sem hash declarado, o download para aqui. A alternativa seria instalar um executável sem
   // conferir o que chegou, e é justamente isso que a conferência existe para impedir -- a
   // regra não pode ter exceção só porque a versão é experimental.

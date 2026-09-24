@@ -1,0 +1,5 @@
+# O que roda no Linux sai sempre com LF, mesmo de um checkout no Windows com
+# core.autocrlf=true: um script de shell com CRLF quebra na primeira linha ("\r: command not
+# found"), e um Caddyfile ou unit do systemd com CRLF falha de jeitos menos óbvios.
+*.sh text eol=lf
+deploy/** text eol=lf

@@ -259,8 +259,9 @@ O que **de fato** falta, e é tudo pequeno:
    continua fora do Git (`app/dist/` está no `.gitignore`) são os próprios instaladores —
    `SalaCompartilhada.exe`, `Nexo.AppImage` e `Nexo.dmg`. Sem eles no `app/dist` do VPS, o
    servidor **roda**, e a página apenas não oferece o download.
-4. **arm64 não é aceito.** `pacoteDestaMaquina()` recusa `process.arch !== 'x64'`. Só importa
-   se o destino for ARM (ver "hospedagem gratuita", adiante).
+4. ~~**arm64 não é aceito.**~~ **Resolvido em 24/09/2026**: `baixar-livekit.cjs` e
+   `baixar-musica.cjs` declaram o `linux-arm64` com hash conferido, e `deploy/oracle/` instala
+   tudo numa máquina do Oracle Cloud grátis, x86 ou ARM (roteiro em `docs/oracle.md`).
 
 Uma consequência de desenho que vale registrar: **hospedar remoto torna o `audio-helper`
 irrelevante e o `audio-agent` essencial.** O helper lista e captura aplicativos da máquina

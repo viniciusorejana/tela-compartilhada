@@ -1177,6 +1177,13 @@ Use `https://stream.seudominio.com/sala` (ou `/{codigo}/sala`) para entrar na sa
 
 Para manter o servico apos reinicializacoes, configure o `cloudflared` como servico do Windows ou use o Agendador de Tarefas. O processo Node tambem precisa ser mantido ativo por NSSM, PM2 ou um servico do Windows.
 
+## Oracle Cloud grátis
+
+Para testar com amigos numa máquina de verdade, de graça: `docs/oracle.md` tem o roteiro do
+console (máquina, portas) e `deploy/oracle/instalar.sh` instala o resto com um comando —
+Node, servidor de mídia (x86 ou ARM), bot de música, serviço do systemd e HTTPS pelo Caddy
+num endereço `sslip.io`, sem comprar domínio.
+
 ## Dominio proprio sem Cloudflare Tunnel
 
 Outra arquitetura e apontar o DNS para um servidor publico e colocar Caddy ou Nginx como proxy HTTPS na frente do Node. O proxy deve encaminhar HTTP e WebSocket para `localhost:3000`; libere apenas as portas 80/443 no firewall e mantenha o Node escutando localmente. Configure `PUBLIC_URL` e `CORS_ORIGIN` com a URL HTTPS final. Nao encaminhe a porta 3000 diretamente quando o objetivo for acesso publico seguro.

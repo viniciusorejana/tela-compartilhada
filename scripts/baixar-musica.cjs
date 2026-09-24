@@ -29,6 +29,7 @@ const PACOTES = {
   win32: {
     ytdlp: {
       arquivo: 'yt-dlp.exe',
+      nomeNoLancamento: 'yt-dlp.exe',
       url: `https://github.com/yt-dlp/yt-dlp/releases/download/${VERSAO_YTDLP}/yt-dlp.exe`,
       sha256: '66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a'
     },
@@ -41,11 +42,17 @@ const PACOTES = {
     }
   },
   linux: {
+    // O binário muda com o processador: o Oracle Cloud grátis é ARM (Ampere), e o yt-dlp
+    // publica um próprio para ele. Os dois hashes foram conferidos contra o SHA2-256SUMS do
+    // próprio lançamento -- que dá, para o .exe, exatamente o hash declarado acima. Antes o
+    // do Linux era `null`, e `conferir` aceitava qualquer coisa que chegasse.
     ytdlp: {
       arquivo: 'yt-dlp',
-      url: `https://github.com/yt-dlp/yt-dlp/releases/download/${VERSAO_YTDLP}/yt-dlp_linux`,
-      // Conferido contra o SHA2-256SUMS do proprio lancamento.
-      sha256: null
+      nomeNoLancamento: process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux',
+      url: `https://github.com/yt-dlp/yt-dlp/releases/download/${VERSAO_YTDLP}/${process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux'}`,
+      sha256: process.arch === 'arm64'
+        ? 'b16e4dab368a816cd05d477d698a605a6ae87ccee1c8ffd38fa21d7254141fcc'
+        : '58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a'
     },
     // No Linux o ffmpeg vem do gerenciador de pacotes da distribuicao; nao ha build oficial
     // para baixar aqui.
@@ -205,7 +212,7 @@ async function atualizarYtdlp() {
   const versao = String(lancamento.tag_name || '').trim();
   if (!/^\d{4}\.\d{2}\.\d{2}(\.\d+)?$/.test(versao)) throw new Error(`versão inesperada: ${versao}`);
 
-  const nome = pacotesDestaMaquina().ytdlp.arquivo === 'yt-dlp.exe' ? 'yt-dlp.exe' : 'yt-dlp_linux';
+  const nome = pacotesDestaMaquina().ytdlp.nomeNoLancamento || pacotesDestaMaquina().ytdlp.arquivo;
   const somas = await (await fetch(`https://github.com/yt-dlp/yt-dlp/releases/download/${versao}/SHA2-256SUMS`)).text();
   const linha = somas.split('\n').find(l => l.trim().endsWith(nome));
   if (!linha) throw new Error(`o lançamento ${versao} não publicou a soma de ${nome}`);
