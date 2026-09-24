@@ -147,9 +147,17 @@ const FORMATO_DE_AUDIO = 'bestaudio[abr<=192]/bestaudio/best';
 
 // Argumentos comuns a toda chamada do yt-dlp. "--no-update" evita o aviso de versao velha
 // no stderr, que so polui o diagnostico -- quem atualiza e o npm run musica:atualizar.
+//
+// "--js-runtimes" entrega ao yt-dlp o MESMO Node que roda o Nexo. O YouTube embaralha o
+// endereco de cada audio com um desafio em JavaScript, e sem um interpretador o yt-dlp fica
+// sem formato nenhum -- a mensagem que chega e a do YouTube, "The page needs to be
+// reloaded", que nao diz nada disso. O yt-dlp so liga o Deno sozinho; o Node precisa ser
+// pedido, e ele e o unico que existe com certeza em qualquer maquina que roda o Nexo.
+// Aconteceu no Oracle Cloud, e e questao de tempo acontecer em qualquer lugar.
 function argumentosBase() {
   const extras = (process.env.NEXO_YTDLP_ARGS || '').split(' ').filter(Boolean);
-  return ['--no-playlist', '--no-warnings', '--no-update', '--no-color', '--socket-timeout', '15', '-f', FORMATO_DE_AUDIO, ...extras];
+  return ['--no-playlist', '--no-warnings', '--no-update', '--no-color', '--socket-timeout', '15',
+    '--js-runtimes', `node:${process.execPath}`, '-f', FORMATO_DE_AUDIO, ...extras];
 }
 
 // ---------- Plataformas que não entregam o áudio ----------

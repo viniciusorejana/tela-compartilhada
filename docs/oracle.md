@@ -102,6 +102,41 @@ e, com essa janela aberta, <http://localhost:3000/painel>.
 **O banco das contas** fica em `/opt/nexo/native/contas`. Num teste isso basta; antes de
 convidar gente de fora do grupo, ele precisa de cópia fora da máquina.
 
+## O bot de música e o YouTube
+
+O YouTube desconfia de IP de datacenter e responde **"Sign in to confirm you're not a bot"**. O
+yt-dlp precisa então dos cookies de uma conta logada. **Use uma conta Google secundária**: o
+arquivo dá acesso à conta, e o YouTube pode restringir conta usada por bot.
+
+1. No PC, instale a extensão **"Get cookies.txt LOCALLY"** (Chrome) ou **"cookies.txt"**
+   (Firefox) e permita que ela rode em janela anônima.
+2. Numa **janela anônima**: entre no YouTube, vá na mesma aba para
+   `https://www.youtube.com/robots.txt`, exporte os cookies e **feche a janela** — aberta, o
+   YouTube troca os cookies e o arquivo exportado deixa de valer.
+3. Mande para a máquina e ligue no Nexo:
+
+```powershell
+scp -i C:\caminho\para\a-chave.key .\cookies.txt ubuntu@SEU_IP:/tmp/cookies.txt
+```
+
+```bash
+sudo install -o nexo -g nexo -m 600 /tmp/cookies.txt /opt/nexo/native/musica/cookies.txt && rm /tmp/cookies.txt
+echo 'NEXO_YTDLP_ARGS="--cookies /opt/nexo/native/musica/cookies.txt"' | sudo tee -a /opt/nexo/.env.prod
+sudo systemctl restart nexo
+```
+
+**"The page needs to be reloaded"** com cookies já lidos é outra coisa: o yt-dlp sem
+interpretador de JavaScript para resolver o desafio que embaralha o endereço do áudio. O bot
+passa ao yt-dlp o próprio Node do Nexo (`--js-runtimes`, em `musica.js`); numa instalação
+anterior a isso, acrescente `--js-runtimes node` ao `NEXO_YTDLP_ARGS`. Para diagnosticar:
+
+```bash
+sudo -u nexo -H /opt/nexo/native/musica/yt-dlp -v --js-runtimes node --cookies /opt/nexo/native/musica/cookies.txt --skip-download "https://www.youtube.com/watch?v=ID" 2>&1 | tail -40
+```
+
+Os cookies vencem em semanas ou meses: quando o erro voltar, repita os passos 1 a 3 (sem a
+linha do `.env.prod`). Links do SoundCloud e do Bandcamp não passam por nada disso.
+
 ## Quando algo não funciona
 
 | Sintoma | Onde olhar |
