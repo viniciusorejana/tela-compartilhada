@@ -34,6 +34,11 @@
     return Object.keys(limpo).length ? limpo : undefined;
   };
 
+  // Os temas prontos e as cores de destaque moram em tema.js; a lista daqui é a mesma, para o
+  // servidor recusar um tema que a página não conhece.
+  const NexoTema = typeof module !== 'undefined' && module.exports ? require('./tema.js') : root.NexoTema;
+  const corHex = valor => (typeof valor === 'string' && /^#[0-9a-f]{6}$/i.test(valor) ? valor.toLowerCase() : undefined);
+
   const AJUSTES_SINCRONIZADOS = Object.freeze({
     qualidade: um(['economical', 'high', 'ultra']),
     codec: um(['auto', 'h264', 'vp8', 'vp9', 'av1']),
@@ -44,8 +49,15 @@
     reducaoDeRuido: booleano,
     // Os avisos sonoros e o jeito de ler a sala são da pessoa, como a qualidade: quem baixou
     // o volume dos avisos no computador não quer ouvi-los no máximo no celular.
-    sons: grupo({ ligados: booleano, volume: inteiroEntre(0, 100), entrada: booleano, saida: booleano, tela: booleano, mensagem: booleano, mensagemSoFora: booleano, mencao: booleano, voce: booleano, pedido: booleano, conexao: booleano }),
-    aparencia: grupo({ densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano })
+    sons: grupo({ ligados: booleano, volume: inteiroEntre(0, 100), entrada: booleano, saida: booleano, tela: booleano, assistir: booleano, mensagem: booleano, mensagemSoFora: booleano, mencao: booleano, voce: booleano, pedido: booleano, conexao: booleano }),
+    // Tema e cores também: quem escolheu o claro no computador quer o claro no celular. As
+    // cores exatas sobem mesmo sem premium -- é o plano que decide se elas VALEM (tema.js), e
+    // guardá-las é o que as faz voltar quando ele volta.
+    aparencia: grupo({
+      densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano,
+      tema: um((NexoTema?.TEMAS || []).map(t => t.id)), modo: um(['escuro', 'claro', 'sistema']),
+      destaque: um(Object.keys(NexoTema?.DESTAQUES || {})), cores: grupo({ destaque: corHex, fundo: corHex })
+    })
   });
 
   // Teto do JSON guardado. Com a lista fechada ele nunca chega perto disto; o teto existe para

@@ -2,7 +2,9 @@
   const grid = document.getElementById('multiStage');
   const toggle = document.getElementById('multiViewBtn');
   const cards = new Map();
-  let active = false;
+  // A grade lembrada só abre quando houver o que mostrar: render() confere, e sem fonte o palco
+  // continua o de sempre.
+  let active = window.Preferencias?.ler('grade', false) === true;
   let mostrando = new Set();
 
   const chave = item => JSON.stringify([item.id, item.source]);
@@ -29,13 +31,16 @@
     const ehPropria = item.id === 'self';
     const ehTela = item.source === 'screen';
     const root = document.createElement('section');
-    root.className = 'multi-card';
+    // Escuro mesmo no tema claro, como o palco: é vídeo, e o controle por cima dele precisa
+    // do fundo escuro para ser lido (tema.css).
+    root.className = 'multi-card contexto-escuro';
     // A grade e a mesma coisa que os quadradinhos de baixo, so que grande: quem ajusta o
     // volume de uma tela ali tem de encontrar o mesmo ajuste aqui, e nao um card onde o som
     // simplesmente nao se controla.
     root.innerHTML = `
       <video autoplay muted playsinline></video>
       <p class="multi-wait" role="status">Conectando ao vídeo…</p>
+      ${ehTela ? '<button type="button" class="espectadores espectadores-card" hidden></button>' : ''}
       <div class="multi-caption">
         <span class="multi-nome"></span>
         <div class="multi-barra">
@@ -127,7 +132,7 @@
     video.addEventListener('resize', transform);
     button('Reproduzir', 'Retomar a reprodução deste vídeo', () => garantirReproducao(video)).className = 'multi-retry';
     grid.appendChild(root);
-    return { root, video, label, slider, muteBtn, parar, source: item.source, transform };
+    return { root, video, label, slider, muteBtn, parar, source: item.source, transform, espectadores: root.querySelector('.espectadores') };
   }
 
   // O volume mora num lugar so (sala.js); daqui o card apenas recebe o aviso de que ele
@@ -170,6 +175,9 @@
       const stream = item.id === 'self' ? (item.source === 'screen' ? screenStream : cameraStream) : peers.get(item.id)?.remoteStreams[item.source];
       if (ligarFluxo(card.video, stream) || card.video.paused) garantirReproducao(card.video);
       card.root.classList.toggle('selected', pinned?.id === item.id && pinned.source === item.source);
+      // Cada tela da grade com o próprio placar: com três telas lado a lado, quem vê qual é
+      // exatamente a pergunta que a grade faz.
+      if (card.espectadores) window.NexoEspectadores?.pintar(card.espectadores, item.id);
       if (card.slider) sincronizarAudio(item.id);
     }
     if (visible) stageControls.classList.remove('hidden');
@@ -178,6 +186,9 @@
 
   function setActive(value) {
     active = value; render(); mostrarControlesDoPalco();
+    // Quem prefere ver tudo em grade prefere na próxima entrada também. Neste aparelho só: o
+    // que cabe numa tela larga não cabe num celular.
+    window.Preferencias?.gravar('grade', active || null);
     // Abrir ou fechar a grade muda quem está em destaque -- e com isso quem sai da plateia,
     // quem volta para ela e em que camada cada um desce. `atualizarPalco` é quem avisa as
     // duas pontas, então vale nos dois sentidos, não só ao fechar.

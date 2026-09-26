@@ -1,6 +1,6 @@
 @import url('/tema.css');
 :root { --barra:84px; }
-* { box-sizing:border-box; scrollbar-width:thin; scrollbar-color:#45465c transparent; }
+* { box-sizing:border-box; scrollbar-width:thin; scrollbar-color:var(--bg-5) transparent; }
 html,body { height:100%; }
 body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; -webkit-font-smoothing:antialiased; }
 button,input,textarea,select { font:inherit; -webkit-tap-highlight-color:transparent; }
@@ -16,95 +16,95 @@ button.ghost:hover:not(:disabled) { background:var(--bg-3); color:var(--text); }
 button.secondary { background:var(--bg-3); color:var(--text); }
 button.secondary:hover:not(:disabled) { background:var(--bg-4); }
 button.danger { background:var(--danger-suave); color:var(--danger-texto); }
-button.danger:hover:not(:disabled) { background:#ef6f7d38; }
+button.danger:hover:not(:disabled) { background:color-mix(in srgb, var(--danger) 22%, transparent); }
 /* Só ícone: quadrado, do tamanho pequeno. É o X dos painéis, o enviar, o anexar. */
 button.icone-so,button.botao-icone { display:inline-grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:var(--r-sm); }
-:focus-visible { outline:2px solid #b6abff; outline-offset:3px; }
-a { color:#b5aaff; }
-input[type="text"],select,textarea { width:100%; border:1px solid #ffffff12; border-radius:var(--r-md); background:#181923; color:var(--text); padding:12px; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
-input[type="text"]:hover,select:hover,textarea:hover { border-color:#ffffff24; }
+:focus-visible { outline:2px solid var(--anel-cor); outline-offset:3px; }
+a { color:var(--accent-hi); }
+input[type="text"],select,textarea { width:100%; border:1px solid rgb(var(--tinta) / 7.1%); border-radius:var(--r-md); background:var(--bg-0); color:var(--text); padding:12px; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+input[type="text"]:hover,select:hover,textarea:hover { border-color:rgb(var(--tinta) / 14.1%); }
 /* O campo acende inteiro no foco, como na página da conta: um anel roxo em volta, e não um
    contorno solto três pixels para fora. */
 input[type="text"]:focus-visible,select:focus-visible,textarea:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
-input::placeholder,textarea::placeholder { color:#89899f; }
+input::placeholder,textarea::placeholder { color:var(--faint); }
 .hidden,[hidden] { display:none!important; }
-.eyebrow { display:block; color:#b1a8ee; font-size:10px; font-weight:750; letter-spacing:.13em; }
+.eyebrow { display:block; color:var(--accent-hi); font-size:10px; font-weight:750; letter-spacing:.13em; }
 .app { display:grid; width:100%; height:100vh; height:100dvh; grid-template-columns:224px minmax(0,1fr) 292px; grid-template-rows:64px minmax(0,1fr) var(--barra); grid-template-areas:"sidebar topo chat" "sidebar palco chat" "sidebar barra chat"; }
 .app.sem-chat { grid-template-columns:224px minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; }
 .app.sem-chat .chat { display:none; }
-.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:column; background:#1b1c27; border-right:1px solid var(--line); position:relative; }
+.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:column; background:var(--bg-1); border-right:1px solid var(--line); position:relative; }
 .workspace-name { height:64px; flex:none; padding:0 20px; display:flex; align-items:center; gap:9px; border-bottom:1px solid var(--line); }
 .workspace-name strong { font-size:17px; letter-spacing:.08em; }
-.workspace-name strong span { color:#6a667f; font-weight:400; margin-left:5px; }
-.workspace-name>span { color:#89899f; font-size:11px; }
+.workspace-name strong span { color:var(--apagado); font-weight:400; margin-left:5px; }
+.workspace-name>span { color:var(--faint); font-size:11px; }
 .sidebar-content { padding:20px 12px; overflow-y:auto; flex:1; }
 /* Um cartão só, no lugar dos três blocos que antes diziam a mesma coisa (frase de efeito,
    botão de convite solto e um "monte seu squad" no rodapé). O gradiente continua; o que
    mudou é que agora ele conta o estado real da sessão. */
-.space-cover { position:relative; overflow:hidden; border:1px solid #aaa0fb18; background:linear-gradient(120deg,#3a324e,#28273f); padding:14px 13px; border-radius:11px; margin:0 2px 22px; }
-.space-cover .eyebrow { position:relative; z-index:1; font-size:var(--fs-rotulo); letter-spacing:.1em; color:#c3b8df; }
+.space-cover { position:relative; overflow:hidden; border:1px solid color-mix(in srgb, var(--accent-hi) 9.4%, transparent); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 16%, var(--bg-cartao)),color-mix(in srgb, var(--accent) 10%, var(--bg-cartao))); padding:14px 13px; border-radius:11px; margin:0 2px 22px; }
+.space-cover .eyebrow { position:relative; z-index:1; font-size:var(--fs-rotulo); letter-spacing:.1em; color:var(--text-2); }
 .space-cover strong { display:block; position:relative; font-size:15px; line-height:1.3; margin-top:6px; z-index:1; letter-spacing:-.03em; }
-.space-cover small { display:block; position:relative; z-index:1; margin-top:3px; font-size:10px; color:#b6acd4; }
-.cover-invite { position:relative; z-index:1; width:100%; min-height:var(--ctl-p); margin-top:12px; padding:0 8px; font-size:var(--fs-sm); background:#ffffff12; color:#e5deff; }
-.cover-invite:hover:not(:disabled) { background:#ffffff1f; }
+.space-cover small { display:block; position:relative; z-index:1; margin-top:3px; font-size:10px; color:var(--text-3); }
+.cover-invite { position:relative; z-index:1; width:100%; min-height:var(--ctl-p); margin-top:12px; padding:0 8px; font-size:var(--fs-sm); background:rgb(var(--tinta) / 7.1%); color:var(--accent-texto); }
+.cover-invite:hover:not(:disabled) { background:rgb(var(--tinta) / 12.2%); }
 .cover-invite span { margin-right:4px; }
-.cover-orbit { position:absolute; right:-8px; bottom:-27px; font-size:113px; color:#afa1f528; line-height:1; transform:rotate(-15deg); }
-.section-caption { display:flex; justify-content:space-between; color:#8e8da5; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; padding:0 9px; margin-bottom:10px; }
-.channel { display:flex; width:100%; gap:10px; padding:9px 10px; align-items:center; background:transparent; color:#a5a4b9; text-align:left; font-size:12px; margin-bottom:3px; border-radius:var(--r-sm); }
-.channel:hover:not(:disabled) { background:#ffffff0a; color:var(--text-2); }
-.channel:active:not(:disabled) { transform:none; background:#ffffff10; }
+.cover-orbit { position:absolute; right:-8px; bottom:-27px; font-size:113px; color:color-mix(in srgb, var(--accent-hi) 15.7%, transparent); line-height:1; transform:rotate(-15deg); }
+.section-caption { display:flex; justify-content:space-between; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; padding:0 9px; margin-bottom:10px; }
+.channel { display:flex; width:100%; gap:10px; padding:9px 10px; align-items:center; background:transparent; color:var(--muted); text-align:left; font-size:12px; margin-bottom:3px; border-radius:var(--r-sm); }
+.channel:hover:not(:disabled) { background:rgb(var(--tinta) / 3.9%); color:var(--text-2); }
+.channel:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 6.3%); }
 .channel.active { background:var(--accent-suave); color:var(--accent-texto); }
 .channel>span:nth-child(2) { min-width:0; flex:1; }
 .channel strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
 /* O nome da faixa que esta tocando entra aqui, e ele pode ter setenta caracteres: sem o
    corte, o canal de musica cresce para tres linhas e empurra a lista de gente para baixo. */
-.channel small { display:block; color:#9390ac; font-size:var(--fs-meta); margin-top:2px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.channel small { display:block; color:var(--faint); font-size:var(--fs-meta); margin-top:2px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .channel-symbol { flex:none; font-size:20px; font-weight:400; width:24px; }
-.channel-count { font-size:10px; padding:1px 5px; background:#a599ff20; border-radius:4px; }
+.channel-count { font-size:10px; padding:1px 5px; background:color-mix(in srgb, var(--accent-hi) 12.5%, transparent); border-radius:4px; }
 .member-caption { margin-top:26px; }
 .member-list { display:flex; flex-direction:column; gap:4px; }
 .member { display:flex; align-items:center; gap:9px; padding:7px 9px; min-width:0; border-radius:var(--r-sm); transition:background-color var(--dur) var(--curva); }
-.member:hover { background:#ffffff08; }
+.member:hover { background:rgb(var(--tinta) / 3.1%); }
 .member-avatar,.self-avatar { display:grid; place-items:center; flex:none; position:relative; width:30px; height:30px; border-radius:11px; color:#171823; font-size:11px; font-weight:800; }
-.member-avatar::after,.self-avatar::after { content:''; position:absolute; width:8px; height:8px; background:var(--online); border:2px solid #1b1c27; border-radius:50%; right:-2px; bottom:-2px; }
-.member-name { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; color:#cac8da; }
-.member-state { color:#90899f; font-size:var(--fs-meta); }
+.member-avatar::after,.self-avatar::after { content:''; position:absolute; width:8px; height:8px; background:var(--online); border:2px solid var(--bg-1); border-radius:50%; right:-2px; bottom:-2px; }
+.member-name { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; color:var(--text-2); }
+.member-state { color:var(--faint); font-size:var(--fs-meta); }
 .member.falando .member-avatar { box-shadow:0 0 0 2px var(--online); }
-.member-live { font-size:var(--fs-rotulo); font-weight:800; color:#ffa6bd; background:#f16f9820; padding:2px 4px; border-radius:4px; }
+.member-live { font-size:var(--fs-rotulo); font-weight:800; color:var(--rosa-texto); background:color-mix(in srgb, var(--rosa) 12.5%, transparent); padding:2px 4px; border-radius:4px; }
 /* Selo próprio, ao lado do LIVE: os dois estados são independentes e cabem juntos. */
-.member-mudo { flex:none; position:relative; width:13px; height:13px; color:#ec949f; }
+.member-mudo { flex:none; position:relative; width:13px; height:13px; color:var(--danger-texto); }
 .member-mudo::before { content:''; position:absolute; inset:0; background:currentColor; mask:var(--mic-off) center/contain no-repeat; -webkit-mask:var(--mic-off) center/contain no-repeat; --mic-off:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18'/%3E%3C/svg%3E"); }
 .member-state:empty { display:none; }
-.connection-box { display:flex; flex:none; align-items:center; gap:8px; padding:12px 15px; border-top:1px solid var(--line); background:#171820; }
-.connection-dot { height:7px; width:7px; background:#9189a5; border-radius:50%; }
-.connection-box.connected .connection-dot { background:var(--online); box-shadow:0 0 10px #90dfb340; }
+.connection-box { display:flex; flex:none; align-items:center; gap:8px; padding:12px 15px; border-top:1px solid var(--line); background:var(--bg-0); }
+.connection-dot { height:7px; width:7px; background:var(--faint); border-radius:50%; }
+.connection-box.connected .connection-dot { background:var(--online); box-shadow:0 0 10px color-mix(in srgb, var(--online) 25.1%, transparent); }
 .connection-box>div { min-width:0; flex:1; }
 .connection-box strong { font-size:var(--fs-meta); font-weight:600; color:var(--muted); }
 .connection-box.connected strong { color:var(--online); }
-.connection-box small,.self-profile small { display:block; font-size:var(--fs-meta); color:#9290a6; margin-top:2px; }
+.connection-box small,.self-profile small { display:block; font-size:var(--fs-meta); color:var(--faint); margin-top:2px; }
 .connection-box button,.self-profile>button.ghost { flex:none; display:inline-grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:var(--r-sm); font-size:17px; }
-.self-profile { display:flex; gap:4px; align-items:center; padding:12px 10px; background:#14151e; min-height:70px; }
+.self-profile { display:flex; gap:4px; align-items:center; padding:12px 10px; background:var(--bg-0); min-height:70px; }
 /* Avatar e nome são o botão do perfil, como o painel de usuário do Discord: é onde a mão vai
    quando se quer mudar como aparece. */
 .self-perfil-btn { flex:1; min-width:0; display:flex; align-items:center; gap:9px; padding:6px 7px; background:transparent; color:var(--text); text-align:left; border-radius:var(--r-md); }
-.self-perfil-btn:hover:not(:disabled) { background:#ffffff0d; }
-.self-perfil-btn:active:not(:disabled) { transform:none; background:#ffffff14; }
+.self-perfil-btn:hover:not(:disabled) { background:rgb(var(--tinta) / 5.1%); }
+.self-perfil-btn:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 7.8%); }
 .self-textos { min-width:0; flex:1; }
 .self-profile strong { font-size:12px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.self-avatar { background:#afa2f5; width:32px; height:32px; }
-.topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 24px; border-bottom:1px solid var(--line); background:#1d1e29; min-width:0; }
+.self-avatar { background:var(--accent-hi); width:32px; height:32px; }
+.topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 24px; border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
 .room-id { display:flex; align-items:center; gap:12px; min-width:0; }
-.topbar-symbol { color:#aba1d4; font-size:22px; }
+.topbar-symbol { color:var(--text-3); font-size:22px; }
 /* O nome da sala é o último a ceder espaço na barra de cima. Sem o mínimo garantido, ele e o
    contador encolhiam juntos e o título chegava a ZERO enquanto "Só você na sala" continuava
    inteiro ao lado -- a sala perdia o nome para não perder um número que a barra lateral e a
    plateia já mostram. Agora a pressão vai toda para o contador, que some se precisar. */
 h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; min-width:7ch; }
-#participantCount { font-size:10px; color:#8e8da3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; border-left:1px solid #ffffff14; padding-left:12px; }
+#participantCount { font-size:10px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; border-left:1px solid rgb(var(--tinta) / 7.8%); padding-left:12px; }
 .topbar-actions { display:flex; flex:none; align-items:center; gap:6px; }
 /* A atualização do aplicativo: verde, pequena, e só existe quando há o que atualizar. */
 .topbar-actions .atualizar-app { color:var(--online); background:var(--online-suave); }
-.topbar-actions .atualizar-app:hover:not(:disabled) { background:#90dfb333; color:#c3f2d6; }
+.topbar-actions .atualizar-app:hover:not(:disabled) { background:color-mix(in srgb, var(--online) 20%, transparent); color:var(--online-texto); }
 .atualizar-menu { flex-direction:column; gap:0; width:min(300px,calc(100vw - 24px)); padding:14px; }
 .atualizar-menu strong { font-size:var(--fs-md); }
 .atualizar-menu p { margin:6px 0 12px; color:var(--muted); font-size:var(--fs-sm); line-height:1.55; }
@@ -113,52 +113,52 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .msg-menu .atualizar-acoes button { justify-content:center; background:var(--bg-3); color:var(--text); font-weight:600; }
 .msg-menu .atualizar-acoes button:hover:not(:disabled) { background:var(--bg-4); }
 .topbar-actions button { display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-m); font-size:var(--fs-sm); padding:0 12px; }
-#copyLinkBtn { color:#d9d1ff; background:#8272df20; }
+#copyLinkBtn { color:var(--accent-texto); background:color-mix(in srgb, var(--accent) 12.5%, transparent); }
 #copyLinkBtn::before { content:'＋'; margin-right:6px; }
 /* Com "Link copiado!" o "＋" viraria uma cruz no meio da confirmação. */
-#copyLinkBtn.copiado { color:#a9e4c2; background:#6fca9a1f; }
+#copyLinkBtn.copiado { color:var(--online-texto); background:color-mix(in srgb, var(--online) 12.2%, transparent); }
 #copyLinkBtn.copiado::before { content:'✓'; }
 #sidebarToggle { display:none; }
 /* O cabeçalho que ficava aqui ("O melhor é estar junto") custava ~75px de altura do palco
    em toda sessão para repetir uma frase que ninguém lê duas vezes. O único dado dele, o
    selo de telas ao vivo, subiu para a barra do topo, ao lado do nome da sala. */
 .palco-area { grid-area:palco; min-height:0; min-width:0; display:grid; grid-template-rows:minmax(100px,1fr) auto auto auto; gap:14px; padding:20px 24px 0; }
-.session-badge { flex:none; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.09em; background:#9f96be0d; border:1px solid #a59bbe18; border-radius:6px; padding:5px 7px; color:#b0a8c4; white-space:nowrap; }
-.session-badge.live { color:#f8a2bd; background:#dc759015; border-color:#dc759025; }
-.stage { grid-row:1; position:relative; min-height:0; border-radius:var(--raio); overflow:hidden; background:#12131c; border:1px solid #ffffff0e; container-type:size; }
+.session-badge { flex:none; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.09em; background:rgb(var(--tinta) / 5.1%); border:1px solid rgb(var(--tinta) / 9.4%); border-radius:6px; padding:5px 7px; color:var(--muted); white-space:nowrap; }
+.session-badge.live { color:var(--rosa-texto); background:color-mix(in srgb, var(--rosa) 8.2%, transparent); border-color:color-mix(in srgb, var(--rosa) 14.5%, transparent); }
+.stage { grid-row:1; position:relative; min-height:0; border-radius:var(--raio); overflow:hidden; background:var(--bg-fundo); border:1px solid rgb(var(--tinta) / 5.5%); container-type:size; }
 .stage:fullscreen { border:0; border-radius:0; background:#050507; }
 #stageVideo { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; transform-origin:center; }
-.stage-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; gap:0; background:radial-gradient(ellipse at 50% 32%,#8870db0a,transparent 70%); color:var(--muted); font-size:13px; }
-.stage-empty h3 { color:#e4e0f2; font-size:clamp(19px,1.9vw,26px); line-height:1.2; letter-spacing:-.04em; font-weight:650; margin:4px 0 8px; max-width:26ch; }
-.stage-empty p { font-size:11px; line-height:1.7; margin:0 0 18px; color:#9490ab; max-width:40ch; }
+.stage-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; gap:0; background:radial-gradient(ellipse at 50% 32%,color-mix(in srgb, var(--accent) 3.9%, transparent),transparent 70%); color:var(--muted); font-size:13px; }
+.stage-empty h3 { color:var(--text); font-size:clamp(19px,1.9vw,26px); line-height:1.2; letter-spacing:-.04em; font-weight:650; margin:4px 0 8px; max-width:26ch; }
+.stage-empty p { font-size:11px; line-height:1.7; margin:0 0 18px; color:var(--faint); max-width:40ch; }
 .stage-empty-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 .stage-empty-actions button { min-height:var(--ctl-m); font-size:var(--fs-md); padding:0 18px; }
 .stage-empty-actions button:not(.secondary) { background:var(--accent-forte); color:#fff; }
 .stage-empty-actions button:not(.secondary):hover:not(:disabled) { background:var(--accent-forte-hi); }
-.stage-empty-actions button.secondary { background:#ffffff10; color:#ded7f5; }
-.stage-empty-actions button.secondary:hover { background:#ffffff1c; }
+.stage-empty-actions button.secondary { background:rgb(var(--tinta) / 6.3%); color:var(--text); }
+.stage-empty-actions button.secondary:hover { background:rgb(var(--tinta) / 11%); }
 /* Recado de passagem ("conectando…", "recebendo vídeo…"): sem ilustração e sem botão, para
    não parecer que a transmissão terminou quando ela só está chegando. */
 .stage.so-mensagem .stage-art { display:none; }
-.stage.so-mensagem .stage-empty h3 { font-size:15px; font-weight:600; color:#b6b0ca; letter-spacing:0; }
+.stage.so-mensagem .stage-empty h3 { font-size:15px; font-weight:600; color:var(--text-3); letter-spacing:0; }
 .stage-art { position:relative; width:216px; height:149px; margin-bottom:14px; flex:none; }
-.orbit { position:absolute; border:1px solid #a999db15; border-radius:50%; width:185px; height:110px; left:15px; top:14px; transform:rotate(-25deg); }
+.orbit { position:absolute; border:1px solid color-mix(in srgb, var(--accent) 8.2%, transparent); border-radius:50%; width:185px; height:110px; left:15px; top:14px; transform:rotate(-25deg); }
 .orbit-two { width:225px; height:130px; left:-4px; top:4px; transform:rotate(25deg); border-style:dashed; }
-.orbit-spark { position:absolute; color:#b4a4fa; }
+.orbit-spark { position:absolute; color:var(--accent-hi); }
 .spark-one { left:17px; top:10px; font-size:22px; }
 .spark-two { right:5px; bottom:18px; color:#c9c195; font-size:23px; }
-.screen-illustration { position:absolute; width:124px; height:86px; left:44px; top:25px; border:1px solid #a69aca65; border-radius:12px; transform:rotate(-7deg); background:linear-gradient(145deg,#4d415f,#2b2947); box-shadow:10px 12px 0 #6f62a315,0 0 35px #a28beb0c; }
-.screen-illustration>span { display:block; border-bottom:1px solid #b3a1e230; height:18px; }
-.screen-illustration>span::before { content:'•••'; color:#d0b4ec; font-size:11px; position:absolute; left:8px; top:-1px; letter-spacing:2px; }
-.screen-illustration>b { position:absolute; font-size:40px; color:#c9bbf6; right:24px; top:17px; font-weight:400; }
+.screen-illustration { position:absolute; width:124px; height:86px; left:44px; top:25px; border:1px solid rgb(var(--tinta) / 39.6%); border-radius:12px; transform:rotate(-7deg); background:linear-gradient(145deg,color-mix(in srgb, var(--accent) 18%, var(--bg-cartao)),color-mix(in srgb, var(--accent) 10%, var(--bg-cartao))); box-shadow:10px 12px 0 rgb(var(--tinta) / 8.2%),0 0 35px color-mix(in srgb, var(--accent) 4.7%, transparent); }
+.screen-illustration>span { display:block; border-bottom:1px solid color-mix(in srgb, var(--accent) 18.8%, transparent); height:18px; }
+.screen-illustration>span::before { content:'•••'; color:var(--accent-hi); font-size:11px; position:absolute; left:8px; top:-1px; letter-spacing:2px; }
+.screen-illustration>b { position:absolute; font-size:40px; color:var(--accent-texto); right:24px; top:17px; font-weight:400; }
 .screen-illustration>i { position:absolute; width:35px; height:5px; left:-13px; bottom:-11px; transform:rotate(16deg); border-radius:5px; background:#d8d0ae; }
 .art-badge { position:absolute; bottom:18px; right:20px; color:#c2e6be; font-size:7px; font-weight:750; letter-spacing:.09em; background:#2f443d; border:1px solid #a3cfae30; border-radius:6px; padding:6px 8px; transform:rotate(6deg); }
 .stage.is-waiting .stage-empty { background:#15141ede; gap:18px; }
-.stage.is-waiting .stage-empty::before { content:''; width:26px; height:26px; border-radius:50%; border:2px solid #a697eb30; border-top-color:var(--accent); animation:spin 1.1s linear infinite; }
+.stage.is-waiting .stage-empty::before { content:''; width:26px; height:26px; border-radius:50%; border:2px solid color-mix(in srgb, var(--accent) 18.8%, transparent); border-top-color:var(--accent); animation:spin 1.1s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 .playback-recovery { position:absolute; top:14px; left:50%; max-width:calc(100% - 28px); transform:translateX(-50%); display:flex; justify-content:center; gap:8px; z-index:3; pointer-events:none; }
 .playback-recovery button { flex:none; pointer-events:auto; box-shadow:0 8px 25px #0008; }
-.stage-label,.stage-controls { position:absolute; bottom:13px; z-index:2; background:#16151edb; border:1px solid #ffffff12; border-radius:9px; transition:opacity .2s,transform .2s; }
+.stage-label,.stage-controls { position:absolute; bottom:13px; z-index:2; background:#16151edb; border:1px solid rgb(var(--tinta) / 7.1%); border-radius:9px; transition:opacity .2s,transform .2s; }
 .stage-label { left:13px; padding:7px 11px; font-size:11px; }
 .stage-controls { right:13px; display:flex; align-items:center; gap:1px; padding:3px; }
 .stage-controls button { color:var(--text); background:transparent; padding:5px 9px; }
@@ -172,8 +172,8 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    existe: [hidden] some da tela, mas continua casando o seletor irmão. */
 .stage-volume { width:146px; margin:0 3px 0 1px; gap:2px; }
 .stage-volume .volume-slider { height:4px; }
-.stage-controls .mute-peer-btn { padding:5px 7px; color:#cdc6e2; }
-.stage-volume:not([hidden]) + button { margin-left:3px; padding-left:11px; border-left:1px solid #ffffff14; border-radius:0; }
+.stage-controls .mute-peer-btn { padding:5px 7px; color:var(--text-2); }
+.stage-volume:not([hidden]) + button { margin-left:3px; padding-left:11px; border-left:1px solid rgb(var(--tinta) / 7.8%); border-radius:0; }
 /* Palco estreito (grade em duas colunas, celular deitado): fica o mudo, que é o controle
    que resolve rápido; o nível continua no quadradinho. */
 @container (max-width:560px) { .stage-volume { width:auto; } .stage-volume .volume-slider,.stage-volume .volume-valor:not(.alterado) { display:none; } }
@@ -184,23 +184,23 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .participants-section { grid-row:3; min-width:0; }
 .participants-heading { display:flex; align-items:center; justify-content:space-between; margin:0 0 10px; gap:8px; }
 .participants-heading strong { font-size:11px; font-weight:600; }
-.participants-heading strong span { margin-left:5px; color:#a899de; font-size:10px; }
-.participants-heading>span { font-size:var(--fs-meta); color:#9690a4; }
+.participants-heading strong span { margin-left:5px; color:var(--accent-hi); font-size:10px; }
+.participants-heading>span { font-size:var(--fs-meta); color:var(--faint); }
 .participants { display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:2px 1px 5px; }
-.participant { position:relative; flex:none; width:148px; border:1px solid #ffffff0c; border-radius:11px; background:#252532; padding:6px; transition:border .16s; }
-.participant:hover { border-color:#b3a1f445; }
-.participant.pinned { border-color:#a191e8; background:#2d293f; }
+.participant { position:relative; flex:none; width:148px; border:1px solid rgb(var(--tinta) / 4.7%); border-radius:11px; background:var(--bg-cartao); padding:6px; transition:border .16s; }
+.participant:hover { border-color:color-mix(in srgb, var(--accent-hi) 27.1%, transparent); }
+.participant.pinned { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)); }
 /* Conexao perdida: a pessoa ainda esta na sala, esperando voltar -- ela so sai da lista se
    nao voltar. Apagar o quadradinho diz isso sem gastar espaco, e e o unico lugar onde o
    aviso aparece no modo teatro, onde a lista lateral nao existe. */
-.participant.sem-conexao { opacity:.45; border-color:#ffffff10; }
+.participant.sem-conexao { opacity:.45; border-color:rgb(var(--tinta) / 6.3%); }
 .participant.sem-conexao::after { content:'sem conexão'; position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); font-size:var(--fs-rotulo); letter-spacing:.03em; white-space:nowrap; color:#e8e4f5; background:#161620d9; padding:3px 7px; border-radius:6px; pointer-events:none; }
-.avatar-wrap { position:relative; aspect-ratio:16 / 9; border-radius:7px; overflow:hidden; display:grid; place-items:center; background:radial-gradient(ellipse at 30% 30%,#4b426039,transparent),#1d1d29; cursor:pointer; }
+.avatar-wrap { position:relative; aspect-ratio:16 / 9; border-radius:7px; overflow:hidden; display:grid; place-items:center; background:radial-gradient(ellipse at 30% 30%,#4b426039,transparent),var(--bg-1); cursor:pointer; }
 .avatar-wrap::after { content:''; position:absolute; inset:0; border-radius:7px; box-shadow:inset 0 0 0 2px transparent; pointer-events:none; z-index:2; transition:box-shadow .12s; }
 .participant.falando .avatar-wrap::after { box-shadow:inset 0 0 0 2px var(--online); }
 .cam-video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:none; }
 .cam-video.active { display:block; }
-.avatar-fallback { position:absolute; width:36px; height:36px; border-radius:13px; display:grid; place-items:center; color:#22202e; font-size:12px; font-weight:750; box-shadow:0 0 0 5px #ffffff05; }
+.avatar-fallback { position:absolute; width:36px; height:36px; border-radius:13px; display:grid; place-items:center; color:#22202e; font-size:12px; font-weight:750; box-shadow:0 0 0 5px rgb(var(--tinta) / 2%); }
 .mic-icon { position:absolute; left:5px; bottom:3px; font-size:10px; }
 .screen-badge { position:absolute; right:5px; top:5px; font-size:var(--fs-rotulo); font-weight:800; background:#dd7899; color:#1b1620; padding:2px 5px; border-radius:4px; }
 /* So esconde a PREVIA local: a faixa continua saindo normal para os outros participantes.
@@ -209,7 +209,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    cima — quem nunca esbarrasse nele jamais saberia que ele existe, e no toque não havia
    "passar por cima" nenhum. Agora ele é uma pílula legível, com o verbo escrito, e só
    aparece quando há imagem por baixo para ocultar (quem decide isso é o pintarBotaoDeOcultar). */
-.hide-self-btn { position:absolute; right:5px; bottom:4px; z-index:3; display:inline-flex; align-items:center; gap:4px; padding:3px 7px 3px 5px; border-radius:7px; background:#0b0a11c4; box-shadow:inset 0 0 0 1px #ffffff1f; color:#ddd7ef; font-size:var(--fs-rotulo); font-weight:700; line-height:1; cursor:pointer; opacity:.82; transition:opacity .12s,background .12s; }
+.hide-self-btn { position:absolute; right:5px; bottom:4px; z-index:3; display:inline-flex; align-items:center; gap:4px; padding:3px 7px 3px 5px; border-radius:7px; background:#0b0a11c4; box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 12.2%); color:var(--text); font-size:var(--fs-rotulo); font-weight:700; line-height:1; cursor:pointer; opacity:.82; transition:opacity .12s,background .12s; }
 .participant:hover .hide-self-btn, .hide-self-btn:focus-visible { opacity:1; background:#151321e8; }
 .hide-self-btn::before { content:''; flex:none; display:block; width:12px; height:12px; background:currentColor; mask:var(--eye-icon) center/contain no-repeat; -webkit-mask:var(--eye-icon) center/contain no-repeat; --eye-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
 .hide-self-btn[aria-pressed="true"] { opacity:1; background:#dd7899; box-shadow:none; color:#1b1620; }
@@ -217,33 +217,33 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 /* Um aviso de duas linhas dentro de um quadradinho de 148px virava um bloco de texto sem
    folga nenhuma. O essencial fica visível; o resto vive no título do botão ao lado. */
 .oculto-overlay { position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:3px; padding:10px; background:#14131cf2; }
-.oculto-overlay strong { font-size:10px; font-weight:700; color:#c3bcda; }
-.oculto-overlay small { font-size:var(--fs-meta); line-height:1.4; color:#8d87a4; }
+.oculto-overlay strong { font-size:10px; font-weight:700; color:var(--text-2); }
+.oculto-overlay small { font-size:var(--fs-meta); line-height:1.4; color:var(--faint); }
 /* Num quadradinho de 134×75 a segunda linha só brigaria por espaço com o botão que desfaz
    a ação. Ela continua no palco, onde há folga, e no título do próprio botão. */
 .participant .oculto-overlay { padding-bottom:26px; }
 .participant .oculto-overlay small { display:none; }
 #stageOcultoOverlay { gap:7px; background:#12111af2; }
-#stageOcultoOverlay strong { font-size:17px; letter-spacing:-.02em; color:#ddd6ef; }
-#stageOcultoOverlay small { font-size:11px; color:#9a94b0; }
-#stageMostrarBtn { margin-top:6px; font-size:11px; padding:9px 16px; background:#ffffff12; color:#ded7f5; }
-#stageMostrarBtn:hover { background:#ffffff1f; }
+#stageOcultoOverlay strong { font-size:17px; letter-spacing:-.02em; color:var(--text); }
+#stageOcultoOverlay small { font-size:11px; color:var(--muted); }
+#stageMostrarBtn { margin-top:6px; font-size:11px; padding:9px 16px; background:rgb(var(--tinta) / 7.1%); color:var(--text); }
+#stageMostrarBtn:hover { background:rgb(var(--tinta) / 12.2%); }
 /* Tela anunciada mas nao pedida: nada esta descendo do servidor de midia. O convite ocupa
    o lugar da imagem em vez de cobri-la -- nao ha imagem por baixo. */
 /* O padding de cima reserva a faixa do selo "Tela": sem ele o rótulo centralizado passava
    por baixo dele e terminava cortado. */
 .convite-de-tela { position:absolute; inset:0; z-index:1; display:grid; place-content:center; justify-items:center; gap:7px; text-align:center; padding:22px 6px 6px; }
-.convite-texto { font-size:var(--fs-rotulo); font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:#8e88a3; }
-.assistir-btn { font-size:10px; font-weight:700; padding:5px 12px; border-radius:7px; background:#5d51b8; color:#f1eefc; }
-.assistir-btn:hover { background:#6d60cf; }
-.participant.nao-assistida .avatar-wrap { background:repeating-linear-gradient(135deg,#20202c,#20202c 7px,#242433 7px,#242433 14px); }
-.parar-de-assistir { position:absolute; right:5px; bottom:5px; z-index:3; font-size:var(--fs-rotulo); font-weight:700; padding:3px 8px; border-radius:6px; background:#00000094; color:#e6e2f3; opacity:0; transition:opacity .12s; }
+.convite-texto { font-size:var(--fs-rotulo); font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--faint); }
+.assistir-btn { font-size:10px; font-weight:700; padding:5px 12px; border-radius:7px; background:var(--accent-forte); color:#f1eefc; }
+.assistir-btn:hover { background:var(--accent-forte-hi); }
+.participant.nao-assistida .avatar-wrap { background:repeating-linear-gradient(135deg,var(--bg-2),var(--bg-2) 7px,var(--bg-cartao) 7px,var(--bg-cartao) 14px); }
+.parar-de-assistir { position:absolute; right:5px; bottom:5px; z-index:3; font-size:var(--fs-rotulo); font-weight:700; padding:3px 8px; border-radius:6px; background:#00000094; color:var(--text); opacity:0; transition:opacity .12s; }
 .participant:hover .parar-de-assistir, .parar-de-assistir:focus-visible { opacity:1; }
 @media(max-width:760px) { .parar-de-assistir { opacity:1; } }
 .participant-name { font-size:10px; font-weight:600; margin:6px 2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .volume-row { display:flex; align-items:center; gap:4px; min-height:20px; margin-top:2px; }
-.volume-slider { flex:1; min-width:0; height:3px; accent-color:#b0a0ed; cursor:pointer; }
-.volume-slider:disabled { cursor:not-allowed; accent-color:#55536a; }
+.volume-slider { flex:1; min-width:0; height:3px; accent-color:var(--accent-hi); cursor:pointer; }
+.volume-slider:disabled { cursor:not-allowed; accent-color:var(--apagado); }
 .mute-peer-btn { background:transparent; padding:2px 4px; font-size:11px; }
 /* Sem áudio nenhum para ajustar, a linha inteira se apaga junta — antes só os controles
    ficavam cinzas e o trilho continuava aceso, como se ainda houvesse o que arrastar. */
@@ -254,18 +254,18 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .volume-valor { flex:none; min-width:38px; padding:2px 4px; border-radius:var(--r-xs); background:transparent; color:var(--faint); font-size:var(--fs-meta); font-weight:600; font-variant-numeric:tabular-nums; text-align:center; line-height:1.3; }
 .volume-valor:disabled { opacity:.8; cursor:default; }
 .volume-valor.alterado { color:var(--accent-texto); background:var(--accent-suave); }
-.volume-valor.alterado:hover:not(:disabled) { background:var(--accent-suave-hi); color:#fff; }
+.volume-valor.alterado:hover:not(:disabled) { background:var(--accent-suave-hi); color:var(--text); }
 .volume-valor.reforcado { color:var(--aviso); background:var(--aviso-suave); }
-.volume-valor.reforcado:hover:not(:disabled) { background:#e8c07a33; color:#ffe2ad; }
+.volume-valor.reforcado:hover:not(:disabled) { background:color-mix(in srgb, var(--aviso) 20%, transparent); color:var(--aviso-texto); }
 .volume-row:has(.volume-valor.reforcado) .volume-slider { accent-color:var(--aviso); }
 .peer-audio,.screen-audio { display:none; }
-.status-line { grid-row:4; color:#9b95ac; font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
-.control-bar { grid-area:barra; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--line); background:#191923; padding:12px 16px; }
+.status-line { grid-row:4; color:var(--faint); font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
+.control-bar { grid-area:barra; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--line); background:var(--bg-0); padding:12px 16px; }
 .control-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:5px; font-size:var(--fs-rotulo); min-width:67px; height:55px; border-radius:10px; padding:8px 11px; white-space:nowrap; }
 .control-btn::before { content:''; display:block; width:19px; height:19px; background:currentColor; mask:var(--control-icon) center/contain no-repeat; -webkit-mask:var(--control-icon) center/contain no-repeat; }
 #micBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='2' width='6' height='12' rx='3'/%3E%3Cpath d='M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8'/%3E%3C/svg%3E"); }
 #deafenBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 14v-3a8 8 0 0 1 16 0v3'/%3E%3Cpath d='M4 14H2v6h4v-7H4m16 1h2v6h-4v-7h2'/%3E%3C/svg%3E"); }
-#deafenBtn[aria-pressed="true"] { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18'/%3E%3C/svg%3E"); color:#f19ba8; background:#ef7c8e16; }
+#deafenBtn[aria-pressed="true"] { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18'/%3E%3C/svg%3E"); color:var(--danger-texto); background:color-mix(in srgb, var(--danger) 8.6%, transparent); }
 #cameraBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='5' width='14' height='14' rx='3'/%3E%3Cpath d='m16 10 6-4v12l-6-4z'/%3E%3C/svg%3E"); }
 #screenBtn,#updateScreenBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cpath d='M8 21h8M12 17v4M12 13V7m-3 3 3-3 3 3'/%3E%3C/svg%3E"); }
 /* Câmera com o arco de girar: legível mesmo nos 19px da barra de controles. */
@@ -274,8 +274,8 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    do celular os dois ficavam idênticos. É o mesmo desenho do atalho de dispositivos no rodapé. */
 #devicesBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'/%3E%3C/svg%3E"); }
 #leaveBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M2 12q10-10 20 0v5h-5v-5a13 13 0 0 0-10 0v5H2z'/%3E%3C/svg%3E"); margin-left:10px; }
-#micBtn[aria-pressed="true"],#cameraBtn[aria-pressed="true"],#screenBtn[aria-pressed="true"] { color:#dbd4ff; background:#8170d840; }
-#micBtn[aria-pressed="false"] { background:#ef7c8e16; color:#f19ba8; }
+#micBtn[aria-pressed="true"],#cameraBtn[aria-pressed="true"],#screenBtn[aria-pressed="true"] { color:var(--accent-texto); background:color-mix(in srgb, var(--accent) 25.1%, transparent); }
+#micBtn[aria-pressed="false"] { background:color-mix(in srgb, var(--danger) 8.6%, transparent); color:var(--danger-texto); }
 /* O rótulo virou o nome fixo da coisa ("Microfone", "Câmera"), então quem conta o estado
    agora é o ícone: desligado, ele aparece cortado. */
 #micBtn.desligado { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18'/%3E%3C/svg%3E"); }
@@ -285,10 +285,10 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    trocava o rótulo por "Abrindo..." e a barra inteira pulava de largura. */
 #micBtn.ocupado::before { animation:pulsa 1s ease-in-out infinite; }
 @keyframes pulsa { 50% { opacity:.35; } }
-.call-indicator { display:none; align-items:center; gap:7px; color:#97a598; font-size:var(--fs-rotulo); letter-spacing:.08em; margin-right:auto; }
+.call-indicator { display:none; align-items:center; gap:7px; color:var(--faint); font-size:var(--fs-rotulo); letter-spacing:.08em; margin-right:auto; }
 .call-indicator i { width:5px; height:5px; background:var(--online); border-radius:50%; }
 #enableSoundBtn { position:fixed; left:50%; top:73px; transform:translateX(-50%); z-index:65; box-shadow:0 8px 35px #0008; white-space:nowrap; }
-.chat { grid-area:chat; min-height:0; min-width:0; display:grid; grid-template-rows:64px auto minmax(0,1fr) auto auto auto; background:#1c1d28; border-left:1px solid var(--line); }
+.chat { grid-area:chat; min-height:0; min-width:0; display:grid; grid-template-rows:64px auto minmax(0,1fr) auto auto auto; background:var(--bg-1); border-left:1px solid var(--line); }
 .chat.musica { grid-template-rows:64px minmax(0,1fr) auto auto; }
 .chat:not(.musica)>.chat-head { grid-row:1; }
 .chat:not(.musica)>.chat-pinned-bar { grid-row:2; }
@@ -302,35 +302,35 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .chat.musica>.chat-hint { grid-row:4; }
 .chat-head { display:flex; align-items:center; justify-content:space-between; padding:0 14px 0 19px; border-bottom:1px solid var(--line); font-size:12px; }
 .chat-head strong { font-weight:600; }
-.chat-head strong span { margin-right:7px; font-size:19px; color:#9487ab; font-weight:400; }
+.chat-head strong span { margin-right:7px; font-size:19px; color:var(--faint); font-weight:400; }
 .chat-head button { display:inline-grid; place-items:center; min-width:var(--ctl-p); height:var(--ctl-p); font-size:13px; padding:0; border-radius:var(--r-sm); }
 .chat-head-actions { display:flex; align-items:center; gap:2px; }
-.chat-head .chat-focus-btn { display:inline-flex; padding:0 9px; color:#aaa3b8; font-size:var(--fs-meta); }
-.chat-head .chat-focus-btn[aria-pressed="true"] { color:#d5ccff; background:#a092ff20; }
+.chat-head .chat-focus-btn { display:inline-flex; padding:0 9px; color:var(--muted); font-size:var(--fs-meta); }
+.chat-head .chat-focus-btn[aria-pressed="true"] { color:var(--accent-texto); background:color-mix(in srgb, var(--accent-hi) 12.5%, transparent); }
 .chat-msgs { overflow-y:auto; min-height:0; padding:18px 17px; display:flex; flex-direction:column; gap:20px; }
-.chat-vazio { text-align:left; margin:auto 0 12px; font-size:11px; color:#9690a8; line-height:1.8; }
-.chat-vazio::before { content:'#'; display:grid; place-items:center; width:47px; height:47px; border-radius:17px; background:#9383d418; color:#b1a4d7; font-size:29px; margin-bottom:16px; }
-.chat-vazio strong { color:#ded8eb; display:block; font-size:17px; margin-bottom:5px; letter-spacing:-.025em; }
+.chat-vazio { text-align:left; margin:auto 0 12px; font-size:11px; color:var(--faint); line-height:1.8; }
+.chat-vazio::before { content:'#'; display:grid; place-items:center; width:47px; height:47px; border-radius:17px; background:color-mix(in srgb, var(--accent) 9.4%, transparent); color:var(--text-3); font-size:29px; margin-bottom:16px; }
+.chat-vazio strong { color:var(--text); display:block; font-size:17px; margin-bottom:5px; letter-spacing:-.025em; }
 .msg { display:grid; grid-template-columns:28px minmax(0,1fr); column-gap:9px; row-gap:2px; }
 .msg-avatar { grid-row:1 / 3; display:grid; place-items:center; width:28px; height:28px; font-size:10px; border-radius:10px; color:#26202f; font-weight:750; }
 .msg-topo { grid-column:2; display:flex; align-items:baseline; gap:7px; min-width:0; }
 .msg-autor { font-size:11px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.msg-hora { font-size:var(--fs-meta); color:#9990a6; white-space:nowrap; }
-.msg-texto { grid-column:2; font-size:11px; line-height:1.7; overflow-wrap:anywhere; white-space:pre-wrap; color:#c6c0d2; }
-.msg-texto a { color:#bdadff; }
+.msg-hora { font-size:var(--fs-meta); color:var(--faint); white-space:nowrap; }
+.msg-texto { grid-column:2; font-size:11px; line-height:1.7; overflow-wrap:anywhere; white-space:pre-wrap; color:var(--text-3); }
+.msg-texto a { color:var(--accent-texto); }
 .msg-img { max-width:100%; max-height:260px; border-radius:8px; margin-top:5px; display:block; cursor:zoom-in; }
 .msg-sistema { font-size:var(--fs-meta); color:var(--muted); text-align:center; }
 /* A caixa inteira acende quando se escreve nela, e não um contorno no meio dela: o campo é
    a caixa, com o anexar e o enviar dentro. */
-.chat-compose { margin:8px 12px 0; border:1px solid #ffffff0a; background:#282835; border-radius:var(--r-lg); display:flex; align-items:flex-end; padding:4px; gap:2px; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
-.chat-compose:focus-within { border-color:#8879f666; box-shadow:0 0 0 3px var(--accent-suave); }
+.chat-compose { margin:8px 12px 0; border:1px solid rgb(var(--tinta) / 3.9%); background:var(--bg-cartao); border-radius:var(--r-lg); display:flex; align-items:flex-end; padding:4px; gap:2px; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.chat-compose:focus-within { border-color:color-mix(in srgb, var(--accent) 40%, transparent); box-shadow:0 0 0 3px var(--accent-suave); }
 #chatInput,#musicaInput { resize:none; max-height:120px; min-height:36px; background:transparent; border:none; font-size:var(--fs-md); padding:8px 4px; line-height:1.45; }
 #chatInput:focus-visible,#musicaInput:focus-visible { outline:none; box-shadow:none; }
 #chatSend,#musicaSend,#attachImageBtn,#musicaProxima { flex:none; width:var(--ctl-m); height:var(--ctl-m); }
 #chatSend,#musicaSend { background:transparent; color:var(--accent-texto); }
-#chatSend:hover:not(:disabled),#musicaSend:hover:not(:disabled) { background:var(--accent-suave-hi); color:#fff; }
-.chat-hint { display:block; padding:7px 19px 14px; font-size:var(--fs-meta); color:#9a8ca8; }
-.chat-hint code { background:#ffffff0f; border-radius:4px; padding:1px 4px; color:#b9aee0; }
+#chatSend:hover:not(:disabled),#musicaSend:hover:not(:disabled) { background:var(--accent-suave-hi); color:var(--text); }
+.chat-hint { display:block; padding:7px 19px 14px; font-size:var(--fs-meta); color:var(--faint); }
+.chat-hint code { background:rgb(var(--tinta) / 5.9%); border-radius:4px; padding:1px 4px; color:var(--accent-hi); }
 
 /* ---------- Canal de música ----------
    O painel de música é o MESMO objeto que o chat -- mesma classe, mesma coluna do grid,
@@ -343,32 +343,32 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    canal e outro. */
 #musicaMsgs .chat-vazio::before { content:'♪'; }
 .musica-corpo { display:grid; grid-template-rows:auto auto auto minmax(0,1fr); min-height:0; }
-.channel-live { flex:none; font-size:10px; color:#a6e7c4; animation:pulsa-nota 1.6s ease-in-out infinite; }
+.channel-live { flex:none; font-size:10px; color:var(--online-texto); animation:pulsa-nota 1.6s ease-in-out infinite; }
 @keyframes pulsa-nota { 0%,100% { opacity:.35; } 50% { opacity:1; } }
 
 /* O cartão do que está tocando. Fica preso no topo do canal: rolar as mensagens não pode
    esconder a única informação que a sala consulta o tempo todo. */
-.tocando { display:flex; gap:11px; align-items:center; padding:12px 12px 12px 13px; margin:12px 12px 0; border-radius:var(--r-lg); background:linear-gradient(120deg,#332e4d,#272638); border:1px solid #aaa0fb1a; }
-.tocando-capa { flex:none; display:grid; place-items:center; width:48px; height:48px; border-radius:var(--r-md); background:#4a4272 center/cover no-repeat; color:#cdc2ff; font-size:20px; box-shadow:0 6px 16px #0006; transition:opacity var(--dur) var(--curva); }
+.tocando { display:flex; gap:11px; align-items:center; padding:12px 12px 12px 13px; margin:12px 12px 0; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
+.tocando-capa { flex:none; display:grid; place-items:center; width:48px; height:48px; border-radius:var(--r-md); background:color-mix(in srgb, var(--accent) 30%, var(--bg-cartao)) center/cover no-repeat; color:var(--accent-texto); font-size:20px; box-shadow:0 6px 16px #0006; transition:opacity var(--dur) var(--curva); }
 .tocando-info { flex:1; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:8px; }
-.tocando-rotulo { grid-column:1 / 3; display:flex; align-items:center; gap:5px; min-width:0; white-space:nowrap; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; color:#a6e7c4; margin-bottom:2px; }
+.tocando-rotulo { grid-column:1 / 3; display:flex; align-items:center; gap:5px; min-width:0; white-space:nowrap; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; color:var(--online-texto); margin-bottom:2px; }
 .tocando-rotulo::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulsa-nota 1.6s ease-in-out infinite; }
 .tocando.pausado .tocando-rotulo { color:var(--aviso); }
 .tocando.pausado .tocando-rotulo::before { animation:none; }
 .tocando-info strong { grid-column:1 / 3; font-size:var(--fs-md); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.01em; }
-.tocando-info small { grid-column:1 / 3; font-size:var(--fs-meta); color:#b3a9cf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:7px; }
+.tocando-info small { grid-column:1 / 3; font-size:var(--fs-meta); color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:7px; }
 .tocando-info small:empty { display:none; }
-.tocando-barra { height:4px; border-radius:2px; background:#ffffff1c; overflow:hidden; align-self:center; }
+.tocando-barra { height:4px; border-radius:2px; background:rgb(var(--tinta) / 11%); overflow:hidden; align-self:center; }
 .tocando-barra i { display:block; height:100%; width:0; border-radius:2px; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .9s linear; }
-.tocando-tempo { font-size:var(--fs-meta); color:#a79ec2; font-variant-numeric:tabular-nums; }
+.tocando-tempo { font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
 .tocando-botoes { flex:none; display:flex; gap:2px; }
 .tocando-botoes button { color:var(--text-2); }
 .tocando.pausado .tocando-capa { opacity:.5; }
 .tocando.pausado .tocando-barra i { transition:none; }
 
 .musica-volume { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:10px 15px 0; }
-.musica-volume label { grid-column:1 / 3; font-size:var(--fs-meta); font-weight:600; color:#a79ec2; }
-.musica-volume span { font-size:var(--fs-meta); color:#a79ec2; font-variant-numeric:tabular-nums; }
+.musica-volume label { grid-column:1 / 3; font-size:var(--fs-meta); font-weight:600; color:var(--muted); }
+.musica-volume span { font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
 
 /* ---------- A fila ----------
    Antes: uma lista recolhida, texto de 9 px e um ✕ por linha -- e nenhum jeito de mudar a
@@ -377,7 +377,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .musica-fila { margin:12px 10px 0; min-width:0; }
 .fila-topo { display:flex; align-items:center; gap:2px; padding:0 2px; }
 .fila-recolher { display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-p); padding:0 6px; background:transparent; color:var(--text-2); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
-.fila-recolher:hover:not(:disabled) { background:#ffffff0a; color:var(--text); }
+.fila-recolher:hover:not(:disabled) { background:rgb(var(--tinta) / 3.9%); color:var(--text); }
 .fila-recolher:active:not(:disabled) { transform:none; }
 .fila-recolher svg { transition:transform var(--dur) var(--curva); }
 .fila-recolher[aria-expanded="false"] svg { transform:rotate(-90deg); }
@@ -386,54 +386,54 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .fila-topo .botao-icone { width:28px; height:28px; }
 .fila-lista { list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:1px; max-height:min(36vh,340px); overflow-y:auto; overscroll-behavior:contain; }
 .musica-fila.recolhida .fila-lista,.musica-fila.recolhida .fila-dica { display:none; }
-.fila-item { position:relative; display:grid; grid-template-columns:22px 18px 36px minmax(0,1fr); align-items:center; gap:7px; min-height:48px; padding:4px 4px 4px 0; border-radius:var(--r-md); background:#1f202b00; transition:background-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
-.fila-item:hover,.fila-item:focus-within,.fila-item.menu-aberto { background:#ffffff09; }
-.fila-alca { width:22px; height:34px; padding:0; display:grid; place-items:center; background:transparent; color:#6f6d86; cursor:grab; border-radius:var(--r-xs); touch-action:none; }
-.fila-alca:hover:not(:disabled),.fila-alca:focus-visible { color:var(--text); background:#ffffff0f; }
+.fila-item { position:relative; display:grid; grid-template-columns:22px 18px 36px minmax(0,1fr); align-items:center; gap:7px; min-height:48px; padding:4px 4px 4px 0; border-radius:var(--r-md); background:transparent; transition:background-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.fila-item:hover,.fila-item:focus-within,.fila-item.menu-aberto { background:rgb(var(--tinta) / 3.5%); }
+.fila-alca { width:22px; height:34px; padding:0; display:grid; place-items:center; background:transparent; color:var(--apagado); cursor:grab; border-radius:var(--r-xs); touch-action:none; }
+.fila-alca:hover:not(:disabled),.fila-alca:focus-visible { color:var(--text); background:rgb(var(--tinta) / 5.9%); }
 .fila-alca:active:not(:disabled) { transform:none; cursor:grabbing; }
 .fila-alca svg { stroke-width:3.2; }
 .fila-pos { font-size:var(--fs-meta); color:var(--faint); text-align:right; font-variant-numeric:tabular-nums; }
-.fila-capa { width:36px; height:36px; border-radius:var(--r-sm); background:#3a3558 center/cover no-repeat; display:grid; place-items:center; color:#cdc2ff; font-size:15px; }
+.fila-capa { width:36px; height:36px; border-radius:var(--r-sm); background:color-mix(in srgb, var(--accent) 18%, var(--bg-cartao)) center/cover no-repeat; display:grid; place-items:center; color:var(--accent-texto); font-size:15px; }
 .fila-info { min-width:0; }
 .fila-info strong { display:block; font-size:var(--fs-sm); font-weight:600; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fila-info small { display:block; font-size:var(--fs-meta); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fila-item:first-child .fila-pos { color:var(--accent-texto); font-weight:700; }
 /* As ações vêm por cima do fim da linha, com um degradê, em vez de reservar uma coluna: numa
    coluna de 290 px, a coluna reservada comia o nome da música mesmo sem ninguém olhar. */
-.fila-acoes { position:absolute; right:3px; top:50%; transform:translateY(-50%); display:flex; gap:1px; padding-left:22px; background:linear-gradient(90deg,#24253000,#242530 22px); border-radius:0 var(--r-md) var(--r-md) 0; opacity:0; pointer-events:none; transition:opacity var(--dur) var(--curva); }
+.fila-acoes { position:absolute; right:3px; top:50%; transform:translateY(-50%); display:flex; gap:1px; padding-left:22px; background:linear-gradient(90deg,transparent,var(--bg-2) 22px); border-radius:0 var(--r-md) var(--r-md) 0; opacity:0; pointer-events:none; transition:opacity var(--dur) var(--curva); }
 .fila-item:hover .fila-acoes,.fila-item:focus-within .fila-acoes,.fila-item.menu-aberto .fila-acoes { opacity:1; pointer-events:auto; }
-@media (hover:none) { .fila-acoes { opacity:1; pointer-events:auto; background:linear-gradient(90deg,#1c1d2800,#1c1d28 22px); } }
+@media (hover:none) { .fila-acoes { opacity:1; pointer-events:auto; background:linear-gradient(90deg,transparent,var(--bg-1) 22px); } }
 .fila-acoes button { width:28px; height:28px; padding:0; display:grid; place-items:center; border-radius:var(--r-sm); color:var(--muted); }
 /* Arrastar: a faixa segue o dedo por cima das outras, e as outras abrem espaço deslizando. */
 .fila-lista.reordenando { user-select:none; }
 .fila-lista.reordenando .fila-item:not(.arrastando) { transition:transform var(--dur) var(--curva); }
-.fila-item.arrastando { z-index:3; background:#2f2e44; box-shadow:0 12px 28px #0009,0 0 0 1px var(--accent); transition:none; }
+.fila-item.arrastando { z-index:3; background:color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)); box-shadow:0 12px 28px #0009,0 0 0 1px var(--accent); transition:none; }
 .fila-item.arrastando .fila-acoes { opacity:0; }
 .fila-item.chegou { animation:fila-chegou .7s var(--curva); }
-@keyframes fila-chegou { from { background:var(--accent-suave-hi); } to { background:#1f202b00; } }
+@keyframes fila-chegou { from { background:var(--accent-suave-hi); } to { background:transparent; } }
 .fila-dica { display:block; margin:4px 6px 0; font-size:var(--fs-meta); color:var(--faint); }
 /* Uma faixa já pedida esperando o servidor confirmar a nova ordem: meio apagada, sem sumir. */
 .fila-item.pendente { opacity:.6; }
 .fila-posicao { display:flex; align-items:flex-end; gap:6px; padding:4px; }
 .fila-posicao label { display:flex; flex-direction:column; gap:5px; font-size:var(--fs-meta); color:var(--muted); }
-.fila-posicao input { width:92px; min-height:var(--ctl-p); padding:0 8px; border:1px solid #ffffff1c; border-radius:var(--r-sm); background:#181923; color:var(--text); font:inherit; font-size:var(--fs-md); }
+.fila-posicao input { width:92px; min-height:var(--ctl-p); padding:0 8px; border:1px solid rgb(var(--tinta) / 11%); border-radius:var(--r-sm); background:var(--bg-0); color:var(--text); font:inherit; font-size:var(--fs-md); }
 .fila-posicao input:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
 .msg-menu .fila-posicao button { min-height:var(--ctl-p); padding:0 12px; background:var(--accent-forte); color:#fff; font-weight:600; }
 .msg-menu .fila-posicao button:hover:not(:disabled) { background:var(--accent-forte-hi); }
 .musica-sem-fila { margin:10px 12px 0; padding:10px 12px; border-radius:var(--r-md); border:1px dashed var(--line-2); color:var(--faint); font-size:var(--fs-meta); }
 
 /* A fala do bot não usa avatar de pessoa: ela é resposta a um comando, não conversa. */
-.msg.do-bot .msg-avatar { background:#4b3f85; color:#d6ccff; }
-.msg.do-bot .msg-autor { color:#b7a7ff; }
-.msg.do-bot .msg-texto { color:#b9b2ca; }
-.msg-texto strong { color:#e3ddf3; font-weight:650; }
+.msg.do-bot .msg-avatar { background:color-mix(in srgb, var(--accent) 30%, var(--bg-cartao)); color:var(--accent-texto); }
+.msg.do-bot .msg-autor { color:var(--accent-hi); }
+.msg.do-bot .msg-texto { color:var(--text-3); }
+.msg-texto strong { color:var(--text); font-weight:650; }
 /* Listas achadas por nome: alvos grandes, porque a maioria dos toques vem de celular. */
 .escolhas-de-lista { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
-.escolhas-de-lista button { text-align:left; font-size:11px; font-weight:600; line-height:1.35; padding:9px 11px; background:var(--bg-3); color:#d6d0e6; border:1px solid #ffffff0d; }
-.escolhas-de-lista button::before { content:'♪'; margin-right:7px; color:#a292ff; }
-.escolhas-de-lista button:hover:not(:disabled) { background:#3c3d50; color:#fff; }
-.escolhas-de-lista button.escolhida { background:#5d51b8; color:#f3f0fd; opacity:1; }
-.msg-texto code { background:#ffffff0f; border-radius:4px; padding:1px 5px; font-size:10px; color:#c1b6e6; }
+.escolhas-de-lista button { text-align:left; font-size:11px; font-weight:600; line-height:1.35; padding:9px 11px; background:var(--bg-3); color:var(--text-2); border:1px solid rgb(var(--tinta) / 5.1%); }
+.escolhas-de-lista button::before { content:'♪'; margin-right:7px; color:var(--accent-hi); }
+.escolhas-de-lista button:hover:not(:disabled) { background:var(--bg-4); color:var(--text); }
+.escolhas-de-lista button.escolhida { background:var(--accent-forte); color:#f3f0fd; opacity:1; }
+.msg-texto code { background:rgb(var(--tinta) / 5.9%); border-radius:4px; padding:1px 5px; font-size:10px; color:var(--accent-hi); }
 
 /* ---------- Mesa de sons ---------- */
 #soundboardBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 10v4M8 6v12M12 3v18M16 7v10M20 11v2'/%3E%3C/svg%3E"); }
@@ -443,21 +443,21 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .som-card { position:relative; }
 /* O botão inteiro é o alvo: numa mesa de sons se erra o clique com pressa, e um alvo
    pequeno no meio de um cartão grande transforma isso em "não tocou e não sei por quê". */
-.som-btn { display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%; min-height:56px; padding:10px 11px; text-align:left; background:var(--bg-3); color:var(--text); border:1px solid #ffffff0a; }
-.som-btn:hover:not(:disabled) { background:#3c3d50; }
+.som-btn { display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%; min-height:56px; padding:10px 11px; text-align:left; background:var(--bg-3); color:var(--text); border:1px solid rgb(var(--tinta) / 3.9%); }
+.som-btn:hover:not(:disabled) { background:var(--bg-4); }
 .som-btn strong { font-size:11px; font-weight:650; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
-.som-btn small { font-size:var(--fs-meta); color:#9c96b0; font-weight:400; }
-.som-btn.tocando-agora { background:#5d51b8; }
-.som-btn.tocando-agora small { color:#d7d0f7; }
-.som-apagar { position:absolute; top:4px; right:4px; padding:2px 6px; font-size:11px; background:transparent; color:#8a8399; opacity:0; transition:opacity .12s; }
+.som-btn small { font-size:var(--fs-meta); color:var(--muted); font-weight:400; }
+.som-btn.tocando-agora { background:var(--accent-forte); }
+.som-btn.tocando-agora small { color:var(--accent-texto); }
+.som-apagar { position:absolute; top:4px; right:4px; padding:2px 6px; font-size:11px; background:transparent; color:var(--faint); opacity:0; transition:opacity .12s; }
 .som-card:hover .som-apagar,.som-apagar:focus-visible { opacity:1; }
-.som-apagar:hover:not(:disabled) { background:#f0758326; color:#ff98a4; }
+.som-apagar:hover:not(:disabled) { background:color-mix(in srgb, var(--danger) 14.9%, transparent); color:var(--danger-texto); }
 @media(max-width:760px) { .som-apagar { opacity:1; } }
-.sons-vazio { font-size:11px; color:#9690a8; line-height:1.7; margin:0 0 16px; }
+.sons-vazio { font-size:11px; color:var(--faint); line-height:1.7; margin:0 0 16px; }
 .sons-envio { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
-.sons-envio small { font-size:10px; color:#a99fba; }
-.sons-envio small.sons-sem-conta { flex-basis:100%; color:#cfc4df; }
-.sons-sem-conta a { color:#cbbcff; }
+.sons-envio small { font-size:10px; color:var(--muted); }
+.sons-envio small.sons-sem-conta { flex-basis:100%; color:var(--text-2); }
+.sons-sem-conta a { color:var(--accent-texto); }
 .sons-volume { margin-bottom:0; }
 .sons-volume .volume-row { gap:8px; }
 /* O que a sala guardou das escolhas de quem está aqui. Vive no fim das preferências de
@@ -465,44 +465,44 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    volume baixado meses atrás e esquecido. */
 .lembrados small { margin-bottom:9px; }
 .lembrados button { font-size:11px; padding:7px 11px; }
-.sons-volume span { font-size:10px; color:#a99fba; font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
+.sons-volume span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
 .badge { display:inline-grid; place-items:center; min-width:16px; height:16px; border-radius:8px; font-size:var(--fs-rotulo); font-weight:700; background:#db7994; color:#251821; margin-left:4px; }
 #chatToggle { display:none; }
 .app.sem-chat #chatToggle { display:inline-flex; align-items:center; }
 #nameGate,.modal { position:fixed; inset:0; display:grid; place-items:center; padding:22px; background:#0d0d16ed; z-index:80; animation:nexo-aparecer var(--dur) var(--curva); }
 #nameGate { z-index:90; background:radial-gradient(ellipse at 50% 40%,#34304c88,transparent 65%),#101119f5; }
-.gate-card { width:min(100%,430px); padding:37px; border:1px solid #b6a7df1c; background:#23222f; border-radius:var(--r-xl); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
+.gate-card { width:min(100%,430px); padding:37px; border:1px solid color-mix(in srgb, var(--accent) 11%, transparent); background:var(--bg-2); border-radius:var(--r-xl); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
 .gate-mark { margin-bottom:21px; }
 .gate-card .eyebrow { font-size:var(--fs-rotulo); }
 .gate-card h1 { font-size:28px; letter-spacing:-.045em; margin:9px 0 12px; }
-.gate-card p { font-size:var(--fs-sm); color:#b0a7c0; line-height:1.8; margin:0 0 25px; }
-.gate-card label { display:block; font-size:var(--fs-sm); color:#c9bfd9; margin-bottom:8px; font-weight:600; }
+.gate-card p { font-size:var(--fs-sm); color:var(--muted); line-height:1.8; margin:0 0 25px; }
+.gate-card label { display:block; font-size:var(--fs-sm); color:var(--text-2); margin-bottom:8px; font-weight:600; }
 .gate-card input { font-size:16px; min-height:var(--ctl-g); }
 .gate-card button { width:100%; min-height:var(--ctl-g); padding:0 16px; margin-top:16px; }
-.gate-back { display:block; text-align:center; margin-top:20px; color:#aaa0bc; font-size:var(--fs-sm); text-decoration:none; }
+.gate-back { display:block; text-align:center; margin-top:20px; color:var(--muted); font-size:var(--fs-sm); text-decoration:none; }
 .gate-back:hover { color:var(--text); }
 /* Com conta, o nome é o apelido da conta: o campo fica só para leitura, e esta linha diz por quê. */
-.gate-card p.gate-conta { margin:10px 0 0; font-size:var(--fs-sm); color:#c9bfd9; line-height:1.6; }
-.gate-card p.gate-conta a { color:#cbbcff; }
-.gate-card input:read-only { color:#cfc6e0; background:#1b1a26; cursor:default; }
-.gate-conta-link { display:block; text-align:center; margin-top:16px; color:#cbbcff; font-size:var(--fs-sm); }
+.gate-card p.gate-conta { margin:10px 0 0; font-size:var(--fs-sm); color:var(--text-2); line-height:1.6; }
+.gate-card p.gate-conta a { color:var(--accent-texto); }
+.gate-card input:read-only { color:var(--text-2); background:var(--bg-1); cursor:default; }
+.gate-conta-link { display:block; text-align:center; margin-top:16px; color:var(--accent-texto); font-size:var(--fs-sm); }
 /* A marca escolhida no perfil é um símbolo de texto, não um emoji: a fonte de símbolos
    desenha todos no mesmo traço, e o avatar não vira um adesivo colorido no meio da lista. */
 /* O que o plano libera, dito antes da escolha. O cadeado nas opções é a oferta; esta linha é
    a explicação dela. */
-.plano-dica { font-size:11.5px; line-height:1.6; color:#d8cdea; background:#8879f614; border:1px solid #8879f633; border-radius:10px; padding:10px 12px; margin:0 0 14px; }
-.plano-dica a { color:#cbbcff; }
+.plano-dica { font-size:11.5px; line-height:1.6; color:var(--text-2); background:color-mix(in srgb, var(--accent) 7.8%, transparent); border:1px solid color-mix(in srgb, var(--accent) 20%, transparent); border-radius:10px; padding:10px 12px; margin:0 0 14px; }
+.plano-dica a { color:var(--accent-texto); }
 .perfil-topo { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
 .perfil-topo h2 { margin:0; word-break:break-word; }
 .perfil-topo .modal-sub { margin:4px 0 0; font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
 .perfil-avatar { flex:none; display:grid; place-items:center; width:54px; height:54px; border-radius:50%; color:#15121f; font-size:21px; font-weight:700; transition:background-color var(--dur) var(--curva); }
 /* O editor de perfil de dentro da sala. A prévia no topo muda a cada escolha, antes de salvar. */
 .meu-perfil-card { width:min(100%,520px); }
-.meu-perfil-previa { display:flex; align-items:center; gap:14px; padding:14px; margin:0 0 18px; border-radius:var(--r-lg); background:linear-gradient(120deg,#302b48,#262536); border:1px solid #aaa0fb1a; }
+.meu-perfil-previa { display:flex; align-items:center; gap:14px; padding:14px; margin:0 0 18px; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
 .meu-perfil-previa > div { min-width:0; }
 .meu-perfil-previa strong { display:block; font-size:var(--fs-lg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meu-perfil-previa small { display:block; margin-top:2px; color:var(--muted); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.03em; }
-.campo-rotulo { display:block; margin:0 0 7px; font-size:var(--fs-sm); font-weight:600; color:#c9bfd9; }
+.campo-rotulo { display:block; margin:0 0 7px; font-size:var(--fs-sm); font-weight:600; color:var(--text-2); }
 .campo-dica { display:block; margin-top:6px; color:var(--faint); font-size:var(--fs-meta); line-height:1.5; }
 .meu-perfil-mais { margin-right:auto; }
 .relato-status[data-tipo="certo"] { color:var(--online); }
@@ -514,14 +514,14 @@ button[aria-busy="true"] { cursor:progress; }
 /* Todo painel é o mesmo cartão: entra subindo um pouco, tem um X no canto (room-ui.js) e o
    rodapé com as ações fica preso embaixo enquanto o conteúdo rola -- no diagnóstico e nos
    dispositivos, os botões ficavam fora da tela até alguém descobrir que dava para rolar. */
-.modal-card { --pad-cartao:26px; position:relative; width:min(100%,470px); max-height:88vh; max-height:88dvh; overflow-y:auto; overscroll-behavior:contain; border:1px solid #b9a9e024; border-radius:var(--r-xl); background:#23222f; padding:var(--pad-cartao); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
+.modal-card { --pad-cartao:26px; position:relative; width:min(100%,470px); max-height:88vh; max-height:88dvh; overflow-y:auto; overscroll-behavior:contain; border:1px solid color-mix(in srgb, var(--accent-hi) 14.1%, transparent); border-radius:var(--r-xl); background:var(--bg-2); padding:var(--pad-cartao); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
 .modal-card h2 { font-size:22px; letter-spacing:-.04em; margin:0 0 7px; padding-right:40px; }
 .modal-fechar { position:absolute; top:16px; right:16px; z-index:3; }
-.modal-sub { display:block; color:#aaa2ba; font-size:var(--fs-sm); margin:0 0 22px; line-height:1.7; }
+.modal-sub { display:block; color:var(--muted); font-size:var(--fs-sm); margin:0 0 22px; line-height:1.7; }
 .device-tools { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
 /* A ação principal fica à direita e as outras à esquerda dela, como em qualquer sistema: a
    ordem no HTML continua a de importância (a principal primeiro), e o `row-reverse` a vira. */
-.modal-actions { position:sticky; bottom:calc(var(--pad-cartao) * -1); z-index:2; display:flex; flex-direction:row-reverse; flex-wrap:wrap; justify-content:flex-start; gap:8px; margin:22px calc(var(--pad-cartao) * -1) calc(var(--pad-cartao) * -1); padding:14px var(--pad-cartao) var(--pad-cartao); background:linear-gradient(#23222f00,#23222f 12px); }
+.modal-actions { position:sticky; bottom:calc(var(--pad-cartao) * -1); z-index:2; display:flex; flex-direction:row-reverse; flex-wrap:wrap; justify-content:flex-start; gap:8px; margin:22px calc(var(--pad-cartao) * -1) calc(var(--pad-cartao) * -1); padding:14px var(--pad-cartao) var(--pad-cartao); background:linear-gradient(transparent,var(--bg-2) 12px); }
 .modal-actions > button,.modal-actions > .botao-link { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; min-height:var(--ctl-m); padding:0 16px; }
 /* Fechar é sempre a saída, nunca a ação: o mesmo cinza em todo painel. Antes era violeta em
    uns e cinza em outros, e o botão mais chamativo do painel era o que não fazia nada. */
@@ -531,10 +531,10 @@ button[aria-busy="true"] { cursor:progress; }
 /* Abas dos painéis de configuração. A fita fica colada no topo enquanto o conteúdo rola:
    numa aba longa (o áudio com o agente aberto) a pessoa não perde a referência de onde
    está nem precisa voltar ao topo para trocar de assunto. */
-.abas-fita { position:sticky; top:-26px; z-index:2; display:flex; gap:4px; margin:0 0 18px; padding:4px; border-radius:11px; background:#1b1b26; box-shadow:inset 0 0 0 1px #ffffff0a; }
-.aba { flex:1; font-size:12px; font-weight:650; padding:8px 10px; border-radius:8px; background:transparent; color:#a49bb8; white-space:nowrap; }
-.aba:hover { color:#e7e3f2; background:#ffffff09; }
-.aba[aria-selected="true"] { background:#5d51b8; color:#f3f0fd; }
+.abas-fita { position:sticky; top:-26px; z-index:2; display:flex; gap:4px; margin:0 0 18px; padding:4px; border-radius:11px; background:var(--bg-1); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 3.9%); }
+.aba { flex:1; font-size:12px; font-weight:650; padding:8px 10px; border-radius:8px; background:transparent; color:var(--muted); white-space:nowrap; }
+.aba:hover { color:var(--text); background:rgb(var(--tinta) / 3.5%); }
+.aba[aria-selected="true"] { background:var(--accent-forte); color:#f3f0fd; }
 .aba-painel { animation:aba-entra .14s ease-out; }
 .aba-painel > .field:last-child, .aba-painel > small:last-child { margin-bottom:0; }
 @keyframes aba-entra { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
@@ -542,13 +542,13 @@ button[aria-busy="true"] { cursor:progress; }
 
 /* Ajuste que quase ninguém precisa mexer (codec, relatório bruto) fica dobrado: some da
    primeira leitura sem sumir do produto. */
-.avancado { margin-bottom:16px; border:1px solid #ffffff0d; border-radius:10px; background:#ffffff05; }
-.avancado > summary { padding:10px 13px; font-size:11px; font-weight:600; color:#b0a7c4; cursor:pointer; list-style:none; display:flex; align-items:center; gap:7px; border-radius:10px; }
+.avancado { margin-bottom:16px; border:1px solid rgb(var(--tinta) / 5.1%); border-radius:10px; background:rgb(var(--tinta) / 2%); }
+.avancado > summary { padding:10px 13px; font-size:11px; font-weight:600; color:var(--muted); cursor:pointer; list-style:none; display:flex; align-items:center; gap:7px; border-radius:10px; }
 .avancado > summary::-webkit-details-marker { display:none; }
-.avancado > summary::before { content:'▸'; font-size:var(--fs-rotulo); color:#8d86a5; transition:transform .15s; }
-.avancado[open] > summary { color:#ded7ef; border-bottom:1px solid #ffffff0d; border-radius:10px 10px 0 0; }
+.avancado > summary::before { content:'▸'; font-size:var(--fs-rotulo); color:var(--faint); transition:transform .15s; }
+.avancado[open] > summary { color:var(--text); border-bottom:1px solid rgb(var(--tinta) / 5.1%); border-radius:10px 10px 0 0; }
 .avancado[open] > summary::before { transform:rotate(90deg); }
-.avancado > summary:hover { background:#ffffff07; }
+.avancado > summary:hover { background:rgb(var(--tinta) / 2.7%); }
 .avancado > *:not(summary) { margin:13px; }
 .avancado .field:last-child { margin-bottom:13px; }
 /* ---------- Medições do envio ----------
@@ -557,49 +557,49 @@ button[aria-busy="true"] { cursor:progress; }
    legível, até quem abria o painel para entender um problema ter de ler tudo só para saber
    se havia um. A hierarquia mudou de lugar: ela está no tamanho e na cor, não na pontuação.
    A fonte monoespaçada fica apenas nos números, onde alinhar colunas importa. */
-.medicao { display:block; margin-top:12px; padding:13px; border-radius:11px; background:#b4a1dd09; border:1px solid #b4a1dd1c; font-size:11px; line-height:1.6; color:#b7aecb; }
+.medicao { display:block; margin-top:12px; padding:13px; border-radius:11px; background:color-mix(in srgb, var(--accent) 3.5%, transparent); border:1px solid color-mix(in srgb, var(--accent) 11%, transparent); font-size:11px; line-height:1.6; color:var(--text-3); }
 /* Os três números que respondem "como está agora". Grandes porque são a resposta; o resto
    da caixa existe para explicá-los. */
 .medicao-destaque { display:flex; gap:20px; flex-wrap:wrap; }
 .medicao-numero { display:flex; flex-direction:column; gap:1px; }
 .medicao-numero strong { font:600 17px/1.2 ui-monospace,Consolas,monospace; color:var(--text); }
-.medicao-numero span { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#8d86a5; }
-.medicao-sub { margin-top:7px; color:#a99fba; }
+.medicao-numero span { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
+.medicao-sub { margin-top:7px; color:var(--muted); }
 /* Captura contra codificação. A comparação que diz de quem é a culpa quando os quadros
    caem -- se a fonte parou de entregar, mexer na qualidade não resolve nada. */
-.medicao-fluxo { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:12px; padding:9px 11px; border-radius:9px; background:#ffffff06; }
-.medicao-fluxo-ponta { font:600 11px/1 ui-monospace,Consolas,monospace; color:#ded7ef; }
+.medicao-fluxo { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:12px; padding:9px 11px; border-radius:9px; background:rgb(var(--tinta) / 2.4%); }
+.medicao-fluxo-ponta { font:600 11px/1 ui-monospace,Consolas,monospace; color:var(--text); }
 /* O pedido é a referência, não uma medição: ele fica mais apagado para que os dois números
    medidos ao lado sejam os que o olho compara. */
-.medicao-fluxo-pedido { color:#8d86a5; font-weight:400; }
-.medicao-seta { color:#8d86a5; }
+.medicao-fluxo-pedido { color:var(--faint); font-weight:400; }
+.medicao-seta { color:var(--faint); }
 .medicao-selo { font-size:10px; padding:3px 8px; border-radius:999px; }
-.medicao-selo.ok { background:#90dfb31f; color:var(--online); }
-.medicao-selo.alerta { background:#f0a87528; color:#f0b98a; }
-.medicao-titulo { margin:14px 0 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#8d86a5; }
+.medicao-selo.ok { background:color-mix(in srgb, var(--online) 12.2%, transparent); color:var(--online); }
+.medicao-selo.alerta { background:color-mix(in srgb, var(--aviso) 15.7%, transparent); color:var(--laranja-texto); }
+.medicao-titulo { margin:14px 0 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
 /* Grade em vez de frase: comparar camadas é comparar linhas, e para isso as colunas
    precisam se alinhar. */
 .medicao-grade { display:flex; flex-direction:column; gap:1px; }
-.medicao-linha { display:grid; grid-template-columns:52px 62px 1fr auto; gap:8px; align-items:baseline; padding:6px 9px; border-radius:7px; background:#ffffff06; font:11px/1.5 ui-monospace,Consolas,monospace; color:#c6bdd8; }
-.medicao-linha-secundaria { color:#9a92ad; background:#ffffff03; }
+.medicao-linha { display:grid; grid-template-columns:52px 62px 1fr auto; gap:8px; align-items:baseline; padding:6px 9px; border-radius:7px; background:rgb(var(--tinta) / 2.4%); font:11px/1.5 ui-monospace,Consolas,monospace; color:var(--text-3); }
+.medicao-linha-secundaria { color:var(--faint); background:rgb(var(--tinta) / 1.2%); }
 .medicao-camada-nome { font-weight:600; color:var(--text); }
-.medicao-linha-secundaria .medicao-camada-nome { color:#b0a7c4; }
-.medicao-custo { color:#8d86a5; }
-.medicao-nota { margin-top:10px; padding:8px 10px; border-radius:8px; background:#ffffff06; color:#a99fba; }
+.medicao-linha-secundaria .medicao-camada-nome { color:var(--muted); }
+.medicao-custo { color:var(--faint); }
+.medicao-nota { margin-top:10px; padding:8px 10px; border-radius:8px; background:rgb(var(--tinta) / 2.4%); color:var(--muted); }
 /* O custo somado das camadas contra o segundo que existe. Fica logo abaixo da grade porque
    é a conclusão dela: as camadas sobem em sequência, na mesma thread, e é a soma que decide
    se a taxa pedida cabe. */
-.medicao-custo-total { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:8px; padding:7px 10px; border-radius:8px; background:#ffffff06; color:#a99fba; }
-.medicao-custo-total strong { font:600 13px/1 ui-monospace,Consolas,monospace; color:#ded7ef; }
-.medicao-custo-total.aperta { background:#f0a8751a; color:#f0cdaf; }
-.medicao-custo-total.aperta strong { color:#f0b98a; }
+.medicao-custo-total { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:8px; padding:7px 10px; border-radius:8px; background:rgb(var(--tinta) / 2.4%); color:var(--muted); }
+.medicao-custo-total strong { font:600 13px/1 ui-monospace,Consolas,monospace; color:var(--text); }
+.medicao-custo-total.aperta { background:color-mix(in srgb, var(--aviso) 10.2%, transparent); color:var(--laranja-texto); }
+.medicao-custo-total.aperta strong { color:var(--laranja-texto); }
 /* O veredito fecha a caixa porque é conclusão, não introdução: quem chega aqui já viu os
    números que a sustentam. */
 .medicao-veredito { display:flex; flex-direction:column; gap:4px; margin-top:12px; padding:10px 12px; border-radius:9px; border-left:3px solid; }
 .medicao-veredito strong { font-size:11.5px; font-weight:600; }
-.medicao-veredito.ok { border-color:var(--online); background:#90dfb312; color:#bfe6d0; }
-.medicao-veredito.alerta { border-color:#f0b98a; background:#f0a8751a; color:#f0cdaf; }
-.medicao-veredito.neutro { border-color:#8d86a5; background:#ffffff08; color:#bcb2cf; }
+.medicao-veredito.ok { border-color:var(--online); background:color-mix(in srgb, var(--online) 7.1%, transparent); color:var(--online-texto); }
+.medicao-veredito.alerta { border-color:var(--laranja-texto); background:color-mix(in srgb, var(--aviso) 10.2%, transparent); color:var(--laranja-texto); }
+.medicao-veredito.neutro { border-color:var(--faint); background:rgb(var(--tinta) / 3.1%); color:var(--text-3); }
 /* No celular a caixa tem uns 280px, e quatro colunas de números não cabem nisso: "1,1 Mbps"
    e "4,9 ms/quadro" quebravam no meio, cada uma em duas linhas, e a grade deixava de ser
    grade. Em duas colunas os mesmos quatro valores viram dois pares alinhados, que é a forma
@@ -612,25 +612,25 @@ button[aria-busy="true"] { cursor:progress; }
   .medicao-destaque { gap:14px; }
 }
 .field { margin-bottom:16px; }
-.field label { display:block; font-size:11px; font-weight:600; color:#bcb2cf; margin-bottom:7px; }
+.field label { display:block; font-size:11px; font-weight:600; color:var(--text-3); margin-bottom:7px; }
 /* Rótulo de caixa de seleção: o texto acompanha a caixa e o alvo de toque cobre os dois. */
 .field label.check-linha { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); cursor:pointer; min-height:32px; }
 .check-linha input[type="checkbox"] { width:18px; height:18px; margin:0; flex:none; accent-color:var(--accent); }
-.field small,#devicesDica { display:block; font-size:11px; color:#a99fba; margin-top:7px; line-height:1.6; }
+.field small,#devicesDica { display:block; font-size:11px; color:var(--muted); margin-top:7px; line-height:1.6; }
 /* "Está funcionando?" é a pergunta que traz alguém a este painel, e ela não se responde
    com uma lista de nomes de aparelho. O medidor e a prévia respondem na hora. */
-.medidor { height:6px; margin-top:9px; border-radius:3px; background:#ffffff0d; overflow:hidden; }
+.medidor { height:6px; margin-top:9px; border-radius:3px; background:rgb(var(--tinta) / 5.1%); overflow:hidden; }
 .medidor > span { display:block; height:100%; width:0; border-radius:3px; background:linear-gradient(90deg,#7fd6a6,#cbd77f 70%,#e8a06e); transition:width .07s linear; }
 /* Espelhada, como qualquer prévia de câmera: quem se vê aqui está se conferindo, e um
    espelho que inverte os lados confunde mais do que ajuda. */
-.cam-preview { display:block; width:100%; max-height:148px; aspect-ratio:16 / 9; margin-top:9px; border-radius:10px; background:#12131c; object-fit:cover; transform:scaleX(-1); }
+.cam-preview { display:block; width:100%; max-height:148px; aspect-ratio:16 / 9; margin-top:9px; border-radius:10px; background:var(--bg-fundo); object-fit:cover; transform:scaleX(-1); }
 #devicesDica:empty { display:none; }
-#echoHint { display:block; color:#a99fba; font-size:11px; line-height:1.7; }
-.echo-warning,.aviso-eco { background:#3d3024; border:1px solid #b692532e; border-radius:10px; padding:10px 13px; color:#e7c5a2; font-size:11px; line-height:1.6; }
+#echoHint { display:block; color:var(--muted); font-size:11px; line-height:1.7; }
+.echo-warning,.aviso-eco { background:color-mix(in srgb, var(--aviso) 14%, var(--bg-1)); border:1px solid color-mix(in srgb, var(--aviso) 18%, transparent); border-radius:10px; padding:10px 13px; color:var(--laranja-texto); font-size:11px; line-height:1.6; }
 .echo-warning { display:flex; flex-direction:column; gap:9px; align-items:flex-start; margin-top:12px; }
-.agente-box { margin-top:12px; border:1px solid #ffffff0c; background:#292835; padding:14px; border-radius:10px; color:#b3a9c2; font-size:12px; line-height:1.7; }
-.agente-status { display:flex; align-items:center; gap:7px; color:#ded3eb; font-size:12px; margin-bottom:5px; }
-.agente-bolinha { width:7px; height:7px; border-radius:50%; background:#84798e; }
+.agente-box { margin-top:12px; border:1px solid rgb(var(--tinta) / 4.7%); background:var(--bg-cartao); padding:14px; border-radius:10px; color:var(--muted); font-size:12px; line-height:1.7; }
+.agente-status { display:flex; align-items:center; gap:7px; color:var(--text-2); font-size:12px; margin-bottom:5px; }
+.agente-bolinha { width:7px; height:7px; border-radius:50%; background:var(--apagado); }
 .agente-bolinha.ligado { background:var(--online); }
 /* O texto era <small>, que é inline: o botão de download entrava na mesma linha e caía por
    cima da última frase. Os dois viram blocos, e o link ganha a linha que é dele. */
@@ -646,37 +646,37 @@ button[aria-busy="true"] { cursor:progress; }
    obriga a ler sessenta linhas de números para achar a que importa. Os cartões respondem
    isso antes: uma área por cartão, uma linha por fato, e a cor dizendo onde olhar. */
 #diagnosticsCards { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
-.diag-cartao { padding:11px 13px; border-radius:11px; background:#ffffff05; border:1px solid var(--line); }
-.diag-cartao h3 { margin:0 0 8px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
-.diag-linha { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:4px 0; font-size:12px; border-top:1px solid #ffffff08; }
+.diag-cartao { padding:11px 13px; border-radius:11px; background:rgb(var(--tinta) / 2%); border:1px solid var(--line); }
+.diag-cartao h3 { margin:0 0 8px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+.diag-linha { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:4px 0; font-size:12px; border-top:1px solid rgb(var(--tinta) / 3.1%); }
 .diag-cartao .diag-linha:first-of-type { border-top:0; }
-.diag-rotulo { color:#a29bae; flex:none; }
-.diag-valor { text-align:right; color:#ded7ef; font-family:ui-monospace,Consolas,monospace; font-size:11.5px; }
+.diag-rotulo { color:var(--muted); flex:none; }
+.diag-valor { text-align:right; color:var(--text); font-family:ui-monospace,Consolas,monospace; font-size:11.5px; }
 /* A cor fica no VALOR, não na linha inteira: o olho procura o dado, não o rótulo. Um ponto
    antes do valor dá o estado a quem não distingue as cores. */
 .diag-linha.diag-ok .diag-valor { color:var(--online); }
-.diag-linha.diag-alerta .diag-valor { color:#f0b98a; }
+.diag-linha.diag-alerta .diag-valor { color:var(--laranja-texto); }
 .diag-linha.diag-problema .diag-valor { color:var(--danger); }
-.diag-linha.diag-neutro .diag-valor { color:#a29bae; }
+.diag-linha.diag-neutro .diag-valor { color:var(--muted); }
 .diag-linha.diag-ok .diag-valor::before,
 .diag-linha.diag-alerta .diag-valor::before,
 .diag-linha.diag-problema .diag-valor::before { content:'● '; font-size:var(--fs-rotulo); }
-#diagnosticsSummary { font-size:12px; color:#d4cbe2; border:1px solid #b4a1dd22; background:#b4a1dd09; padding:12px; border-radius:9px; line-height:1.7; margin-bottom:14px; }
-#diagnosticsReport { white-space:pre-wrap; word-break:break-word; font:11px/1.8 ui-monospace,Consolas,monospace; color:#beb3ce; max-height:230px; overflow:auto; }
+#diagnosticsSummary { font-size:12px; color:var(--text-2); border:1px solid color-mix(in srgb, var(--accent) 13.3%, transparent); background:color-mix(in srgb, var(--accent) 3.5%, transparent); padding:12px; border-radius:9px; line-height:1.7; margin-bottom:14px; }
+#diagnosticsReport { white-space:pre-wrap; word-break:break-word; font:11px/1.8 ui-monospace,Consolas,monospace; color:var(--text-3); max-height:230px; overflow:auto; }
 /* O relato fica depois dos cartões e antes dos botões: quem chegou até aqui já viu o que o
    painel tinha a dizer, e é nesse ponto que "continua errado" é a próxima frase honesta. */
 .relato { margin-top:14px; padding-top:13px; border-top:1px solid var(--line); }
-.relato-titulo { display:block; font-size:12px; font-weight:600; color:#d4cbe2; margin-bottom:7px; }
-.relato textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:58px; padding:9px 11px; border-radius:9px; border:1px solid var(--line); background:#ffffff08; color:var(--text); font:inherit; font-size:12.5px; line-height:1.6; }
+.relato-titulo { display:block; font-size:12px; font-weight:600; color:var(--text-2); margin-bottom:7px; }
+.relato textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:58px; padding:9px 11px; border-radius:9px; border:1px solid var(--line); background:rgb(var(--tinta) / 3.1%); color:var(--text); font:inherit; font-size:12.5px; line-height:1.6; }
 .relato textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 /* O que vai junto precisa estar À VISTA, não escondido num "saiba mais". Pedir diagnóstico
    sem dizer o que ele carrega é o tipo de coisa que queima confiança de graça. */
-.relato-aviso { margin:8px 0 0; font-size:11px; line-height:1.65; color:#a29bae; }
-.relato-aviso strong { color:#c9c0d8; font-weight:600; }
+.relato-aviso { margin:8px 0 0; font-size:11px; line-height:1.65; color:var(--muted); }
+.relato-aviso strong { color:var(--text-2); font-weight:600; }
 .relato-status:empty { display:none; }
-.relato-status { margin-top:9px; font-size:11.5px; line-height:1.6; color:#a29bae; }
+.relato-status { margin-top:9px; font-size:11.5px; line-height:1.6; color:var(--muted); }
 .relato-status.ok { color:var(--online); }
-.relato-status.alerta { color:#f0b98a; }
+.relato-status.alerta { color:var(--laranja-texto); }
 .relato-status.problema { color:var(--danger); }
 /* ---------- Moderação ---------- */
 /* O selo do dono é discreto de propósito: ele informa quem responde pela sala, não distingue
@@ -693,8 +693,8 @@ button[aria-busy="true"] { cursor:progress; }
 .moderar-acoes button { width:100%; }
 .moderar-acoes[hidden] { display:none; }
 .moderar-removidos { margin-top:14px; padding-top:13px; border-top:1px solid var(--line); }
-.moderar-removidos>strong { display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; margin-bottom:8px; }
-.moderar-removido { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:12.5px; border-top:1px solid #ffffff08; }
+.moderar-removidos>strong { display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); margin-bottom:8px; }
+.moderar-removido { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:12.5px; border-top:1px solid rgb(var(--tinta) / 3.1%); }
 .moderar-removidos .moderar-removido:first-of-type { border-top:0; }
 /* O nome ocupa o espaço que sobra e quebra se precisar: ele foi escolhido por quem entrou, e
    pode ser tão longo quanto o limite permitir. */
@@ -707,8 +707,8 @@ button[aria-busy="true"] { cursor:progress; }
    banda, e só aparece quando há algo a dizer -- um aviso que aparece sempre é um aviso que
    ninguém lê. */
 .codec-estado:empty { display:none; }
-.codec-estado { display:block; margin-top:6px; padding-top:6px; border-top:1px solid var(--line); color:#a29bae; }
-.codec-estado.aviso-aperta { color:#f0b98a; }
+.codec-estado { display:block; margin-top:6px; padding-top:6px; border-top:1px solid var(--line); color:var(--muted); }
+.codec-estado.aviso-aperta { color:var(--laranja-texto); }
 /* Um link com cara de botão: ser removido não tem "fechar", tem "ir para outro lugar". Herda
    a aparência dos botões do projeto em vez de inventar outra. */
 /* Link com cara de botão: o mesmo desenho e as mesmas cores do botão, para a pessoa não ter de
@@ -717,7 +717,7 @@ button[aria-busy="true"] { cursor:progress; }
 .botao-link:hover { background:var(--accent-forte-hi); }
 .botao-link:active { transform:scale(.97); }
 .botao-link.secundario { background:transparent; color:var(--text-2); box-shadow:inset 0 0 0 1px var(--line-3); }
-.botao-link.secundario:hover { background:#ffffff0d; color:var(--text); }
+.botao-link.secundario:hover { background:rgb(var(--tinta) / 5.1%); color:var(--text); }
 .lightbox { position:fixed; inset:0; z-index:95; padding:55px 20px 40px; display:grid; place-items:center; overflow:auto; background:#090910f7; }
 #lightboxImg { max-width:94vw; max-height:84vh; object-fit:contain; border-radius:10px; cursor:zoom-in; display:block; margin:auto; }
 #lightboxImg.real { max-width:none; max-height:none; cursor:zoom-out; }
@@ -781,15 +781,15 @@ button[aria-busy="true"] { cursor:progress; }
 @media(max-width:760px) { .mute-peer-btn { min-width:32px; min-height:32px; } #chatSend,#attachImageBtn { min-width:36px; min-height:42px; } }
 
 .workspace-name { text-decoration:none; color:inherit; gap:9px; }
-.workspace-name:hover { background:#ffffff06; }
+.workspace-name:hover { background:rgb(var(--tinta) / 2.4%); }
 .channel-symbol svg,.topbar-symbol svg { width:23px; height:23px; display:block; }
 
 .mic-icon,.mute-peer-btn { --audio-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='12' rx='3'/%3E%3Cpath d='M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8'/%3E%3C/svg%3E"); }
 .mute-peer-btn { --audio-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 4 6 8H2v8h4l5 4zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14'/%3E%3C/svg%3E"); }
 .mic-icon::before,.mute-peer-btn::before { content:''; display:block; width:16px; height:16px; background:currentColor; mask:var(--audio-icon) center/contain no-repeat; }
-.mic-icon.muted,.mute-peer-btn[aria-pressed="true"] { color:#ec949f; }
+.mic-icon.muted,.mute-peer-btn[aria-pressed="true"] { color:var(--danger-texto); }
 .mute-peer-btn { position:relative; }
-.mic-icon.muted::after,.mute-peer-btn[aria-pressed="true"]::after { content:''; position:absolute; width:21px; height:2px; background:currentColor; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-45deg); box-shadow:0 1px #20212c; }
+.mic-icon.muted::after,.mute-peer-btn[aria-pressed="true"]::after { content:''; position:absolute; width:21px; height:2px; background:currentColor; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-45deg); box-shadow:0 1px var(--bg-2); }
 .mute-peer-btn { display:inline-flex; align-items:center; justify-content:center; }
 .app.teatro,.app.teatro.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-areas:"topo" "palco" "barra"; }
 .app.teatro .room-sidebar,.app.teatro .chat,.app.teatro #sidebarToggle { display:none!important; }
@@ -810,18 +810,18 @@ button[aria-busy="true"] { cursor:progress; }
 .app.teatro #chatToggle { display:inline-flex; }
 .audience-toggle { display:inline-flex; align-items:center; gap:6px; }
 .audience-toggle svg { display:block; flex:none; }
-.audience-toggle[aria-pressed="true"] { color:var(--accent-hi); background:#a092ff20; }
+.audience-toggle[aria-pressed="true"] { color:var(--accent-hi); background:color-mix(in srgb, var(--accent-hi) 12.5%, transparent); }
 .app.plateia-oculta .participants-section { display:none; }
 #theaterBtn svg { display:block; }
-#theaterBtn[aria-pressed="true"] { color:var(--accent-hi); background:#a092ff20; }
+#theaterBtn[aria-pressed="true"] { color:var(--accent-hi); background:color-mix(in srgb, var(--accent-hi) 12.5%, transparent); }
 
 /* Multiple video sources share the existing stage and its theater/fullscreen modes. */
 .multi-stage { position:absolute; inset:0; display:grid; gap:10px; padding:10px 10px 55px; overflow:auto; overscroll-behavior:contain; }
 .multi-stage[hidden] { display:none; }
 .multi-view > #stageVideo,.multi-view > .stage-empty,.multi-view > .stage-label,.multi-view > .playback-recovery,
 .multi-view #zoomInBtn,.multi-view #zoomOutBtn,.multi-view #zoomLevelLabel { display:none!important; }
-.multi-card { position:relative; min-width:0; min-height:0; overflow:hidden; background:#0c0d14; border:1px solid #ffffff16; border-radius:12px; }
-.multi-card.selected { border-color:var(--accent); box-shadow:inset 0 0 0 1px #a092ff40; }
+.multi-card { position:relative; min-width:0; min-height:0; overflow:hidden; background:#0c0d14; border:1px solid rgb(var(--tinta) / 8.6%); border-radius:12px; }
+.multi-card.selected { border-color:var(--accent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 25.1%, transparent); }
 .multi-card video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; transform-origin:center; }
 .multi-caption { position:absolute; inset:auto 0 0; padding:22px 10px 9px; background:linear-gradient(transparent,#10101af5); transition:opacity .2s; }
 .multi-nome { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:7px; font-size:12px; font-weight:600; }
@@ -830,14 +830,14 @@ button[aria-busy="true"] { cursor:progress; }
    equilibrar duas transmissões exigia fechar a grade e caçar o quadradinho lá embaixo. */
 .multi-volume { flex:1 1 130px; min-width:118px; max-width:210px; margin-top:0; }
 .multi-volume .volume-slider { height:4px; }
-.multi-volume .mute-peer-btn { color:#d6cfe9; padding:4px; }
+.multi-volume .mute-peer-btn { color:var(--text-2); padding:4px; }
 .multi-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-left:auto; }
-.multi-actions button { padding:5px 8px; min-height:28px; border:1px solid #ffffff18; border-radius:6px; background:#262332; color:#eee8ff; font-size:10px; font-weight:600; }
-.multi-actions button:hover:not(:disabled) { background:#453c61; }
-.multi-actions .multi-zoom { padding:5px 6px; min-width:26px; background:#ffffff0a; }
-.multi-actions .multi-nivel { min-width:38px; font-size:var(--fs-rotulo); color:#b3acc9; }
-.multi-actions .multi-ampliar { background:#5d51b8; border-color:transparent; }
-.multi-actions .multi-ampliar:hover:not(:disabled) { background:#6d60cf; }
+.multi-actions button { padding:5px 8px; min-height:28px; border:1px solid rgb(var(--tinta) / 9.4%); border-radius:6px; background:var(--bg-cartao); color:#eee8ff; font-size:10px; font-weight:600; }
+.multi-actions button:hover:not(:disabled) { background:color-mix(in srgb, var(--accent) 18%, var(--bg-cartao)); }
+.multi-actions .multi-zoom { padding:5px 6px; min-width:26px; background:rgb(var(--tinta) / 3.9%); }
+.multi-actions .multi-nivel { min-width:38px; font-size:var(--fs-rotulo); color:var(--text-3); }
+.multi-actions .multi-ampliar { background:var(--accent-forte); border-color:transparent; }
+.multi-actions .multi-ampliar:hover:not(:disabled) { background:var(--accent-forte-hi); }
 .multi-actions .multi-ocultar[aria-pressed="true"] { background:#dd7899; border-color:transparent; color:#1b1620; }
 .multi-card:not(.playback-stalled) .multi-retry { display:none; }
 .multi-wait { position:absolute; inset:30% 10px auto; text-align:center; font-size:12px; color:var(--muted); pointer-events:none; }
@@ -847,7 +847,7 @@ button[aria-busy="true"] { cursor:progress; }
 .stage.ocioso .multi-card:hover .multi-caption,
 .stage.ocioso .multi-caption:focus-within { opacity:1; pointer-events:auto; }
 #multiViewBtn svg { display:block; }
-#multiViewBtn[aria-pressed="true"] { color:var(--accent-hi); background:#a092ff20; }
+#multiViewBtn[aria-pressed="true"] { color:var(--accent-hi); background:color-mix(in srgb, var(--accent-hi) 12.5%, transparent); }
 @media (max-width:600px) { .multi-stage { padding:6px 6px 52px; gap:8px; } .multi-actions button { min-height:36px; } }
 
 /* ---------- Barra da esquerda recolhivel ---------- */
@@ -920,33 +920,33 @@ button[aria-busy="true"] { cursor:progress; }
 /* Controles de conversa e presença. Tudo continua cabendo na mesma linguagem visual da
    sala: superfícies escuras, bordas discretas e estado indicado também por texto/forma. */
 .connection-quality { display:inline-flex; align-items:center; gap:7px; color:var(--muted); }
-.connection-quality i { width:9px; height:9px; border-radius:50%; background:#77788a; box-shadow:0 0 0 3px #77788a22; }
+.connection-quality i { width:9px; height:9px; border-radius:50%; background:var(--apagado); box-shadow:0 0 0 3px rgb(var(--tinta) / 13.3%); }
 /* A medida em milissegundos numa caixa de largura fixa: ela muda a cada cinco segundos, e sem
    isso a barra inteira se reacomodava a cada medição -- "9 ms" e "148 ms" não ocupam o mesmo
    espaço, e quem estava lendo o nome da sala via tudo escorregar para o lado. */
-.connection-quality b { min-width:46px; padding:1px 5px; border-radius:7px; background:#ffffff0d; color:#b9b3cc; font-size:var(--fs-rotulo); font-weight:650; font-variant-numeric:tabular-nums; text-align:center; }
-.connection-quality[data-quality="poor"] b,.connection-quality[data-quality="lost"] b { background:#f0758322; color:#f0a9b1; }
-.connection-quality[data-quality="excellent"] i,.connection-quality[data-quality="good"] i { background:#4ccc8a; box-shadow:0 0 0 3px #4ccc8a24; }
-.connection-quality[data-quality="poor"] i { background:#f2b84b; box-shadow:0 0 0 3px #f2b84b24; }
-.connection-quality[data-quality="lost"] i { background:#ef6d7b; box-shadow:0 0 0 3px #ef6d7b24; }
-.chat-pinned-bar { margin:9px 12px 0; padding:7px 10px; display:flex; align-items:center; gap:7px; border:1px solid #a092ff2b; border-radius:9px; background:#a092ff0d; color:#b6aed1; font-size:11px; text-align:left; cursor:pointer; overflow:hidden; transition:background .14s,border-color .14s; }
-.chat-pinned-bar:hover { border-color:#a092ff4d; background:#a092ff16; }
-.chat-pinned-bar svg { flex:none; width:13px; height:13px; color:#a396e8; }
-.chat-pinned-bar strong { flex:none; color:#ccc4ea; font-weight:650; }
+.connection-quality b { min-width:46px; padding:1px 5px; border-radius:7px; background:rgb(var(--tinta) / 5.1%); color:var(--text-3); font-size:var(--fs-rotulo); font-weight:650; font-variant-numeric:tabular-nums; text-align:center; }
+.connection-quality[data-quality="poor"] b,.connection-quality[data-quality="lost"] b { background:color-mix(in srgb, var(--danger) 13.3%, transparent); color:var(--danger-texto); }
+.connection-quality[data-quality="excellent"] i,.connection-quality[data-quality="good"] i { background:#4ccc8a; box-shadow:0 0 0 3px color-mix(in srgb, var(--online) 14.1%, transparent); }
+.connection-quality[data-quality="poor"] i { background:#f2b84b; box-shadow:0 0 0 3px color-mix(in srgb, var(--aviso) 14.1%, transparent); }
+.connection-quality[data-quality="lost"] i { background:#ef6d7b; box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 14.1%, transparent); }
+.chat-pinned-bar { margin:9px 12px 0; padding:7px 10px; display:flex; align-items:center; gap:7px; border:1px solid color-mix(in srgb, var(--accent-hi) 16.9%, transparent); border-radius:9px; background:color-mix(in srgb, var(--accent-hi) 5.1%, transparent); color:var(--text-3); font-size:11px; text-align:left; cursor:pointer; overflow:hidden; transition:background .14s,border-color .14s; }
+.chat-pinned-bar:hover { border-color:color-mix(in srgb, var(--accent-hi) 30.2%, transparent); background:color-mix(in srgb, var(--accent-hi) 8.6%, transparent); }
+.chat-pinned-bar svg { flex:none; width:13px; height:13px; color:var(--accent-hi); }
+.chat-pinned-bar strong { flex:none; color:var(--accent-texto); font-weight:650; }
 .chat-pinned-bar span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .chat-pinned-bar[hidden],.chat-context[hidden] { display:none; }
 /* "Respondendo a" e "Editando" encostam no compositor de propósito: são o cabeçalho do que
    está prestes a ser enviado, e não mais um aviso solto no meio da coluna. A borda de cima
    arredonda, a de baixo não -- as duas peças leem como uma só. */
-.chat-context { position:relative; margin:9px 12px -8px; padding:8px 11px 15px; display:flex; align-items:center; gap:9px; border:1px solid #b9a9e01f; border-bottom:0; border-radius:10px 10px 0 0; background:#22232f; }
+.chat-context { position:relative; margin:9px 12px -8px; padding:8px 11px 15px; display:flex; align-items:center; gap:9px; border:1px solid color-mix(in srgb, var(--accent-hi) 12.2%, transparent); border-bottom:0; border-radius:10px 10px 0 0; background:var(--bg-2); }
 .chat-context::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:10px 0 0 0; background:var(--accent); }
 .chat-context>div { flex:1; min-width:0; display:grid; gap:2px; }
 .chat-context strong,.chat-context span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.chat-context strong { font-size:10px; font-weight:650; color:#a99cf0; letter-spacing:.02em; }
-.chat-context strong b { color:#d9d2ff; font-weight:700; }
+.chat-context strong { font-size:10px; font-weight:650; color:var(--accent-hi); letter-spacing:.02em; }
+.chat-context strong b { color:var(--accent-texto); font-weight:700; }
 .chat-context span { font-size:11px; color:var(--muted); }
 .chat-context button { flex:none; padding:5px 8px; background:transparent; color:var(--muted); font-size:12px; }
-.chat-context button:hover:not(:disabled) { background:#ffffff12; color:var(--text); }
+.chat-context button:hover:not(:disabled) { background:rgb(var(--tinta) / 7.1%); color:var(--text); }
 .app.foco-chat .chat-context { width:calc(100% - 24px); max-width:936px; margin-inline:auto; }
 /* As ações de uma mensagem FLUTUAM ACIMA dela, encaixadas na folga de 20px que separa uma
    mensagem da outra. Encostadas no topo da própria mensagem, como estavam, elas passavam por
@@ -954,9 +954,9 @@ button[aria-busy="true"] { cursor:progress; }
    exatamente quando o ponteiro chegava nela para lê-la. */
 .msg { position:relative; }
 .msg:hover .msg-actions,.msg:focus-within .msg-actions { opacity:1; pointer-events:auto; }
-.msg-actions { position:absolute; right:2px; top:-13px; z-index:3; display:flex; gap:1px; opacity:0; pointer-events:none; padding:2px; border:1px solid #b9a9e01f; border-radius:9px; background:var(--bg-3); box-shadow:0 6px 18px #0007; transition:opacity .13s; }
-.msg-actions button { display:grid; place-items:center; width:27px; height:25px; padding:0; border-radius:7px; background:transparent; color:#b6b0ca; }
-.msg-actions button:hover:not(:disabled) { background:#ffffff14; color:var(--text); }
+.msg-actions { position:absolute; right:2px; top:-13px; z-index:3; display:flex; gap:1px; opacity:0; pointer-events:none; padding:2px; border:1px solid color-mix(in srgb, var(--accent-hi) 12.2%, transparent); border-radius:9px; background:var(--bg-3); box-shadow:0 6px 18px #0007; transition:opacity .13s; }
+.msg-actions button { display:grid; place-items:center; width:27px; height:25px; padding:0; border-radius:7px; background:transparent; color:var(--text-3); }
+.msg-actions button:hover:not(:disabled) { background:rgb(var(--tinta) / 7.8%); color:var(--text); }
 .msg-actions svg { display:block; }
 /* Um botão que só tem ícone centra o desenho pela grade, e não pela linha de base do texto:
    um caractere herda a altura de linha da fonte e nasce torto dentro do quadrado. */
@@ -966,45 +966,45 @@ button[aria-busy="true"] { cursor:progress; }
    cem mensagens no histórico não precisam de cem paletas escondidas no DOM. */
 /* Todo menu solto -- o da mensagem, o das fixadas, o de status, o da fila -- entra igual e
    tem linhas da mesma altura. */
-.msg-menu { position:fixed; z-index:106; display:flex; gap:3px; padding:6px; border:0; border-radius:var(--r-lg); background:#1e1f2b; box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
+.msg-menu { position:fixed; z-index:106; display:flex; gap:3px; padding:6px; border:0; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
 .msg-menu[data-tipo="mais"],.msg-menu.menu-lista { flex-direction:column; min-width:188px; gap:1px; padding:5px; }
 .msg-menu button { display:flex; align-items:center; gap:9px; min-height:var(--ctl-p); padding:0 10px; border-radius:var(--r-sm); background:transparent; color:var(--text); font-size:var(--fs-md); font-weight:500; text-align:left; }
-.msg-menu button:active:not(:disabled) { transform:none; background:#ffffff17; }
+.msg-menu button:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 9%); }
 .msg-menu hr { width:100%; height:1px; margin:4px 0; border:0; background:var(--line-2); }
-.msg-menu button:hover:not(:disabled) { background:#ffffff0f; }
-.msg-menu button.perigo { color:#ff98a4; }
-.msg-menu button.perigo:hover:not(:disabled) { background:#ef6f7d24; }
+.msg-menu button:hover:not(:disabled) { background:rgb(var(--tinta) / 5.9%); }
+.msg-menu button.perigo { color:var(--danger-texto); }
+.msg-menu button.perigo:hover:not(:disabled) { background:color-mix(in srgb, var(--danger) 14.1%, transparent); }
 .msg-menu-emoji { width:36px; height:36px; display:grid; place-items:center; padding:0; font-size:19px; }
-.msg-menu-emoji:hover:not(:disabled) { background:#ffffff12; transform:scale(1.14); }
-.msg-menu-emoji.minha { background:#8879f633; box-shadow:inset 0 0 0 1px #a092ff66; }
+.msg-menu-emoji:hover:not(:disabled) { background:rgb(var(--tinta) / 7.1%); transform:scale(1.14); }
+.msg-menu-emoji.minha { background:color-mix(in srgb, var(--accent) 20%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 40%, transparent); }
 /* A lista de fixadas: com mais de uma, quem clica no alfinete quer escolher, não percorrer.
    Cada linha mostra autor e trecho, e quem modera solta o alfinete ali mesmo. */
 .pins-menu { flex-direction:column; gap:1px; width:min(310px,calc(100vw - 24px)); max-height:min(60vh,340px); overflow-y:auto; padding:9px; }
-.pins-menu>strong { padding:1px 4px 6px; color:#9a94ad; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+.pins-menu>strong { padding:1px 4px 6px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
 .pin-item { display:flex; align-items:stretch; gap:2px; }
 .pin-ir { flex:1; min-width:0; display:grid; gap:2px; padding:7px 9px; border-radius:8px; background:transparent; text-align:left; }
-.pin-ir:hover:not(:disabled) { background:#ffffff0f; }
-.pin-ir strong { color:#b3a6f5; font-size:10px; font-weight:650; }
+.pin-ir:hover:not(:disabled) { background:rgb(var(--tinta) / 5.9%); }
+.pin-ir strong { color:var(--accent-hi); font-size:10px; font-weight:650; }
 .pin-ir span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); font-size:11px; font-weight:400; }
-.pin-soltar { flex:none; display:grid; place-items:center; width:30px; padding:0; border-radius:8px; background:transparent; color:#8f8aa3; }
-.pin-soltar:hover:not(:disabled) { background:#ef6f7d24; color:#ff98a4; }
+.pin-soltar { flex:none; display:grid; place-items:center; width:30px; padding:0; border-radius:8px; background:transparent; color:var(--faint); }
+.pin-soltar:hover:not(:disabled) { background:color-mix(in srgb, var(--danger) 14.1%, transparent); color:var(--danger-texto); }
 .pin-soltar svg { display:block; }
 /* A citação fica entre o nome e o texto, e o autor dela puxa a cor de destaque: é o que o
    olho procura para saber a quem a mensagem responde antes de ler o resto. */
-.msg-reply { grid-column:2; display:flex; gap:6px; margin:1px 0 4px; padding:4px 9px; border-left:2px solid var(--accent); border-radius:0 6px 6px 0; background:#ffffff07; color:#9c95af; font-size:10px; text-align:left; overflow:hidden; white-space:nowrap; }
-.msg-reply:hover:not(:disabled) { background:#ffffff0d; color:#b6afc6; }
-.msg-reply-autor { flex:none; color:#b3a6f5; font-weight:650; }
+.msg-reply { grid-column:2; display:flex; gap:6px; margin:1px 0 4px; padding:4px 9px; border-left:2px solid var(--accent); border-radius:0 6px 6px 0; background:rgb(var(--tinta) / 2.7%); color:var(--muted); font-size:10px; text-align:left; overflow:hidden; white-space:nowrap; }
+.msg-reply:hover:not(:disabled) { background:rgb(var(--tinta) / 5.1%); color:var(--text-3); }
+.msg-reply-autor { flex:none; color:var(--accent-hi); font-weight:650; }
 .msg-reply>:last-child { overflow:hidden; text-overflow:ellipsis; }
 .msg-reactions { grid-column:2; display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
-.msg-reactions button { display:flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid #ffffff14; border-radius:999px; background:#ffffff09; color:#cdc7dd; font-size:11px; font-weight:600; line-height:1.7; }
-.msg-reactions button:hover:not(:disabled) { border-color:#ffffff2e; background:#ffffff14; }
-.msg-reactions button.minha { border-color:#8879f6; background:#8879f628; color:#ded8ff; }
+.msg-reactions button { display:flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid rgb(var(--tinta) / 7.8%); border-radius:999px; background:rgb(var(--tinta) / 3.5%); color:var(--text-2); font-size:11px; font-weight:600; line-height:1.7; }
+.msg-reactions button:hover:not(:disabled) { border-color:rgb(var(--tinta) / 18%); background:rgb(var(--tinta) / 7.8%); }
+.msg-reactions button.minha { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 15.7%, transparent); color:var(--accent-texto); }
 /* Menção: a faixa dourada vale para a mensagem inteira, avatar incluído, e sem empurrar a
    linha para o lado -- com `margin-inline` ela ficava desalinhada das vizinhas. */
-.msg.mencionou { padding:6px 9px 7px; margin:-6px -9px -7px; border-radius:9px; box-shadow:inset 3px 0 0 #d4ad4f; background:#d4ad4f0c; }
+.msg.mencionou { padding:6px 9px 7px; margin:-6px -9px -7px; border-radius:9px; box-shadow:inset 3px 0 0 #d4ad4f; background:color-mix(in srgb, var(--aviso) 4.7%, transparent); }
 .msg.editada .msg-hora::after { content:' · editada'; }
 .unread-divider { display:flex; align-items:center; gap:8px; color:var(--danger); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
-.unread-divider::before,.unread-divider::after { content:''; height:1px; flex:1; background:#f0758359; }
+.unread-divider::before,.unread-divider::after { content:''; height:1px; flex:1; background:color-mix(in srgb, var(--danger) 34.9%, transparent); }
 #chatPinsCount { margin-left:4px; padding:1px 5px; border-radius:8px; background:var(--accent); color:#fff; font-size:var(--fs-rotulo); font-weight:700; }
 .chat-pins-btn { display:inline-flex; align-items:center; }
 .toggle-line { display:flex; align-items:center; justify-content:space-between; gap:14px; }
@@ -1014,43 +1014,43 @@ button[aria-busy="true"] { cursor:progress; }
    pequena e espaçada. Sem isso, "Controles da sala" e "Pedidos de entrada" apareciam como
    negrito comum e o painel parecia costurado de duas peças diferentes. */
 .room-security { display:grid; gap:11px; margin-top:16px; padding-top:15px; border-top:1px solid var(--line); }
-.room-security>strong { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
+.room-security>strong { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
 /* `.field label` é `display:block` e tem especificidade maior que `.toggle-line`: sem esta
    linha, o interruptor do push-to-talk e o da economia de dados caíam para baixo do texto,
    em duas linhas, enquanto os iguais a eles na moderação ficavam certos. */
 .field label.toggle-line { display:flex; margin-bottom:0; font-size:13px; color:var(--text); cursor:pointer; }
-.toggle-line input[type="checkbox"] { appearance:none; -webkit-appearance:none; flex:0 0 auto; width:38px; height:22px; padding:0; border:1px solid #ffffff18; border-radius:999px; background:#11121a; cursor:pointer; position:relative; transition:background .16s,border-color .16s; }
-.toggle-line input[type="checkbox"]::after { content:''; position:absolute; width:16px; height:16px; left:2px; top:2px; border-radius:50%; background:#8d8b9b; box-shadow:0 1px 3px #0008; transition:transform .16s,background .16s; }
+.toggle-line input[type="checkbox"] { appearance:none; -webkit-appearance:none; flex:0 0 auto; width:38px; height:22px; padding:0; border:1px solid rgb(var(--tinta) / 9.4%); border-radius:999px; background:var(--bg-fundo); cursor:pointer; position:relative; transition:background .16s,border-color .16s; }
+.toggle-line input[type="checkbox"]::after { content:''; position:absolute; width:16px; height:16px; left:2px; top:2px; border-radius:50%; background:var(--faint); box-shadow:0 1px 3px #0008; transition:transform .16s,background .16s; }
 .toggle-line input[type="checkbox"]:checked { border-color:var(--accent-hi); background:var(--accent); }
 .toggle-line input[type="checkbox"]:checked::after { transform:translateX(16px); background:white; }
 .toggle-line input[type="checkbox"]:focus-visible { outline:2px solid var(--accent-hi); outline-offset:2px; }
 .toggle-line input[type="checkbox"]:disabled { opacity:.45; cursor:not-allowed; }
-.ptt-field { gap:8px; margin-top:-5px; padding:10px 12px; border:1px solid #ffffff0b; border-radius:10px; background:#ffffff04; }
+.ptt-field { gap:8px; margin-top:-5px; padding:10px 12px; border:1px solid rgb(var(--tinta) / 4.3%); border-radius:10px; background:rgb(var(--tinta) / 1.6%); }
 .ptt-field .toggle-line strong { font-size:11px; }
 .ptt-field .toggle-line small,.shortcut-hint { font-size:var(--fs-meta); line-height:1.5; }
 .join-requests { display:grid; gap:7px; }
 .join-requests:empty { display:none; }
-.join-requests>strong { margin-top:5px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8d86a5; }
-.join-request { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:6px; padding:7px 8px 7px 11px; border:1px solid #a092ff26; border-radius:8px; background:#a092ff0d; font-size:12px; }
+.join-requests>strong { margin-top:5px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+.join-request { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:6px; padding:7px 8px 7px 11px; border:1px solid color-mix(in srgb, var(--accent-hi) 14.9%, transparent); border-radius:8px; background:color-mix(in srgb, var(--accent-hi) 5.1%, transparent); font-size:12px; }
 .join-request>span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .join-request button { padding:6px 10px; font-size:11px; }
 .waiting-card { text-align:center; }
 .waiting-card .modal-actions { justify-content:center; }
-.waiting-spinner { display:block; width:32px; height:32px; margin:0 auto 14px; border:3px solid #ffffff20; border-top-color:var(--accent); border-radius:50%; animation:girar .8s linear infinite; }
+.waiting-spinner { display:block; width:32px; height:32px; margin:0 auto 14px; border:3px solid rgb(var(--tinta) / 12.5%); border-top-color:var(--accent); border-radius:50%; animation:girar .8s linear infinite; }
 @keyframes girar { to { transform:rotate(360deg); } }
 /* Sem `left`/`bottom` fixos: quem posiciona é o JS, ancorando no botão que abriu. A barra
    lateral recolhe, e no celular ela é uma gaveta -- uma distância fixa da quina deixava o
    menu boiando longe do que o chamou. */
-.presence-menu { position:fixed; z-index:105; width:220px; padding:12px; border:0; border-radius:var(--r-lg); background:#1e1f2b; box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
-.presence-menu>strong { display:block; margin:3px 4px 7px; color:#9a94ad; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+.presence-menu { position:fixed; z-index:105; width:220px; padding:12px; border:0; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
+.presence-menu>strong { display:block; margin:3px 4px 7px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
 .presence-options { display:grid; gap:2px; margin-bottom:13px; }
 .presence-options button { padding:8px 10px; text-align:left; background:transparent; color:var(--text); font-size:12px; font-weight:500; }
-.presence-options button:hover:not(:disabled) { background:#ffffff0f; }
-.presence-options button.ativo { background:#8879f62e; color:#ded8ff; box-shadow:inset 0 0 0 1px #a092ff4d; }
+.presence-options button:hover:not(:disabled) { background:rgb(var(--tinta) / 5.9%); }
+.presence-options button.ativo { background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-texto); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 30.2%, transparent); }
 .presence-reactions { display:flex; gap:4px; margin-bottom:0; }
-.presence-reactions button { flex:1; padding:8px 3px; border-radius:9px; background:#ffffff08; font-size:18px; line-height:1; transition:background .14s,transform .14s; }
-.presence-reactions button:hover:not(:disabled) { background:#ffffff16; transform:translateY(-2px) scale(1.06); }
-.presence-badge { position:absolute; right:6px; top:6px; z-index:2; display:grid; place-items:center; min-width:22px; height:22px; padding:0 4px; border:1px solid #ffffff1a; border-radius:8px; background:#14151dea; font-size:11px; line-height:1; cursor:help; }
+.presence-reactions button { flex:1; padding:8px 3px; border-radius:9px; background:rgb(var(--tinta) / 3.1%); font-size:18px; line-height:1; transition:background .14s,transform .14s; }
+.presence-reactions button:hover:not(:disabled) { background:rgb(var(--tinta) / 8.6%); transform:translateY(-2px) scale(1.06); }
+.presence-badge { position:absolute; right:6px; top:6px; z-index:2; display:grid; place-items:center; min-width:22px; height:22px; padding:0 4px; border:1px solid rgb(var(--tinta) / 10.2%); border-radius:8px; background:#14151dea; font-size:11px; line-height:1; cursor:help; }
 
 /* ---------- Reações que atravessam a sala ----------
    Três propriedades de transformação independentes, em duas camadas: a de fora sobe
@@ -1086,7 +1086,7 @@ button[aria-busy="true"] { cursor:progress; }
    topo, abaixo da barra de cima, como o de pedido de entrada. */
 .nexo-toasts { top:76px; bottom:auto; right:18px; }
 @media(max-width:560px) { .nexo-toasts { top:calc(64px + env(safe-area-inset-top)); bottom:auto; } }
-.join-request-notice { position:fixed; z-index:110; right:18px; top:72px; width:min(350px,calc(100vw - 28px)); display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #a092ff45; border-radius:12px; background:#1b1b28f5; box-shadow:0 16px 45px #0009; }
+.join-request-notice { position:fixed; z-index:110; right:18px; top:72px; width:min(350px,calc(100vw - 28px)); display:flex; align-items:center; gap:12px; padding:12px; border:1px solid color-mix(in srgb, var(--accent-hi) 27.1%, transparent); border-radius:12px; background:color-mix(in srgb, var(--bg-1) 96%, transparent); box-shadow:0 16px 45px #0009; }
 .join-request-notice[hidden] { display:none; }
 .join-request-notice>div { display:grid; flex:1; gap:3px; min-width:0; }
 .join-request-notice strong { font-size:12px; }
@@ -1099,8 +1099,8 @@ button[aria-busy="true"] { cursor:progress; }
 .app.compacto-local .palco-area { padding:0; }
 .app.compacto-local .stage { border-radius:0; }
 .app.compacto-local .stage-controls { opacity:1!important; transform:none!important; pointer-events:auto!important; }
-.app.compacto-local #compactBtn { position:fixed; right:12px; bottom:12px; z-index:120; display:block; background:#181923; }
-.app.economia-dados .connection-quality::after { content:'Eco'; padding:2px 5px; border-radius:8px; background:#56b88722; color:#70d9a3; font-size:var(--fs-rotulo); }
+.app.compacto-local #compactBtn { position:fixed; right:12px; bottom:12px; z-index:120; display:block; background:var(--bg-0); }
+.app.economia-dados .connection-quality::after { content:'Eco'; padding:2px 5px; border-radius:8px; background:color-mix(in srgb, var(--online) 13.3%, transparent); color:var(--online-texto); font-size:var(--fs-rotulo); }
 /* Dois botões novos entraram na barra de cima, e ela ficou apertada antes de chegar ao
    celular: no meio do caminho o nome da sala é que encolhia, virando "teste-v...". Os
    rótulos de "Conexão" e "Plateia" saem primeiro -- os ícones continuam dizendo o que são,
@@ -1134,40 +1134,40 @@ button[aria-busy="true"] { cursor:progress; }
    altura fixa: trocar de seção não faz o painel inteiro pular de tamanho. */
 .config-card { --pad-cartao:0px; width:min(100%,880px); height:min(88vh,680px); height:min(88dvh,680px); max-height:none; display:flex; padding:0; overflow:hidden; }
 .config-card > .abas.config { flex:1; min-width:0; display:grid; grid-template-columns:216px minmax(0,1fr); }
-.config-nav { display:flex; flex-direction:column; min-height:0; overflow-y:auto; padding:24px 12px 16px; background:#1c1c27; border-right:1px solid var(--line); }
+.config-nav { display:flex; flex-direction:column; min-height:0; overflow-y:auto; padding:24px 12px 16px; background:var(--bg-1); border-right:1px solid var(--line); }
 .config-nav-topo h2 { margin:0 10px 2px; padding:0; font-size:var(--fs-lg); letter-spacing:-.01em; }
 .config-nav-topo small { display:block; margin:0 10px 8px; color:var(--faint); font-size:var(--fs-meta); }
 .config-fita { display:flex; flex-direction:column; gap:2px; }
 .config-grupo { margin:16px 10px 6px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
-.config-fita .aba { flex:none; display:flex; align-items:center; gap:10px; width:100%; padding:8px 10px; border-radius:var(--r-sm); background:transparent; color:#b4aec6; font-size:var(--fs-md); font-weight:550; text-align:left; }
+.config-fita .aba { flex:none; display:flex; align-items:center; gap:10px; width:100%; padding:8px 10px; border-radius:var(--r-sm); background:transparent; color:var(--text-3); font-size:var(--fs-md); font-weight:550; text-align:left; }
 .config-fita .aba .ico { width:17px; height:17px; opacity:.8; transition:opacity var(--dur) var(--curva); }
-.config-fita .aba:hover:not(:disabled) { background:#ffffff0a; color:var(--text); }
+.config-fita .aba:hover:not(:disabled) { background:rgb(var(--tinta) / 3.9%); color:var(--text); }
 .config-fita .aba:hover .ico { opacity:1; }
-.config-fita .aba:active:not(:disabled) { transform:none; background:#ffffff12; }
-.config-fita .aba[aria-selected="true"] { background:var(--accent-suave-hi); color:#fff; }
+.config-fita .aba:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 7.1%); }
+.config-fita .aba[aria-selected="true"] { background:var(--accent-suave-hi); color:var(--text); }
 .config-fita .aba[aria-selected="true"] .ico { opacity:1; color:var(--accent-texto); }
 .config-conteudo { --pad-cartao:32px; position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overscroll-behavior:contain; padding:28px var(--pad-cartao) var(--pad-cartao); }
 .config-conteudo > .aba-painel { flex:1 0 auto; }
-.config-conteudo .modal-actions { background:linear-gradient(#23222f00,#23222f 12px); }
+.config-conteudo .modal-actions { background:linear-gradient(transparent,var(--bg-2) 12px); }
 .config-cabeca h3 { margin:0 0 4px; padding-right:40px; font-size:20px; letter-spacing:-.035em; }
 .config-cabeca p { margin:0 0 20px; color:var(--muted); font-size:var(--fs-sm); line-height:1.6; }
-.config-rotulo { display:block; margin:0 0 8px; color:#bcb2cf; font-size:11px; font-weight:650; letter-spacing:.02em; }
+.config-rotulo { display:block; margin:0 0 8px; color:var(--text-3); font-size:11px; font-weight:650; letter-spacing:.02em; }
 .config-dica { margin:14px 0 0; color:var(--faint); font-size:var(--fs-meta); line-height:1.6; }
-.config-bloco { display:grid; gap:14px; margin-bottom:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:#ffffff04; }
+.config-bloco { display:grid; gap:14px; margin-bottom:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
 .config-bloco .toggle-line strong { font-size:var(--fs-md); font-weight:600; }
 .config-bloco .toggle-line small { font-size:var(--fs-meta); line-height:1.5; }
-.config-volume label { display:block; margin-bottom:6px; color:#bcb2cf; font-size:11px; font-weight:600; }
+.config-volume label { display:block; margin-bottom:6px; color:var(--text-3); font-size:11px; font-weight:600; }
 .config-volume .volume-row { gap:10px; color:var(--muted); }
 .config-volume .volume-slider { height:4px; }
 .config-volume output { min-width:40px; color:var(--text-2); font-size:var(--fs-sm); font-variant-numeric:tabular-nums; text-align:right; }
 kbd { display:inline-grid; place-items:center; min-width:22px; height:21px; padding:0 6px; border-radius:6px; background:var(--bg-4); box-shadow:inset 0 -2px 0 #0000004d, 0 0 0 1px var(--line-2); color:var(--text); font:600 var(--fs-meta)/1 "Segoe UI",system-ui,sans-serif; }
-.link-botao { display:inline; padding:0; border-radius:4px; background:none; color:#b5aaff; font:inherit; font-weight:600; text-decoration:underline; text-underline-offset:2px; }
-.link-botao:hover:not(:disabled) { background:none; color:#d2caff; }
+.link-botao { display:inline; padding:0; border-radius:4px; background:none; color:var(--accent-hi); font:inherit; font-weight:600; text-decoration:underline; text-underline-offset:2px; }
+.link-botao:hover:not(:disabled) { background:none; color:var(--accent-texto); }
 .link-botao:active:not(:disabled) { transform:none; }
 
 /* O interruptor da sala, também para quem não está dentro de uma `.toggle-line`. */
-input.interruptor { appearance:none; -webkit-appearance:none; flex:0 0 auto; position:relative; width:38px; height:22px; margin:0; padding:0; border:1px solid #ffffff18; border-radius:999px; background:#11121a; cursor:pointer; transition:background .16s,border-color .16s; }
-input.interruptor::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#8d8b9b; box-shadow:0 1px 3px #0008; transition:transform .16s,background .16s; }
+input.interruptor { appearance:none; -webkit-appearance:none; flex:0 0 auto; position:relative; width:38px; height:22px; margin:0; padding:0; border:1px solid rgb(var(--tinta) / 9.4%); border-radius:999px; background:var(--bg-fundo); cursor:pointer; transition:background .16s,border-color .16s; }
+input.interruptor::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--faint); box-shadow:0 1px 3px #0008; transition:transform .16s,background .16s; }
 input.interruptor:checked { border-color:var(--accent-hi); background:var(--accent); }
 input.interruptor:checked::after { transform:translateX(16px); background:#fff; }
 input.interruptor:focus-visible { outline:2px solid var(--accent-hi); outline-offset:2px; }
@@ -1176,65 +1176,65 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 /* ---------- Sons ---------- */
 .som-eventos { display:grid; gap:2px; }
 .som-evento { display:grid; grid-template-columns:34px minmax(0,1fr) auto auto; align-items:center; gap:12px; padding:10px 10px 10px 8px; border-radius:var(--r-md); transition:background-color var(--dur) var(--curva); }
-.som-evento:hover { background:#ffffff07; }
+.som-evento:hover { background:rgb(var(--tinta) / 2.7%); }
 .som-evento-icone { display:grid; place-items:center; width:34px; height:34px; border-radius:var(--r-md); background:var(--accent-suave); color:var(--accent-texto); }
 .som-evento-icone[data-cor="online"] { background:var(--online-suave); color:var(--online); }
-.som-evento-icone[data-cor="neutro"] { background:#ffffff0d; color:var(--text-2); }
-.som-evento-icone[data-cor="live"] { background:#f16f9820; color:#ffa6bd; }
+.som-evento-icone[data-cor="neutro"] { background:rgb(var(--tinta) / 5.1%); color:var(--text-2); }
+.som-evento-icone[data-cor="live"] { background:color-mix(in srgb, var(--rosa) 12.5%, transparent); color:var(--rosa-texto); }
 .som-evento-icone[data-cor="aviso"] { background:var(--aviso-suave); color:var(--aviso); }
 .config-rotulo-grupo { margin-top:22px; }
 .som-evento-texto { min-width:0; display:grid; gap:1px; }
 .som-evento-texto strong { font-size:var(--fs-md); font-weight:600; }
 .som-evento-texto small { color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
-.som-previa { display:grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:50%; background:#ffffff0d; color:var(--text-2); opacity:.75; }
+.som-previa { display:grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:50%; background:rgb(var(--tinta) / 5.1%); color:var(--text-2); opacity:.75; }
 .som-previa svg { width:13px; height:13px; fill:currentColor; margin-left:2px; }
 .som-evento:hover .som-previa,.som-previa:focus-visible { opacity:1; }
 .som-previa:hover:not(:disabled) { background:var(--accent-forte); color:#fff; }
 .som-previa.tocou { animation:som-tocou .5s var(--curva); }
-@keyframes som-tocou { 0% { box-shadow:0 0 0 0 #8879f680; } 100% { box-shadow:0 0 0 10px #8879f600; } }
+@keyframes som-tocou { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 50.2%, transparent); } 100% { box-shadow:0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); } }
 .som-sub { margin:2px 0 0 54px; padding:8px 10px; border-radius:var(--r-md); font-size:var(--fs-sm); }
 .som-sub small { font-size:var(--fs-meta); }
-.som-sub:hover { background:#ffffff05; }
+.som-sub:hover { background:rgb(var(--tinta) / 2%); }
 #painelSons.sons-desligados .som-evento-texto,#painelSons.sons-desligados .som-evento-icone,#painelSons.sons-desligados .config-volume,#painelSons.sons-desligados .som-sub { opacity:.45; }
 
 /* ---------- Aparência ---------- */
-.segmentado { display:inline-flex; flex-wrap:wrap; gap:4px; padding:4px; border-radius:var(--r-md); background:#1b1b26; box-shadow:inset 0 0 0 1px #ffffff0a; }
+.segmentado { display:inline-flex; flex-wrap:wrap; gap:4px; padding:4px; border-radius:var(--r-md); background:var(--bg-1); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 3.9%); }
 .segmentado label { position:relative; cursor:pointer; }
 .segmentado input { position:absolute; opacity:0; width:1px; height:1px; }
-.segmentado span { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 14px; border-radius:var(--r-sm); color:#a49bb8; font-size:var(--fs-sm); font-weight:600; transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva); }
-.segmentado label:hover span { background:#ffffff09; color:var(--text); }
+.segmentado span { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 14px; border-radius:var(--r-sm); color:var(--muted); font-size:var(--fs-sm); font-weight:600; transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva); }
+.segmentado label:hover span { background:rgb(var(--tinta) / 3.5%); color:var(--text); }
 .segmentado input:checked + span { background:var(--accent-forte); color:#fff; }
-.segmentado input:focus-visible + span { outline:2px solid #b6abff; outline-offset:2px; }
-.previa-chat { display:flex; flex-direction:column; gap:12px; margin:0 0 20px; padding:12px 10px; border:1px solid var(--line); border-radius:var(--r-lg); background:#1c1d28; pointer-events:none; }
+.segmentado input:focus-visible + span { outline:2px solid var(--anel-cor); outline-offset:2px; }
+.previa-chat { display:flex; flex-direction:column; gap:12px; margin:0 0 20px; padding:12px 10px; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--bg-1); pointer-events:none; }
 /* A prévia imita a mensagem do chat com classes próprias; as regras de densidade e de tamanho
    logo abaixo valem para as duas. */
 .previa-msg { display:grid; grid-template-columns:28px minmax(0,1fr); column-gap:9px; row-gap:2px; padding:4px 8px; }
 .previa-avatar { grid-row:1 / 3; display:grid; place-items:center; width:28px; height:28px; border-radius:10px; color:#26202f; font-size:10px; font-weight:750; }
 .previa-topo { grid-column:2; display:flex; align-items:baseline; gap:7px; }
 .previa-autor { font-size:11px; font-weight:650; }
-.previa-hora { color:#9990a6; font-size:var(--fs-meta); }
-.previa-texto { grid-column:2; color:#c6c0d2; font-size:11px; line-height:1.7; }
+.previa-hora { color:var(--faint); font-size:var(--fs-meta); }
+.previa-texto { grid-column:2; color:var(--text-3); font-size:11px; line-height:1.7; }
 .config-chaves { gap:16px; }
 
 /* ---------- Atalhos ---------- */
 .atalhos { display:grid; gap:0; margin:0 0 20px; border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; }
 .atalhos > div { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:10px 14px; transition:background-color var(--dur) var(--curva); }
 .atalhos > div + div { border-top:1px solid var(--line); }
-.atalhos > div:hover { background:#ffffff05; }
+.atalhos > div:hover { background:rgb(var(--tinta) / 2%); }
 .atalhos dt { color:var(--text-2); font-size:var(--fs-md); }
 .atalhos dd { display:flex; flex:none; gap:4px; margin:0; }
 
 /* ---------- Perfil ---------- */
-.config-perfil { overflow:hidden; border:1px solid var(--line-2); border-radius:var(--r-lg); background:#1b1b26; }
-.config-perfil-faixa { height:64px; background:linear-gradient(120deg,#8879f6,#8879f666); }
+.config-perfil { overflow:hidden; border:1px solid var(--line-2); border-radius:var(--r-lg); background:var(--bg-1); }
+.config-perfil-faixa { height:64px; background:linear-gradient(120deg,var(--accent),color-mix(in srgb, var(--accent) 40%, transparent)); }
 .config-perfil-corpo { display:flex; align-items:flex-end; gap:14px; padding:0 16px; margin-top:-28px; }
-.config-perfil-corpo .perfil-avatar { width:72px; height:72px; font-size:26px; box-shadow:0 0 0 6px #1b1b26; }
+.config-perfil-corpo .perfil-avatar { width:72px; height:72px; font-size:26px; box-shadow:0 0 0 6px var(--bg-1); }
 .config-perfil-nome { flex:1; min-width:0; padding-bottom:4px; }
 .config-perfil-nome strong { display:block; font-size:var(--fs-lg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .config-perfil-nome small { display:block; color:var(--muted); font:var(--fs-meta) ui-monospace,Consolas,monospace; letter-spacing:.03em; }
 .config-perfil-corpo > button,.config-perfil-corpo > .botao-link { flex:none; min-height:var(--ctl-m); margin-bottom:4px; padding:0 14px; font-size:var(--fs-sm); }
 .config-perfil-dados { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px; }
-.config-perfil-dados > div { padding:10px 12px; border-radius:var(--r-md); background:#ffffff06; }
+.config-perfil-dados > div { padding:10px 12px; border-radius:var(--r-md); background:rgb(var(--tinta) / 2.4%); }
 .config-perfil-dados dt { color:var(--faint); font-size:var(--fs-rotulo); font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .config-perfil-dados dd { margin:3px 0 0; color:var(--text); font-size:var(--fs-md); }
 #configConta { margin-top:12px; }
@@ -1256,16 +1256,16 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 }
 
 /* ---------- O tempo na sala ---------- */
-.tempo-sala { flex:none; display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-p); padding:0 9px; border-radius:var(--r-sm); background:#ffffff08; color:#b8b1cc; font-size:var(--fs-meta); font-weight:650; font-variant-numeric:tabular-nums; }
-.tempo-sala .ico { color:#a79fca; }
-.tempo-sala:hover:not(:disabled),.tempo-sala[aria-expanded="true"] { background:#ffffff12; color:var(--text); }
+.tempo-sala { flex:none; display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-p); padding:0 9px; border-radius:var(--r-sm); background:rgb(var(--tinta) / 3.1%); color:var(--text-3); font-size:var(--fs-meta); font-weight:650; font-variant-numeric:tabular-nums; }
+.tempo-sala .ico { color:var(--muted); }
+.tempo-sala:hover:not(:disabled),.tempo-sala[aria-expanded="true"] { background:rgb(var(--tinta) / 7.1%); color:var(--text); }
 /* A barra de cima já disputa cada pixel entre o nome da sala e as ações. O relógio só entra
    nela onde sobra espaço; abaixo disso ele vive ao lado de "NO SQUAD", na barra lateral. */
 @media(max-width:1499px) { .tempo-sala { display:none!important; } }
 .member-caption { align-items:center; }
 .caption-acao { display:inline-flex; align-items:center; gap:5px; min-width:22px; height:22px; margin:-4px -6px -4px 0; padding:0 6px; border-radius:6px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:650; letter-spacing:.02em; font-variant-numeric:tabular-nums; }
 .caption-acao .ico { width:13px; height:13px; }
-.caption-acao:hover:not(:disabled),.caption-acao[aria-expanded="true"] { background:#ffffff0f; color:var(--text); }
+.caption-acao:hover:not(:disabled),.caption-acao[aria-expanded="true"] { background:rgb(var(--tinta) / 5.9%); color:var(--text); }
 .member-tempo { display:none; flex:none; color:var(--faint); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; }
 .member-tempo:empty { display:none!important; }
 .member:hover .member-tempo,.member:focus-visible .member-tempo,.app.mostrar-tempos .member-tempo { display:inline; }
@@ -1276,11 +1276,11 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 .tempo-topo small { display:block; color:var(--muted); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; }
 .tempo-lista { overflow-y:auto; padding:6px; }
 .tempo-linha { display:grid; grid-template-columns:24px minmax(0,1fr) auto; grid-template-rows:auto auto; column-gap:9px; row-gap:4px; align-items:center; padding:7px 8px; border-radius:var(--r-sm); transition:background-color var(--dur) var(--curva); }
-.tempo-linha:hover { background:#ffffff08; }
+.tempo-linha:hover { background:rgb(var(--tinta) / 3.1%); }
 .tempo-avatar { grid-row:1 / 3; display:grid; place-items:center; width:24px; height:24px; border-radius:8px; color:#171823; font-size:9px; font-weight:800; }
 .tempo-nome { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-2); font-size:var(--fs-sm); }
 .tempo-valor { color:var(--text); font-size:var(--fs-sm); font-weight:600; font-variant-numeric:tabular-nums; }
-.tempo-barra { grid-column:2 / 4; height:3px; border-radius:2px; background:#ffffff0d; overflow:hidden; }
+.tempo-barra { grid-column:2 / 4; height:3px; border-radius:2px; background:rgb(var(--tinta) / 5.1%); overflow:hidden; }
 .tempo-barra i { display:block; height:100%; border-radius:2px; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .9s linear; }
 .perfil-tempo { display:flex; align-items:center; gap:7px; margin:-2px 0 12px; padding:8px 11px; border-radius:var(--r-md); background:var(--accent-suave); color:var(--accent-texto); font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
 .perfil-tempo::before { content:''; width:6px; height:6px; flex:none; border-radius:50%; background:var(--online); }
@@ -1292,10 +1292,10 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
    preenchimento -- a distância entre elas é a mesma de antes. */
 .chat-msgs { gap:12px; padding:14px 9px; }
 .chat-msgs > .msg { padding:4px 8px; border-radius:var(--r-md); transition:background-color var(--dur-rapida) var(--curva); }
-.chat-msgs > .msg:hover,.chat-msgs > .msg:focus-within { background:#ffffff0a; }
+.chat-msgs > .msg:hover,.chat-msgs > .msg:focus-within { background:rgb(var(--tinta) / 3.9%); }
 .chat-msgs > .chat-vazio,.chat-msgs > .unread-divider { margin-inline:8px; }
 .msg.mencionou { padding:4px 8px; margin:0; }
-.chat-msgs > .msg.mencionou:hover { background:#d4ad4f16; }
+.chat-msgs > .msg.mencionou:hover { background:color-mix(in srgb, var(--aviso) 8.6%, transparent); }
 .msg-avatar { transition:transform var(--dur) var(--curva-mola); }
 .chat-msgs > .msg:hover .msg-avatar { transform:scale(1.06); }
 .densidade-compacta .chat-msgs,.previa-chat.densidade-compacta { gap:4px; }
@@ -1318,7 +1318,7 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 #musicaMsgs { gap:2px; padding:14px 9px; }
 #musicaMsgs > .msg:not(.bot-linha):not(.continua):not(:first-child) { margin-top:12px; }
 #musicaMsgs > .msg:not(.bot-linha) { padding:4px 8px; border-radius:var(--r-md); transition:background-color var(--dur-rapida) var(--curva); }
-#musicaMsgs > .msg:not(.bot-linha):hover { background:#ffffff07; }
+#musicaMsgs > .msg:not(.bot-linha):hover { background:rgb(var(--tinta) / 2.7%); }
 #musicaMsgs > .bot-linha + .msg:not(.bot-linha) { margin-top:12px; }
 #musicaMsgs > .msg + .bot-linha { margin-top:4px; }
 #musicaMsgs > .bot-linha + .bot-linha { margin-top:0; }
@@ -1326,51 +1326,197 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 .msg.continua .msg-texto { grid-row:1; }
 .msg.continua { margin-top:0!important; }
 .bot-linha { display:flex; align-items:flex-start; gap:9px; padding:5px 8px; border-radius:var(--r-md); transition:background-color var(--dur-rapida) var(--curva); }
-.bot-linha:hover { background:#ffffff07; }
+.bot-linha:hover { background:rgb(var(--tinta) / 2.7%); }
 .bot-marca { flex:none; display:grid; place-items:center; width:22px; height:22px; margin-top:1px; border-radius:7px; background:var(--accent-suave-hi) center/cover no-repeat; color:var(--accent-texto); font-size:11px; }
 .bot-marca svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-.bot-marca.com-capa { box-shadow:inset 0 0 0 1px #ffffff1a; }
+.bot-marca.com-capa { box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 10.2%); }
 .bot-marca.com-capa svg { display:none; }
-.bot-linha .msg-texto { flex:1; min-width:0; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; color:#b9b2ca; font-size:var(--fs-sm); line-height:1.5; white-space:normal; }
+.bot-linha .msg-texto { flex:1; min-width:0; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; color:var(--text-3); font-size:var(--fs-sm); line-height:1.5; white-space:normal; }
 .bot-linha .msg-hora { flex:none; margin-top:2px; font-size:var(--fs-rotulo); opacity:0; transition:opacity var(--dur) var(--curva); }
 .bot-linha:hover .msg-hora,.bot-linha:focus-within .msg-hora { opacity:1; }
 @media (hover:none) { .bot-linha .msg-hora { opacity:.7; } }
 .bot-linha[data-tipo="tocando"] .bot-marca,.bot-linha[data-tipo="agora"] .bot-marca,.bot-linha[data-tipo="volta"] .bot-marca { background-color:var(--online-suave); color:var(--online); }
 .bot-linha[data-tipo="tocando"] .msg-texto { color:var(--text-2); }
 .bot-linha[data-tipo="erro"] .bot-marca,.bot-linha[data-tipo="aviso"] .bot-marca { background-color:var(--danger-suave); color:var(--danger-texto); }
-.bot-linha[data-tipo="erro"] .msg-texto { color:#e2b3bb; -webkit-line-clamp:4; }
+.bot-linha[data-tipo="erro"] .msg-texto { color:var(--danger-texto); -webkit-line-clamp:4; }
 .bot-linha[data-tipo="pausa"] .bot-marca { background-color:var(--aviso-suave); color:var(--aviso); }
-.bot-linha[data-tipo="parou"] .bot-marca,.bot-linha[data-tipo="dica"] .bot-marca,.bot-linha[data-tipo="info"] .bot-marca { background-color:#ffffff0d; color:var(--text-2); }
+.bot-linha[data-tipo="parou"] .bot-marca,.bot-linha[data-tipo="dica"] .bot-marca,.bot-linha[data-tipo="info"] .bot-marca { background-color:rgb(var(--tinta) / 5.1%); color:var(--text-2); }
 .bot-linha[data-tipo="dica"] .msg-texto { -webkit-line-clamp:3; }
-.bot-cartao { display:block; margin-top:8px; padding:10px 12px; border:1px solid var(--line-2); border-radius:var(--r-lg); background:#ffffff04; transition:border-color var(--dur) var(--curva),background-color var(--dur) var(--curva); }
-.bot-cartao:hover { border-color:var(--line-3); background:#ffffff07; }
+.bot-cartao { display:block; margin-top:8px; padding:10px 12px; border:1px solid var(--line-2); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); transition:border-color var(--dur) var(--curva),background-color var(--dur) var(--curva); }
+.bot-cartao:hover { border-color:var(--line-3); background:rgb(var(--tinta) / 2.7%); }
 .bot-cartao + .bot-linha { margin-top:6px!important; }
 .bot-cartao-topo { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.bot-cartao-topo .msg-autor { color:#b7a7ff; }
-.bot-cartao .msg-texto { color:#b9b2ca; font-size:var(--fs-sm); }
+.bot-cartao-topo .msg-autor { color:var(--accent-hi); }
+.bot-cartao .msg-texto { color:var(--text-3); font-size:var(--fs-sm); }
 .bot-cartao.recolhido .msg-texto { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:5; overflow:hidden; }
-.bot-mais { margin-top:6px; padding:3px 8px; border-radius:var(--r-xs); background:#ffffff0a; color:var(--accent-texto); font-size:var(--fs-meta); font-weight:600; }
-.bot-mais:hover:not(:disabled) { background:var(--accent-suave-hi); color:#fff; }
+.bot-mais { margin-top:6px; padding:3px 8px; border-radius:var(--r-xs); background:rgb(var(--tinta) / 3.9%); color:var(--accent-texto); font-size:var(--fs-meta); font-weight:600; }
+.bot-mais:hover:not(:disabled) { background:var(--accent-suave-hi); color:var(--text); }
 /* O pedido esperando a busca: um indicador pequeno embaixo do que a pessoa escreveu, que some
    quando a música entra (ou quando não se acha nada). */
 .pedido-status { grid-column:2; display:inline-flex; align-items:center; gap:7px; margin-top:4px; color:var(--muted); font-size:var(--fs-meta); animation:nexo-aparecer var(--dur) var(--curva); }
-.pedido-status::before { content:''; width:10px; height:10px; flex:none; border-radius:50%; border:2px solid #a697eb40; border-top-color:var(--accent-hi); animation:nexo-girar .8s linear infinite; }
+.pedido-status::before { content:''; width:10px; height:10px; flex:none; border-radius:50%; border:2px solid color-mix(in srgb, var(--accent) 25.1%, transparent); border-top-color:var(--accent-hi); animation:nexo-girar .8s linear infinite; }
 
 /* ---------- Mais resposta à mão ---------- */
 .participant { transition:border-color .16s,transform var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
 .participant:hover { transform:translateY(-1px); box-shadow:0 8px 20px #0000004d; }
-.participant:not(.falando) .avatar-wrap:hover::after { box-shadow:inset 0 0 0 2px #ffffff1c; }
+.participant:not(.falando) .avatar-wrap:hover::after { box-shadow:inset 0 0 0 2px rgb(var(--tinta) / 11%); }
 .member:hover .member-name { color:var(--text); }
 .member-avatar { transition:transform var(--dur) var(--curva-mola); }
 .member:hover .member-avatar { transform:scale(1.06); }
 .tocando { transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
-.tocando:hover { border-color:#aaa0fb33; box-shadow:0 10px 24px #00000040; }
+.tocando:hover { border-color:color-mix(in srgb, var(--accent-hi) 20%, transparent); box-shadow:0 10px 24px #00000040; }
 .space-cover { transition:border-color var(--dur) var(--curva); }
-.space-cover:hover { border-color:#aaa0fb30; }
+.space-cover:hover { border-color:color-mix(in srgb, var(--accent-hi) 18.8%, transparent); }
 .diag-cartao,.join-request { transition:border-color var(--dur) var(--curva),background-color var(--dur) var(--curva); }
 .diag-cartao:hover { border-color:var(--line-2); }
-.stage-controls button:hover:not(:disabled) { background:#ffffff14; }
+.stage-controls button:hover:not(:disabled) { background:rgb(var(--tinta) / 7.8%); }
 
 /* "Menos animação", escolhido na Aparência: o mesmo efeito de pedir menos movimento ao sistema,
    só que para esta pessoa, neste Nexo. */
 html.menos-movimento *,html.menos-movimento *::before,html.menos-movimento *::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; scroll-behavior:auto!important; }
+
+/* ---------- Quem está vendo a tela (espectadores.js) ----------
+   Uma pílula no canto: olho, número e até três rostos. Os nomes só aparecem ao passar o
+   mouse, focar ou tocar -- o placar diz que há gente olhando sem tapar o que ela olha. */
+.espectadores { position:absolute; z-index:3; display:inline-flex; align-items:center; gap:6px; height:26px; margin:0; padding:0 9px 0 4px; border:1px solid var(--line-2); border-radius:var(--r-pilula); background:#15141ed6; color:var(--text-2); font-size:var(--fs-meta); font-weight:650; line-height:1; font-variant-numeric:tabular-nums; cursor:default; -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); transition:opacity var(--dur) var(--curva),background-color var(--dur) var(--curva),border-color var(--dur) var(--curva); animation:nexo-aparecer var(--dur) var(--curva); }
+.espectadores:hover:not(:disabled),.espectadores.aberto,.espectadores:focus-visible { background:#1c1b27f2; border-color:var(--line-3); }
+.espectadores:active:not(:disabled) { transform:none; }
+.espectadores-rostos { display:flex; }
+.espectadores-rosto { flex:none; display:grid; place-items:center; width:18px; height:18px; border-radius:50%; font-size:8px; font-weight:800; color:#22202e; box-shadow:0 0 0 2px var(--bg-0); overflow:hidden; }
+.espectadores-rostos .espectadores-rosto + .espectadores-rosto { margin-left:-5px; }
+.espectadores-conta { display:inline-flex; align-items:center; gap:4px; }
+.espectadores-conta svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.75; }
+.espectadores-lista { position:absolute; top:calc(100% + 6px); right:0; z-index:4; display:none; flex-direction:column; gap:6px; min-width:150px; max-width:230px; max-height:190px; overflow-y:auto; padding:9px 10px; border-radius:var(--r-md); background:#1b1a25f7; box-shadow:var(--sombra-menu); text-align:left; cursor:default; animation:nexo-descer var(--dur) var(--curva); }
+.espectadores:hover .espectadores-lista,.espectadores:focus-visible .espectadores-lista,.espectadores.aberto .espectadores-lista { display:flex; }
+.espectadores-titulo { font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
+.espectadores-linha { display:flex; align-items:center; gap:7px; min-width:0; font-size:var(--fs-sm); font-weight:550; color:var(--text); white-space:nowrap; }
+.espectadores-linha > span:last-child { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.espectadores-palco { top:13px; right:13px; }
+.espectadores-card { top:9px; right:9px; }
+/* O placar da tela que está no palco some com o resto dos controles quando o mouse para -- mas
+   só esmaece: é o único jeito de quem transmite saber, sem mexer em nada, que alguém olha. */
+.stage.ocioso .espectadores-palco:not(:hover):not(.aberto) { opacity:.55; }
+.multi-view > .espectadores-palco { display:none; }
+/* No quadradinho só cabe o olho e o número, e a lista ficaria cortada pela borda dele: os nomes
+   vão no título, que o navegador mostra por cima de tudo. */
+.espectadores-mini { top:4px; left:5px; height:18px; gap:3px; padding:0 6px 0 5px; font-size:var(--fs-rotulo); }
+.espectadores-mini .espectadores-rostos,.espectadores-mini .espectadores-lista { display:none!important; }
+.espectadores-mini .espectadores-conta svg { width:11px; height:11px; }
+@container (max-width:420px) { .espectadores-palco .espectadores-rostos { display:none; } }
+
+/* ---------- Mencionar (mencoes.js) ----------
+   A lista nasce colada em cima do campo, da largura dele, e nunca passa de oito nomes: é um
+   atalho para escrever, não uma segunda lista de participantes. */
+.chat-compose { position:relative; }
+.mencoes { position:absolute; left:0; right:0; bottom:calc(100% + 8px); z-index:20; display:flex; flex-direction:column; max-height:min(300px,45vh); overflow-y:auto; overscroll-behavior:contain; padding:6px; border-radius:var(--r-lg); background:color-mix(in srgb, var(--bg-1) 98%, transparent); box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
+.mencoes-titulo { padding:4px 8px 6px; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
+.mencao-opcao { display:flex; align-items:center; gap:9px; min-height:34px; padding:4px 8px; border-radius:var(--r-sm); color:var(--text-2); font-size:var(--fs-md); cursor:pointer; transition:background-color var(--dur-rapida) var(--curva),color var(--dur-rapida) var(--curva); }
+.mencao-opcao.ativa { background:var(--accent-suave-hi); color:var(--text); }
+.mencao-avatar { flex:none; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; font-size:9px; font-weight:800; color:#22202e; }
+.mencao-nome { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.mencao-opcao small { flex:none; margin-left:auto; font-size:var(--fs-meta); color:var(--faint); }
+.mencao-no-texto { padding:0 3px; border-radius:4px; background:var(--accent-suave-hi); color:var(--accent-texto); font-weight:600; }
+.mencao-no-texto.eu { background:color-mix(in srgb, var(--aviso) 18%, transparent); color:var(--aviso-texto); }
+
+/* ---------- A barra de cima, pelo espaço que ELA tem ----------
+   As regras antigas desta barra olhavam a largura da janela. Só que a barra divide a janela
+   com a lateral e o chat: numa janela de 800 px com a lateral aberta ela tem 590, e com o chat
+   aberto numa de 1300 tem 830. Com a regra certa para a janela e errada para a barra, o selo
+   "SALA DE VOZ" -- que não encolhe -- vazava por cima de "Moderação" e dos milissegundos.
+
+   Agora a barra é um contêiner, e cada peça sai pela ordem do que importa menos: quantas
+   pessoas (a lista lateral diz), o relógio (a lateral também), os rótulos que só repetem o
+   ícone, o selo de tipo de sala; depois os botões viram ícone, com o texto ainda lá para o
+   leitor de tela. O nome da sala é o último: encolhe com reticências, e nunca empurra ninguém. */
+.topbar { container:topo / inline-size; }
+.room-id { flex:1 1 auto; }
+.room-id > :not(h1) { flex-shrink:0; }
+h1#roomTitle { min-width:3ch; }
+.topbar-actions > button { flex-shrink:0; white-space:nowrap; }
+/* Botão que vira só ícone: o texto fica, em tamanho zero, e o desenho vem de uma máscara. */
+#copyLinkBtn { --icone-topo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='4'/%3E%3Cpath d='M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6'/%3E%3C/svg%3E"); }
+#moderarSalaBtn { --icone-topo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6Z'/%3E%3C/svg%3E"); }
+#chatToggle { --icone-topo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z'/%3E%3C/svg%3E"); }
+@container topo (max-width:1180px) { #participantCount,.tempo-sala { display:none!important; } }
+@container topo (max-width:1000px) { .connection-quality span,.audience-toggle span { display:none; } .connection-quality,.audience-toggle { padding:8px 9px; } }
+@container topo (max-width:900px) { .session-badge { display:none; } }
+@container topo (max-width:820px) {
+  #copyLinkBtn { width:var(--ctl-m); padding:0; justify-content:center; font-size:0; gap:0; }
+  #copyLinkBtn::before { content:''; display:block; width:18px; height:18px; margin:0; background:currentColor; mask:var(--icone-topo) center/contain no-repeat; -webkit-mask:var(--icone-topo) center/contain no-repeat; }
+  .atualizar-app span { display:none; }
+  .topbar-actions .atualizar-app { padding:0 9px; }
+}
+@container topo (max-width:720px) {
+  #moderarSalaBtn { min-width:var(--ctl-m); padding:0 9px; justify-content:center; font-size:0; gap:4px; }
+  #moderarSalaBtn::before { content:''; display:block; width:17px; height:17px; background:currentColor; mask:var(--icone-topo) center/contain no-repeat; -webkit-mask:var(--icone-topo) center/contain no-repeat; }
+  #joinRequestCount { font-size:var(--fs-rotulo); }
+}
+@container topo (max-width:600px) { .connection-quality b,.topbar-symbol { display:none; } }
+@container topo (max-width:470px) {
+  #chatToggle { min-width:var(--ctl-p); padding:0 7px; justify-content:center; font-size:0; }
+  #chatToggle::before { content:''; display:block; width:17px; height:17px; background:currentColor; mask:var(--icone-topo) center/contain no-repeat; -webkit-mask:var(--icone-topo) center/contain no-repeat; }
+  #chatToggle .badge { font-size:var(--fs-rotulo); }
+}
+/* O celular estreito: sete botões de 48 px mais os espaços não cabem em 360. Abaixo de 420 os
+   rótulos saem (o nome continua para o leitor de tela) e os botões apertam, em vez de a barra
+   empurrar a página para o lado. */
+@media(max-width:420px) {
+  .control-bar { gap:4px; padding-left:6px; padding-right:6px; }
+  .control-btn { min-width:40px; font-size:0; gap:0; }
+  #leaveBtn { margin-left:2px; }
+}
+
+/* ---------- Aparência: temas prontos, destaque e cores exatas ----------
+   Cartões pequenos com a miniatura do próprio tema, e bolinhas de cor: o mesmo desenho das
+   escolhas de perfil, para o painel parecer uma coisa só. */
+.temas-grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:10px; }
+/* `.field label` (bloco com margem e letra de rótulo) vale para todo rótulo de campo; estes são
+   opções, e precisam da própria forma -- daí o seletor com a grade na frente. */
+.temas-grade > .tema-cartao { position:relative; display:grid; gap:7px; margin:0; cursor:pointer; }
+.tema-cartao input,.destaque-opcao input { position:absolute; opacity:0; width:1px; height:1px; }
+.tema-amostra { position:relative; display:flex; gap:5px; height:62px; padding:6px; border-radius:var(--r-md); background:var(--pv-bg); box-shadow:inset 0 0 0 1px var(--pv-linha),0 0 0 2px transparent; overflow:hidden; transition:box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.tema-lateral { width:24%; border-radius:5px; background:var(--pv-lateral); }
+.tema-painel { flex:1; display:flex; flex-direction:column; gap:5px; padding:7px; border-radius:5px; background:var(--pv-painel); }
+.tema-painel b { display:block; height:5px; width:78%; border-radius:3px; background:var(--pv-texto); opacity:.85; }
+.tema-painel b + b { width:52%; background:var(--pv-fraco); opacity:.7; }
+.tema-painel em { margin-top:auto; align-self:flex-end; width:34%; height:10px; border-radius:4px; background:var(--pv-destaque); }
+.tema-nome { font-size:var(--fs-sm); font-weight:600; color:var(--text-2); text-align:center; }
+.tema-cartao:hover .tema-amostra { transform:translateY(-1px); }
+.tema-cartao input:checked + .tema-amostra { box-shadow:inset 0 0 0 1px var(--pv-linha),0 0 0 2px var(--accent); }
+.tema-cartao input:checked ~ .tema-nome { color:var(--text); }
+.tema-cartao input:focus-visible + .tema-amostra { outline:2px solid var(--anel-cor); outline-offset:3px; }
+
+.destaques { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.destaques > .destaque-opcao { position:relative; display:block; margin:0; cursor:pointer; }
+.destaque-opcao > span { display:block; width:28px; height:28px; border-radius:50%; background:var(--cor); box-shadow:0 0 0 2px transparent; transition:transform var(--dur-rapida) var(--curva),box-shadow var(--dur) var(--curva); }
+.destaque-opcao:hover > span { transform:scale(1.08); }
+.destaque-opcao input:checked + span { box-shadow:0 0 0 2px var(--bg-2),0 0 0 4px var(--cor); }
+.destaque-opcao input:focus-visible + span { outline:2px solid var(--anel-cor); outline-offset:4px; }
+.destaque-opcao.do-tema > span { width:auto; height:28px; display:inline-flex; align-items:center; padding:0 12px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 5%); color:var(--text-2); font-size:var(--fs-meta); font-weight:600; --cor:var(--accent); }
+.destaque-opcao.do-tema:hover > span { transform:none; background:rgb(var(--tinta) / 9%); }
+
+.cores-exatas { margin:0 0 20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
+.cores-exatas-cabeca { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.cores-exatas-cabeca .config-rotulo { margin:0; }
+.selo-premium { display:inline-flex; align-items:center; gap:4px; padding:2px 8px 2px 6px; border-radius:var(--r-pilula); background:color-mix(in srgb, var(--aviso) 16%, transparent); color:var(--aviso-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
+.selo-premium .ico { width:12px; height:12px; }
+.cores-exatas-linha { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; }
+.cor-exata { position:relative; display:inline-flex; align-items:center; gap:9px; padding:5px 12px 5px 5px; border-radius:var(--r-pilula); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); cursor:pointer; transition:box-shadow var(--dur) var(--curva); }
+.cor-exata:hover { box-shadow:inset 0 0 0 1px var(--line-3); }
+/* O seletor nativo continua lá, invisível e por cima da pílula: o clique abre a paleta do
+   sistema, e a pílula mostra a cor do jeito do Nexo. */
+.cor-exata input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+.cor-exata input:disabled { cursor:not-allowed; }
+.cor-exata-amostra { width:26px; height:26px; border-radius:50%; background:var(--accent); box-shadow:inset 0 0 0 1px var(--line-3); }
+.cor-exata-texto { display:grid; line-height:1.25; }
+.cor-exata-texto strong { font-size:var(--fs-sm); font-weight:600; color:var(--text); }
+.cor-exata-texto small { font-size:var(--fs-meta); color:var(--faint); font-variant-numeric:tabular-nums; }
+.cor-exata:has(input:focus-visible) { outline:2px solid var(--anel-cor); outline-offset:2px; }
+.cores-exatas .config-dica { margin-top:10px; }
+.cores-exatas.bloqueado .cor-exata { opacity:.55; }
+
+/* ---------- Tema claro: o que as cores de token não resolvem sozinhas ----------
+   O nome de quem escreve usa a cor do perfil (menta, limão, céu...), escolhida para o fundo
+   escuro. Num fundo branco ela some; escurecida por filtro, continua sendo a cor da pessoa --
+   o mesmo matiz --, só que legível. Vale só quando a cor veio do perfil, no estilo em linha. */
+:root[data-modo="claro"] :is(.msg-autor,.previa-autor)[style*="color"] { filter:brightness(.58) saturate(1.4); }

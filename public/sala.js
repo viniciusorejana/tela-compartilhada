@@ -17,6 +17,7 @@ const stageVideo = document.getElementById('stageVideo');
 const stageOcultoOverlay = document.getElementById('stageOcultoOverlay');
 const stageEmpty = document.getElementById('stageEmpty');
 const stageLabel = document.getElementById('stageLabel');
+const stageEspectadores = document.getElementById('stageEspectadores');
 const stageControls = document.getElementById('stageControls');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomInBtn = document.getElementById('zoomInBtn');
@@ -516,7 +517,9 @@ async function iniciarConexao() {
       aoMudarMidia: id => { ligarMidiaDoTile(id); avaliarDestaque(); },
       // A ordem em que a tela de alguém entrou só é conhecida aqui -- o quadradinho dela
       // já foi criado quando a faixa chegou, antes de o estado ser recalculado.
-      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); avisarTela(par); },
+      // A lista de telas que esta página vê vai ao servidor daqui, e não do botão "Assistir":
+      // o transporte também liga e larga telas sozinho (ver espectadores.js).
+      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); avisarTela(par); window.NexoEspectadores?.sincronizar(); },
 
       // Credencial NOVA a cada volta. A antiga tem prazo, e uma queda longa a deixa
       // vencida: reaproveita-la faria a reconexao falhar justamente nos casos em que ela
@@ -622,6 +625,7 @@ async function iniciarConexao() {
       }
       if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
       window.NexoTempo?.aoEntrar(response.tempos, response.peers);
+      window.NexoEspectadores?.aoEntrar(response.espectadores);
       // O toque de entrada é o "você está na sala" -- só na primeira entrada, e não a cada volta
       // do socket depois de uma oscilação.
       if (!voltando) window.NexoSons?.tocar('entrada');
@@ -842,8 +846,10 @@ async function iniciarConexao() {
   socket.on('chat-mensagem', (msg) => mostrarMensagem(msg));
   socket.on('chat-atualizada', atualizarMensagemDoChat);
   socket.on('chat-removida', ({ id }) => removerMensagemDoChat(id));
+  socket.on('espectadores', placar => window.NexoEspectadores?.atualizar(placar));
 
   socket.on('disconnect', () => {
+    window.NexoEspectadores?.aoCair();
     // A queda vem LOGO depois da remoção, porque é o servidor fechando o socket de propósito.
     // Prometer reconexão a quem foi retirado é a mensagem errada duas vezes: ela não vai
     // acontecer, e ela apaga a frase que explicava o motivo.
@@ -3410,6 +3416,8 @@ function aplicarPlano(plano) {
   // Transmitindo acima do plano novo (um premium que venceu no meio da conversa): a tela se
   // encaixa sozinha, em vez de esperar o servidor desligá-la.
   if (antes !== nivelDoPlano && screenStream) encaixarTelaNoPlano();
+  // As cores exatas do tema seguem o plano: liberadas, ou guardadas até ele voltar.
+  window.NexoConfig?.aoMudarPlano(NexoPlanos.podeUsarCoresExatas(nivelDoPlano, planosLivres));
 }
 
 function pintarDicaDoPlano() {
@@ -3904,6 +3912,14 @@ function montarAbas(caixa) {
   const emPe = caixa.querySelector('[role="tablist"]')?.getAttribute('aria-orientation') === 'vertical';
   const [anterior, seguinte] = emPe ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
   caixa.mostrarAba = id => { const aba = abas.find(a => a.id === id); if (aba) mostrar(aba); };
+  // As configurações abrem na seção em que a pessoa estava, como o Discord: quem entra toda vez
+  // para mexer nos sons não precisa atravessar "Voz e vídeo" toda vez. Só neste aparelho.
+  const chave = caixa.dataset.lembrarAba;
+  if (chave) {
+    const guardada = abas.find(a => a.id === Preferencias.ler(chave, ''));
+    if (guardada) mostrar(guardada);
+    abas.forEach(aba => aba.addEventListener('click', () => Preferencias.gravar(chave, aba.id)));
+  }
   abas.forEach((aba, indice) => {
     aba.addEventListener('click', () => mostrar(aba));
     aba.addEventListener('keydown', evento => {
@@ -5030,8 +5046,9 @@ function criarTileBase(id, name, state, isSelf) {
   el.className = 'participant';
   el.dataset.id = id;
   el.dataset.source = 'camera';
+  // O quadradinho é vídeo: fica escuro mesmo no tema claro, como o palco (tema.css).
   el.innerHTML = `
-    <div class="avatar-wrap">
+    <div class="avatar-wrap contexto-escuro">
       <video class="cam-video" autoplay playsinline muted></video>
       <div class="avatar-fallback"></div>
       <span class="mic-icon audio-icon" aria-hidden="true"></span>
@@ -5121,6 +5138,7 @@ function criarTileBase(id, name, state, isSelf) {
 function repintarAvatares() {
   tiles.forEach((refs, id) => pintarAvatar(refs.avatar, id === 'self' ? myName : peers.get(id)?.name, perfilDe(id)));
   atualizarRotulosDosQuadradinhos();
+  window.NexoEspectadores?.repintar();
   document.dispatchEvent(new Event('room-update'));
 }
 
@@ -5556,9 +5574,10 @@ function garantirTileDeTela(id) {
   el.dataset.id = id;
   el.dataset.source = 'screen';
   el.innerHTML = `
-    <div class="avatar-wrap">
+    <div class="avatar-wrap contexto-escuro">
       <video class="cam-video active" autoplay playsinline muted></video>
       <span class="screen-badge">Tela</span>
+      <button type="button" class="espectadores espectadores-mini" hidden></button>
       <div class="convite-de-tela" hidden>
         <span class="convite-texto">ao vivo</span>
         <button class="assistir-btn" type="button">Assistir</button>
@@ -5575,7 +5594,7 @@ function garantirTileDeTela(id) {
     root: el, video: el.querySelector('.cam-video'), nome: el.querySelector('.participant-name'),
     linhaDeVolume: el.querySelector('.volume-row'), slider: null, muteBtn: null,
     convite: el.querySelector('.convite-de-tela'), assistirBtn: el.querySelector('.assistir-btn'),
-    pararBtn: el.querySelector('.parar-de-assistir'),
+    pararBtn: el.querySelector('.parar-de-assistir'), espectadores: el.querySelector('.espectadores'),
     hideBtn: el.querySelector('.hide-self-btn'), ocultoOverlay: el.querySelector('.oculto-overlay')
   };
   tilesDeTela.set(id, refs);
@@ -5629,8 +5648,12 @@ function removerTileDeTela(id) {
 // entrar numa sala com cinco telas no ar nao custa mais nada ate voce escolher uma.
 function assistirTela(id, ligar) {
   if (id === 'self' || !peers.has(id)) return;
+  // Só o pedido de quem clicou toca: a retomada automática depois de uma queda passa pelo
+  // transporte, e não por aqui, então não soa -- a pessoa não pediu nada naquele instante.
+  const comecou = ligar && !assistindoTela(id);
   transporte?.assistir(id, ligar);
   atualizarTileDeTela(id);
+  if (comecou) window.NexoSons?.tocar('assistir');
   if (ligar) { pin(id, 'screen', true); status.textContent = `Assistindo a tela de ${nomeDe(id)}.`; }
   else {
     // Sair de uma tela nao pode deixar o palco vazio se ha outra coisa para ver.
@@ -5653,6 +5676,7 @@ function atualizarTileDeTela(id) {
   refs.root.hidden = emDestaque;
   if (emDestaque) { ligarFluxo(refs.video, null); return; }
   refs.nome.textContent = `${nomeDe(id)} — Tela`;
+  window.NexoEspectadores?.pintar(refs.espectadores, id);
   const assistindo = assistindoTela(id);
   const stream = id === 'self' ? screenStream : peers.get(id)?.remoteStreams.screen;
   ligarFluxo(refs.video, assistindo ? stream : null);
@@ -5736,7 +5760,11 @@ function atualizarContador() {
 // So um overlay local: a faixa continua saindo normal para o resto da sala. Serve para
 // quem nao quer ver a propria cara/tela no quadradinho (ou no palco, quando esta sozinho
 // na sala e a propria imagem acaba indo ao centro).
-let ocultarPropriaCamera = false;
+//
+// A câmera oculta é lembrada neste aparelho: quem não quer ver a própria cara não quer em toda
+// entrada. A tela não -- escondê-la é coisa do momento (poupar a máquina durante um jogo), e
+// voltar a transmitir sem ver o que sai pegaria a pessoa de surpresa.
+let ocultarPropriaCamera = Preferencias.ler('ocultarPropriaCamera', false) === true;
 let ocultarPropriaTela = false;
 
 // No palco o aviso ocupava a tela inteira sem oferecer a volta: para desfazer era preciso
@@ -5746,8 +5774,10 @@ document.getElementById('stageMostrarBtn').onclick = () => {
 };
 
 function alternarOcultarPropria(fonte) {
-  if (fonte === 'camera') ocultarPropriaCamera = !ocultarPropriaCamera;
-  else ocultarPropriaTela = !ocultarPropriaTela;
+  if (fonte === 'camera') {
+    ocultarPropriaCamera = !ocultarPropriaCamera;
+    Preferencias.gravar('ocultarPropriaCamera', ocultarPropriaCamera || null);
+  } else ocultarPropriaTela = !ocultarPropriaTela;
   atualizarTile('self');
   atualizarTileDeTela('self');
   if (pinned?.id === 'self' && pinned.source === fonte) atualizarPalco();
@@ -5971,6 +6001,7 @@ function despinar() {
   clearTimeout(esperaDoVideo);
   stageEmpty.classList.remove('hidden');
   stageLabel.classList.add('hidden');
+  window.NexoEspectadores?.pintar(stageEspectadores, '');
   stageControls.classList.add('hidden');
   sincronizarVolumeDoPalco();
   if (!window.RoomMulti?.active || !candidatosDeDestaque().length) definirModoTeatro(false);
@@ -5993,6 +6024,7 @@ function atualizarPalco() {
   // destaque. Sem um substituto aqui, quem abrisse uma tela ficaria sem como fechá-la, e o
   // custo dela seguiria sendo pago até a pessoa sair da sala.
   stageStopBtn.hidden = !(pinned && pinned.id !== 'self' && pinned.source === 'screen' && assistindoTela(pinned.id));
+  window.NexoEspectadores?.pintar(stageEspectadores, pinned?.source === 'screen' ? pinned.id : '');
   if (!pinned) return;
   const { id, source } = pinned;
   const nome = id === 'self' ? myName : (peers.get(id)?.name || 'Participante');
@@ -6296,10 +6328,15 @@ function chatVisivel() {
   if (app.classList.contains('foco-chat')) return true;
   return window.matchMedia('(min-width: 1101px)').matches || chatPanel.classList.contains('aberto');
 }
+// Na tela larga o chat é uma coluna, e quem a fechou para dar espaço ao palco quer que ela
+// continue fechada na próxima entrada. Na estreita ele é uma camada, e começa fechado sempre.
+const chatLargo = window.matchMedia('(min-width: 1101px)');
+if (Preferencias.ler('chatFechado', false) === true && chatLargo.matches) document.querySelector('.app').classList.add('sem-chat');
 function abrirChat() {
   definirModoTeatro(false);
   chatPanel.classList.add('aberto');
   document.querySelector('.app').classList.remove('sem-chat');
+  if (chatLargo.matches) Preferencias.gravar('chatFechado', null);
   naoLidas = 0;
   chatBadge.classList.add('hidden');
   divisorDeNaoLidas = false;
@@ -6312,6 +6349,7 @@ function fecharChat() {
   definirFocoChat(false);
   chatPanel.classList.remove('aberto');
   document.querySelector('.app').classList.add('sem-chat');
+  if (chatLargo.matches) Preferencias.gravar('chatFechado', true);
   chatMsgs.querySelectorAll('.unread-divider').forEach(el => el.remove());
 }
 chatToggle.onclick = () => (chatVisivel() ? fecharChat() : abrirChat());
@@ -6347,9 +6385,32 @@ function montarTexto(destino, texto) {
         destino.appendChild(img);
       }
     } else {
-      destino.appendChild(document.createTextNode(parte));
+      acrescentarTexto(destino, parte);
     }
   });
+}
+
+// "@Nome" de quem está na sala vira um destaque, como no Discord, e o seu nome um destaque mais
+// forte: é o que faz achar, numa conversa longa, onde chamaram você. Continua sendo nó de texto
+// dentro de um <span> -- nada do que a pessoa escreveu vira marcação. Nomes mais longos primeiro,
+// para "@Ana Clara" não parar em "@Ana" quando as duas estão na sala.
+function acrescentarTexto(destino, texto) {
+  const nomes = [...new Set([myName, ...[...peers.values()].map(par => par?.name)].filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (!texto.includes('@') || !nomes.length) { destino.appendChild(document.createTextNode(texto)); return; }
+  const escapar = nome => nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const padrao = new RegExp(`(^|\\s)@(${nomes.map(escapar).join('|')})(?=$|[\\s.,!?;:)\\]])`, 'gi');
+  let ultimo = 0;
+  for (const achado of texto.matchAll(padrao)) {
+    const inicio = achado.index + achado[1].length;
+    destino.appendChild(document.createTextNode(texto.slice(ultimo, inicio)));
+    const mencao = document.createElement('span');
+    mencao.className = 'mencao-no-texto';
+    if (myName && achado[2].toLowerCase() === myName.toLowerCase()) mencao.classList.add('eu');
+    mencao.textContent = `@${achado[2]}`;
+    destino.appendChild(mencao);
+    ultimo = inicio + 1 + achado[2].length;
+  }
+  destino.appendChild(document.createTextNode(texto.slice(ultimo)));
 }
 
 let perto = true;
@@ -6603,12 +6664,36 @@ function enviarMensagem(texto, imagem) {
   return true;
 }
 
+// ---------- Rascunho ----------
+// O que foi escrito e não enviado sobrevive a um F5, a uma queda e a fechar a aba sem querer,
+// como no Discord -- uma por sala, porque a conversa de uma não é a da outra. Uma edição em
+// andamento não vira rascunho: ela é de uma mensagem que já existe.
+let gravarRascunho = null;
+function guardarRascunho() {
+  clearTimeout(gravarRascunho);
+  gravarRascunho = setTimeout(() => {
+    if (contextoDoChat?.tipo === 'edicao') return;
+    Preferencias.guardarDaSala(roomCode, 'rascunho', chatInput.value.slice(0, 2000) || null);
+  }, 400);
+}
+{
+  const rascunho = Preferencias.daSala(roomCode, 'rascunho', '');
+  if (typeof rascunho === 'string' && rascunho) {
+    chatInput.value = rascunho;
+    // Do tamanho do texto, como se tivesse sido digitado -- mas só com o campo à vista: escondido,
+    // ele mede zero, e ficaria com altura zero quando aparecesse.
+    requestAnimationFrame(() => { if (chatInput.scrollHeight) chatInput.style.height = Math.min(120, chatInput.scrollHeight) + 'px'; });
+  }
+}
+
 chatSend.onclick = () => {
   const texto = chatInput.value.trim();
   if (!texto) return;
   if (!enviarMensagem(texto, null)) return;
   chatInput.value = '';
   chatInput.style.height = 'auto';
+  clearTimeout(gravarRascunho);
+  Preferencias.guardarDaSala(roomCode, 'rascunho', null);
 };
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend.click(); }
@@ -6616,6 +6701,7 @@ chatInput.addEventListener('keydown', (e) => {
 chatInput.addEventListener('input', () => {
   chatInput.style.height = 'auto';
   chatInput.style.height = Math.min(120, chatInput.scrollHeight) + 'px';
+  guardarRascunho();
 });
 
 // Imagem colada ou arrastada: reduzida no proprio navegador antes de sair. Mandar o

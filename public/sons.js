@@ -20,22 +20,24 @@
  */
 (() => {
   const ContextoDeAudio = window.AudioContext || window.webkitAudioContext;
-  const SONS = ['entrada', 'saida', 'tela', 'tela-fim', 'mensagem', 'mencao', 'mic-ligado', 'mic-desligado', 'surdo', 'ouvir', 'pedido', 'caiu', 'voltou', 'teste'];
+  const SONS = ['entrada', 'saida', 'tela', 'tela-fim', 'assistir', 'mensagem', 'mencao', 'mic-ligado', 'mic-desligado', 'surdo', 'ouvir', 'pedido', 'caiu', 'voltou', 'teste'];
   // Qual chave das configurações liga e desliga cada som. Os pares andam juntos: quem não quer
   // ouvir a tela entrando também não quer ouvi-la saindo.
   const GRUPO = {
-    entrada: 'entrada', saida: 'saida', tela: 'tela', 'tela-fim': 'tela', mensagem: 'mensagem', mencao: 'mencao',
+    entrada: 'entrada', saida: 'saida', tela: 'tela', 'tela-fim': 'tela', assistir: 'assistir', mensagem: 'mensagem', mencao: 'mencao',
     'mic-ligado': 'voce', 'mic-desligado': 'voce', surdo: 'voce', ouvir: 'voce', pedido: 'pedido', caiu: 'conexao', voltou: 'conexao'
   };
+  // Entrar numa transmissão fica de fora: ensurdecido, a tela chega muda de qualquer jeito, e
+  // um toque confirmando que você vai "ouvir" algo seria o único som de uma sala calada.
   const SOBRE_VOCE = new Set(['mic-ligado', 'mic-desligado', 'surdo', 'ouvir', 'caiu', 'voltou']);
   // O mesmo aviso não se repete dentro desta janela. Mensagem espera mais: uma conversa animada
   // manda três por segundo, e o que interessa é saber que ela existe. Os do microfone são
   // curtos de propósito -- quem alterna depressa quer ouvir cada alternância.
   const INTERVALO_MINIMO_MS = {
-    entrada: 450, saida: 450, tela: 1500, 'tela-fim': 1500, mensagem: 1600, mencao: 1200,
+    entrada: 450, saida: 450, tela: 1500, 'tela-fim': 1500, assistir: 600, mensagem: 1600, mencao: 1200,
     'mic-ligado': 100, 'mic-desligado': 100, surdo: 150, ouvir: 150, pedido: 2500, caiu: 5000, voltou: 5000
   };
-  const PADRAO = Object.freeze({ ligados: true, volume: 60, entrada: true, saida: true, tela: true, mensagem: true, mensagemSoFora: false, mencao: true, voce: true, pedido: true, conexao: true });
+  const PADRAO = Object.freeze({ ligados: true, volume: 60, entrada: true, saida: true, tela: true, assistir: true, mensagem: true, mensagemSoFora: false, mencao: true, voce: true, pedido: true, conexao: true });
   const CHAVES_BOOLEANAS = Object.keys(PADRAO).filter(chave => chave !== 'volume');
 
   let ajustes = { ...PADRAO };

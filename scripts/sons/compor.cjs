@@ -238,6 +238,11 @@ finalizar('saida', frase([[piano, 'G4', 0, 0.85, 0.22], [piano, 'C4', 0.1, 1]], 
 // entra no ar, as mesmas descendo quando sai.
 finalizar('tela', frase([[vibrafone, 'C4', 0, 0.85, 0.2], [vibrafone, 'E4', 0.08, 0.9, 0.2], [vibrafone, 'G4', 0.16, 1]], { duracao: 0.7 }), { loudA: -30 });
 finalizar('tela-fim', frase([[vibrafone, 'G4', 0, 0.85, 0.2], [vibrafone, 'E4', 0.08, 0.9, 0.2], [vibrafone, 'C4', 0.16, 1]], { duracao: 0.65 }), { loudA: -31, corte: 2000 });
+// Entrar numa transmissão: é você chegando a uma tela, então o mesmo vibrafone, mas numa forma
+// que nenhum outro aviso tem -- uma quinta aberta, Ré4 e Lá4 quase juntos, que soa como uma
+// janela abrindo e não como uma frase. Mais baixo que a tela entrando no ar: só confirma o
+// clique de quem pediu para ver.
+finalizar('assistir', frase([[vibrafone, 'D4', 0, 0.9], [vibrafone, 'A4', 0.035, 0.8]], { duracao: 0.5 }), { loudA: -32, corte: 2000 });
 // Menção: dois toques de vibrafone no mesmo tom. O único aviso que é para você, e por isso o
 // único que repete a nota -- chama sem precisar ser agudo.
 finalizar('mencao', frase([[vibrafone, 'A4', 0, 1, 0.2], [vibrafone, 'A4', 0.14, 0.75]], { duracao: 0.55 }), { loudA: -29 });

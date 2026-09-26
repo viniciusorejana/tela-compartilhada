@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#14151d">
 <title>Sala</title>
 <link rel="icon" href="/mark.svg" type="image/svg+xml">
+<!-- Antes do CSS e síncrono: o tema claro tem de valer já na primeira pintura (tema.js). -->
+<script src="/tema.js"></script>
 <link rel="stylesheet" href="/sala.css">
 </head>
 <body>
@@ -69,7 +71,7 @@
   </header>
 
   <main class="palco-area">
-    <div class="stage" id="stage">
+    <div class="stage contexto-escuro" id="stage">
       <video id="stageVideo" autoplay playsinline muted></video>
       <div class="oculto-overlay hidden" id="stageOcultoOverlay"><strong>Oculto para você</strong><small>A sala continua recebendo normalmente.</small><button type="button" id="stageMostrarBtn">Mostrar de novo</button></div>
       <div id="multiStage" class="multi-stage" aria-label="Telas e câmeras em destaque" hidden></div>
@@ -81,6 +83,7 @@
       </div>
       <div id="playbackRecovery" class="playback-recovery" hidden><button type="button" id="retryPlaybackBtn">Reproduzir vídeo</button><button type="button" class="secondary" data-action="diagnostics">Ver diagnóstico</button></div>
       <div class="stage-label hidden" id="stageLabel"></div>
+      <button type="button" class="espectadores espectadores-palco" id="stageEspectadores" hidden></button>
       <div class="stage-controls hidden" id="stageControls">
         <div class="volume-row stage-volume" id="stageVolume" hidden>
           <button class="mute-peer-btn" id="stageMute" type="button" aria-pressed="false"></button>
@@ -187,7 +190,7 @@
   </nav>
 </div>
 
-<div class="lightbox hidden" id="lightbox">
+<div class="lightbox contexto-escuro hidden" id="lightbox">
   <div class="lightbox-barra">
     <a id="lightboxBaixar" download="imagem" href="#"><button type="button">Baixar</button></a>
     <button id="lightboxFechar" type="button" title="Fechar (Esc)">✕</button>
@@ -201,7 +204,7 @@
      moram em sons.js e configuracoes.js. -->
 <div class="modal hidden" id="devicesPanel" role="dialog" aria-modal="true" aria-labelledby="devicesTitle">
   <div class="modal-card config-card">
-    <div class="abas config" data-abas>
+    <div class="abas config" data-abas data-lembrar-aba="abaDasConfiguracoes">
       <nav class="config-nav">
         <div class="config-nav-topo"><h2 id="devicesTitle">Configurações</h2><small>Valem na hora, só para você.</small></div>
         <div class="config-fita" role="tablist" aria-orientation="vertical" aria-labelledby="devicesTitle">
@@ -253,7 +256,7 @@
         <div class="field">
           <label for="camDevice">Câmera</label>
           <select id="camDevice"></select>
-          <video id="camPreview" class="cam-preview" autoplay muted playsinline hidden></video>
+          <video id="camPreview" class="cam-preview contexto-escuro" autoplay muted playsinline hidden></video>
           <small id="camDica">Ligue a câmera para se ver aqui.</small>
         </div>
         <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Tocar som de teste</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
@@ -339,6 +342,12 @@
             <input type="checkbox" class="interruptor" role="switch" data-som="voce" aria-label="Tocar ao ligar o microfone e ao ensurdecer" checked>
           </div>
           <div class="som-evento">
+            <span class="som-evento-icone" data-cor="live" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <span class="som-evento-texto"><strong>Entrar numa transmissão</strong><small>Quando você pede para assistir a tela de alguém. A volta automática depois de uma queda não toca.</small></span>
+            <button type="button" class="som-previa" data-previa="assistir" title="Ouvir" aria-label="Ouvir o aviso de entrar numa transmissão"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="assistir" aria-label="Tocar ao entrar numa transmissão" checked>
+          </div>
+          <div class="som-evento">
             <span class="som-evento-icone" data-cor="neutro" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01"/></svg></span>
             <span class="som-evento-texto"><strong>Sua conexão</strong><small>Quando ela cai por mais de alguns segundos, e quando volta.</small></span>
             <button type="button" class="som-previa" data-previa="caiu voltou" title="Ouvir" aria-label="Ouvir os avisos de conexão caindo e voltando"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
@@ -349,7 +358,35 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAparencia" aria-labelledby="abaAparencia" hidden>
-        <header class="config-cabeca"><h3>Aparência</h3><p>Do jeito que você prefere ler a sala. Muda só para você.</p></header>
+        <header class="config-cabeca"><h3>Aparência</h3><p>Do jeito que você prefere ver o Nexo. Muda só para você, e segue sua conta.</p></header>
+        <div class="field">
+          <span class="config-rotulo" id="rotuloModo">Modo</span>
+          <div class="segmentado" role="radiogroup" aria-labelledby="rotuloModo">
+            <label><input type="radio" name="modoTema" value="escuro"><span>Escuro</span></label>
+            <label><input type="radio" name="modoTema" value="claro"><span>Claro</span></label>
+            <label><input type="radio" name="modoTema" value="sistema"><span>Do sistema</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <span class="config-rotulo" id="rotuloTemas">Temas prontos</span>
+          <div class="temas-grade" id="temasProntos" role="radiogroup" aria-labelledby="rotuloTemas"></div>
+        </div>
+        <div class="field">
+          <span class="config-rotulo" id="rotuloDestaque">Cor de destaque</span>
+          <div class="destaques" id="destaques" role="radiogroup" aria-labelledby="rotuloDestaque"></div>
+        </div>
+        <div class="cores-exatas" id="coresExatas">
+          <div class="cores-exatas-cabeca">
+            <span class="config-rotulo">Cores exatas</span>
+            <span class="selo-premium" id="coresExatasSelo" hidden><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Premium</span>
+          </div>
+          <div class="cores-exatas-linha">
+            <label class="cor-exata"><input type="color" id="corExataDestaque" value="#8879f6"><span class="cor-exata-amostra" aria-hidden="true"></span><span class="cor-exata-texto"><strong>Destaque</strong><small id="corExataDestaqueHex">do tema</small></span></label>
+            <label class="cor-exata"><input type="color" id="corExataFundo" value="#191a24"><span class="cor-exata-amostra" aria-hidden="true"></span><span class="cor-exata-texto"><strong>Fundo</strong><small id="corExataFundoHex">do tema</small></span></label>
+            <button type="button" class="link-botao" id="corExataRestaurar" hidden>Voltar às cores do tema</button>
+          </div>
+          <small class="config-dica" id="coresExatasDica">Qualquer cor para o destaque e para o fundo. O Nexo ajusta textos e botões sozinho, para tudo continuar legível.</small>
+        </div>
         <!-- Classes próprias, e não as do chat: uma `.msg` a mais escondida no painel seria achada
              por qualquer código (ou teste) que procura as mensagens da conversa. -->
         <div class="previa-chat" id="previaChat" aria-hidden="true">
@@ -571,6 +608,8 @@
 <script src="/sala.js"></script>
 <script src="/sons.js"></script>
 <script src="/tempo-sala.js"></script>
+<script src="/espectadores.js"></script>
+<script src="/mencoes.js"></script>
 <script src="/configuracoes.js"></script>
 <script src="/multi-view.js"></script>
 <script src="/musica.js"></script>

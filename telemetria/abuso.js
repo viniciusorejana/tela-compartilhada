@@ -71,6 +71,10 @@ const REGRAS = Object.freeze({
   'join-room': { sessao: 6, sala: 120, longa: [20, 10 * MINUTO] },
   'leave-room': { sessao: Infinity },
   'media-state': { sessao: 30, sala: 600 },
+  // A lista de telas que a página está vendo. Muda a cada Assistir e Parar, e o transporte a
+  // manda de novo sozinho quando uma queda retoma uma tela; ninguém clica trinta vezes por
+  // minuto, mas uma sala de vinte pessoas trocando de tela junto chega perto do coletivo.
+  'assistindo': { sessao: 30, sala: 600 },
   // Moderar é deliberado e raro. O teto baixo aqui protege menos o servidor do que a própria
   // sala: um dono irritado clicando em expulsar dez vezes por segundo é o retrato de algo
   // que precisa de um segundo de pausa.

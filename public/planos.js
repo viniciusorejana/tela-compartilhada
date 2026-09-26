@@ -72,7 +72,14 @@
     return presentes < tetoDePessoas({ comAssinante: algumAssinante || entraAssinante }, pessoas);
   }
 
-  const api = { LIMITES, NOMES, FOLGA, PESSOAS, nivelDaConta, limites, alturaPermitida, quadrosPermitidos, alturaEfetiva, quadrosEfetivos, excedeTeto, tetoDePessoas, cabeNaSala };
+  // Escolher a cor exata do destaque e do fundo é do premium. É a exceção consciente à regra
+  // de só cobrar resolução: não custa nada no servidor, mas é um mimo de quem assina, e a
+  // personalização de um clique -- claro e escuro, temas prontos, oito cores -- continua
+  // livre para todo mundo. Com os planos desligados (NEXO_PLANOS=0), vale para todos, como o
+  // 1440p. Quem deixa o premium vencer não perde as cores: elas ficam guardadas e voltam.
+  const podeUsarCoresExatas = (nivel, livre = false) => Boolean(livre) || nivel === 'premium';
+
+  const api = { LIMITES, NOMES, FOLGA, PESSOAS, nivelDaConta, limites, alturaPermitida, quadrosPermitidos, alturaEfetiva, quadrosEfetivos, excedeTeto, tetoDePessoas, cabeNaSala, podeUsarCoresExatas };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NexoPlanos = api;
 })(typeof window === 'undefined' ? globalThis : window);

@@ -342,8 +342,8 @@ pela forma: sobe quando alguém chega, desce quando vai embora.
 | Alguém entrou / saiu | Microfone ligado / desligado (botão e `Ctrl+Shift+M`; o push-to-talk não toca) |
 | Uma tela entrou / saiu do ar (câmera não toca) | Ensurdecer / voltar a ouvir |
 | Mensagem no chat (só as dos outros) | Sua conexão caiu por alguns segundos / voltou |
-| Menção a você (`@nome`) | Som de teste do fone, em Voz e vídeo |
-| Pedido para entrar (só para quem modera) | |
+| Menção a você (`@nome`) | Entrar numa transmissão (quando você pede para assistir) |
+| Pedido para entrar (só para quem modera) | Som de teste do fone, em Voz e vídeo |
 
 Tudo se ajusta em **Configurações → Sons**: volume dos avisos, cada grupo liga e desliga, e cada
 um tem prévia. Ensurdecido, os avisos da sala silenciam; os que são sobre você continuam — ouvir o
@@ -359,6 +359,51 @@ nota acima de ~500 Hz, passa-baixa em todos, ataque de 5 a 12 ms e volume nivela
 ponderada A, que pesa as frequências como o ouvido. A primeira versão tinha sino e glockenspiel e
 incomodava — a menção concentrava 84% da energia acima de 4 kHz. Hoje nenhum aviso passa de 1% acima
 de 2 kHz, e o script imprime essas medidas a cada montagem para a regra não se perder.
+
+## Quem está vendo, e quem mencionar
+
+**Quem está vendo a sua tela** aparece como no Discord: um selo discreto no canto da tela — olho,
+número e até três rostos —, no palco, em cada card da grade e no quadradinho da tela. Os nomes
+aparecem ao passar o mouse ou tocar. Todo mundo na sala vê o placar de cada tela, não só quem
+transmite. O servidor de sinalização nunca soube quem recebe qual tela (isso é entre a página e o
+servidor de mídia), então cada página conta a ele a **lista inteira** do que está vendo sempre que
+ela muda (`espectadores.js`). Lista inteira, e não "liguei/desliguei": uma mensagem perdida numa
+oscilação, ou a retomada automática depois de uma queda, não deixa o placar errado — a próxima
+lista corrige tudo.
+
+**Mencionar** abre a lista de quem está na sala ao digitar `@`: setas escolhem, Enter ou Tab
+completam o nome inteiro (e não enviam a mensagem), Esc fecha só a lista. Sem acento e sem
+maiúscula dos dois lados — `@joao` acha o João —, e uma palavra do meio também serve. Na mensagem,
+`@Nome` de quem está na sala vira uma pílula, dourada quando é você.
+
+## Aparência e temas
+
+Em **Configurações → Aparência**:
+
+- **Modo**: escuro, claro ou o do sistema (acompanha a troca do aparelho sem recarregar).
+- **Temas prontos**: Nexo, Meia-noite, Floresta e Carvão (escuros); Claro, Céu, Areia e Sakura
+  (claros). Cada cartão é uma miniatura pintada com as cores que o tema produz de verdade.
+- **Cor de destaque**: oito cores de um clique, ou a do tema.
+- **Cores exatas** (premium): qualquer cor para o destaque e para o fundo, pelo seletor do
+  sistema. Com os planos desligados (`NEXO_PLANOS=0`) vale para todo mundo, como o 1440p; com eles
+  ligados, só para o premium. Quem deixa o plano vencer não perde as cores: ficam guardadas e
+  voltam sozinhas.
+
+Uma escolha vira uma paleta inteira em `public/tema.js`: o botão cheio escurece até 4,5:1 com o
+texto branco, o texto em destaque até o contraste que ele pede, e as camadas de superfície têm
+luminosidade fixa por camada. Por isso um seletor de cor livre é seguro: não existe escolha que
+produza texto ilegível, e `tests/tema.test.js` confere isso nos oito temas e em 98 combinações de
+cores extremas. O `tema.js` roda no `<head>` de toda página, antes da primeira pintura — o tema
+claro nunca nasce escuro e pisca.
+
+O palco, os quadradinhos, a grade e o visualizador de imagem ficam **escuros mesmo no tema
+claro** (classe `contexto-escuro`), como no Discord: são vídeo, e uma tela compartilhada cercada
+de branco ofusca.
+
+**Para quem mexe no CSS:** cor de superfície, texto, borda sutil e destaque vêm sempre dos tokens
+de `public/tema.css` (`--bg-*`, `--text*`, `rgb(var(--tinta) / N%)`, `--accent*`, `--online`,
+`--danger`, `--aviso`, `--rosa`). Uma cor escrita direto no CSS fica igual nos dois temas — e no
+tema claro, quase sempre, some.
 
 ## O que a sala lembra de você
 
@@ -377,8 +422,11 @@ some sozinho quando a sala presta atenção.
 | **Volume do bot de música** (o seu) | por nome, em qualquer sala |
 | **Volume da mesa de sons** | **por sala** (a primeira vez herda o último usado) |
 | Avisos sonoros: volume e quais tocam | sempre, e seguem a conta |
-| Aparência: densidade e tamanho do chat, tempos à vista, reações, animação | sempre, e seguem a conta |
-| Barra lateral recolhida | sempre |
+| Aparência: tema, modo, destaque, cores exatas, densidade e tamanho do chat, tempos à vista, reações, animação | sempre, e seguem a conta |
+| **Rascunho do chat** (o que foi escrito e não enviado) | **por sala**, sobrevive ao F5 |
+| Barra lateral recolhida, plateia oculta, chat fechado (tela larga), grade ligada | neste aparelho |
+| A seção em que as configurações estavam | neste aparelho |
+| Câmera oculta só para você | neste aparelho |
 
 E uma que **não** fica no navegador de ninguém, porque não é de ninguém: o **volume do bot na
 sala** (`!volume`) é da sala, vale para todo mundo e vive no servidor enquanto a sala existir —
@@ -390,7 +438,9 @@ continua sendo. Numa janela anônima, ou com armazenamento bloqueado, a sala fun
 apenas não lembra.
 
 **Com conta, uma parte segue a pessoa para outros aparelhos**: qualidade, codec, prioridade,
-quadros, lado da câmera, push-to-talk e redução de ruído. Sobe dois segundos depois da última
+quadros, lado da câmera, push-to-talk, redução de ruído, avisos sonoros e aparência (inclusive o
+tema e as cores). O layout — barra, plateia, chat, grade — fica em cada aparelho, porque o que
+cabe numa tela larga não cabe num celular. Sobe dois segundos depois da última
 mudança, e ao abrir a sala noutro aparelho a escolha da conta vale. O que **não** sobe, de
 propósito e com teste que protege a decisão: o microfone, o fone e a câmera escolhidos (o id da
 webcam do desktop não existe no celular), o **volume por pessoa** (seria guardar em disco,
@@ -428,9 +478,13 @@ cada troca. Entrar numa sala nova não recomeça do zero: vale o último volume 
 qualquer lugar, e só a partir do primeiro ajuste ali aquela sala passa a ter o dela. O teto
 aqui é de **20 salas**.
 
-O que **não** é lembrado, de propósito: zoom do palco, modo teatro e qual painel estava aberto.
-São estado de navegação, não preferência — restaurá-los faria a pessoa entrar numa tela que ela
-não pediu.
+O que **não** é lembrado, de propósito: zoom do palco, modo teatro e qual painel estava aberto
+(as configurações lembram a *seção*, mas não abrem sozinhas). São estado de navegação, não
+preferência — restaurá-los faria a pessoa entrar numa tela que ela não pediu. Nem o microfone
+ligado (a sala sempre entra muda, e abre o microfone só no clique) nem o ensurdecer: entrar
+ensurdecido sem lembrar disso é "não ouço ninguém" sem nada que explique. A tela oculta só para
+você também não — escondê-la é coisa do momento, e voltar a transmitir sem ver o que sai pegaria
+a pessoa de surpresa.
 
 Em **Dispositivos** há uma linha dizendo quantas pessoas têm volume ajustado, e um botão para
 esquecer tudo. Ela existe porque uma preferência guardada vira um mistério no dia em que a
@@ -1367,7 +1421,15 @@ sinal que sai do ganho, confere que 100% gruda, que o clique no número desfaz o
 volume é lembrado ao recarregar e que ensurdecer cala o reforço.
 `npm run test:planos` (porta `:3223`, com o servidor de mídia) confere o cadeado do seletor, a
 tela sem conta subindo em 720p e ficando, e a tela acima do plano sendo avisada e desligada — só
-ela. Os testes antigos de mídia rodam com as duas janelas de transição ligadas
+ela.
+`npm run test:espectadores` (porta `:3229`, com o servidor de mídia) põe duas pessoas numa sala,
+uma transmitindo: confere o selo de quem está vendo no palco e na grade, o som de entrar na
+transmissão e a sugestão de `@` (sem acento, palavra do meio, Esc, `email@dominio`).
+`npm run test:aparencia` (porta `:3231`, sem servidor de mídia, com os planos ligados) troca modo,
+tema pronto e destaque, confere que o palco segue escuro no tema claro, que a cor exata trava sem
+o premium, libera com ele e fica guardada quando ele vence — e que rascunho, chat fechado e a
+última seção das configurações sobrevivem ao F5.
+Os testes antigos de mídia rodam com as duas janelas de transição ligadas
 (`NEXO_ANONIMO_ABRE_SALA=1`, `NEXO_PLANOS=0`), porque testam a sala, e não os planos.
 
 `tests/musica.test.js` e `tests/soundboard.test.js` rodam sem rede: fixam o que não pode mudar

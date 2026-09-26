@@ -30,7 +30,22 @@ npm run test:soundboard
 npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
+npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
+npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
 ```
+
+## Cor no CSS: sempre pelos tokens
+
+O Nexo tem tema claro, temas prontos e cores exatas escolhidas pela pessoa. Tudo isso só
+funciona porque nenhuma cor de superfície, texto, borda sutil ou destaque está escrita direto
+no CSS: elas vêm de `public/tema.css` (`--bg-fundo`…`--bg-5`, `--bg-cartao`, `--text`…`--apagado`,
+`rgb(var(--tinta) / N%)` para sobreposições, `--accent*`, `--online`, `--danger`, `--aviso`,
+`--rosa` e os `-texto` de cada um). Uma cor fixa fica igual nos dois temas e, no claro, some.
+
+Cor fixa só para o que é igual nos dois temas: o que está sobre vídeo (o palco, o quadradinho e
+a grade são `.contexto-escuro`, escuros sempre), preenchimento colorido com texto escuro, sombra
+e ilustração. Para converter cores em lote: um Edit com `replace_all` por cor, sempre a de
+8 dígitos antes da de 6 — `#a092ff` é o começo de `#a092ff40`.
 
 ## Idioma
 
@@ -52,6 +67,10 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Painel de configurações (perfil, sons, aparência, atalhos) | `public/configuracoes.js` + `sala.html` |
 | Página de "não encontrada" | `public/404.html` + `nao-encontrada.{css,js}`; a rota é a última de `server.js` |
 | Aviso no canto (download, atualização) | `public/toast.js`; o download do app em `app/main.js` |
+| Tema claro/escuro, temas prontos, cores exatas | `public/tema.js` (no `<head>` de toda página) + tokens em `public/tema.css` |
+| Quem está vendo cada tela | `espectadores.js` (servidor) + `public/espectadores.js` |
+| Sugestão de `@` no chat | `public/mencoes.js` |
+| Barra de cima por largura | container queries `topo` no fim de `public/sala.css` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`.

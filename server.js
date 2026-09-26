@@ -33,6 +33,7 @@ const medicao = require('./medicao');
 const { criarModeracao } = require('./moderacao');
 const { criarSalas } = require('./salas');
 const { criarTempos, chaveDeTempo } = require('./tempos');
+const { criarEspectadores } = require('./espectadores');
 const planos = require('./public/planos');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
@@ -53,6 +54,8 @@ const salas = criarSalas({ anonimoAbre: ANONIMO_ABRE_SALA });
 // Há quanto tempo a sala está aberta e há quanto tempo cada pessoa está nela, sem zerar no F5:
 // ver tempos.js.
 const tempos = criarTempos();
+// Quem está vendo a tela de quem, para quem transmite saber: ver espectadores.js.
+const espectadores = criarEspectadores();
 // O teto de pessoas por sala: base e com um assinante presente. Os números de partida são 25
 // e 50 (public/planos.js); NEXO_PESSOAS_POR_SALA="base,comAssinante" ajusta sem mexer no código.
 const PESSOAS_POR_SALA = (() => {
@@ -746,8 +749,39 @@ salas.aoFechar(sala => {
   aprovadosPorSala.delete(sala);
   identidadesConhecidasPorSala.delete(sala);
   tempos.fechou(sala);
+  espectadores.fechou(sala);
   moderacao.fechou(sala);
 });
+
+// ---------- Quem está vendo cada tela ----------
+//
+// O que se guarda é o que cada página disse estar vendo (espectadores.js). Se a tela está no ar
+// quem sabe é o servidor de mídia, e não este: cada página só põe na lista uma tela que ela vê
+// no ar, e a tira quando a tela cai. O filtro daqui é só o de presença -- a lista de uma página
+// que caiu fica até o socket dela perceber, e um placar com quem já saiu seria mentira.
+function membroPorIdentidade(roomCode, identidade) {
+  for (const membro of roomMembers.get(roomCode)?.values() || []) if (membro.identidade === identidade) return membro;
+  return null;
+}
+
+function placarDaTela(roomCode, dono) {
+  return espectadores.de(roomCode, dono).filter(espectador => membroPorIdentidade(roomCode, espectador));
+}
+
+function placarDaSala(roomCode) {
+  const placar = {};
+  for (const dono of espectadores.donos(roomCode)) {
+    const lista = placarDaTela(roomCode, dono);
+    if (lista.length) placar[dono] = lista;
+  }
+  return placar;
+}
+
+// Para a sala inteira, e não só para quem transmite: como no Discord, qualquer um vê quem mais
+// está na mesma tela -- é o que faz um "olha isso aqui" funcionar sem perguntar quem está vendo.
+function anunciarEspectadores(roomCode, donos) {
+  for (const dono of donos) io.to(roomName(roomCode)).emit('espectadores', { dono, espectadores: placarDaTela(roomCode, dono) });
+}
 
 // ---------- Os planos ----------
 //
@@ -1200,6 +1234,12 @@ io.on('connection', (socket) => {
     const identidadeQueSaiu = socket.data.identidadeDeMidia || null;
     moderacao.saiu(roomCode, identidadeQueSaiu);
     anunciarDono(roomCode);
+    // Quem sai deixa de ver o que via, e a tela dele sai do placar. Só se nenhuma outra conexão
+    // com a mesma identidade ficou: a oscilação de socket entra de novo antes de a antiga cair,
+    // e a conexão nova pode já ter mandado a lista dela.
+    if (identidadeQueSaiu && !membroPorIdentidade(roomCode, identidadeQueSaiu)) {
+      anunciarEspectadores(roomCode, espectadores.saiu(roomCode, identidadeQueSaiu));
+    }
     // A identidade da midia vai junto: e por ela que a sala reconhece quem saiu. O socket
     // percebe a saida em segundos; o servidor de midia guarda a pessoa por muito mais
     // tempo, esperando ela voltar, e ate la ela ficaria parada na lista.
@@ -1298,6 +1338,9 @@ io.on('connection', (socket) => {
         // diferença para o relógio dela: um computador cinco minutos adiantado mostraria
         // "há cinco minutos" para quem acabou de chegar.
         tempos: { agora: Date.now(), abertaEm: tempos.abertaEm(roomCode), desde },
+        // Quem já está vendo cada tela: sem isto, quem chega só saberia do placar na próxima
+        // mudança dele.
+        espectadores: placarDaSala(roomCode),
         // Quem manda na sala, e o que ESTA pessoa pode fazer. As duas coisas separadas: a
         // primeira desenha o selo na lista, a segunda decide se as ações aparecem. Mandar só
         // a primeira obrigaria o cliente a deduzir a segunda comparando identidades -- e a
@@ -1477,6 +1520,17 @@ io.on('connection', (socket) => {
       micMuted: Boolean(state?.micMuted)
     };
     socket.to(roomName(roomCode)).emit('media-state', { id: socket.id, ...membro.state });
+  });
+
+  // As telas que esta página está recebendo agora -- a lista inteira, nunca um "liguei" solto
+  // (ver espectadores.js). Só entram identidades de quem está nesta sala: o mapa é chaveado
+  // pelo que chega do cliente, e nada solto vira chave dele.
+  socket.on('assistindo', dados => {
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomCode && roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro || !Array.isArray(dados?.telas)) return;
+    const telas = dados.telas.filter(tela => typeof tela === 'string' && tela.length <= 128 && membroPorIdentidade(roomCode, tela));
+    anunciarEspectadores(roomCode, espectadores.definir(roomCode, membro.identidade, telas));
   });
 
   // Quanto esta página recebeu desde o relatório anterior dela. Somado com o de todo mundo,

@@ -330,6 +330,11 @@
   montarEscolhas();
   (async () => {
     const r = await api('/api/conta/eu');
+    // As cores exatas do tema são do premium (planos.js). Esta página sabe o plano: atualiza o
+    // que tema.js lembra, para a próxima página já nascer com as cores certas.
+    const c = r.ok ? r.dados.conta : null;
+    const premium = c?.plano === 'premium' && (!c.planoAte || c.planoAte > Date.now());
+    if (window.NexoTema) { NexoTema.definirPermissao(r.dados?.planosLigados === false || premium); NexoTema.aplicar(); }
     if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; pintarConta(); mostrar('comConta'); return; }
     mostrar('semConta');
   })();

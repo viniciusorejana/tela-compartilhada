@@ -13,8 +13,14 @@
   const raiz = document.querySelector('.app');
   const painel = $('devicesPanel');
   const abas = painel.querySelector('[data-abas]');
-  const PADRAO = Object.freeze({ densidade: 'confortavel', texto: 'normal', tempos: false, reacoes: true, menosMovimento: false });
+  const Tema = window.NexoTema;
+  // `modo` vazio quer dizer "o do tema": escolher o Areia traz o claro junto, e o Floresta o
+  // escuro. Só quem mexe no seletor de modo fixa um -- e "do sistema" sobrevive à troca de tema.
+  const PADRAO = Object.freeze({ densidade: 'confortavel', texto: 'normal', tempos: false, reacoes: true, menosMovimento: false, tema: Tema.TEMA_PADRAO, modo: '', destaque: '', cores: null });
   let aparencia = { ...PADRAO };
+  // Se as cores exatas valem agora. O plano chega depois da página; até lá vale o último que
+  // esta página soube (tema.js guarda), para o tema de um premium não piscar.
+  let coresLivres = Tema.lerPermissao();
 
   function limpar(bruto) {
     const limpo = { ...PADRAO };
@@ -22,12 +28,18 @@
     if (['confortavel', 'compacta'].includes(bruto.densidade)) limpo.densidade = bruto.densidade;
     if (['normal', 'grande', 'maior'].includes(bruto.texto)) limpo.texto = bruto.texto;
     for (const chave of ['tempos', 'reacoes', 'menosMovimento']) if (typeof bruto[chave] === 'boolean') limpo[chave] = bruto[chave];
+    if (Tema.TEMAS.some(t => t.id === bruto.tema)) limpo.tema = bruto.tema;
+    if (Tema.MODOS.includes(bruto.modo)) limpo.modo = bruto.modo;
+    if (Object.prototype.hasOwnProperty.call(Tema.DESTAQUES, bruto.destaque)) limpo.destaque = bruto.destaque;
+    const cores = { destaque: Tema.hexValido(bruto.cores?.destaque), fundo: Tema.hexValido(bruto.cores?.fundo) };
+    if (cores.destaque || cores.fundo) limpo.cores = Object.fromEntries(Object.entries(cores).filter(([, valor]) => valor));
     return limpo;
   }
 
   // As classes vão no `.app` (a sala inteira) e na prévia do painel, que fica fora dela: a
-  // prévia mostra a escolha com as mesmas regras de estilo que a sala vai usar.
-  function aplicar() {
+  // prévia mostra a escolha com as mesmas regras de estilo que a sala vai usar. O tema vai na
+  // raiz do documento, pelo tema.js -- o mesmo caminho da primeira pintura.
+  function aplicar({ comTransicao = false } = {}) {
     const alvos = [raiz, $('previaChat')].filter(Boolean);
     for (const alvo of alvos) {
       alvo.classList.toggle('densidade-compacta', aparencia.densidade === 'compacta');
@@ -38,6 +50,39 @@
     raiz.classList.toggle('sem-reacoes', !aparencia.reacoes);
     // Na raiz do documento: painéis e menus vivem fora do `.app`, e também param de deslizar.
     document.documentElement.classList.toggle('menos-movimento', aparencia.menosMovimento);
+    (comTransicao ? Tema.aplicarComTransicao : Tema.aplicar)(aparencia, { coresLivres });
+  }
+
+  // ---------- Os temas prontos e as cores ----------
+  // Cada cartão é uma miniatura do próprio tema -- barra lateral, painel, duas linhas de texto e
+  // o botão --, pintada com as cores que ele produz de verdade: escolher por uma amostra que
+  // não é o tema seria escolher no escuro.
+  function montarTemas() {
+    const grade = $('temasProntos');
+    for (const tema of Tema.TEMAS) {
+      const cores = Tema.derivar(Tema.resolver({ tema: tema.id }));
+      const opcao = document.createElement('label');
+      opcao.className = 'tema-cartao';
+      opcao.innerHTML = `<input type="radio" name="temaPronto" value="${tema.id}"><span class="tema-amostra" aria-hidden="true"><i class="tema-lateral"></i><i class="tema-painel"><b></b><b></b><em></em></i></span><span class="tema-nome"></span>`;
+      opcao.querySelector('.tema-nome').textContent = tema.nome;
+      opcao.querySelector('input').setAttribute('aria-label', `${tema.nome}, ${tema.modo === 'claro' ? 'claro' : 'escuro'}`);
+      const amostra = opcao.querySelector('.tema-amostra');
+      for (const [nome, valor] of Object.entries({ '--pv-bg': cores['--bg'], '--pv-lateral': cores['--bg-1'], '--pv-painel': cores['--bg-cartao'], '--pv-texto': cores['--text'], '--pv-fraco': cores['--faint'], '--pv-destaque': cores['--accent-forte'], '--pv-linha': cores['--line-2'] })) amostra.style.setProperty(nome, valor);
+      grade.append(opcao);
+    }
+    const destaques = $('destaques');
+    const nenhum = document.createElement('label');
+    nenhum.className = 'destaque-opcao do-tema';
+    nenhum.innerHTML = '<input type="radio" name="corDestaque" value="" aria-label="A cor do tema"><span>Do tema</span>';
+    destaques.append(nenhum);
+    for (const [id, cor] of Object.entries(Tema.DESTAQUES)) {
+      const opcao = document.createElement('label');
+      opcao.className = 'destaque-opcao';
+      opcao.title = Tema.NOMES_DOS_DESTAQUES[id] || id;
+      opcao.innerHTML = `<input type="radio" name="corDestaque" value="${id}"><span style="--cor:${cor}"></span>`;
+      opcao.querySelector('input').setAttribute('aria-label', opcao.title);
+      destaques.append(opcao);
+    }
   }
 
   function pintarControles() {
@@ -47,6 +92,38 @@
     $('aparenciaTempos').checked = aparencia.tempos;
     $('aparenciaReacoes').checked = aparencia.reacoes;
     $('aparenciaMovimento').checked = aparencia.menosMovimento;
+    const efetivo = Tema.resolver(aparencia, { coresLivres });
+    marcar('modoTema', efetivo.modoEscolhido);
+    marcar('temaPronto', aparencia.tema);
+    // Com uma cor exata valendo, nenhuma das oito está escolhida -- a escolhida é a do seletor.
+    if (aparencia.cores?.destaque && coresLivres) painel.querySelectorAll('input[name="corDestaque"]').forEach(opcao => { opcao.checked = false; });
+    else marcar('corDestaque', aparencia.destaque);
+    pintarCoresExatas(efetivo);
+  }
+
+  function pintarCoresExatas(efetivo = Tema.resolver(aparencia, { coresLivres })) {
+    const cores = aparencia.cores || {};
+    $('corExataDestaque').value = cores.destaque || efetivo.destaque;
+    $('corExataFundo').value = cores.fundo || Tema.derivar(efetivo)['--bg'];
+    pintarAmostras();
+    $('corExataDestaqueHex').textContent = cores.destaque ? cores.destaque.toUpperCase() : 'do tema';
+    $('corExataFundoHex').textContent = cores.fundo ? cores.fundo.toUpperCase() : 'do tema';
+    $('corExataRestaurar').hidden = !aparencia.cores;
+    $('coresExatas').classList.toggle('bloqueado', !coresLivres);
+    $('coresExatasSelo').hidden = coresLivres;
+    $('corExataDestaque').disabled = !coresLivres;
+    $('corExataFundo').disabled = !coresLivres;
+    $('coresExatasDica').textContent = coresLivres
+      ? 'Qualquer cor para o destaque e para o fundo. O Nexo ajusta textos e botões sozinho, para tudo continuar legível.'
+      : aparencia.cores
+        ? 'Escolher qualquer cor é do premium. As suas estão guardadas e voltam quando o plano estiver ativo.'
+        : 'Escolher qualquer cor para o destaque e para o fundo é do premium. Os temas e as cores acima são de todo mundo.';
+  }
+
+  // A bolinha de cada seletor mostra a cor dele -- inclusive a guardada de quem está sem o
+  // premium agora, que não vale na tela mas continua sendo a escolha.
+  function pintarAmostras() {
+    for (const campo of ['corExataDestaque', 'corExataFundo']) $(campo).nextElementSibling.style.background = $(campo).value;
   }
 
   function recarregar() {
@@ -60,8 +137,41 @@
     aparencia = limpar({ ...aparencia, ...parcial });
     const diferente = Object.fromEntries(Object.entries(aparencia).filter(([chave, valor]) => PADRAO[chave] !== valor));
     window.Preferencias?.gravarAjuste('aparencia', Object.keys(diferente).length ? diferente : null);
-    aplicar();
+    aplicar({ comTransicao: 'tema' in parcial || 'modo' in parcial || 'destaque' in parcial || 'cores' in parcial });
+    pintarControles();
   }
+
+  function aoMudarPlano(pode) {
+    if (pode === coresLivres) return;
+    coresLivres = pode;
+    Tema.definirPermissao(pode);
+    aplicar();
+    pintarControles();
+  }
+
+  montarTemas();
+  painel.querySelectorAll('input[name="modoTema"]').forEach(opcao => opcao.addEventListener('change', () => definir({ modo: opcao.value })));
+  // Um tema pronto é um ponto de partida inteiro: traz o modo dele (a menos que o modo siga o
+  // sistema), a cor dele, e deixa de lado as cores exatas -- senão o clique não mudaria nada.
+  painel.querySelectorAll('input[name="temaPronto"]').forEach(opcao => opcao.addEventListener('change', () => definir({ tema: opcao.value, modo: aparencia.modo === 'sistema' ? 'sistema' : '', destaque: '', cores: null })));
+  painel.querySelectorAll('input[name="corDestaque"]').forEach(opcao => opcao.addEventListener('change', () => {
+    const cores = aparencia.cores?.fundo ? { fundo: aparencia.cores.fundo } : null;
+    definir({ destaque: opcao.value, cores });
+  }));
+  // O seletor de cor dispara a cada movimento: o tema acompanha ao vivo, e só grava ao soltar.
+  for (const [campo, chave] of [['corExataDestaque', 'destaque'], ['corExataFundo', 'fundo']]) {
+    $(campo).addEventListener('input', evento => {
+      if (!coresLivres) return;
+      aparencia = limpar({ ...aparencia, cores: { ...(aparencia.cores || {}), [chave]: evento.target.value } });
+      Tema.aplicar(aparencia, { coresLivres });
+      pintarAmostras();
+    });
+    $(campo).addEventListener('change', evento => {
+      if (!coresLivres) return;
+      definir({ cores: { ...(aparencia.cores || {}), [chave]: evento.target.value } });
+    });
+  }
+  $('corExataRestaurar').addEventListener('click', () => definir({ cores: null }));
 
   painel.querySelectorAll('input[name="densidade"]').forEach(opcao => opcao.addEventListener('change', () => definir({ densidade: opcao.value })));
   painel.querySelectorAll('input[name="textoChat"]').forEach(opcao => opcao.addEventListener('change', () => definir({ texto: opcao.value })));
@@ -118,5 +228,5 @@
   recarregar();
   window.NexoConta?.pronto.then(() => { recarregar(); pintarPerfil(); }).catch(() => {});
 
-  window.NexoConfig = { abrir, recarregar };
+  window.NexoConfig = { abrir, recarregar, aoMudarPlano };
 })();

@@ -4,24 +4,55 @@
  * com texto branco a 3,5:1 de contraste (abaixo dos 4,5:1 que texto pequeno pede), e havia
  * botões de 30, 34, 38, 44 e 46 px de altura lado a lado. Aqui ficam os números; cada página
  * só escolhe entre eles. */
+/* ---------- Cores: escuro, claro, e o que fica escuro nos dois ----------
+ *
+ * As cores de verdade são poucas e moram aqui. O resto do CSS nunca escreve uma cor de
+ * superfície ou de texto: usa estes nomes, e é isso que deixa o tema claro, os temas prontos e
+ * as cores exatas do premium trocarem a sala inteira de uma vez (tema.js).
+ *
+ * As constantes `--e-*` são o Nexo escuro de sempre. Elas não mudam com o tema: servem de
+ * padrão e de valor para o que fica escuro mesmo no tema claro -- tudo o que está sobre vídeo
+ * (palco, quadradinho, grade, visualizador de imagem), como no Discord. Uma tela compartilhada
+ * cercada de branco ofusca, e o controle por cima dela precisa do fundo escuro para ser lido. */
 :root {
+  --e-bg-fundo:#12131c; --e-bg-0:#171820; --e-bg:#191a24; --e-bg-1:#1c1d28; --e-bg-2:#20212d;
+  --e-bg-cartao:#252532; --e-bg-3:#2a2b3a; --e-bg-4:#353647; --e-bg-5:#40415a;
+  --e-text:#eeeef5; --e-text-2:#cfcde0; --e-text-3:#b6b0ca; --e-muted:#a2a2b8; --e-faint:#8f8ea6; --e-apagado:#6f6d86;
+  --e-accent-texto:#c7bcff;
+}
+:root,:root[data-modo="claro"] .contexto-escuro {
   color-scheme: dark;
 
-  /* Superfícies, da mais funda para a mais alta. */
-  --bg:#191a24; --bg-2:#20212d; --bg-3:#2a2b3a; --bg-4:#353647; --bg-5:#40415a;
-  --line:#ffffff0d; --line-2:#ffffff17; --line-3:#ffffff26;
+  /* Superfícies, da mais funda para a mais alta. `--bg-fundo` é o poço (trilho de interruptor,
+     fundo de vídeo); `--bg-0` é o campo de digitar e a barra de controles; `--bg-1` os painéis;
+     `--bg-2` os cartões de modal; `--bg-cartao` os quadradinhos e a caixa de escrever. As três
+     últimas são as de botão secundário e de passar o mouse. */
+  --bg-fundo:var(--e-bg-fundo); --bg-0:var(--e-bg-0); --bg:var(--e-bg); --bg-1:var(--e-bg-1); --bg-2:var(--e-bg-2);
+  --bg-cartao:var(--e-bg-cartao); --bg-3:var(--e-bg-3); --bg-4:var(--e-bg-4); --bg-5:var(--e-bg-5);
+  /* A tinta das sobreposições translúcidas: branco aqui, quase preto no claro. Toda borda sutil
+     e todo "passar o mouse" é `rgb(var(--tinta) / N%)`. */
+  --tinta:255 255 255;
+  --line:rgb(var(--tinta) / 5%); --line-2:rgb(var(--tinta) / 9%); --line-3:rgb(var(--tinta) / 15%);
 
-  /* Texto: quatro níveis, todos legíveis sobre --bg-2 (o mais fraco dá 5,2:1). */
-  --text:#eeeef5; --text-2:#cfcde0; --muted:#a2a2b8; --faint:#8f8ea6;
+  /* Texto: seis níveis, do título ao desabilitado. Até --faint, todos legíveis sobre --bg-2
+     (o mais fraco dá 5,2:1). */
+  --text:var(--e-text); --text-2:var(--e-text-2); --text-3:var(--e-text-3); --muted:var(--e-muted); --faint:var(--e-faint); --apagado:var(--e-apagado);
+  --accent-texto:var(--accent-texto-escuro, var(--e-accent-texto));
 
+  /* Verde de conectado, vermelho de perigo, âmbar de aviso e rosa de ao vivo. O `-texto` de
+     cada um é a versão para letra; o outro, para borda, ponto e fundo translúcido. */
+  --online:#90dfb3; --online-texto:#a6e7c4; --danger:#f07583; --danger-texto:#ff98a4;
+  --aviso:#e8c07a; --aviso-texto:#f1d58c; --laranja-texto:#f0b98a; --rosa:#e87fa3; --rosa-texto:#ffa6bd;
+}
+:root {
   /* O violeta. `--accent-forte` é o de preencher botão com texto branco: 4,6:1, como o
      "blurple" do Discord. Os outros são de destaque -- borda, ícone, texto sobre fundo escuro. */
   --accent:#8879f6; --accent-hi:#a092ff; --accent-forte:#6c5ce7; --accent-forte-hi:#7b6cf0;
-  --accent-suave:#8879f61f; --accent-suave-hi:#8879f633; --accent-texto:#c7bcff;
-  --online:#90dfb3; --online-suave:#90dfb31f;
+  --accent-suave:#8879f61f; --accent-suave-hi:#8879f633; --anel-cor:#b6abff;
+  --online-suave:color-mix(in srgb, var(--online) 12%, transparent);
   /* `--danger-forte` também é de preencher com texto branco: 4,8:1. */
-  --danger:#f07583; --danger-forte:#c93a4f; --danger-suave:#ef6f7d20; --danger-texto:#ff98a4;
-  --aviso:#e8c07a; --aviso-suave:#e8c07a1f;
+  --danger-forte:#c93a4f; --danger-suave:color-mix(in srgb, var(--danger) 13%, transparent);
+  --aviso-suave:color-mix(in srgb, var(--aviso) 12%, transparent);
 
   /* Escala de texto. O piso é 10 px, e só para rótulos em caixa-alta espaçados; texto que se
      lê de verdade começa em 11. */
@@ -37,11 +68,39 @@
   /* Sombras e o anel de foco -- o mesmo em todo lugar que recebe teclado. */
   --sombra-menu:0 14px 36px #00000073, 0 0 0 1px var(--line-2);
   --sombra-modal:0 30px 80px #0000009c, 0 0 0 1px var(--line-2);
-  --anel-foco:0 0 0 2px var(--bg), 0 0 0 4px #b6abff;
+  --anel-foco:0 0 0 2px var(--bg), 0 0 0 4px var(--anel-cor);
 
   /* Movimento: rápido para o que responde ao dedo, um pouco mais para o que aparece. */
   --dur-rapida:110ms; --dur:170ms; --dur-lenta:240ms;
   --curva:cubic-bezier(.2,.8,.2,1); --curva-mola:cubic-bezier(.34,1.4,.64,1);
+}
+
+/* O tema claro de partida (o "Claro"). tema.js recalcula tudo isto para os outros temas e
+   para as cores exatas; estes valores são os que valem se o cálculo não acontecer. */
+:root[data-modo="claro"] {
+  color-scheme: light;
+  --bg-fundo:#cccddb; --bg-0:#eaebf0; --bg:#f2f2f6; --bg-1:#fbfbfc; --bg-2:#ffffff;
+  --bg-cartao:#ffffff; --bg-3:#e6e6ed; --bg-4:#dbdce6; --bg-5:#cfd0dd;
+  --tinta:21 23 40;
+  --line:rgb(var(--tinta) / 8%); --line-2:rgb(var(--tinta) / 12%); --line-3:rgb(var(--tinta) / 18%);
+  --text:#1b1c27; --text-2:#303245; --text-3:#44465a; --muted:#55576d; --faint:#636579; --apagado:#9698a6;
+  --accent:#6c5ce7; --accent-hi:#5441e3; --accent-forte:#6c5ce7; --accent-forte-hi:#5846e4;
+  --accent-suave:#6c5ce71a; --accent-suave-hi:#6c5ce729; --accent-texto:#6858e6; --anel-cor:#6c5ce7;
+  --online:#23965f; --online-texto:#1b7a4b; --danger:#d23b4f; --danger-texto:#b8283d;
+  --aviso:#b8841f; --aviso-texto:#855b00; --laranja-texto:#a24f14; --rosa:#d2477a; --rosa-texto:#b12e62;
+  /* Sombra preta pura num fundo claro vira mancha: aqui ela é da cor da tinta, mais leve. */
+  --sombra-menu:0 12px 32px rgb(var(--tinta) / 16%), 0 0 0 1px var(--line-2);
+  --sombra-modal:0 28px 70px rgb(var(--tinta) / 22%), 0 0 0 1px var(--line-2);
+}
+/* Dentro do que é sempre escuro, o destaque e o anel usam a versão clara da cor do tema, que
+   tema.js calcula junto: o tom forte do tema claro some sobre um vídeo escuro. */
+:root[data-modo="claro"] .contexto-escuro { --accent-hi:var(--accent-hi-escuro, #a092ff); --anel-cor:var(--anel-cor-escuro, #b6abff); }
+:root[data-modo="claro"] { --accent-hi-escuro:#8477eb; --accent-texto-escuro:#bcb5f4; --anel-cor-escuro:#9c91ef; }
+
+/* Trocar de tema desliza as cores por um instante, em vez de piscar. Só durante a troca: uma
+   transição de cor permanente em todo elemento pesaria em cada passar de mouse. */
+html.trocando-tema,html.trocando-tema *,html.trocando-tema *::before,html.trocando-tema *::after {
+  transition:background-color .28s ease,color .28s ease,border-color .28s ease,fill .28s ease,stroke .28s ease!important;
 }
 
 /* Entradas: o que surge desliza pouco e cresce pouco. Nada de pular na cara de ninguém. */
@@ -54,6 +113,7 @@
 /* Um só lugar para quem pediu menos movimento ao sistema: vale para as quatro páginas. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; scroll-behavior:auto!important; }
+  html.trocando-tema,html.trocando-tema * { transition:none!important; }
 }
 
 /* Texto que só o leitor de tela lê: o rótulo continua lá, a tela mostra só o ícone. */
@@ -61,25 +121,25 @@
 
 /* Cor e marca do perfil, na página da conta e no editor de dentro da sala (perfil.js monta). */
 .escolhas { border:0; padding:0; margin:18px 0 0; display:flex; flex-wrap:wrap; gap:8px; min-width:0; }
-.escolhas legend { font-size:var(--fs-sm); font-weight:600; color:#c6bcd1; margin-bottom:9px; padding:0; }
+.escolhas legend { font-size:var(--fs-sm); font-weight:600; color:var(--text-2); margin-bottom:9px; padding:0; }
 .escolhas label { position:relative; margin:0!important; cursor:pointer; }
 .escolhas input { position:absolute; opacity:0; width:1px; height:1px; }
 .escolha { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; border:2px solid transparent; font-size:17px; color:#15121f; font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; transition:transform var(--dur-rapida) var(--curva),box-shadow var(--dur) var(--curva),background-color var(--dur) var(--curva); }
 .escolhas label:hover .escolha { transform:scale(1.08); }
-.escolha.simbolo { background:#ffffff14; color:#e4dcf6; }
-.escolha.texto { width:auto; padding:0 12px; border-radius:18px; font:600 var(--fs-meta)/1 "Segoe UI",system-ui,sans-serif; background:#ffffff0d; color:#d8cdea; }
-.escolhas label:hover .escolha.texto { transform:none; background:#ffffff17; }
-.escolhas input:checked + .escolha { border-color:#f1ebff; box-shadow:0 0 0 2px var(--accent); }
+.escolha.simbolo { background:rgb(var(--tinta) / 8%); color:var(--text); }
+.escolha.texto { width:auto; padding:0 12px; border-radius:18px; font:600 var(--fs-meta)/1 "Segoe UI",system-ui,sans-serif; background:rgb(var(--tinta) / 5%); color:var(--text-2); }
+.escolhas label:hover .escolha.texto { transform:none; background:rgb(var(--tinta) / 9%); }
+.escolhas input:checked + .escolha { border-color:var(--bg-2); box-shadow:0 0 0 2px var(--accent); }
 .escolhas input:checked + .escolha.simbolo { background:var(--accent-suave-hi); }
-.escolhas input:focus-visible + .escolha { outline:2px solid #b6abff; outline-offset:2px; }
+.escolhas input:focus-visible + .escolha { outline:2px solid var(--anel-cor); outline-offset:2px; }
 
 /* ---------- Avisos (toast.js) ----------
    Um canto só, a mesma peça em toda página. Cada botão daqui declara tudo o que precisa: a
    sala e a página inicial têm regras de `button` globais (fundo violeta, largura cheia) que
    vazariam para dentro do aviso. */
 .nexo-toasts { position:fixed; right:20px; bottom:20px; z-index:130; display:flex; flex-direction:column; align-items:flex-end; gap:10px; width:min(350px,calc(100vw - 32px)); pointer-events:none; }
-.nexo-toast { position:relative; width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; column-gap:11px; align-items:center; padding:12px 8px 13px 12px; border-radius:var(--r-lg); background:#1e1f2bf7; box-shadow:var(--sombra-menu); color:var(--text); font:13px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; pointer-events:auto; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); animation:nexo-toast-entra var(--dur-lenta) var(--curva); transition:box-shadow var(--dur) var(--curva); }
-.nexo-toast:hover { box-shadow:0 18px 40px #0000008c, 0 0 0 1px var(--line-3); }
+.nexo-toast { position:relative; width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; column-gap:11px; align-items:center; padding:12px 8px 13px 12px; border-radius:var(--r-lg); background:color-mix(in srgb, var(--bg-1) 97%, transparent); box-shadow:var(--sombra-menu); color:var(--text); font:13px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; pointer-events:auto; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); animation:nexo-toast-entra var(--dur-lenta) var(--curva); transition:box-shadow var(--dur) var(--curva); }
+.nexo-toast:hover { box-shadow:0 18px 40px rgb(0 0 0 / 30%), 0 0 0 1px var(--line-3); }
 .nexo-toast.saindo { animation:nexo-toast-sai var(--dur) var(--curva) forwards; }
 @keyframes nexo-toast-entra { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
 @keyframes nexo-toast-sai { to { opacity:0; transform:translateX(18px); } }
@@ -91,14 +151,14 @@
 .nexo-toast-texto strong { font-size:var(--fs-md); font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .nexo-toast-texto small { color:var(--muted); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .nexo-toast .nexo-toast-fechar { align-self:start; display:grid; place-items:center; width:28px; min-width:0; height:28px; min-height:0; margin:0; padding:0; border:0; border-radius:var(--r-sm); background:transparent; color:var(--faint); cursor:pointer; box-shadow:none; transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva); }
-.nexo-toast .nexo-toast-fechar:hover { background:#ffffff12; color:var(--text); transform:none; }
+.nexo-toast .nexo-toast-fechar:hover { background:rgb(var(--tinta) / 7%); color:var(--text); transform:none; }
 .nexo-toast-acoes { grid-column:2 / 4; display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; padding-right:4px; }
 .nexo-toast .nexo-toast-acoes button { width:auto; min-height:var(--ctl-p); margin:0; padding:0 12px; border:0; border-radius:var(--r-sm); background:var(--bg-3); color:var(--text); font:600 var(--fs-sm)/1 "Segoe UI",system-ui,sans-serif; cursor:pointer; box-shadow:none; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
 .nexo-toast .nexo-toast-acoes button:hover { background:var(--bg-4); transform:none; }
 .nexo-toast .nexo-toast-acoes button.principal { background:var(--accent-forte); color:#fff; }
 .nexo-toast .nexo-toast-acoes button.principal:hover { background:var(--accent-forte-hi); }
 .nexo-toast .nexo-toast-acoes button:active { transform:scale(.97); }
-.nexo-toast-barra { position:absolute; left:0; right:0; bottom:0; height:3px; background:#ffffff10; overflow:hidden; }
+.nexo-toast-barra { position:absolute; left:0; right:0; bottom:0; height:3px; background:rgb(var(--tinta) / 6%); overflow:hidden; }
 .nexo-toast-barra i { display:block; height:100%; width:0; border-radius:0 2px 2px 0; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .3s linear; }
 .nexo-toast[data-tom="ok"] .nexo-toast-barra i { background:var(--online); }
 .nexo-toast [hidden] { display:none!important; }
