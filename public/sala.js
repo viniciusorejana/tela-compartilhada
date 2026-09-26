@@ -144,7 +144,6 @@ let appAudioContext = null;
 let appAudioNode = null;
 let appAudioTrack = null;
 let audioCaptureVersion = 0;
-let testAudioContext = null;
 let settingsMode = 'start'; // 'start' | 'update'
 let audioCapabilities = { podeUsarHelper: false, motivo: 'remoto', agenteDisponivel: false, agenteConectado: false };
 
@@ -356,6 +355,103 @@ function entrar() {
 nameConfirmBtn.onclick = entrar;
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
 
+// ---------- Os avisos sonoros de gente ----------
+//
+// Quem entra numa sala com cinco pessoas recebe as cinco de uma vez, e cada uma chega pela
+// mídia como uma "entrada": seriam cinco toques dizendo que chegou quem já estava lá. O mesmo
+// na volta de uma queda minha, e ao contrário na queda: a lista esvazia e cada pessoa "sai".
+// Por isso os avisos de gente só valem com a sala assentada -- a mídia conectada há alguns
+// segundos e nenhuma queda minha em andamento. Os sons em si moram em sons.js.
+let avisosLiberadosEm = Infinity;
+const saidasParaAvisar = new Map();   // id -> temporizador
+const telasNoAr = new Set();
+const telaDesligouEm = new Map();
+const fimDeTelaParaAvisar = new Map(); // id -> temporizador
+function salaAssentada() {
+  return !saindoDaSala && !fuiRemovido && Date.now() >= avisosLiberadosEm && transporte?.sala?.state === 'connected';
+}
+function acompanharConexaoDosAvisos(estado) {
+  if (estado === 'connected' || estado === 'conectado') {
+    if (avisosLiberadosEm === Infinity) avisosLiberadosEm = Date.now() + 3000;
+  } else avisosLiberadosEm = Infinity;
+  acompanharQueda();
+}
+
+// ---------- A sua conexão, em som ----------
+//
+// Quem está com um jogo em tela cheia não vê a barra dizer "reconectando" -- e segue falando
+// para uma sala que não o ouve. Um som quando a conexão cai, e só se ela ficar fora por alguns
+// segundos: a oscilação de um instante se resolve sozinha, e avisá-la seria alarme falso. O de
+// "voltou" só toca se o de "caiu" tocou.
+const MS_ATE_AVISAR_A_QUEDA = 4000;
+let quedaAvisada = false;
+let temporizadorDaQueda = null;
+function conectadoDeVerdade() {
+  return Boolean(socket?.connected) && (!transporte || transporte.sala?.state === 'connected');
+}
+function acompanharQueda() {
+  if (!sessaoIniciada || saindoDaSala || fuiRemovido) return;
+  if (conectadoDeVerdade()) {
+    clearTimeout(temporizadorDaQueda);
+    temporizadorDaQueda = null;
+    if (quedaAvisada) { quedaAvisada = false; window.NexoSons?.tocar('voltou'); }
+    return;
+  }
+  if (quedaAvisada || temporizadorDaQueda) return;
+  temporizadorDaQueda = setTimeout(() => {
+    temporizadorDaQueda = null;
+    if (saindoDaSala || fuiRemovido || conectadoDeVerdade()) return;
+    quedaAvisada = true;
+    window.NexoSons?.tocar('caiu');
+  }, MS_ATE_AVISAR_A_QUEDA);
+}
+function avisarEntrada(par) {
+  if (par.ehBot) return;
+  // Voltou antes de o aviso de saída tocar: a mídia dela oscilou, ela nunca saiu. As duas
+  // coisas se anulam, e a sala não ouve nada.
+  const saida = saidasParaAvisar.get(par.id);
+  if (saida) { clearTimeout(saida); saidasParaAvisar.delete(par.id); return; }
+  if (salaAssentada()) window.NexoSons?.tocar('entrada');
+}
+function avisarSaida(id) {
+  // Quem vai embora leva a tela junto; o som de saída já diz isso, e o de "tela saiu" não toca.
+  telasNoAr.delete(id);
+  clearTimeout(fimDeTelaParaAvisar.get(id));
+  fimDeTelaParaAvisar.delete(id);
+  if (String(id).startsWith('nexo-dj#') || !salaAssentada()) return;
+  // Dois segundos de espera: é o tempo de uma oscilação de rede trazer a pessoa de volta, e um
+  // "saiu, entrou" por nada é justamente o aviso que faz alguém desligar todos.
+  clearTimeout(saidasParaAvisar.get(id));
+  saidasParaAvisar.set(id, setTimeout(() => {
+    saidasParaAvisar.delete(id);
+    if (!saindoDaSala && !fuiRemovido) window.NexoSons?.tocar('saida');
+  }, 2000));
+}
+function avisarTela(par) {
+  if (par.ehBot) return;
+  if (!par.state.screen) {
+    if (!telasNoAr.delete(par.id)) return;
+    telaDesligouEm.set(par.id, Date.now());
+    // O fim espera um pouco pelo mesmo motivo do começo, ao contrário: numa troca de tela a
+    // transmissão sai do ar e volta em instantes, e ela não acabou.
+    if (!salaAssentada()) return;
+    clearTimeout(fimDeTelaParaAvisar.get(par.id));
+    fimDeTelaParaAvisar.set(par.id, setTimeout(() => {
+      fimDeTelaParaAvisar.delete(par.id);
+      if (!telasNoAr.has(par.id) && salaAssentada()) window.NexoSons?.tocar('tela-fim');
+    }, 2500));
+    return;
+  }
+  if (telasNoAr.has(par.id)) return;
+  telasNoAr.add(par.id);
+  const pendente = fimDeTelaParaAvisar.get(par.id);
+  if (pendente) { clearTimeout(pendente); fimDeTelaParaAvisar.delete(par.id); }
+  // Trocar o que se compartilha, ou o codec, despublica e publica de novo em seguida: é a mesma
+  // transmissão, e não merece um segundo anúncio.
+  if (Date.now() - (telaDesligouEm.get(par.id) || 0) < 8000) return;
+  if (salaAssentada()) window.NexoSons?.tocar('tela');
+}
+
 // ---------- Conexão / sala ----------
 async function iniciarConexao() {
   status.textContent = 'Conectando ao servidor...';
@@ -402,6 +498,7 @@ async function iniciarConexao() {
         criarTile(par.id, par.name, par.state);
         atualizarContador();
         avaliarDestaque();
+        avisarEntrada(par);
         // Vale dizer que a retomada foi automática: sem isso parece que a sala decidiu
         // sozinha voltar a pagar por uma imagem que ninguém pediu agora.
         if (info?.retomando) status.textContent = `${par.name} voltou — a tela que você estava assistindo volta junto.`;
@@ -410,6 +507,7 @@ async function iniciarConexao() {
         removerPar(id);
         atualizarContador();
         avaliarDestaque();
+        avisarSaida(id);
         // Sumir sem explicação é o que faz a sala achar que o problema é dela. Dizer que a
         // pessoa caiu, e que a volta se resolve sozinha, evita meia dúzia de "cadê o
         // fulano?" no chat.
@@ -418,7 +516,7 @@ async function iniciarConexao() {
       aoMudarMidia: id => { ligarMidiaDoTile(id); avaliarDestaque(); },
       // A ordem em que a tela de alguém entrou só é conhecida aqui -- o quadradinho dela
       // já foi criado quando a faixa chegou, antes de o estado ser recalculado.
-      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); },
+      aoMudarEstado: par => { atualizarTile(par.id); reordenarQuadradinhos(); avaliarDestaque(); avaliarRiscoDeEco(); avisarTela(par); },
 
       // Credencial NOVA a cada volta. A antiga tem prazo, e uma queda longa a deixa
       // vencida: reaproveita-la faria a reconexao falhar justamente nos casos em que ela
@@ -430,6 +528,7 @@ async function iniciarConexao() {
       },
       aoReconectar: republicarTudo,
       aoMudarConexao: (estado, mensagem) => {
+        acompanharConexaoDosAvisos(estado);
         // Quem foi removido não recebe aviso de conexão em cima do motivo. Sem esta guarda o
         // "a mídia caiu" chega um instante depois e apaga a única frase que explicava o que
         // aconteceu -- e a pessoa fica recarregando a página sem saber que foi retirada.
@@ -451,7 +550,9 @@ async function iniciarConexao() {
     if (saindoDaSala) { await transporte.desconectar(); return; }
   }
 
-  socket = io({ autoConnect: false, auth: responder => responder({ credencial: credencialSessao }) });
+  // `tempo` é o sorteio que faz o relógio desta pessoa sobreviver a um F5 quando ela não tem
+  // conta (tempo-sala.js e, no servidor, tempos.js).
+  socket = io({ autoConnect: false, auth: responder => responder({ credencial: credencialSessao, tempo: window.NexoTempo?.chave() }) });
   socket.on('limite-atingido', aviso => { status.textContent = aviso.error || 'Aguarde antes de tentar novamente.'; });
   let renovandoSessao = false;
   socket.on('connect_error', async erro => {
@@ -492,6 +593,7 @@ async function iniciarConexao() {
     // nesses primeiros instantes que se olha para a conexão, antes de ligar qualquer coisa.
     medirLatenciaDaSinalizacao();
     sessaoIniciada = true;
+    acompanharQueda();
     // O microfone NAO e aberto ao entrar. Num celular, abrir o microfone aqui tira o audio
     // de quem esta falando em outro aplicativo -- a pessoa entra para assistir e fica muda
     // no Discord sem entender por que. Como se entra mudo de qualquer forma, o microfone so
@@ -519,6 +621,10 @@ async function iniciarConexao() {
         if (par) { par.state.presenca = participante.state?.presenca || ''; atualizarTile(par.id); }
       }
       if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
+      window.NexoTempo?.aoEntrar(response.tempos, response.peers);
+      // O toque de entrada é o "você está na sala" -- só na primeira entrada, e não a cada volta
+      // do socket depois de uma oscilação.
+      if (!voltando) window.NexoSons?.tocar('entrada');
       // Os quadradinhos de quem já estava na mídia nasceram antes de os perfis chegarem.
       repintarAvatares();
       atualizarSelosDeDono();
@@ -619,8 +725,9 @@ async function iniciarConexao() {
   // pessoa não saiu de lugar nenhum, e a mídia dela nunca chegou a cair. Sem este aviso, a
   // anotação de saída a manteria fora da lista de todos por um minuto e meio, porque a
   // sessão de mídia continua sendo a mesma e a anotação só sabe distinguir sessões.
-  socket.on('peer-joined', ({ identidade, perfil }) => {
+  socket.on('peer-joined', ({ identidade, perfil, desde }) => {
     if (!identidade) return;
+    window.NexoTempo?.definir(identidade, desde);
     if (perfil) perfisPorIdentidade.set(identidade, perfil); else perfisPorIdentidade.delete(identidade);
     repintarAvatares();
     if (!transporte) return;
@@ -747,6 +854,7 @@ async function iniciarConexao() {
     medindoLatencia = false;
     atualizarIndicadorDeConexao();
     registrarDiagnostico('socket.disconnect');
+    acompanharQueda();
   });
   socket.on('connect_error', erro => {
     if (fuiRemovido) return;
@@ -2069,7 +2177,19 @@ function alternarMic() {
   enviarEstado();
   atualizarModoSegundoPlano();
 }
-micBtn.onclick = alternarMic;
+// O clique no botão e o atalho tocam o som do microfone; o push-to-talk, não. Quem fala
+// segurando o Espaço aperta dezenas de vezes por conversa, e um clique a cada frase seria o
+// próprio exemplo de aviso que irrita -- ali o sinal é a voz saindo.
+async function alternarMicPorGesto() {
+  if (!micTrack) {
+    await ativarMicrofone();
+    if (micTrack && !micMuted) window.NexoSons?.tocar('mic-ligado');
+    return;
+  }
+  alternarMic();
+  window.NexoSons?.tocar(micMuted ? 'mic-desligado' : 'mic-ligado');
+}
+micBtn.onclick = alternarMicPorGesto;
 
 // Ensurdecer é local: corta tudo que chega e, como no Discord, também fecha o microfone.
 //
@@ -2091,6 +2211,9 @@ function alternarEnsurdecimento() {
     micAntesDeEnsurdecer = micMuted;
     if (!micMuted) alternarMic();
   } else if (!micAntesDeEnsurdecer && micTrack && micMuted && !pushToTalkAtivo) alternarMic();
+  // Um som só, o de ensurdecer: o microfone que fecha junto faz parte do mesmo gesto, e dois
+  // cliques seguidos pareceriam dois botões.
+  window.NexoSons?.tocar(ensurdecido ? 'surdo' : 'ouvir');
   aplicarEnsurdecimento();
   // O rótulo é o nome fixo da coisa, como em "Microfone" e "Câmera"; quem conta o estado é o
   // ícone, que aparece cortado, e o fundo de atenção que o microfone fechado já usa.
@@ -2131,7 +2254,7 @@ document.addEventListener('keydown', evento => {
   }
   if (!(evento.ctrlKey && evento.shiftKey) || evento.repeat) return;
   const tecla = evento.key.toLowerCase();
-  if (tecla === 'm') { evento.preventDefault(); alternarMic(); }
+  if (tecla === 'm') { evento.preventDefault(); alternarMicPorGesto(); }
   else if (tecla === 'd') { evento.preventDefault(); alternarEnsurdecimento(); }
   else if (tecla === 'c') { evento.preventDefault(); cameraBtn.click(); }
   else if (tecla === 'h') { evento.preventDefault(); chatToggle.click(); }
@@ -2170,6 +2293,8 @@ function atualizarPresencaNaInterface(identidade, presenca) {
 // (sobe acelerando, gingando devagar) que tira o movimento do trilho.
 const REACOES_SIMULTANEAS = 18;
 function mostrarReacaoDaSala({ identidade, nome, reacao }) {
+  // Quem desligou as reações flutuantes na Aparência não as vê -- nem as dos outros.
+  if (document.querySelector('.app').classList.contains('sem-reacoes')) return;
   const caixa = document.getElementById('roomReactions');
   // Teto contra o dedo preso no botão: a sala continua respondendo, e o excesso simplesmente
   // não vira elemento. Sai a mais antiga, que já está quase no fim do percurso.
@@ -2416,6 +2541,7 @@ camDevice.onchange = () => trocarCamera(camDevice.value);
 outDevice.onchange = () => {
   guardarDispositivo('saida', outDevice.value);
   aplicarSaidaEmTodos();
+  window.NexoSons?.aplicarSaida();
   status.textContent = 'Saída de áudio trocada.';
 };
 
@@ -2438,7 +2564,7 @@ function mostrarOQueELembrado() {
   // Com conta, "tudo fica só neste navegador" deixa de ser verdade para uma parte -- e a frase
   // precisa dizer qual, porque é justamente o volume por pessoa que continua privado.
   const ondeFica = contaNaSala
-    ? ' Qualidade, codec, quadros, push-to-talk e redução de ruído seguem a sua conta; volumes e aparelhos ficam só neste navegador.'
+    ? ' Qualidade, codec, quadros, push-to-talk, redução de ruído, sons e aparência seguem a sua conta; volumes e aparelhos ficam só neste navegador.'
     : ' Tudo fica só neste navegador.';
   texto.textContent = partes.length
     ? `Guardado: ${partes.join(' e ')}, além dos aparelhos e da qualidade escolhidos.${ondeFica}`
@@ -3773,11 +3899,15 @@ function montarAbas(caixa) {
       document.getElementById(aba.getAttribute('aria-controls')).hidden = !ativa;
     });
   };
+  // Numa lista em pé (as configurações), as setas de cima e de baixo; numa fita deitada, as dos
+  // lados -- como manda o padrão de navegação por teclado.
+  const emPe = caixa.querySelector('[role="tablist"]')?.getAttribute('aria-orientation') === 'vertical';
+  const [anterior, seguinte] = emPe ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+  caixa.mostrarAba = id => { const aba = abas.find(a => a.id === id); if (aba) mostrar(aba); };
   abas.forEach((aba, indice) => {
     aba.addEventListener('click', () => mostrar(aba));
-    // Seta para o lado percorre as abas, como manda o padrão de navegação por teclado.
     aba.addEventListener('keydown', evento => {
-      const passo = evento.key === 'ArrowRight' ? 1 : evento.key === 'ArrowLeft' ? -1 : 0;
+      const passo = evento.key === seguinte ? 1 : evento.key === anterior ? -1 : 0;
       if (!passo) return;
       evento.preventDefault();
       const alvo = abas[(indice + passo + abas.length) % abas.length];
@@ -4113,6 +4243,9 @@ confirmScreenBtn.onclick = async () => {
     definirFaixaEmTodosOsPares('screenAudio', screenStream.getAudioTracks()[0] || null, screenStream);
 
     if (telaAntiga) telaAntiga.getTracks().forEach(t => t.stop());
+    // O mesmo toque que a sala ouve: é a confirmação de que a tela entrou no ar. Trocar o que
+    // se compartilha não é entrar no ar de novo.
+    if (!telaAntiga) window.NexoSons?.tocar('tela');
     fecharPainelDeTela();
     pintarBotaoDaTela(true);
     updateScreenBtn.hidden = false;
@@ -4162,6 +4295,9 @@ function pararTela() {
   atualizarTile('self');
   if (pinned?.id === 'self' && pinned.source === 'screen') { pinned = null; destaqueManual = false; }
   avaliarDestaque();
+  // O par do som de entrar no ar: a confirmação de que a sua tela saiu, inclusive quando quem
+  // encerrou foi o navegador (a barra "parar de compartilhar") ou o programa que fechou.
+  window.NexoSons?.tocar('tela-fim');
   status.textContent = 'Compartilhamento de tela encerrado.';
   enviarEstado();
 }
@@ -4200,21 +4336,12 @@ screenBtn.onclick = () => {
 updateScreenBtn.onclick = () => abrirPainelDeTela('update');
 
 // ---------- Teste de áudio ----------
-testAudioBtn.onclick = async () => {
-  testAudioContext ||= new AudioContextClass();
-  await testAudioContext.resume();
-  const oscillator = testAudioContext.createOscillator();
-  const gain = testAudioContext.createGain();
-  const now = testAudioContext.currentTime;
-  oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(880, now);
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-  oscillator.connect(gain).connect(testAudioContext.destination);
-  oscillator.start(now);
-  oscillator.stop(now + 0.2);
-  status.textContent = 'Beep de teste reproduzido.';
+// O teste passa pelos avisos da sala, e por isso sai no fone escolhido logo acima -- o bipe
+// antigo tinha contexto próprio e tocava no alto-falante padrão, e era justamente o fone que a
+// pessoa queria testar. Toca mesmo com os avisos desligados: é um teste, não um aviso.
+testAudioBtn.onclick = () => {
+  const tocou = window.NexoSons?.previa('teste');
+  status.textContent = tocou ? 'Som de teste tocado no fone escolhido.' : 'Este navegador não conseguiu tocar o som de teste.';
 };
 
 // ---------- Zoom e tela cheia do palco ----------
@@ -4678,20 +4805,11 @@ Object.entries(controlesDaConfiguracao).forEach(([id, chave]) => {
 
 const pedidosPendentes = new Map();
 let temporizadorAvisoDeEntrada = null;
+// Era um bipe à parte, com contexto de áudio próprio: tocava no alto-falante padrão mesmo com
+// outro fone escolhido, e sem obedecer ao volume dos avisos. Agora é mais um aviso da sala
+// (sons.js), com interruptor próprio. O aviso visual continua, som ou não.
 function tocarAvisoDeEntrada() {
-  try {
-    const contexto = new AudioContextClass();
-    const ganho = contexto.createGain();
-    const oscilador = contexto.createOscillator();
-    oscilador.frequency.setValueAtTime(660, contexto.currentTime);
-    oscilador.frequency.exponentialRampToValueAtTime(880, contexto.currentTime + .12);
-    ganho.gain.setValueAtTime(.0001, contexto.currentTime);
-    ganho.gain.exponentialRampToValueAtTime(.09, contexto.currentTime + .02);
-    ganho.gain.exponentialRampToValueAtTime(.0001, contexto.currentTime + .22);
-    oscilador.connect(ganho).connect(contexto.destination);
-    oscilador.start(); oscilador.stop(contexto.currentTime + .24);
-    oscilador.onended = () => contexto.close().catch(() => {});
-  } catch (_) { /* O aviso visual continua disponível se o navegador bloquear áudio. */ }
+  window.NexoSons?.tocar('pedido');
 }
 function atualizarAvisoDeEntrada(nome) {
   const total = podeModerar ? pedidosPendentes.size : 0;
@@ -5048,6 +5166,12 @@ function abrirPerfil(id) {
     ? 'O código é permanente e não muda com o apelido: é ele que distingue esta pessoa de outras com o mesmo nome.'
     : ehEu ? 'Você entrou sem conta: o nome vale só nesta entrada. Com uma conta grátis, você tem um código, abre salas e transmite a 60 quadros.'
       : 'Entrou como convidada: o nome foi escolhido na entrada, e qualquer pessoa pode usar o mesmo.';
+  // Há quanto tempo a pessoa está aqui: é a pergunta que traz alguém ao cartão depois de uma
+  // tarde de conversa, e a resposta já sobrevive ao F5 (tempo-sala.js).
+  const desde = window.NexoTempo?.desdeDe(id);
+  const tempo = document.getElementById('perfilTempo');
+  tempo.hidden = !Number.isFinite(desde);
+  if (Number.isFinite(desde)) tempo.textContent = `Na sala há ${NexoTempo.extenso(Date.now() - desde)} · desde as ${NexoTempo.hora(desde)}`;
   const criar = document.getElementById('perfilCriarConta');
   criar.hidden = !(ehEu && !perfil?.conta);
   criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
@@ -6337,6 +6461,14 @@ function mostrarMensagem(msg) {
   chatMsgs.appendChild(el);
   if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
+  // As minhas não tocam: eu sei que mandei. Uma mensagem editada ou reagida também não -- ela
+  // passa por aqui de novo, mas não é mensagem nova.
+  // A menção toca no lugar do som de mensagem, e mesmo com o chat à vista: é a única mensagem
+  // da conversa que é para você.
+  if (!carregandoHistorico && !msg._atualizandoLocal && !ehMinha(msg)) {
+    const tocouMencao = mencionou && window.NexoSons?.tocar('mencao');
+    if (!tocouMencao) window.NexoSons?.tocar('mensagem', { chatAVista: chatVisivel() && !document.hidden });
+  }
   if (!carregandoHistorico && !msg._atualizandoLocal && !chatVisivel() && msg.autorId !== myId) {
     naoLidas++;
     chatBadge.textContent = naoLidas > 99 ? '99+' : String(naoLidas);

@@ -43,11 +43,11 @@
       <button class="channel" data-action="chat" type="button"><span class="channel-symbol" aria-hidden="true">#</span><span>chat da sala</span></button>
       <button class="channel" data-action="musica" type="button"><span class="channel-symbol" aria-hidden="true">♪</span><span><strong>música</strong><small id="sidebarMusica">Peça uma música</small></span><span class="channel-live" id="musicaLive" hidden>♪</span></button>
       <button class="channel" data-action="soundboard" type="button"><span class="channel-symbol" aria-hidden="true">◎</span><span><strong>mesa de sons</strong><small id="sidebarSons">Nenhum som ainda</small></span></button>
-      <div class="section-caption member-caption">NO SQUAD <span id="memberTotal">0</span></div>
+      <div class="section-caption member-caption"><span>NO SQUAD <span id="memberTotal">0</span></span><button class="caption-acao ghost" id="tempoLateralBtn" type="button" title="Há quanto tempo cada pessoa está na sala" aria-label="Ver há quanto tempo cada pessoa está na sala" aria-haspopup="true" aria-expanded="false" aria-controls="tempoSalaMenu"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg><span id="tempoLateralTexto"></span></button></div>
       <div id="memberList" class="member-list"></div>
     </div>
     <div class="connection-box"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div><button class="ghost" data-action="sugestao" type="button" title="Sugestões e problemas" aria-label="Sugestões e problemas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/></svg></button><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button></div>
-    <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Editar meu perfil" aria-label="Editar meu perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState">Pronto para entrar</small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost" type="button" data-action="devices" title="Configurar dispositivos" aria-label="Configurar dispositivos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button></div>
+    <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Editar meu perfil" aria-label="Editar meu perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState">Pronto para entrar</small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost config-engrenagem" type="button" data-action="devices" title="Configurações" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button></div>
   </aside>
   <header class="topbar">
     <div class="room-id">
@@ -55,6 +55,7 @@
       <span class="topbar-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span>
       <h1 id="roomTitle">sala</h1>
       <span class="session-badge" id="sessionBadge">SALA DE VOZ</span>
+      <button id="tempoSalaBtn" class="tempo-sala ghost" type="button" hidden aria-haspopup="true" aria-expanded="false" aria-controls="tempoSalaMenu"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg><span id="tempoSalaTexto">0:00</span></button>
       <span id="participantCount">Seu ponto de encontro</span>
     </div>
     <div class="topbar-actions">
@@ -145,8 +146,8 @@
 
       <div class="musica-volume" id="musicaVolume" hidden>
         <label for="musicaVolumeSlider">Volume do bot na sala</label>
-        <input type="range" class="volume-slider" id="musicaVolumeSlider" min="0" max="150" step="5" value="85">
-        <span id="musicaVolumeValor">85%</span>
+        <input type="range" class="volume-slider" id="musicaVolumeSlider" min="0" max="150" step="5" value="15">
+        <span id="musicaVolumeValor">15%</span>
       </div>
 
       <!-- A fila: cada faixa vai pelo id, não pela posição (ver musica.js no servidor). -->
@@ -195,25 +196,55 @@
   <span class="lightbox-legenda">Clique na imagem para alternar entre ajustada e tamanho real</span>
 </div>
 
+<!-- As configurações: uma coluna de seções à esquerda, e uma página por seção. Os ids dos
+     controles de aparelhos e de qualidade são os mesmos de sempre (sala.js); as seções novas
+     moram em sons.js e configuracoes.js. -->
 <div class="modal hidden" id="devicesPanel" role="dialog" aria-modal="true" aria-labelledby="devicesTitle">
-  <div class="modal-card">
-    <h2 id="devicesTitle">Áudio e vídeo</h2>
-    <p class="modal-sub">Tudo aqui vale na hora, mesmo no meio da conversa.</p>
+  <div class="modal-card config-card">
+    <div class="abas config" data-abas>
+      <nav class="config-nav">
+        <div class="config-nav-topo"><h2 id="devicesTitle">Configurações</h2><small>Valem na hora, só para você.</small></div>
+        <div class="config-fita" role="tablist" aria-orientation="vertical" aria-labelledby="devicesTitle">
+          <span class="config-grupo" role="presentation">Você</span>
+          <button type="button" class="aba" role="tab" id="abaPerfil" aria-controls="painelPerfil" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Perfil</button>
+          <span class="config-grupo" role="presentation">Aplicativo</span>
+          <button type="button" class="aba" role="tab" id="abaAparelhos" aria-controls="painelAparelhos" aria-selected="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3"/></svg>Voz e vídeo</button>
+          <button type="button" class="aba" role="tab" id="abaQualidade" aria-controls="painelQualidade" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M7 12l3-3 3 3 4-4"/></svg>Qualidade</button>
+          <button type="button" class="aba" role="tab" id="abaSons" aria-controls="painelSons" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Sons</button>
+          <button type="button" class="aba" role="tab" id="abaAparencia" aria-controls="painelAparencia" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.5 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Aparência</button>
+          <button type="button" class="aba" role="tab" id="abaAtalhos" aria-controls="painelAtalhos" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Atalhos</button>
+        </div>
+      </nav>
 
-    <div class="abas" data-abas>
-      <div class="abas-fita" role="tablist" aria-label="Seções das preferências">
-        <button type="button" class="aba" role="tab" id="abaAparelhos" aria-controls="painelAparelhos" aria-selected="true">Aparelhos</button>
-        <button type="button" class="aba" role="tab" id="abaQualidade" aria-controls="painelQualidade" aria-selected="false" tabindex="-1">Qualidade</button>
+      <div class="config-conteudo">
+      <div class="aba-painel" role="tabpanel" id="painelPerfil" aria-labelledby="abaPerfil" hidden>
+        <header class="config-cabeca"><h3>Perfil</h3><p>Como a sala vê você.</p></header>
+        <div class="config-perfil">
+          <div class="config-perfil-faixa" id="configFaixa"></div>
+          <div class="config-perfil-corpo">
+            <span class="perfil-avatar" id="configAvatar" aria-hidden="true"></span>
+            <div class="config-perfil-nome"><strong id="configNome"></strong><small id="configCodigo"></small></div>
+            <button type="button" id="configEditarPerfil">Editar perfil</button>
+            <a class="botao-link" id="configCriarConta" href="/conta" target="_blank" rel="noopener" hidden>Criar conta grátis</a>
+          </div>
+          <dl class="config-perfil-dados">
+            <div><dt>Nesta sala há</dt><dd id="configTempo">—</dd></div>
+            <div><dt>Plano</dt><dd id="configPlano">—</dd></div>
+          </dl>
+        </div>
+        <p class="config-dica" id="configPerfilDica"></p>
+        <a class="botao-link secundario" id="configConta" href="/conta" target="_blank" rel="noopener">Senha e conta</a>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAparelhos" aria-labelledby="abaAparelhos">
+        <header class="config-cabeca"><h3>Voz e vídeo</h3><p>Tudo aqui vale na hora, mesmo no meio da conversa.</p></header>
         <div class="field">
           <label for="micDevice">Microfone</label>
           <select id="micDevice"></select>
           <div class="medidor" id="micMedidor" role="img" aria-label="Nível do microfone"><span id="micNivel"></span></div>
           <small id="micDica">Ative o microfone para ver o nível.</small>
         </div>
-        <div class="field ptt-field"><label class="toggle-line" for="pushToTalk"><span><strong>Push-to-talk</strong><small>Segure Espaço para falar enquanto o Nexo estiver em foco.</small></span><input id="pushToTalk" type="checkbox" role="switch"></label><small class="shortcut-hint">Ctrl+Shift+M microfone · Ctrl+Shift+D ensurdecer · Ctrl+Shift+C câmera · Ctrl+Shift+H chat</small></div>
+        <div class="field ptt-field"><label class="toggle-line" for="pushToTalk"><span><strong>Push-to-talk</strong><small>Segure Espaço para falar enquanto o Nexo estiver em foco.</small></span><input id="pushToTalk" type="checkbox" role="switch"></label><small class="shortcut-hint">Ctrl+Shift+M liga e desliga o microfone. <button type="button" class="link-botao" data-abrir-secao="atalhos">Ver todos os atalhos</button></small></div>
         <div class="field" id="saidaCampo">
           <label for="outDevice">Fone / alto-falante</label>
           <select id="outDevice"></select>
@@ -236,6 +267,7 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelQualidade" aria-labelledby="abaQualidade" hidden>
+        <header class="config-cabeca"><h3>Qualidade</h3><p>O que a sua tela e a sua câmera mandam para a sala.</p></header>
         <p class="plano-dica" data-plano-dica hidden></p>
         <div class="field"><label for="videoQuality">Resolução da transmissão</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="qualidadeBtn"></small></div>
         <div class="field"><label for="videoFps">Quadros por segundo</label><select id="videoFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="fpsDica"></small><small id="codecEstado" class="codec-estado"></small></div>
@@ -248,10 +280,128 @@
         <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
         <div id="qualityLive" class="medicao" aria-live="off"></div>
       </div>
-    </div>
+
+      <div class="aba-painel" role="tabpanel" id="painelSons" aria-labelledby="abaSons" hidden>
+        <header class="config-cabeca"><h3>Sons</h3><p>Avisos curtos e baixos, para saber o que acontece na sala sem precisar olhar para ela.</p></header>
+        <div class="config-bloco">
+          <label class="toggle-line" for="sonsLigados"><span><strong>Avisos sonoros</strong><small>Desligados, a sala fica só com as vozes, as telas e a música.</small></span><input id="sonsLigados" type="checkbox" role="switch" checked></label>
+          <div class="config-volume">
+            <label for="sonsAvisoVolume">Volume dos avisos</label>
+            <div class="volume-row"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/></svg><input type="range" class="volume-slider" id="sonsAvisoVolume" min="0" max="100" step="5" value="60"><output id="sonsAvisoValor" for="sonsAvisoVolume">60%</output></div>
+          </div>
+        </div>
+        <span class="config-rotulo">Na sala</span>
+        <div class="som-eventos">
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="online" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M15 12H3M11 8l4 4-4 4M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/></svg></span>
+            <span class="som-evento-texto"><strong>Alguém entrou</strong><small>Duas notas graves de piano, subindo. Você também ouve ao entrar.</small></span>
+            <button type="button" class="som-previa" data-previa="entrada" title="Ouvir" aria-label="Ouvir o aviso de entrada"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="entrada" aria-label="Avisar quando alguém entrar" checked>
+          </div>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="neutro" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M9 12h12M17 8l4 4-4 4M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/></svg></span>
+            <span class="som-evento-texto"><strong>Alguém saiu</strong><small>As mesmas notas, descendo. Uma queda de segundos não toca.</small></span>
+            <button type="button" class="som-previa" data-previa="saida" title="Ouvir" aria-label="Ouvir o aviso de saída"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="saida" aria-label="Avisar quando alguém sair" checked>
+          </div>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="live" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+            <span class="som-evento-texto"><strong>Tela ao vivo</strong><small>Três notas de vibrafone quando uma tela entra no ar, e o inverso quando sai. Câmera não toca.</small></span>
+            <button type="button" class="som-previa" data-previa="tela tela-fim" title="Ouvir" aria-label="Ouvir os avisos de tela entrando e saindo do ar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="tela" aria-label="Avisar quando uma tela entrar ou sair do ar" checked>
+          </div>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="accent" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg></span>
+            <span class="som-evento-texto"><strong>Mensagem no chat</strong><small>Só as dos outros, e uma vez só numa conversa animada.</small></span>
+            <button type="button" class="som-previa" data-previa="mensagem" title="Ouvir" aria-label="Ouvir o aviso de mensagem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="mensagem" aria-label="Avisar quando chegar mensagem" checked>
+          </div>
+          <label class="toggle-line som-sub" for="sonsMensagemSoFora"><span>Só com o chat fora da vista<small>Com o chat aberto na sua frente, as mensagens chegam em silêncio.</small></span><input id="sonsMensagemSoFora" type="checkbox" role="switch"></label>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="aviso" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/></svg></span>
+            <span class="som-evento-texto"><strong>Menção a você</strong><small>Dois toques suaves quando alguém escreve @ e o seu nome. Toca no lugar do de mensagem.</small></span>
+            <button type="button" class="som-previa" data-previa="mencao" title="Ouvir" aria-label="Ouvir o aviso de menção"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="mencao" aria-label="Avisar quando mencionarem você" checked>
+          </div>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="accent" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M3 21h18M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17M15 12h.01"/></svg></span>
+            <span class="som-evento-texto"><strong>Pedido para entrar</strong><small>Só para quem modera: alguém bateu na porta de uma sala trancada.</small></span>
+            <button type="button" class="som-previa" data-previa="pedido" title="Ouvir" aria-label="Ouvir o aviso de pedido para entrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="pedido" aria-label="Avisar quando alguém pedir para entrar" checked>
+          </div>
+        </div>
+        <span class="config-rotulo config-rotulo-grupo">Você</span>
+        <div class="som-eventos">
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="neutro" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3"/></svg></span>
+            <span class="som-evento-texto"><strong>Microfone e ensurdecer</strong><small>Uma nota curta ao ligar o microfone e outra mais grave ao desligar, e um som abafado ao ensurdecer. O push-to-talk não toca.</small></span>
+            <button type="button" class="som-previa" data-previa="mic-desligado mic-ligado surdo ouvir" title="Ouvir" aria-label="Ouvir os sons do microfone e de ensurdecer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="voce" aria-label="Tocar ao ligar o microfone e ao ensurdecer" checked>
+          </div>
+          <div class="som-evento">
+            <span class="som-evento-icone" data-cor="neutro" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01"/></svg></span>
+            <span class="som-evento-texto"><strong>Sua conexão</strong><small>Quando ela cai por mais de alguns segundos, e quando volta.</small></span>
+            <button type="button" class="som-previa" data-previa="caiu voltou" title="Ouvir" aria-label="Ouvir os avisos de conexão caindo e voltando"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button>
+            <input type="checkbox" class="interruptor" role="switch" data-som="conexao" aria-label="Avisar quando a sua conexão cair ou voltar" checked>
+          </div>
+        </div>
+        <p class="config-dica">Ensurdecido (<kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd>), a sala fica em silêncio: os avisos de quem entra, sai e escreve também. Os que são sobre você continuam. A mesa de sons tem o volume dela, na própria mesa.</p>
+      </div>
+
+      <div class="aba-painel" role="tabpanel" id="painelAparencia" aria-labelledby="abaAparencia" hidden>
+        <header class="config-cabeca"><h3>Aparência</h3><p>Do jeito que você prefere ler a sala. Muda só para você.</p></header>
+        <!-- Classes próprias, e não as do chat: uma `.msg` a mais escondida no painel seria achada
+             por qualquer código (ou teste) que procura as mensagens da conversa. -->
+        <div class="previa-chat" id="previaChat" aria-hidden="true">
+          <div class="previa-msg"><span class="previa-avatar" style="background:#7fd1ae">✿</span><div class="previa-topo"><span class="previa-autor" style="color:#7fd1ae">Ana</span><span class="previa-hora">20:31</span></div><div class="previa-texto">Alguém topa uma partida depois do filme?</div></div>
+          <div class="previa-msg"><span class="previa-avatar" style="background:#a996f2">BF</span><div class="previa-topo"><span class="previa-autor" style="color:#a996f2">Bruno</span><span class="previa-hora">20:32</span></div><div class="previa-texto">Eu! Compartilho a tela quando começar.</div></div>
+        </div>
+        <div class="field">
+          <span class="config-rotulo" id="rotuloDensidade">Mensagens</span>
+          <div class="segmentado" role="radiogroup" aria-labelledby="rotuloDensidade">
+            <label><input type="radio" name="densidade" value="confortavel" checked><span>Confortável</span></label>
+            <label><input type="radio" name="densidade" value="compacta"><span>Compacta</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <span class="config-rotulo" id="rotuloTexto">Tamanho do texto no chat</span>
+          <div class="segmentado" role="radiogroup" aria-labelledby="rotuloTexto">
+            <label><input type="radio" name="textoChat" value="normal" checked><span>Normal</span></label>
+            <label><input type="radio" name="textoChat" value="grande"><span>Grande</span></label>
+            <label><input type="radio" name="textoChat" value="maior"><span>Maior</span></label>
+          </div>
+        </div>
+        <div class="config-bloco config-chaves">
+          <label class="toggle-line" for="aparenciaTempos"><span><strong>Tempo de cada pessoa sempre à vista</strong><small>Na lista da barra lateral. Desligado, ele aparece ao passar o mouse.</small></span><input id="aparenciaTempos" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="aparenciaReacoes"><span><strong>Reações flutuando pela tela</strong><small>As de todo mundo. Desligadas, não aparecem para você.</small></span><input id="aparenciaReacoes" type="checkbox" role="switch" checked></label>
+          <label class="toggle-line" for="aparenciaMovimento"><span><strong>Menos animação</strong><small>Painéis, menus e avisos aparecem sem deslizar.</small></span><input id="aparenciaMovimento" type="checkbox" role="switch"></label>
+        </div>
+      </div>
+
+      <div class="aba-painel" role="tabpanel" id="painelAtalhos" aria-labelledby="abaAtalhos" hidden>
+        <header class="config-cabeca"><h3>Atalhos</h3><p>Valem com o Nexo em foco e fora de um campo de texto.</p></header>
+        <dl class="atalhos">
+          <div><dt>Ligar e desligar o microfone</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd></dd></div>
+          <div><dt>Ensurdecer</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></dd></div>
+          <div><dt>Ligar e desligar a câmera</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd></dd></div>
+          <div><dt>Abrir e fechar o chat</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>H</kbd></dd></div>
+          <div><dt>Abrir as configurações</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd></dd></div>
+          <div><dt>Status e reações</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd></dd></div>
+          <div><dt>Falar enquanto segura (push-to-talk ligado)</dt><dd><kbd>Espaço</kbd></dd></div>
+        </dl>
+        <span class="config-rotulo">No chat e na música</span>
+        <dl class="atalhos">
+          <div><dt>Enviar</dt><dd><kbd>Enter</kbd></dd></div>
+          <div><dt>Quebrar a linha</dt><dd><kbd>Shift</kbd><kbd>Enter</kbd></dd></div>
+          <div><dt>Pedir para tocar a seguir</dt><dd><kbd>Ctrl</kbd><kbd>Enter</kbd></dd></div>
+          <div><dt>Fechar painel, menu ou resposta</dt><dd><kbd>Esc</kbd></dd></div>
+        </dl>
+      </div>
 
     <div class="modal-actions">
       <button id="devicesClose" type="button">Fechar</button>
+    </div>
+      </div>
     </div>
   </div>
 </div>
@@ -367,7 +517,7 @@
 
 <div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">O navegador não deixou copiar sozinho. O link já está selecionado: use Ctrl+C (ou segure e copie, no celular) e mande para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
 <div class="modal hidden" id="sugestaoPanel" role="dialog" aria-modal="true" aria-labelledby="sugestaoTitulo"><div class="modal-card"><h2 id="sugestaoTitulo">Sugestões e problemas</h2><p class="modal-sub">O que faltou, o que incomodou, o que seria bom ter. Chega direto em quem cuida do Nexo — e o que você escrever aqui é o que decide o que vem antes.</p><div class="relato"><label class="relato-titulo" for="sugestaoTexto">Conte com suas palavras</label><textarea id="sugestaoTexto" rows="5" maxlength="500" placeholder="Ex.: queria poder deixar a sala aberta e voltar depois com o mesmo link."></textarea><p class="relato-aviso">Vão junto <strong>a sala e o nome</strong> com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite, senhas nem o relatório técnico — para problemas de imagem e som, o <strong>Diagnóstico</strong> tem um campo próprio, que anexa as medições.</p><div id="sugestaoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendSugestaoBtn">Enviar</button><button class="secondary" type="button" data-close="sugestaoPanel">Fechar</button></div></div></div>
-<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="modal-sub" id="perfilDica"></p><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
 <!-- O perfil de quem tem conta, editado sem sair da chamada (perfil-sala.js). Muda na hora
      para a sala inteira: o servidor avisa todo mundo quando a conta salva. -->
 <div class="modal hidden" id="meuPerfilPanel" role="dialog" aria-modal="true" aria-labelledby="meuPerfilTitulo"><div class="modal-card meu-perfil-card">
@@ -400,9 +550,13 @@
 <div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><strong>Meu status</strong><div class="presence-options"><button type="button" data-presence="">Disponível</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button></div></div>
 <div id="chatMsgMenu" class="msg-menu hidden" role="menu" aria-label="Ações da mensagem"></div>
 <div id="musicaFilaMenu" class="msg-menu menu-lista hidden" role="menu" aria-label="Ações da faixa"></div>
-<!-- `role="group"`, e não "dialog": room-ui.js trata todo dialog como modal e congela a sala. -->
-<div id="atualizarAppMenu" class="msg-menu atualizar-menu hidden" role="group" aria-labelledby="atualizarAppTitulo"><strong id="atualizarAppTitulo">Nova versão disponível</strong><p id="atualizarAppTexto"></p><div class="atualizar-acoes"><a class="botao-link" id="atualizarAppBaixar" href="/" target="_blank" rel="noopener">Baixar agora</a><button type="button" class="secondary" id="atualizarAppDepois">Depois</button></div></div>
+<!-- `role="group"`, e não "dialog": room-ui.js trata todo dialog como modal e congela a sala.
+     O link nasce com "#", e não "/": sala.js transforma todo link para "/" em "sair da sala", e
+     baixar a atualização tirava a pessoa da chamada. atualizacao-app.js põe o endereço certo. -->
+<div id="atualizarAppMenu" class="msg-menu atualizar-menu hidden" role="group" aria-labelledby="atualizarAppTitulo"><strong id="atualizarAppTitulo">Nova versão disponível</strong><p id="atualizarAppTexto"></p><div class="atualizar-acoes"><a class="botao-link" id="atualizarAppBaixar" href="#" target="_blank" rel="noopener">Baixar agora</a><button type="button" class="secondary" id="atualizarAppDepois">Depois</button></div></div>
 <div id="chatPinsList" class="msg-menu pins-menu hidden" role="menu" aria-label="Mensagens fixadas"></div>
+<!-- `role="group"` pelo mesmo motivo do cartão de atualização: um "dialog" congelaria a sala. -->
+<div id="tempoSalaMenu" class="msg-menu tempo-menu hidden" role="group" aria-labelledby="tempoSalaTitulo"><div class="tempo-topo"><span class="tempo-icone" aria-hidden="true"><svg class="ico ico-p" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg></span><div><strong id="tempoSalaTitulo">Tempo na sala</strong><small id="tempoSalaDesde"></small></div></div><div class="tempo-lista" id="tempoSalaLista" role="list"></div></div>
 <div id="roomReactions" class="room-reactions" aria-live="polite"></div>
 <div id="joinRequestNotice" class="join-request-notice" role="status" hidden><div><strong id="joinRequestNoticeTitle">Alguém quer entrar</strong><span>Abra a moderação para aceitar ou recusar.</span></div><button id="joinRequestNoticeOpen" type="button">Ver pedido</button></div>
 <script src="/socket.io/socket.io.js"></script>
@@ -415,11 +569,15 @@
 <script src="/quality-utils.js"></script>
 <script src="/planos.js"></script>
 <script src="/sala.js"></script>
+<script src="/sons.js"></script>
+<script src="/tempo-sala.js"></script>
+<script src="/configuracoes.js"></script>
 <script src="/multi-view.js"></script>
 <script src="/musica.js"></script>
 <script src="/soundboard.js"></script>
 <script src="/perfil-sala.js"></script>
 <script src="/versao-app.js"></script>
+<script src="/toast.js"></script>
 <script src="/atualizacao-app.js"></script>
 <script src="/room-ui.js"></script>
 </body>

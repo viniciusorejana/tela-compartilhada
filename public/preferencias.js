@@ -177,6 +177,8 @@
     ladoCamera: ['nexoLadoCamera', 'texto'],
     pushToTalk: ['sala.pushToTalk', 'um-ou-zero'],
     reducaoDeRuido: [PREFIXO + 'reducaoDeRuido', 'json'],
+    sons: [PREFIXO + 'sons', 'json'],
+    aparencia: [PREFIXO + 'aparencia', 'json'],
     // Daqui para baixo, só deste navegador. Ver o porquê em perfil.js.
     nome: ['salaNome', 'texto'],
     economiaDeDados: ['sala.economiaDados', 'um-ou-zero'],

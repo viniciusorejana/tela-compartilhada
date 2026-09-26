@@ -110,8 +110,11 @@
     const failed = [...peers.values()].some(p => ['failed', 'disconnected'].includes(p.pc.connectionState));
     document.querySelector('.connection-box').classList.toggle('connected', connected && !failed);
     $('connectionLabel').textContent = failed ? 'Conexão instável' : connected ? 'Conectado à sala' : joined ? 'Reconectando…' : 'Aguardando entrada';
-    const seconds = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
-    $('sessionClock').textContent = joined ? `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')} nesta sessão` : 'Sua sessão começa aqui';
+    // O relógio conta desde a entrada que o SERVIDOR registrou, e não desde esta aba: um F5 ou
+    // uma queda curta continuam a hora de conversa (tempo-sala.js). Antes da resposta dele, a
+    // aba conta sozinha, e a troca não se nota.
+    const desde = window.NexoTempo?.desdeDe('self') ?? startedAt;
+    $('sessionClock').textContent = joined && desde ? `Você está há ${NexoTempo.relogio(Date.now() - desde)}` : 'Sua sessão começa aqui';
     $('selfName').textContent = myName || 'Seu perfil';
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
     $('selfState').textContent = !joined ? 'Pronto para entrar' : micMuted ? 'Microfone desligado' : 'Microfone ligado';
@@ -156,7 +159,11 @@
           state.title = nomesDePresenca[person.state.presenca];
           state.setAttribute('aria-label', nomesDePresenca[person.state.presenca]);
         }
-        row.append(avatar, name, state);
+        // O tempo da pessoa fica escondido até o mouse passar pela linha (ou até a pessoa pedir,
+        // na Aparência, para vê-lo sempre): numa lista de dez, dez relógios seriam ruído.
+        const tempo = document.createElement('span');
+        tempo.className = 'member-tempo';
+        row.append(avatar, name, tempo, state);
         // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
         // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
         // pergunta "por que ela não responde?" ficava sem resposta aqui.
@@ -171,7 +178,16 @@
         return row;
       }));
     }
-    document.querySelectorAll('.member').forEach(row => row.classList.toggle('falando', Boolean(tiles.get(row.dataset.memberId)?.root.classList.contains('falando'))));
+    document.querySelectorAll('.member').forEach(row => {
+      row.classList.toggle('falando', Boolean(tiles.get(row.dataset.memberId)?.root.classList.contains('falando')));
+      // A linha não é redesenhada a cada segundo, só o texto do tempo dela.
+      const tempo = row.querySelector('.member-tempo');
+      const duracao = window.NexoTempo?.duracaoDe(row.dataset.memberId);
+      if (tempo) {
+        tempo.textContent = duracao == null ? '' : NexoTempo.curta(duracao);
+        tempo.title = duracao == null ? '' : `Na sala há ${NexoTempo.extenso(duracao)}`;
+      }
+    });
     document.querySelectorAll('.avatar-wrap').forEach(element => {
       element.tabIndex = 0;
       element.setAttribute('role', 'button');

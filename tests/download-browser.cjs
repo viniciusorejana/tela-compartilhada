@@ -25,6 +25,10 @@ const artifact = path.join(output, 'fixture.exe');
   const download = await downloading;
   assert.equal(download.suggestedFilename(), 'SalaCompartilhada.exe');
   assert.deepEqual(await fs.readFile(await download.path()), bytes);
+  // O progresso aparece num aviso no canto, e o fim dele diz o que fazer com o arquivo.
+  await page.locator('.nexo-toast', { hasText: 'Download concluído' }).waitFor({ timeout: 5000 });
+  assert.match(await page.locator('.nexo-toast small').last().textContent(), /SalaCompartilhada\.exe/);
+  await page.locator('.nexo-toasts').screenshot({ path: path.join(output, 'toast.png') });
   await page.locator('.desktop-download').screenshot({ path: path.join(output, 'desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

@@ -20,6 +20,19 @@
 (function (root) {
   const um = lista => valor => (lista.includes(valor) ? valor : undefined);
   const booleano = valor => (typeof valor === 'boolean' ? valor : undefined);
+  const inteiroEntre = (minimo, maximo) => valor => (Number.isInteger(valor) && valor >= minimo && valor <= maximo ? valor : undefined);
+  // Um grupo de ajustes que viaja junto. Cada campo tem o seu validador, e o que não passa some
+  // -- inclusive campos que ninguém declarou: a forma é tão fechada quanto a lista de cima.
+  const grupo = forma => valor => {
+    if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return undefined;
+    const limpo = {};
+    for (const [nome, validar] of Object.entries(forma)) {
+      if (!Object.prototype.hasOwnProperty.call(valor, nome)) continue;
+      const campo = validar(valor[nome]);
+      if (campo !== undefined) limpo[nome] = campo;
+    }
+    return Object.keys(limpo).length ? limpo : undefined;
+  };
 
   const AJUSTES_SINCRONIZADOS = Object.freeze({
     qualidade: um(['economical', 'high', 'ultra']),
@@ -28,7 +41,11 @@
     quadros: um([30, 60]),
     ladoCamera: um(['user', 'environment']),
     pushToTalk: booleano,
-    reducaoDeRuido: booleano
+    reducaoDeRuido: booleano,
+    // Os avisos sonoros e o jeito de ler a sala são da pessoa, como a qualidade: quem baixou
+    // o volume dos avisos no computador não quer ouvi-los no máximo no celular.
+    sons: grupo({ ligados: booleano, volume: inteiroEntre(0, 100), entrada: booleano, saida: booleano, tela: booleano, mensagem: booleano, mensagemSoFora: booleano, mencao: booleano, voce: booleano, pedido: booleano, conexao: booleano }),
+    aparencia: grupo({ densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano })
   });
 
   // Teto do JSON guardado. Com a lista fechada ele nunca chega perto disto; o teto existe para

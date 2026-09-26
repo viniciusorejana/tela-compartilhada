@@ -31,5 +31,28 @@ contextBridge.exposeInMainWorld('appNativo', {
   // local nao e excecao a isso.
   definirEndereco: (endereco) => ipcRenderer.invoke('endereco:definir', endereco),
   estadoDoAgente: () => ipcRenderer.invoke('agente:estado'),
-  trocarServidor: () => ipcRenderer.invoke('endereco:esquecer')
+  trocarServidor: () => ipcRenderer.invoke('endereco:esquecer'),
+  // A versão nova, baixada pelo aplicativo com o progresso na sala. Na ida só atravessa o
+  // número da versão; na volta, um estado de uma lista fechada e números -- nunca um caminho.
+  baixarAtualizacao: versao => ipcRenderer.invoke('atualizacao:baixar', String(versao || '')),
+  cancelarAtualizacao: () => ipcRenderer.invoke('atualizacao:cancelar'),
+  estadoDaAtualizacao: () => ipcRenderer.invoke('atualizacao:estado').then(limparAtualizacao),
+  mostrarAtualizacao: () => ipcRenderer.invoke('atualizacao:mostrar'),
+  abrirAtualizacao: () => ipcRenderer.invoke('atualizacao:abrir'),
+  aoProgressoDaAtualizacao: retorno => {
+    if (typeof retorno !== 'function') return;
+    ipcRenderer.on('atualizacao:progresso', (_evento, dados) => { const limpo = limparAtualizacao(dados); if (limpo) retorno(limpo); });
+  }
 });
+
+function limparAtualizacao(dados) {
+  if (!dados || !['pedido', 'baixando', 'pronto', 'cancelado', 'falhou'].includes(dados.estado)) return null;
+  const numero = valor => (Number.isFinite(Number(valor)) && Number(valor) >= 0 ? Number(valor) : 0);
+  return {
+    estado: dados.estado,
+    versao: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(dados.versao || '')) ? String(dados.versao) : '',
+    recebidos: numero(dados.recebidos),
+    total: numero(dados.total),
+    arquivo: String(dados.arquivo || '').slice(0, 120)
+  };
+}

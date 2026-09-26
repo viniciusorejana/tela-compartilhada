@@ -199,10 +199,11 @@ test('álbum e lista dessas plataformas contam como lista; faixa avulsa não', (
 });
 
 // O bot sai da chamada sozinho depois de um minuto e meio sem fila, e o estado dele morre
-// junto. O volume não pode morrer junto: quem abaixou para 40 abaixou o volume DA SALA, e
-// voltar em 85 no próximo pedido é um susto no meio da conversa de todo mundo.
+// junto. O volume não pode morrer junto: quem pôs em 40 mudou o volume DA SALA, e voltar ao
+// padrão no próximo pedido é um susto no meio da conversa de todo mundo.
 test('o volume é da sala e sobrevive ao bot sair e voltar', async () => {
-  assert.equal(musica.instantaneo('sala-do-volume').volume, 85, 'sala nova começa no padrão');
+  // Sala nova começa baixo: música de fundo não pode chegar por cima da conversa.
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 15, 'sala nova começa no padrão');
 
   const ajuste = musica.definirVolume('sala-do-volume', 40);
   assert.equal(ajuste.porcento, 40);
@@ -224,5 +225,5 @@ test('o volume é da sala e sobrevive ao bot sair e voltar', async () => {
 
   // A sala esvaziou: aí sim, nada dela sobrevive -- como o histórico e a mesa de sons.
   await musica.esquecerSala('sala-do-volume');
-  assert.equal(musica.instantaneo('sala-do-volume').volume, 85);
+  assert.equal(musica.instantaneo('sala-do-volume').volume, 15);
 });

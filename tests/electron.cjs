@@ -13,22 +13,28 @@ let server, electron;
   fs.mkdirSync(output, { recursive: true });
   const profile = fs.mkdtempSync(path.join(output, 'profile-'));
   fs.writeFileSync(path.join(profile, 'config.json'), JSON.stringify({ endereco: origin + '/electron-teste/sala' }));
+  fs.mkdirSync(path.join(profile, 'downloads'));
   const harness = path.join(output, 'harness.cjs');
   fs.writeFileSync(harness, `
     const electron = require('electron');
     const { app, session, desktopCapturer, nativeImage, ipcMain } = electron;
     app.setPath('userData', ${JSON.stringify(profile)});
+    // A atualização baixada pelo aplicativo vai para Downloads: no teste, uma pasta do perfil.
+    app.setPath('downloads', ${JSON.stringify(path.join(profile, 'downloads'))});
     app.disableHardwareAcceleration();
     const NativeWindow = electron.BrowserWindow;
     const TestWindow = new Proxy(NativeWindow, { construct(Target, [options]) {
       return new Target({ ...options, show: false });
     }});
     // Um destino fora da sala abre no navegador de verdade. No teste, isso só é anotado.
-    const FakeShell = { openExternal: async url => { (global.abertosFora ||= []).push(url); } };
+    const FakeShell = { openExternal: async url => { (global.abertosFora ||= []).push(url); },
+      showItemInFolder: caminho => { (global.mostradosNaPasta ||= []).push(caminho); }, openPath: async caminho => { (global.abertosNoSistema ||= []).push(caminho); return ''; } };
+    // A pergunta nativa de "reiniciar agora?" responde "Depois": o teste não pode se reiniciar.
+    const FakeDialog = { showMessageBox: async (...args) => { (global.perguntas ||= []).push(args.at(-1)?.message); return { response: 1 }; } };
     const Module = require('node:module');
     const load = Module._load;
     Module._load = function(name, parent, ...args) {
-      if (name === 'electron' && parent?.filename === ${JSON.stringify(path.join(__dirname, '../app/main.js'))}) return { ...electron, BrowserWindow: TestWindow, shell: FakeShell };
+      if (name === 'electron' && parent?.filename === ${JSON.stringify(path.join(__dirname, '../app/main.js'))}) return { ...electron, BrowserWindow: TestWindow, shell: FakeShell, dialog: FakeDialog };
       return load.call(this, name, parent, ...args);
     };
     app.whenReady().then(() => {
@@ -144,6 +150,39 @@ let server, electron;
   await room.waitForURL('**/electron-teste/sala');
   assert.deepEqual(errors, []);
   console.log('PASS: o aplicativo fica na origem escolhida -- a sala não troca o servidor, destinos de fora abrem no navegador, a origem continua livre por dentro, e a tela local troca o servidor');
+
+  // ---------- A atualização baixada pelo próprio aplicativo ----------
+  //
+  // A sala só pede a versão; o endereço, o nome do arquivo e a pasta são do processo principal.
+  // O progresso atravessa a ponte, o arquivo chega inteiro em Downloads, e "reiniciar" passa por
+  // uma pergunta nativa -- que aqui responde "Depois".
+  const build = path.join(__dirname, '../app/dist/SalaCompartilhada.exe');
+  if (fs.existsSync(build)) {
+    await room.evaluate(() => { window.progressoDaAtualizacao = [];appNativo.aoProgressoDaAtualizacao(dados => progressoDaAtualizacao.push(dados)); });
+    assert.deepEqual(await room.evaluate(() => appNativo.baixarAtualizacao('../../fora')), { ok: false, motivo: 'versao-invalida' }, 'só uma versão bem formada atravessa');
+    assert.deepEqual(await room.evaluate(() => appNativo.baixarAtualizacao('9.9.9')), { ok: true });
+    await room.waitForFunction(() => progressoDaAtualizacao.some(p => p.estado === 'pronto' || p.estado === 'falhou'), null, { timeout: 60000 });
+    const eventos = await room.evaluate(() => progressoDaAtualizacao);
+    const fim = eventos.at(-1);
+    assert.equal(fim.estado, 'pronto', JSON.stringify(eventos.slice(-3)));
+    assert.equal(fim.arquivo, 'Nexo 9.9.9.exe', 'o nome é montado pelo aplicativo, com a versão');
+    assert.ok(eventos.some(p => p.estado === 'baixando'), 'o progresso atravessa a ponte enquanto baixa');
+    const baixado = path.join(profile, 'downloads', 'Nexo 9.9.9.exe');
+    assert.equal(fs.statSync(baixado).size, fs.statSync(build).size, 'o arquivo chega inteiro');
+    // A sala recarregada no meio do caminho pergunta de novo, e recebe onde parou.
+    const estado = await room.evaluate(() => appNativo.estadoDaAtualizacao());
+    assert.equal(estado.estado, 'pronto');
+    assert.equal(estado.versao, '9.9.9');
+    assert.equal(estado.recebidos, fs.statSync(build).size);
+    assert.equal(await room.evaluate(() => appNativo.mostrarAtualizacao()), true);
+    assert.deepEqual(await electron.evaluate(() => global.mostradosNaPasta), [baixado]);
+    assert.equal(await room.evaluate(() => appNativo.abrirAtualizacao()), false, '"Depois" não reinicia nada');
+    assert.match((await electron.evaluate(() => global.perguntas))[0], /Abrir o Nexo 9\.9\.9 agora\?/);
+    // Uma página de fora da origem escolhida não alcança nada disso (a ponte recusa o remetente):
+    // é a mesma trava das outras funções nativas, conferida acima pela troca de servidor.
+    fs.rmSync(baixado, { force: true });
+    console.log('PASS: o aplicativo baixa a própria atualização com progresso, salva com o nome da versão em Downloads e só reinicia com a resposta nativa');
+  } else console.log('SKIP: sem app/dist/SalaCompartilhada.exe, o download da atualização não foi testado');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   await electron?.close();
   await server?.encerrar();

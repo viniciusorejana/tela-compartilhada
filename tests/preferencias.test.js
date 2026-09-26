@@ -226,3 +226,18 @@ test('só a mudança de um ajuste que sincroniza avisa a conta', () => {
   Preferencias.aplicarAjustesDaConta({ codec: 'h264' });
   mesmoConteudo(avisos, ['qualidade']);
 });
+
+// Sons e aparência viajam como grupos, e a forma de cada grupo é tão fechada quanto a lista:
+// um campo que ninguém declarou, ou fora da faixa, não chega ao banco.
+test('sons e aparência seguem a conta só com os campos e valores conhecidos', () => {
+  const { Preferencias, dados } = comArmazenamento();
+  Preferencias.gravarAjuste('sons', { volume: 35, mensagem: false, voce: false, conexao: false });
+  Preferencias.gravarAjuste('aparencia', { densidade: 'compacta', texto: 'grande' });
+  mesmoConteudo(Preferencias.ajustesSincronizaveis(), { sons: { volume: 35, mensagem: false, voce: false, conexao: false }, aparencia: { densidade: 'compacta', texto: 'grande' } });
+  const aplicados = Preferencias.aplicarAjustesDaConta({
+    sons: { volume: 400, ligados: false, script: '<b>' },
+    aparencia: { densidade: 'apertada', tempos: 'sim' }
+  });
+  mesmoConteudo([...aplicados], ['sons'], 'um grupo sem nenhum campo válido não é escrito');
+  mesmoConteudo(JSON.parse(dados.get('nexo.pref.sons')), { ligados: false }, 'do grupo, só o que passou');
+});

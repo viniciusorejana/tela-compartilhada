@@ -42,10 +42,45 @@ async function entrar(contexto, nome) {
   const convidado = await entrar(contextoB, 'Convidado');
   assert.equal(await dono.locator('#dataSaverField').isHidden(), true);
 
+  // Os avisos sonoros passam por um espião: o que se testa é QUANDO a sala pede um som, e não
+  // o som em si, que o navegador sem tela nem toca.
+  const espiarSons = pagina => pagina.evaluate(() => {
+    window.sonsPedidos = [];
+    const tocar = NexoSons.tocar;
+    NexoSons.tocar = (tipo, opcoes) => { sonsPedidos.push(tipo); return tocar(tipo, opcoes); };
+  });
+  await espiarSons(dono);
+  await espiarSons(convidado);
+
   await dono.locator('#chatInput').fill('Olá @Convidado');
   await dono.locator('#chatSend').click();
   await convidado.waitForFunction(() => [...document.querySelectorAll('.msg-texto')].some(e => e.textContent.includes('Olá @Convidado')));
   assert.equal(await convidado.locator('.msg.mencionou').count(), 1);
+  assert.deepEqual(await convidado.evaluate(() => sonsPedidos), ['mencao'], 'a mensagem que menciona você toca o sino, no lugar do som de mensagem');
+  assert.deepEqual(await dono.evaluate(() => sonsPedidos), [], 'a própria, não');
+  // Ensurdecido, a sala fica em silêncio -- mas o próprio gesto soa: ensurdecer sem ouvir o som
+  // de ensurdecer seria apertar um botão sem saber se pegou. E um aviso desligado não toca.
+  assert.deepEqual(await convidado.evaluate(() => {
+    sonsPedidos.length = 0;
+    deafenBtn.click();
+    const surdo = NexoSons.tocar('entrada');
+    deafenBtn.click();
+    const gestos = [...sonsPedidos];
+    NexoSons.definir({ entrada: false });
+    const desligado = NexoSons.tocar('entrada');
+    NexoSons.definir({ entrada: true });
+    return { surdo, gestos, desligado, guardado: Preferencias.lerAjuste('sons', 'nada') };
+  }), { surdo: false, gestos: ['surdo', 'entrada', 'ouvir'], desligado: false, guardado: 'nada' });
+
+  // O relógio da sala: ao lado de "NO SQUAD" e, com um clique, o tempo de cada pessoa.
+  assert.match(await dono.locator('#tempoLateralTexto').textContent(), /^\d+:\d{2}$/);
+  await dono.locator('#tempoLateralBtn').click();
+  await dono.locator('#tempoSalaMenu:not(.hidden)').waitFor();
+  assert.match(await dono.locator('#tempoSalaTitulo').textContent(), /^Sala aberta há /);
+  assert.match(await dono.locator('#tempoSalaLista').textContent(), /Dono \(você\)/);
+  assert.match(await dono.locator('#sessionClock').textContent(), /^Você está há \d+:\d{2}$/);
+  await dono.keyboard.press('Escape');
+  assert.equal(await dono.locator('#tempoSalaMenu.hidden').count(), 1);
 
   await convidado.locator('#chatToggle').click();
   assert.ok(await convidado.locator('#chatInput').evaluate(el => el.getBoundingClientRect().height < 80));
@@ -293,6 +328,8 @@ async function entrar(contexto, nome) {
   await desistente.locator('#nameConfirmBtn').click();
   await desistente.locator('#waitingPanel:not(.hidden)').waitFor({ timeout: 10000 });
   await dono.waitForFunction(() => !document.getElementById('joinRequestNotice').hidden && [...document.querySelectorAll('.join-request')].some(el => el.textContent.includes('Desistente')));
+  // O bipe antigo do pedido tinha contexto de áudio próprio; agora ele é um aviso como os outros.
+  assert.ok((await dono.evaluate(() => sonsPedidos)).includes('pedido'), 'quem modera ouve alguém bater na porta');
   assert.ok(await dono.evaluate(() => {
     const aviso = joinRequestNotice.getBoundingClientRect();
     const botao = joinRequestNoticeOpen.getBoundingClientRect();

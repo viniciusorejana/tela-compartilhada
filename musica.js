@@ -70,14 +70,14 @@ const salas = new Map();
 //
 // Fica separado de propósito: o estado do bot morre toda vez que ele sai da chamada -- e
 // ele sai sozinho depois de um minuto e meio sem fila. Guardar o volume junto significava
-// que, no pedido seguinte, a sala voltava a ouvir a música a 85% por mais alto ou mais
+// que, no pedido seguinte, a sala voltava a ouvir a música a 15% por mais alto ou mais
 // baixo que tivessem deixado. Quem ajustou o volume ajustou o volume DA SALA, não o de
 // uma passagem do bot por ela, e essa escolha vale enquanto a sala existir.
 //
 // Some junto com a sala, como todo o resto: quando a última pessoa sai, `esquecerSala`
 // apaga isto do mesmo jeito que a mesa de sons e o histórico do chat são apagados.
 const volumePorSala = new Map();
-const VOLUME_PADRAO = 0.85;
+const VOLUME_PADRAO = 0.15;
 
 // Como a sala e avisada. Preenchido por server.js na inicializacao para este modulo nao
 // precisar conhecer o Socket.IO.
@@ -698,8 +698,8 @@ function saudeDaSala(sala) {
 
 function instantaneo(sala) {
   const estado = salas.get(sala);
-  // Sem bot na sala, o que a tela mostra é o volume que a sala escolheu -- e não 85%.
-  // Mostrar o padrão aqui fazia o controle mentir: dizia 85 enquanto o próximo pedido ia
+  // Sem bot na sala, o que a tela mostra é o volume que a sala escolheu -- e não o padrão.
+  // Mostrar o padrão aqui fazia o controle mentir: dizia 15 enquanto o próximo pedido ia
   // tocar nos 40 que alguém tinha deixado.
   const volumeGuardado = Math.round((volumePorSala.get(sala) ?? VOLUME_PADRAO) * 100);
   if (!estado) return { conectado: false, tocando: null, fila: [], volume: volumeGuardado, pausado: false };
@@ -981,7 +981,7 @@ async function reproduzir(estado, faixa, { forcarYtdlp = false } = {}) {
   }
   if (!recebeuAudio) {
     const motivo = primeiraLinhaDeErro(pipeline.motivo());
-    mensagemDoBot(estado.sala, `Não consegui tocar **${faixa.titulo}**: ${motivo}`);
+    mensagemDoBot(estado.sala, `Não consegui tocar **${faixa.titulo}**: ${motivo}`, 'erro');
   } else if (ficouPelaMetade) {
     console.warn(`[música] ${estado.sala}: "${faixa.titulo}" parou em ${tocouAte}s de ${faixa.duracao}s (${primeiraLinhaDeErro(pipeline.motivo())})`);
   }
@@ -1003,7 +1003,7 @@ function seguirParaProxima(estado) {
   // anterior e fica assim ate o primeiro quadro sair -- um salto para tras, visível.
   estado.msEnviados = 0;
   avisarSala(estado.sala);
-  mensagemDoBot(estado.sala, `▶ Tocando **${proxima.titulo}**${proxima.autor ? ` · ${proxima.autor}` : ''}`);
+  mensagemDoBot(estado.sala, `Tocando **${proxima.titulo}**${proxima.autor ? ` · ${proxima.autor}` : ''}`, 'tocando', { capa: proxima.capa });
 
   const geracao = estado.geracao;
   // Faixa vinda de uma lista chega sem o endereco do audio -- so com o da pagina. Resolver
@@ -1013,7 +1013,7 @@ function seguirParaProxima(estado) {
     .then(() => { if (estado.geracao === geracao) reproduzir(estado, proxima); })
     .catch(erro => {
       if (estado.geracao !== geracao) return;
-      mensagemDoBot(estado.sala, `Não consegui tocar **${proxima.titulo}**: ${erro.message}`);
+      mensagemDoBot(estado.sala, `Não consegui tocar **${proxima.titulo}**: ${erro.message}`, 'erro');
       seguirParaProxima(estado);
     });
   adiantarProxima(estado);
@@ -1075,14 +1075,14 @@ async function pedir(sala, pedidoOriginal, quemPediu, { listaInteira = false, po
 
   const aSeguir = posicao !== null && entrouEm === 1;
   if (pediuLista) {
-    mensagemDoBot(sala, `＋ **${novas.length} ${novas.length === 1 ? 'faixa' : 'faixas'}** de _${novas[0].origem}_ na fila${tocavaAntes && aSeguir ? ', para tocar a seguir' : ''}.`);
+    mensagemDoBot(sala, `**${novas.length} ${novas.length === 1 ? 'faixa' : 'faixas'}** de ${novas[0].origem} na fila${tocavaAntes && aSeguir ? ', para tocar a seguir' : ''}.`, 'lista');
   } else if (tocavaAntes) {
-    mensagemDoBot(sala, aSeguir ? `＋ **${novas[0].titulo}** vai tocar a seguir` : `＋ **${novas[0].titulo}** entrou na fila (posição ${entrouEm})`);
+    mensagemDoBot(sala, aSeguir ? `**${novas[0].titulo}** vai tocar a seguir` : `**${novas[0].titulo}** entrou na fila · posição ${entrouEm}`, aSeguir ? 'a-seguir' : 'fila', { capa: novas[0].capa });
     // O link trazia uma lista junto e a pessoa pode nao ter percebido. Dizer isso UMA vez,
     // com o comando pronto, e melhor do que enfileirar cinquenta faixas por conta propria.
-    if (listaEmbutida(pedido)) mensagemDoBot(sala, 'Esse link faz parte de uma lista. Para enfileirar ela inteira: `!lista <link>`');
+    if (listaEmbutida(pedido)) mensagemDoBot(sala, 'Esse link faz parte de uma lista. Para enfileirar ela inteira: `!lista <link>`', 'dica');
   } else if (listaEmbutida(pedido)) {
-    mensagemDoBot(sala, 'Esse link faz parte de uma lista. Para enfileirar ela inteira: `!lista <link>`');
+    mensagemDoBot(sala, 'Esse link faz parte de uma lista. Para enfileirar ela inteira: `!lista <link>`', 'dica');
   }
   return novas[0];
 }

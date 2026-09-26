@@ -1,0 +1,121 @@
+@import url('/tema.css');
+/* A página de "não encontrada". Mesmo fundo, mesma marca e mesmos botões da página inicial:
+   quem cai aqui por um convite cortado precisa reconhecer que ainda está no Nexo antes de
+   ler qualquer frase. */
+* { box-sizing:border-box; }
+html,body { min-height:100%; }
+body { margin:0; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; background:radial-gradient(ellipse at 50% 30%,#6552881a,transparent 60%),#161720; color:var(--text); font:14px/1.6 "Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+a { color:inherit; text-decoration:none; }
+button,input { font:inherit; }
+:focus-visible { outline:2px solid #b6abff; outline-offset:3px; }
+[hidden] { display:none!important; }
+
+.topo { width:100%; max-width:1240px; margin:0 auto; height:88px; padding:0 40px; display:flex; align-items:center; }
+.marca { display:inline-flex; align-items:center; gap:11px; padding:6px 10px 6px 6px; margin-left:-6px; border-radius:var(--r-md); transition:background-color var(--dur) var(--curva); }
+.marca:hover { background:#ffffff08; }
+.marca strong { font-size:18px; letter-spacing:.08em; }
+
+.perdido { flex:1; width:100%; max-width:560px; margin:0 auto; padding:8px 24px 64px; display:flex; flex-direction:column; align-items:center; text-align:center; }
+
+/* ---------- A carinha ---------- */
+.palco-do-rosto { position:relative; display:grid; justify-items:center; margin-bottom:18px; }
+.rosto { width:176px; height:172px; padding:0; border:0; border-radius:48px; background:transparent; cursor:pointer; -webkit-tap-highlight-color:transparent; animation:flutuar 4.2s ease-in-out infinite; }
+.rosto svg { display:block; width:100%; height:100%; overflow:visible; }
+.rosto:focus-visible { outline-offset:6px; }
+.sombra { width:108px; height:12px; margin-top:6px; border-radius:50%; background:#00000059; filter:blur(4px); animation:sombra 4.2s ease-in-out infinite; }
+@keyframes flutuar { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-9px); } }
+@keyframes sombra { 0%,100% { transform:scaleX(1); opacity:.9; } 50% { transform:scaleX(.82); opacity:.55; } }
+
+.corpo { transform-box:fill-box; transform-origin:50% 100%; transition:transform var(--dur-lenta) var(--curva-mola); }
+.olho { transform-box:fill-box; transform-origin:center; transition:transform 90ms ease-in; }
+.pupila { transition:transform 120ms var(--curva); }
+.sobrancelha { fill:none; stroke:#f4f1ff; stroke-width:5; stroke-linecap:round; opacity:.9; transform-box:fill-box; transform-origin:center; transition:transform var(--dur) var(--curva); }
+.bochecha { fill:#ff9ec7; opacity:.28; transition:opacity var(--dur) var(--curva); }
+.boca { transition:opacity var(--dur-rapida) var(--curva); }
+.boca.confusa,.boca.feliz { fill:none; stroke:#1c1a33; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; }
+.boca.surpresa { fill:#1c1a33; }
+.boca.feliz,.boca.surpresa { opacity:0; }
+.faisca { transform-box:fill-box; transform-origin:center; animation:cintilar 2.6s ease-in-out infinite; }
+.duvida { transform-box:fill-box; transform-origin:center; animation:duvida 3.4s ease-in-out infinite; }
+.duvida text { font:700 20px/1 "Segoe UI",system-ui,sans-serif; fill:#c7bcff; }
+@keyframes cintilar { 0%,100% { transform:scale(1) rotate(0); opacity:1; } 50% { transform:scale(.72) rotate(45deg); opacity:.7; } }
+@keyframes duvida { 0%,100% { transform:translateY(0) rotate(-8deg); } 50% { transform:translateY(-5px) rotate(6deg); } }
+
+/* Piscar: a pálpebra é o próprio olho achatado. Rápido, como um piscar de verdade. */
+.rosto.piscando .olho { transform:scaleY(.08); }
+/* Feliz: quando a mão chega num caminho de volta. */
+.rosto.feliz .boca.confusa { opacity:0; }
+.rosto.feliz .boca.feliz { opacity:1; }
+.rosto.feliz .sobrancelha { transform:translateY(-4px) rotate(0); }
+.rosto.feliz .bochecha { opacity:.55; }
+.rosto.feliz .duvida { opacity:0; transition:opacity var(--dur) var(--curva); }
+/* Cutucado: o susto dura meio segundo, e o corpo amassa e volta. */
+.rosto.cutucado .boca.confusa,.rosto.cutucado .boca.feliz { opacity:0; }
+.rosto.cutucado .boca.surpresa { opacity:1; }
+.rosto.cutucado .corpo { animation:amassar .55s var(--curva-mola); }
+.rosto.cutucado .sobrancelha { transform:translateY(-7px); }
+@keyframes amassar { 0% { transform:scale(1,1); } 30% { transform:scale(1.12,.86); } 60% { transform:scale(.94,1.07); } 100% { transform:scale(1,1); } }
+/* Um código que não serve: a carinha balança a cabeça, junto com a frase de erro. */
+.rosto.negando .corpo { animation:negar .5s ease-in-out; }
+@keyframes negar { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-7px) rotate(-3deg); } 40% { transform:translateX(6px) rotate(3deg); } 60% { transform:translateX(-4px) rotate(-2deg); } 80% { transform:translateX(3px); } }
+
+/* ---------- O texto ---------- */
+.erro-codigo { display:inline-flex; align-items:center; gap:7px; padding:4px 10px; border-radius:var(--r-pilula); background:var(--accent-suave); color:var(--accent-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.14em; }
+.erro-codigo::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--accent-hi); }
+h1 { margin:14px 0 10px; font-size:clamp(28px,5vw,38px); line-height:1.12; letter-spacing:-.045em; font-weight:650; }
+.explica { margin:0 0 22px; max-width:46ch; color:var(--muted); font-size:var(--fs-md); line-height:1.75; }
+.explica code { padding:1px 6px; border-radius:var(--r-xs); background:#ffffff0d; color:var(--accent-texto); font:12.5px ui-monospace,Consolas,monospace; overflow-wrap:anywhere; }
+
+/* A sugestão só aparece quando o endereço parece um código de sala sem o "/sala": é o erro
+   mais comum de quem monta o link à mão, e aqui ele vira um clique. */
+.sugestao { width:100%; display:flex; align-items:center; gap:12px; margin:0 0 18px; padding:12px 14px; text-align:left; border:1px solid #a092ff3d; border-radius:var(--r-lg); background:linear-gradient(120deg,#8879f61f,#8879f60a); transition:border-color var(--dur) var(--curva),background-color var(--dur) var(--curva),transform var(--dur) var(--curva); animation:nexo-surgir var(--dur-lenta) var(--curva); }
+.sugestao:hover { border-color:#a092ff80; transform:translateY(-1px); }
+.sugestao:active { transform:scale(.99); }
+.sugestao-icone { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:var(--r-md); background:var(--accent-suave-hi); color:var(--accent-texto); font-size:19px; }
+.sugestao>span:nth-child(2) { flex:1; min-width:0; display:grid; }
+.sugestao small { color:var(--muted); font-size:var(--fs-meta); }
+.sugestao strong { font-size:var(--fs-lg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sugestao-seta { flex:none; color:var(--accent-texto); font-size:20px; transition:transform var(--dur) var(--curva); }
+.sugestao:hover .sugestao-seta { transform:translateX(3px); }
+
+/* ---------- Os caminhos de volta ---------- */
+.acoes { width:100%; display:flex; justify-content:center; flex-wrap:wrap; gap:10px; margin-bottom:26px; }
+.botao { flex:0 1 auto; display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:var(--ctl-g); padding:0 20px; border:0; border-radius:var(--r-md); background:var(--accent-forte); color:#fff; font-size:var(--fs-md); font-weight:650; cursor:pointer; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva),box-shadow var(--dur) var(--curva); }
+.botao svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.botao:hover { background:var(--accent-forte-hi); box-shadow:0 8px 22px #6c5ce740; transform:translateY(-1px); }
+.botao:active { transform:scale(.975); }
+.botao.secundario { background:#ffffff08; color:var(--text-2); box-shadow:inset 0 0 0 1px var(--line-3); }
+.botao.secundario:hover { background:#ffffff12; box-shadow:inset 0 0 0 1px #ffffff38; }
+
+.entrar { width:100%; padding:18px; border:1px solid #ac9ac326; border-radius:var(--r-xl); background:linear-gradient(140deg,#282432,#21212d); text-align:left; }
+.entrar label { display:block; margin-bottom:9px; color:#c6bcd1; font-size:var(--fs-sm); font-weight:600; }
+.campo { display:flex; align-items:center; gap:4px; padding:4px; border:1px solid #af9cbe26; border-radius:var(--r-md); background:#181822; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.campo:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.campo>span { margin-left:10px; color:#9f90b2; font-size:19px; }
+.campo input { flex:1; min-width:0; min-height:var(--ctl-m); padding:0 6px; border:0; background:transparent; color:var(--text); font-size:14px; }
+.campo input:focus-visible { outline:none; }
+.campo input::placeholder { color:#887b95; }
+.campo input[aria-invalid="true"] { color:var(--danger-texto); }
+.campo button { flex:none; display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-m); padding:0 14px; border:0; border-radius:var(--r-sm); background:var(--accent-forte); color:#fff; font-size:var(--fs-sm); font-weight:650; cursor:pointer; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.campo button:hover { background:var(--accent-forte-hi); }
+.campo button:hover span { transform:translateX(2px); }
+.campo button span { transition:transform var(--dur) var(--curva); }
+.campo button:active { transform:scale(.97); }
+.erro { margin:9px 0 0; color:var(--danger-texto); font-size:var(--fs-sm); }
+
+.recentes { width:100%; margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 10px; }
+.recentes>span { flex-basis:100%; color:var(--faint); font-size:var(--fs-rotulo); font-weight:650; letter-spacing:.11em; }
+#recentesLinks { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+#recentesLinks a { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 12px; border:1px solid #ad9aee2e; border-radius:var(--r-sm); background:#ad9aee0b; color:#d0c3e2; font-size:var(--fs-sm); transition:background-color var(--dur) var(--curva),border-color var(--dur) var(--curva),transform var(--dur) var(--curva); }
+#recentesLinks a:hover { background:#ad9aee18; border-color:#ad9aee4a; transform:translateY(-1px); }
+
+@media (max-width:560px) {
+  .topo { height:72px; padding:0 20px; }
+  .perdido { padding:0 18px 48px; }
+  .rosto { width:148px; height:144px; }
+  .acoes .botao { flex:1 1 100%; }
+  .entrar { padding:15px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .rosto,.sombra,.faisca,.duvida { animation:none; }
+}

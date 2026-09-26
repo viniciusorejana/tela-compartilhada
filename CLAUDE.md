@@ -47,6 +47,11 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Rate limiting e cotas | `telemetria/abuso.js` |
 | Painel privado e autenticação | `telemetria/` + `painel/` |
 | Contabilidade de banda | `medicao.js` + `telemetria/agregacao.js` |
+| Tempo da sala e de cada pessoa (sobrevive ao F5) | `tempos.js` + `public/tempo-sala.js` |
+| Avisos sonoros | `public/sons.js`; arquivos montados por `scripts/sons/compor.cjs` |
+| Painel de configurações (perfil, sons, aparência, atalhos) | `public/configuracoes.js` + `sala.html` |
+| Página de "não encontrada" | `public/404.html` + `nao-encontrada.{css,js}`; a rota é a última de `server.js` |
+| Aviso no canto (download, atualização) | `public/toast.js`; o download do app em `app/main.js` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`.

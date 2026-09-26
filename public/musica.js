@@ -17,7 +17,7 @@
   const entrada = $('musicaInput');
 
   let naoLidasNaMusica = 0;
-  let estadoAtual = { conectado: false, tocando: null, fila: [], volume: 85, pausado: false };
+  let estadoAtual = { conectado: false, tocando: null, fila: [], volume: 15, pausado: false };
   let disponivel = true;
   let pertoDoFim = true;
   // O tempo decorrido anda de segundo em segundo aqui, entre um aviso e outro do servidor.
@@ -124,17 +124,123 @@
     }
   }
 
+  // ---------- As falas do bot ----------
+  //
+  // O tipo vem do servidor e diz o que aconteceu; é ele que escolhe o ícone da linha. Uma fala
+  // de antes desta versão chega sem tipo, com o glifo no começo do texto -- ele é traduzido
+  // para o tipo e sai do texto, para as duas formas ficarem iguais na tela.
+  const ICONES_DO_BOT = {
+    tocando: '<path d="M7 4v16l13-8Z" fill="currentColor"/>',
+    agora: '<path d="M7 4v16l13-8Z" fill="currentColor"/>',
+    volta: '<path d="M7 4v16l13-8Z" fill="currentColor"/>',
+    fila: '<path d="M12 5v14M5 12h14"/>',
+    'a-seguir': '<path d="M5 4h14M12 20V9M7 13l5-5 5 5"/>',
+    lista: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    'lista-da-fila': '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    escolha: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    pulou: '<path d="M5 5v14l10-7ZM19 5v14"/>',
+    pausa: '<path d="M8 5v14M16 5v14"/>',
+    parou: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    moveu: '<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>',
+    removeu: '<path d="M18 6 6 18M6 6l12 12"/>',
+    esvaziou: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+    embaralhou: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+    volume: '<path d="M11 5 6 9H2v6h4l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7"/>',
+    erro: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+    aviso: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+    dica: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.4 1-1.9A6 6 0 0 0 12 3Z"/>',
+    ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 16.5v.01"/>',
+    info: '<path d="M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>'
+  };
+  // Falas que são para ler, e não avisos: ficam num cartão, e dobram quando são longas.
+  const TIPOS_EM_CARTAO = new Set(['ajuda', 'lista-da-fila', 'escolha']);
+  const GLIFOS_ANTIGOS = [['▶ ', 'tocando'], ['＋ ', 'fila'], ['⏭ ', 'pulou'], ['⏸ ', 'pausa'], ['⏹ ', 'parou'], ['🔀 ', 'embaralhou'], ['↕ ', 'moveu'], ['⤒ ', 'a-seguir'], ['✕ ', 'removeu'], ['🔊 ', 'volume']];
+  function tipoDaFala(msg) {
+    let texto = String(msg.texto || '');
+    let tipo = typeof msg.tipo === 'string' && ICONES_DO_BOT[msg.tipo] ? msg.tipo : null;
+    const antigo = GLIFOS_ANTIGOS.find(([glifo]) => texto.startsWith(glifo));
+    if (antigo) { texto = texto.slice(antigo[0].length); tipo ||= antigo[1]; }
+    if (!tipo) tipo = Array.isArray(msg.opcoes) && msg.opcoes.length ? 'escolha' : texto.includes('\n') ? 'ajuda' : 'info';
+    return { tipo, texto };
+  }
+
+  // Mensagens seguidas da mesma pessoa, a poucos minutos uma da outra, dividem o cabeçalho --
+  // quem enfileira cinco músicas de uma vez não precisa ver o próprio nome cinco vezes.
+  const MS_PARA_AGRUPAR = 5 * 60000;
+  let ultimaDePessoa = null;
+
   function mostrarMensagemDeMusica(msg) {
     const vazio = mensagens.querySelector('.chat-vazio');
     if (vazio) vazio.remove();
     pertoDoFim = mensagens.scrollHeight - mensagens.scrollTop - mensagens.clientHeight < 80;
+    const hora = document.createElement('span');
+    hora.className = 'msg-hora';
+    hora.textContent = horaCurta(msg.em || Date.now());
+
+    if (msg.doBot) {
+      const { tipo, texto } = tipoDaFala(msg);
+      ultimaDePessoa = null;
+      const marca = document.createElement('span');
+      marca.className = 'bot-marca';
+      marca.setAttribute('aria-hidden', 'true');
+      marca.innerHTML = `<svg viewBox="0 0 24 24">${ICONES_DO_BOT[tipo]}</svg>`;
+      // A capa da faixa, quando há: reconhecer a música pela imagem é mais rápido que ler.
+      if (/^https:\/\//.test(msg.capa || '')) { pintarCapa(marca, msg.capa); marca.classList.add('com-capa'); }
+      const corpo = document.createElement('div');
+      corpo.className = 'msg-texto';
+      montarTextoDaMusica(corpo, texto);
+      const el = document.createElement('div');
+      el.dataset.tipo = tipo;
+      // Quem ouve pela tela não vê o ícone: o nome do bot vai junto, só para o leitor.
+      const quem = document.createElement('span');
+      quem.className = 'so-leitor';
+      quem.textContent = `${msg.autor || 'Nexo DJ'}: `;
+      if (TIPOS_EM_CARTAO.has(tipo)) {
+        el.className = 'msg do-bot bot-cartao';
+        const topo = document.createElement('div');
+        topo.className = 'bot-cartao-topo';
+        const autor = document.createElement('span');
+        autor.className = 'msg-autor';
+        autor.textContent = msg.autor || 'Nexo DJ';
+        topo.append(marca, autor, hora);
+        el.append(topo, corpo);
+        adicionarEscolhas(corpo, msg);
+        // Uma lista de quinze músicas ou a ajuda inteira ocupavam a coluna toda. Dobradas, as
+        // primeiras linhas dizem do que se trata, e o resto está a um clique.
+        if (!msg.opcoes?.length && texto.split('\n').length > 5) {
+          el.classList.add('recolhido');
+          const mais = document.createElement('button');
+          mais.type = 'button';
+          mais.className = 'bot-mais';
+          mais.textContent = `Mostrar tudo (${texto.split('\n').length} linhas)`;
+          mais.setAttribute('aria-expanded', 'false');
+          mais.onclick = () => {
+            const aberto = el.classList.toggle('recolhido') === false;
+            mais.textContent = aberto ? 'Mostrar menos' : `Mostrar tudo (${texto.split('\n').length} linhas)`;
+            mais.setAttribute('aria-expanded', String(aberto));
+          };
+          el.append(mais);
+        }
+      } else {
+        el.className = 'msg do-bot bot-linha';
+        el.title = texto.replace(/\*\*|`/g, '');
+        el.append(marca, quem, corpo, hora);
+      }
+      mensagens.appendChild(el);
+      concluirMensagem(msg);
+      return;
+    }
 
     const el = document.createElement('div');
-    el.className = msg.doBot ? 'msg do-bot' : 'msg';
+    el.className = 'msg';
+    if (msg.id) el.dataset.pedido = msg.id;
+    const anterior = ultimaDePessoa;
+    if (anterior && anterior.autorId === msg.autorId && (msg.em || 0) - (anterior.em || 0) < MS_PARA_AGRUPAR && mensagens.lastElementChild?.classList.contains('msg')) el.classList.add('continua');
+    ultimaDePessoa = { autorId: msg.autorId, em: msg.em || Date.now() };
     const avatar = document.createElement('span');
     avatar.className = 'msg-avatar';
-    avatar.textContent = msg.doBot ? '♪' : iniciais(msg.autor || '?');
-    if (!msg.doBot) avatar.style.background = corDoNome(msg.autor || '');
+    avatar.textContent = iniciais(msg.autor || '?');
+    avatar.style.background = corDoNome(msg.autor || '');
     avatar.setAttribute('aria-hidden', 'true');
 
     const topo = document.createElement('div');
@@ -142,19 +248,48 @@
     const autor = document.createElement('span');
     autor.className = 'msg-autor';
     autor.textContent = msg.autor || 'Alguém';
-    if (!msg.doBot) autor.style.color = corDoNome(msg.autor || '');
-    const hora = document.createElement('span');
-    hora.className = 'msg-hora';
-    hora.textContent = horaCurta(msg.em || Date.now());
+    autor.style.color = corDoNome(msg.autor || '');
     topo.append(autor, hora);
 
     const corpo = document.createElement('div');
     corpo.className = 'msg-texto';
     montarTextoDaMusica(corpo, msg.texto || '');
+    el.append(avatar, topo, corpo);
+    mensagens.appendChild(el);
+    concluirMensagem(msg);
+  }
 
-    // Listas encontradas por nome viram botões. O endereço fica guardado no objeto, nunca
-    // escrito no HTML: ele vem de uma busca externa, e um botão é um alvo mais seguro do
-    // que um link montado com texto de fora.
+  function concluirMensagem(msg) {
+    if (pertoDoFim) mensagens.scrollTop = mensagens.scrollHeight;
+    if (!painelVisivel() && msg.autorId !== meuSocketId) {
+      naoLidasNaMusica++;
+      marcarSidebar();
+    }
+  }
+
+  // "Procurando…" embaixo do pedido, enquanto a busca dura. Quem entrou no meio não tem o
+  // pedido na tela, e aí simplesmente não há onde mostrar -- o resultado chega do mesmo jeito.
+  const buscasEmCurso = new Map();
+  function acompanharBusca({ pedido, rotulo, fim }) {
+    const alvo = pedido && mensagens.querySelector(`[data-pedido="${CSS.escape(pedido)}"]`);
+    clearTimeout(buscasEmCurso.get(pedido));
+    buscasEmCurso.delete(pedido);
+    alvo?.querySelector('.pedido-status')?.remove();
+    if (fim || !alvo) return;
+    const status = document.createElement('span');
+    status.className = 'pedido-status';
+    status.setAttribute('role', 'status');
+    status.textContent = String(rotulo || 'Procurando…').slice(0, 60);
+    alvo.append(status);
+    if (pertoDoFim) mensagens.scrollTop = mensagens.scrollHeight;
+    // Um fim que se perdeu numa queda de conexão não pode deixar o indicador girando para sempre.
+    buscasEmCurso.set(pedido, setTimeout(() => { status.remove(); buscasEmCurso.delete(pedido); }, 90000));
+  }
+
+  // Listas encontradas por nome viram botões. O endereço fica guardado no objeto, nunca
+  // escrito no HTML: ele vem de uma busca externa, e um botão é um alvo mais seguro do
+  // que um link montado com texto de fora.
+  function adicionarEscolhas(corpo, msg) {
     if (Array.isArray(msg.opcoes) && msg.opcoes.length) {
       const escolhas = document.createElement('div');
       escolhas.className = 'escolhas-de-lista';
@@ -173,15 +308,6 @@
         escolhas.appendChild(botao);
       }
       if (escolhas.childElementCount) corpo.appendChild(escolhas);
-    }
-
-    el.append(avatar, topo, corpo);
-    mensagens.appendChild(el);
-    if (pertoDoFim) mensagens.scrollTop = mensagens.scrollHeight;
-
-    if (!painelVisivel() && msg.autorId !== meuSocketId) {
-      naoLidasNaMusica++;
-      marcarSidebar();
     }
   }
 
@@ -668,6 +794,7 @@
     // trocar de objeto, entao ligar uma vez basta para a sessao inteira.
     ligar(soquete) {
       soquete.on('musica-mensagem', mostrarMensagemDeMusica);
+      soquete.on('musica-busca', acompanharBusca);
       soquete.on('musica-estado', aplicarEstado);
     },
     // Chamado pelo `join-room`: o estado inteiro do canal chega de uma vez, junto com o
@@ -676,6 +803,7 @@
       if (!pacote) return;
       disponivel = pacote.disponivel !== false;
       mensagens.replaceChildren();
+      ultimaDePessoa = null;
       if (Array.isArray(pacote.historico) && pacote.historico.length) pacote.historico.forEach(mostrarMensagemDeMusica);
       else mostrarVazioDaMusica();
       aplicarEstado(pacote.estado);

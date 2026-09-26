@@ -32,6 +32,7 @@ const soundboard = require('./soundboard');
 const medicao = require('./medicao');
 const { criarModeracao } = require('./moderacao');
 const { criarSalas } = require('./salas');
+const { criarTempos, chaveDeTempo } = require('./tempos');
 const planos = require('./public/planos');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
@@ -49,6 +50,9 @@ const moderacao = criarModeracao();
 // padrão.
 const ANONIMO_ABRE_SALA = (process.env.NEXO_ANONIMO_ABRE_SALA || '').trim() === '1';
 const salas = criarSalas({ anonimoAbre: ANONIMO_ABRE_SALA });
+// Há quanto tempo a sala está aberta e há quanto tempo cada pessoa está nela, sem zerar no F5:
+// ver tempos.js.
+const tempos = criarTempos();
 // O teto de pessoas por sala: base e com um assinante presente. Os números de partida são 25
 // e 50 (public/planos.js); NEXO_PESSOAS_POR_SALA="base,comAssinante" ajusta sem mexer no código.
 const PESSOAS_POR_SALA = (() => {
@@ -179,13 +183,18 @@ app.get('/conta', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'conta.html'));
 });
 
-app.get('/:roomCode/sala', (req, res) => {
+// Um código que nenhuma sala pode ter cai na página de "não encontrada", e não numa sala que
+// só descobriria o problema depois do nome digitado, com um "código inválido" seco.
+const CODIGO_NO_ENDERECO = /^[a-z0-9_-]{4,32}$/i;
+app.get('/:roomCode/sala', (req, res, next) => {
+  if (!CODIGO_NO_ENDERECO.test(req.params.roomCode)) return next();
   res.sendFile(path.join(__dirname, 'public', 'sala.html'));
 });
 
 // Links antigos continuam funcionando, apontando para a sala unificada.
 app.get(['/compartilhar', '/ao-vivo'], (req, res) => res.redirect('/sala'));
-app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res) => {
+app.get(['/:roomCode/compartilhar', '/:roomCode/ao-vivo'], (req, res, next) => {
+  if (!CODIGO_NO_ENDERECO.test(req.params.roomCode)) return next();
   res.redirect(`/${req.params.roomCode}/sala`);
 });
 
@@ -491,6 +500,21 @@ app.use('/api/soundboard', (erro, req, res, _next) => {
   if (!res.headersSent) res.status(erro.type === 'entity.too.large' ? 413 : 400).json({ error: 'Não foi possível receber o som.' });
 });
 
+// ---------- Nenhuma rota respondeu ----------
+//
+// Última rota registrada, e por isso a última a rodar. Antes era o "Cannot GET /x" do Express:
+// uma linha em inglês, sem marca e sem saída, justamente para quem colou um convite cortado.
+// Quem pediu uma página recebe a do Nexo, que diz o que aconteceu e oferece o caminho de volta;
+// quem pediu dado (uma API, um arquivo) recebe um 404 curto, que é o que um programa sabe ler.
+const PAGINA_NAO_ENCONTRADA = path.join(__dirname, 'public', '404.html');
+app.use((req, res) => {
+  res.status(404);
+  if (req.path.startsWith('/api/')) return res.json({ error: 'Não encontrado.' });
+  if (!['GET', 'HEAD'].includes(req.method) || !req.accepts('html')) return res.type('text').send('Não encontrado.');
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(PAGINA_NAO_ENCONTRADA);
+});
+
 // Chat da sala. Fica na conexao de sinalizacao, que ja existe e passa o tempo todo ociosa:
 // vídeo e voz passam pelo SFU e não encostam nisso. O histórico serve para quem entra
 // depois nao achar a sala muda, e vive so na memoria -- some quando a sala esvazia.
@@ -721,6 +745,7 @@ salas.aoFechar(sala => {
   pedidosDeEntradaPorSala.delete(sala);
   aprovadosPorSala.delete(sala);
   identidadesConhecidasPorSala.delete(sala);
+  tempos.fechou(sala);
   moderacao.fechou(sala);
 });
 
@@ -966,8 +991,22 @@ function publicarNaMusica(roomCode, mensagem) {
   io.to(roomName(roomCode)).emit('musica-mensagem', mensagem);
 }
 
-function falarComoBot(roomCode, texto) {
-  publicarNaMusica(roomCode, { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, texto, em: Date.now() });
+// O `tipo` diz O QUE aconteceu -- tocou, entrou na fila, pulou, deu erro --, e é por ele que a
+// página desenha cada fala como uma linha curta com um ícone, em vez de um cartão com avatar e
+// nome repetidos a cada aviso. O texto continua completo: é ele que o leitor de tela lê, e é
+// ele que um histórico antigo, sem tipo, ainda mostra.
+function falarComoBot(roomCode, texto, tipo = 'info', extra = {}) {
+  const capa = /^https:\/\//.test(extra.capa || '') ? extra.capa : undefined;
+  publicarNaMusica(roomCode, { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, texto, tipo, capa, em: Date.now() });
+}
+
+// "Procurando…" era uma mensagem: ficava no canal para sempre, uma a cada pedido, dizendo algo
+// que só foi verdade por três segundos. Agora é um estado do PEDIDO -- a página mostra um
+// indicador embaixo do que a pessoa escreveu e o apaga quando a busca termina. Não entra no
+// histórico: quem chega depois quer saber o que tocou, não o que foi procurado.
+function avisarBusca(roomCode, pedido, rotulo) {
+  if (!pedido) return;
+  io.to(roomName(roomCode)).emit('musica-busca', rotulo ? { pedido, rotulo } : { pedido, fim: true });
 }
 
 function duracaoLegivel(segundos) {
@@ -987,7 +1026,9 @@ const AJUDA_DA_MUSICA = [
   'Link de playlist entra inteiro. Link de música que estava numa playlist toca só ela — use `!lista` para pegar tudo.'
 ].join('\n');
 
-async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
+// `pedido` é o id da mensagem em que a pessoa pediu: é embaixo dela que a página mostra o
+// "procurando…", e é por ele que o indicador some quando a busca termina, dê certo ou não.
+async function interpretarComandoDeMusica(roomCode, texto, quemPediu, pedido = null) {
   const casou = texto.match(/^!(\S+)\s*([\s\S]*)$/);
   const comando = casou ? casou[1].toLowerCase() : '';
   const resto = casou ? casou[2].trim() : texto;
@@ -995,14 +1036,16 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
   // Sem "!", o canal inteiro e um pedido de musica: e para isso que ele existe, e obrigar
   // um prefixo em todas as linhas so seria cerimonia.
   const ehPedido = !casou || ['bot', 'tocar', 'p', 'play', 'toca'].includes(comando);
+  let buscando = false;
+  const procurar = rotulo => { buscando = true; avisarBusca(roomCode, pedido, rotulo); };
 
   try {
     if (ehPedido) {
       const busca = ehPedido && casou ? resto : texto;
-      if (!busca) return falarComoBot(roomCode, AJUDA_DA_MUSICA);
-      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(busca).slice(0, 120)}**…`);
+      if (!busca) return falarComoBot(roomCode, AJUDA_DA_MUSICA, 'ajuda');
+      procurar('Procurando…');
       const faixa = await musica.pedir(roomCode, busca, quemPediu);
-      if (!faixa) falarComoBot(roomCode, 'Não achei nada com isso.');
+      if (!faixa) falarComoBot(roomCode, 'Não achei nada com isso.', 'erro');
       return;
     }
 
@@ -1010,20 +1053,22 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
     // dela -- que é a forma como o YouTube monta o endereço de qualquer vídeo aberto a
     // partir de uma playlist.
     if (['lista', 'playlist', 'album', 'álbum'].includes(comando)) {
-      if (!resto) return falarComoBot(roomCode, 'Escreva o nome de uma lista ou cole um link: `!lista rock anos 80`');
+      if (!resto) return falarComoBot(roomCode, 'Escreva o nome de uma lista ou cole um link: `!lista rock anos 80`', 'dica');
       // Link: já se sabe qual é. Texto: procura listas e deixa a sala escolher, para
       // ninguém ter de sair da conversa, achar a playlist em outro aplicativo, copiar o
       // endereço e voltar.
       if (/^https?:\/\//i.test(resto)) {
-        falarComoBot(roomCode, 'Abrindo a lista…');
+        procurar('Abrindo a lista…');
         await musica.pedir(roomCode, resto, quemPediu, { listaInteira: true });
         return;
       }
-      falarComoBot(roomCode, `Procurando listas de **${musica.semMarcacao(resto).slice(0, 80)}**…`);
+      procurar('Procurando listas…');
       const achadas = await musica.buscarListas(resto);
       return publicarNaMusica(roomCode, {
-        autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, em: Date.now(),
-        texto: `Achei ${achadas.length} ${achadas.length === 1 ? 'lista' : 'listas'}. Toque em uma para enfileirar:`,
+        autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, em: Date.now(), tipo: 'escolha',
+        texto: achadas.length
+          ? `Achei ${achadas.length} ${achadas.length === 1 ? 'lista' : 'listas'} de **${musica.semMarcacao(resto).slice(0, 80)}**. Toque em uma para enfileirar:`
+          : `Não achei nenhuma lista de **${musica.semMarcacao(resto).slice(0, 80)}**.`,
         opcoes: achadas
       });
     }
@@ -1031,34 +1076,34 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
     // Pedido com lugar na fila. `!proxima` é o caso de todo dia -- "essa, antes das que já
     // estão esperando" --, e `!inserir 3 <música>` cobre o resto.
     if (['proxima', 'próxima', 'seguinte', 'playnext', 'pn', 'depois'].includes(comando)) {
-      if (!resto) return falarComoBot(roomCode, 'Escreva a música: `!proxima nome ou link`');
-      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(resto).slice(0, 120)}**…`);
+      if (!resto) return falarComoBot(roomCode, 'Escreva a música: `!proxima nome ou link`', 'dica');
+      procurar('Procurando…');
       await musica.pedir(roomCode, resto, quemPediu, { posicao: 1 });
       return;
     }
     if (['inserir', 'posicao', 'posição', 'pos'].includes(comando)) {
       const partes = resto.match(/^(\d{1,3})\s+([\s\S]+)$/);
-      if (!partes) return falarComoBot(roomCode, 'Diga a posição e a música: `!inserir 2 nome ou link`');
-      falarComoBot(roomCode, `Procurando **${musica.semMarcacao(partes[2]).slice(0, 120)}**…`);
+      if (!partes) return falarComoBot(roomCode, 'Diga a posição e a música: `!inserir 2 nome ou link`', 'dica');
+      procurar('Procurando…');
       await musica.pedir(roomCode, partes[2], quemPediu, { posicao: Number(partes[1]) });
       return;
     }
     if (['mover', 'mv', 'move'].includes(comando)) {
       const [de, para] = resto.split(/\s+/).map(Number);
       const faixa = musica.instantaneo(roomCode).fila[de - 1];
-      if (!faixa || !Number.isInteger(para) || para < 1) return falarComoBot(roomCode, 'Use `!mover <de> <para>`, com as posições que o `!fila` mostra.');
+      if (!faixa || !Number.isInteger(para) || para < 1) return falarComoBot(roomCode, 'Use `!mover <de> <para>`, com as posições que o `!fila` mostra.', 'dica');
       const movida = musica.moverNaFila(roomCode, faixa.id, para);
-      return falarComoBot(roomCode, `↕ **${movida.faixa.titulo}** foi para a posição ${movida.para}.`);
+      return falarComoBot(roomCode, `**${movida.faixa.titulo}** foi para a posição ${movida.para}.`, 'moveu');
     }
     if (['esvaziar', 'limparfila', 'clear'].includes(comando)) {
       const quantas = musica.esvaziarFila(roomCode);
-      return falarComoBot(roomCode, quantas
-        ? `Esvaziei a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`
-        : 'A fila já está vazia.');
+      return quantas
+        ? falarComoBot(roomCode, `Esvaziei a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`, 'esvaziou')
+        : falarComoBot(roomCode, 'A fila já está vazia.', 'dica');
     }
     if (['pular', 'skip', 'next', 'n'].includes(comando)) {
       const saindo = musica.pular(roomCode);
-      return falarComoBot(roomCode, saindo ? `⏭ Pulei **${saindo.titulo}**.` : 'Não tem nada tocando.');
+      return saindo ? falarComoBot(roomCode, `Pulei **${saindo.titulo}**.`, 'pulou') : falarComoBot(roomCode, 'Não tem nada tocando.', 'dica');
     }
     // Parar é sair. Antes o bot limpava a fila e continuava plantado na sala por mais um
     // minuto e meio, mudo, ocupando um lugar na lista de todo mundo -- e quem escreveu
@@ -1067,48 +1112,50 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu) {
       const tinhaFila = musica.instantaneo(roomCode).fila.length;
       await musica.desconectar(roomCode, 'pedido');
       return falarComoBot(roomCode, tinhaFila
-        ? `⏹ Parei, esvaziei a fila (${tinhaFila} ${tinhaFila === 1 ? 'faixa' : 'faixas'}) e saí da chamada.`
-        : '⏹ Parei e saí da chamada. Peça uma música que eu volto.');
+        ? `Parei, esvaziei a fila (${tinhaFila} ${tinhaFila === 1 ? 'faixa' : 'faixas'}) e saí da chamada.`
+        : 'Parei e saí da chamada. Peça uma música que eu volto.', 'parou');
     }
     if (['pausar', 'pause'].includes(comando)) {
-      return falarComoBot(roomCode, musica.pausar(roomCode, true) ? '⏸ Pausado.' : 'Não tem nada tocando.');
+      return musica.pausar(roomCode, true) ? falarComoBot(roomCode, 'Pausado.', 'pausa') : falarComoBot(roomCode, 'Não tem nada tocando.', 'dica');
     }
     if (['voltar', 'resume', 'continuar', 'despausar'].includes(comando)) {
-      return falarComoBot(roomCode, musica.pausar(roomCode, false) ? '▶ Voltando.' : 'Não tem nada tocando.');
+      return musica.pausar(roomCode, false) ? falarComoBot(roomCode, 'Voltando.', 'volta') : falarComoBot(roomCode, 'Não tem nada tocando.', 'dica');
     }
     if (['fila', 'queue', 'q'].includes(comando)) {
       const estado = musica.instantaneo(roomCode);
-      if (!estado.tocando && !estado.fila.length) return falarComoBot(roomCode, 'A fila está vazia. Peça alguma coisa.');
-      const linhas = [estado.tocando ? `▶ **${estado.tocando.titulo}** · ${duracaoLegivel(estado.tocando.duracao)}` : null]
+      if (!estado.tocando && !estado.fila.length) return falarComoBot(roomCode, 'A fila está vazia. Peça alguma coisa.', 'dica');
+      const linhas = [estado.tocando ? `Tocando: **${estado.tocando.titulo}** · ${duracaoLegivel(estado.tocando.duracao)}` : null]
         .concat(estado.fila.slice(0, 15).map((faixa, i) => `${i + 1}. ${faixa.titulo} · ${duracaoLegivel(faixa.duracao)} · pedida por ${faixa.pedidoPor}`))
         .filter(Boolean);
       if (estado.fila.length > 15) linhas.push(`…e mais ${estado.fila.length - 15}.`);
-      return falarComoBot(roomCode, linhas.join('\n'));
+      return falarComoBot(roomCode, linhas.join('\n'), 'lista-da-fila');
     }
     if (['agora', 'np', 'tocando'].includes(comando)) {
       const estado = musica.instantaneo(roomCode);
-      return falarComoBot(roomCode, estado.tocando
-        ? `▶ **${estado.tocando.titulo}**${estado.tocando.autor ? ` · ${estado.tocando.autor}` : ''} · ${duracaoLegivel(estado.tocando.decorrido)} de ${duracaoLegivel(estado.tocando.duracao)}`
-        : 'Não tem nada tocando.');
+      return estado.tocando
+        ? falarComoBot(roomCode, `**${estado.tocando.titulo}**${estado.tocando.autor ? ` · ${estado.tocando.autor}` : ''} · ${duracaoLegivel(estado.tocando.decorrido)} de ${duracaoLegivel(estado.tocando.duracao)}`, 'agora', { capa: estado.tocando.capa })
+        : falarComoBot(roomCode, 'Não tem nada tocando.', 'dica');
     }
     if (['volume', 'vol', 'v'].includes(comando)) {
       const { porcento, naSala } = musica.definirVolume(roomCode, resto);
       return falarComoBot(roomCode, naSala
-        ? `🔊 Volume do bot em ${porcento}%. Cada um ainda regula o próprio no painel.`
-        : `🔊 Anotado: ${porcento}%. O bot ainda não está na sala, mas já entra nesse volume.`);
+        ? `Volume do bot em ${porcento}%. Cada um ainda regula o próprio no painel.`
+        : `Anotado: ${porcento}%. O bot ainda não está na sala, mas já entra nesse volume.`, 'volume');
     }
     if (['remover', 'rm', 'tirar'].includes(comando)) {
       const removida = musica.removerDaFila(roomCode, resto);
-      return falarComoBot(roomCode, removida ? `Tirei **${removida.titulo}** da fila.` : 'Não existe essa posição na fila.');
+      return removida ? falarComoBot(roomCode, `Tirei **${removida.titulo}** da fila.`, 'removeu') : falarComoBot(roomCode, 'Não existe essa posição na fila.', 'dica');
     }
     if (['embaralhar', 'shuffle'].includes(comando)) {
-      return falarComoBot(roomCode, musica.embaralhar(roomCode) ? '🔀 Embaralhei a fila.' : 'Precisa de pelo menos duas faixas na fila.');
+      return musica.embaralhar(roomCode) ? falarComoBot(roomCode, 'Embaralhei a fila.', 'embaralhou') : falarComoBot(roomCode, 'Precisa de pelo menos duas faixas na fila.', 'dica');
     }
-    if (['ajuda', 'help', 'comandos'].includes(comando)) return falarComoBot(roomCode, AJUDA_DA_MUSICA);
+    if (['ajuda', 'help', 'comandos'].includes(comando)) return falarComoBot(roomCode, AJUDA_DA_MUSICA, 'ajuda');
 
-    falarComoBot(roomCode, `Não conheço \`!${comando}\`. Escreva \`!ajuda\` para ver o que eu faço.`);
+    falarComoBot(roomCode, `Não conheço \`!${comando}\`. Escreva \`!ajuda\` para ver o que eu faço.`, 'dica');
   } catch (erro) {
-    falarComoBot(roomCode, `Não deu: ${erro.message}`);
+    falarComoBot(roomCode, `Não deu: ${erro.message}`, 'erro');
+  } finally {
+    if (buscando) avisarBusca(roomCode, pedido, null);
   }
 }
 
@@ -1140,6 +1187,9 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     telemetria.saiu(socket);
     socket.leave(roomName(roomCode));
+    // O relógio da pessoa fica parado, e não apagado: se ela voltar logo, ele continua.
+    const quemSai = roomMembers.get(roomCode)?.get(socket.id);
+    if (quemSai?.chaveDeTempo) tempos.saiu(roomCode, quemSai.chaveDeTempo, socket.id);
     // Sala vazia não é esquecida aqui: ela espera 60 segundos e, se ninguém voltar, as
     // limpezas registradas em `salas.aoFechar` apagam tudo o que era dela.
     salas.saiu(roomCode, socket.id);
@@ -1222,8 +1272,13 @@ io.on('connection', (socket) => {
     // sala é desenhada a partir da mídia, que é chaveada por identidade, e não por socket.
     // O perfil vai junto (cor, marca e código de quem tem conta); a conta, não -- ela fica no
     // membro, só no servidor, para a moderação e a mesa de sons saberem quem é quem.
-    const peers = Array.from(salas.da(roomCode)?.entries() || []).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null }));
-    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium' });
+    const peers = Array.from(salas.da(roomCode)?.entries() || []).map(([id, info]) => ({ id, name: info.name, state: info.state, identidade: info.identidade || null, perfil: info.perfil || null, desde: info.desde || null }));
+    // O relógio é da pessoa: com conta, a conta; sem ela, o sorteio que o navegador guarda. É o
+    // que faz um F5 continuar a hora de conversa em vez de zerá-la. A chave fica no membro, só
+    // aqui; para a sala vai apenas o instante.
+    const chaveDoRelogio = chaveDeTempo({ contaId: sessao.contaId, identidade: sessao.identidade, sorteio: socket.handshake.auth?.tempo });
+    const desde = tempos.entrou(roomCode, chaveDoRelogio, socket.id);
+    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde });
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     // A conta também: é ela que deixa quem tem conta voltar de um F5 numa sala trancada, já
     // com outra identidade, sem pedir aprovação para entrar na própria sala.
@@ -1239,6 +1294,10 @@ io.on('connection', (socket) => {
       // faria parecer que aquilo nao e desta sala.
       callback({
         ok: true, roomCode, selfId: socket.id, peers, perfil: sessao.perfil || null, plano: planoPublico(nivel),
+        // Os instantes são do relógio deste servidor. `agora` vai junto para a página medir a
+        // diferença para o relógio dela: um computador cinco minutos adiantado mostraria
+        // "há cinco minutos" para quem acabou de chegar.
+        tempos: { agora: Date.now(), abertaEm: tempos.abertaEm(roomCode), desde },
         // Quem manda na sala, e o que ESTA pessoa pode fazer. As duas coisas separadas: a
         // primeira desenha o selo na lista, a segunda decide se as ações aparecem. Mandar só
         // a primeira obrigaria o cliente a deduzir a segunda comparando identidades -- e a
@@ -1259,7 +1318,7 @@ io.on('connection', (socket) => {
     // ela, uma oscilacao de socket -- em que a pessoa NAO saiu e a midia dela nunca caiu --
     // dispara o "peer-left", tira a pessoa da lista de todo mundo, e nada a traz de volta
     // ate o luto vencer, porque a sessao de midia continua sendo a mesma.
-    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null, perfil: sessao.perfil || null });
+    socket.to(roomName(roomCode)).emit('peer-joined', { id: socket.id, name, state: estadoPadrao(), identidade: socket.data.identidadeDeMidia || null, perfil: sessao.perfil || null, desde });
     // Depois do "peer-joined": o primeiro a entrar numa sala vazia é o dono, e o aviso tem
     // de chegar a ele também -- daí `io.to` dentro de anunciarDono, e não `socket.to`.
     anunciarDono(roomCode);
@@ -1618,7 +1677,7 @@ io.on('connection', (socket) => {
     const membro = roomMembers.get(roomCode)?.get(socket.id);
     if (!membro) return;
     if (!configuracaoDaSala(roomCode).musica && membro.identidade !== moderacao.dono(roomCode)) {
-      return socket.emit('musica-mensagem', { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, texto: 'Quem abriu a sala restringiu novos pedidos de música.', em: Date.now() });
+      return socket.emit('musica-mensagem', { autor: musica.NOME_DO_BOT, autorId: 'bot', doBot: true, tipo: 'aviso', texto: 'Quem abriu a sala restringiu novos pedidos de música.', em: Date.now() });
     }
 
     const texto = String(dados?.texto || '').slice(0, 400).trim();
@@ -1630,12 +1689,13 @@ io.on('connection', (socket) => {
     // O que a pessoa escreveu aparece para todo mundo antes de qualquer coisa acontecer:
     // uma busca demora alguns segundos, e sem este eco a sala fica sem saber que alguem
     // ja pediu -- e dois pedem a mesma coisa.
-    publicarNaMusica(roomCode, { autor: membro.name, autorId: socket.id, texto, em: Date.now() });
+    const pedido = crypto.randomUUID();
+    publicarNaMusica(roomCode, { id: pedido, autor: membro.name, autorId: socket.id, texto, em: Date.now() });
 
     if (!musica.disponivel()) {
-      return falarComoBot(roomCode, 'O bot não está instalado neste servidor. Rode `npm run musica:instalar` na máquina que hospeda a sala.');
+      return falarComoBot(roomCode, 'O bot não está instalado neste servidor. Rode `npm run musica:instalar` na máquina que hospeda a sala.', 'erro');
     }
-    await interpretarComandoDeMusica(roomCode, texto, membro.name);
+    await interpretarComandoDeMusica(roomCode, texto, membro.name, pedido);
     } finally { terminarBusca(); }
   });
 
@@ -1662,33 +1722,33 @@ io.on('connection', (socket) => {
       if (!movida) return sumiu();
       if (movida.de !== movida.para) {
         falarComoBot(roomCode, movida.para === 1
-          ? `⤒ **${quem}** pôs **${movida.faixa.titulo}** para tocar a seguir.`
-          : `↕ **${quem}** moveu **${movida.faixa.titulo}** para a posição ${movida.para}.`);
+          ? `**${quem}** pôs **${movida.faixa.titulo}** para tocar a seguir.`
+          : `**${quem}** moveu **${movida.faixa.titulo}** para a posição ${movida.para}.`, movida.para === 1 ? 'a-seguir' : 'moveu');
       }
       return resposta({ ok: true });
     }
     if (acao === 'agora') {
       if (!naFila) return sumiu();
       if (!musica.instantaneo(roomCode).tocando) return resposta({ ok: false, error: 'Não tem nada tocando para pular.' });
-      // Anunciado antes: pular já publica o "▶ Tocando", e a ordem no canal é a do que aconteceu.
-      falarComoBot(roomCode, `⏭ **${quem}** pulou para **${naFila.titulo}**.`);
+      // Anunciado antes: pular já publica o "Tocando", e a ordem no canal é a do que aconteceu.
+      falarComoBot(roomCode, `**${quem}** pulou para **${naFila.titulo}**.`, 'pulou');
       musica.tocarAgora(roomCode, id);
       return resposta({ ok: true });
     }
     if (acao === 'remover') {
       const removida = musica.removerDaFilaPorId(roomCode, id);
       if (!removida) return sumiu();
-      falarComoBot(roomCode, `✕ **${quem}** tirou **${removida.titulo}** da fila.`);
+      falarComoBot(roomCode, `**${quem}** tirou **${removida.titulo}** da fila.`, 'removeu');
       return resposta({ ok: true });
     }
     if (acao === 'esvaziar') {
       const quantas = musica.esvaziarFila(roomCode);
-      if (quantas) falarComoBot(roomCode, `**${quem}** esvaziou a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`);
+      if (quantas) falarComoBot(roomCode, `**${quem}** esvaziou a fila (${quantas} ${quantas === 1 ? 'faixa' : 'faixas'}). A que está tocando continua.`, 'esvaziou');
       return resposta({ ok: true, quantas });
     }
     if (acao === 'embaralhar') {
       if (!musica.embaralhar(roomCode)) return resposta({ ok: false, error: 'Precisa de pelo menos duas faixas na fila.' });
-      falarComoBot(roomCode, `🔀 **${quem}** embaralhou a fila.`);
+      falarComoBot(roomCode, `**${quem}** embaralhou a fila.`, 'embaralhou');
       return resposta({ ok: true });
     }
     resposta({ ok: false, error: 'Ação desconhecida.' });

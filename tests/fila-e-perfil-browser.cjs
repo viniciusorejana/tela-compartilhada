@@ -186,6 +186,48 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   assert.equal(await bia.locator('#atualizarAppBtn').isHidden(), true);
   console.log('PASS: o aplicativo antigo vê "Atualizar" num canto, com a versão nova e o link, e "Depois" vale');
 
+  // ---------- O aplicativo novo baixa sozinho ----------
+  //
+  // A ponte nova do Electron (simulada): a sala pede a versão, o progresso chega aos pedaços e
+  // o fim oferece reiniciar. Nada disso sai do canto da tela.
+  const contextoDoAppNovo = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  await contextoDoAppNovo.addInitScript(() => {
+    const nada = async () => ({});
+    const ouvintes = [];
+    const avisar = dados => ouvintes.forEach(ouvir => ouvir(dados));
+    window.chamadasDaPonte = [];
+    window.appNativo = { pid: 0, versao: '1.0.0', plataforma: 'win32', estadoDoAgente: nada, iniciarAgente: async () => ({ rodando: false }),
+      prepararCaptura: async () => false, capturaSelecionada: async () => null, encerreiCaptura: nada, aoEncerrarCaptura: () => {}, definirEndereco: nada, trocarServidor: nada,
+      aoProgressoDaAtualizacao: ouvir => ouvintes.push(ouvir),
+      estadoDaAtualizacao: async () => null,
+      cancelarAtualizacao: async () => true,
+      mostrarAtualizacao: async () => { chamadasDaPonte.push('mostrar'); return true; },
+      abrirAtualizacao: async () => { chamadasDaPonte.push('abrir'); return true; },
+      baixarAtualizacao: async versao => {
+        chamadasDaPonte.push(`baixar ${versao}`);
+        setTimeout(() => avisar({ estado: 'baixando', versao, recebidos: 42 * 1048576, total: 100 * 1048576, arquivo: '' }), 100);
+        setTimeout(() => avisar({ estado: 'pronto', versao, recebidos: 100 * 1048576, total: 100 * 1048576, arquivo: 'Nexo 1.1.0.exe' }), 1400);
+        return { ok: true };
+      } };
+  });
+  await contextoDoAppNovo.route('**/api/desktop-app', rota => rota.fulfill({ json: { available: true, sistemas: [
+    { chave: 'windows', nome: 'Windows x64', tipo: '.exe portátil', url: '/downloads/SalaCompartilhada.exe', size: 1, builtAt: new Date().toISOString(), versao: '1.1.0' }
+  ] } }));
+  const appNovo = await entrar(contextoDoAppNovo, 'Duda');
+  await appNovo.evaluate(() => NexoAtualizacao.conferir());
+  await appNovo.locator('#atualizarAppBtn').click();
+  assert.equal(await appNovo.locator('#atualizarAppBaixar').textContent(), 'Atualizar agora', 'com a ponte nova, quem baixa é o aplicativo');
+  await appNovo.locator('#atualizarAppBaixar').click();
+  await appNovo.locator('.nexo-toast', { hasText: 'Baixando o Nexo 1.1.0 · 42%' }).waitFor({ timeout: 5000 });
+  assert.match(await appNovo.locator('.nexo-toast small').first().textContent(), /42,0 de 100,0 MB/);
+  assert.equal(await appNovo.locator('#atualizarAppBtn span').textContent(), 'Baixando 42%', 'o botão do topo acompanha');
+  await appNovo.screenshot({ path: path.join(saida, 'atualizacao-baixando.png') });
+  await appNovo.locator('.nexo-toast', { hasText: 'Nexo 1.1.0 pronto' }).waitFor({ timeout: 5000 });
+  await appNovo.locator('.nexo-toast').getByRole('button', { name: 'Reiniciar agora' }).click();
+  assert.deepEqual(await appNovo.evaluate(() => chamadasDaPonte), ['baixar 1.1.0', 'abrir']);
+  assert.equal(await appNovo.locator('#atualizarAppBtn span').textContent(), 'Reiniciar');
+  console.log('PASS: o aplicativo novo baixa a atualização com o progresso num aviso, e oferece reiniciar no fim');
+
   // ---------- A mesma conta em outro aparelho ----------
   //
   // A Ana abre a mesma conta em outro navegador e entra na sala: a aba antiga sai, com o

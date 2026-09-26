@@ -25,7 +25,8 @@
     "build:helper": "powershell -ExecutionPolicy Bypass -File .\\build-helper.ps1",
     "build:sfu": "node scripts/baixar-livekit.cjs",
     "musica:instalar": "node scripts/baixar-musica.cjs",
-    "musica:atualizar": "node scripts/baixar-musica.cjs --atualizar"
+    "musica:atualizar": "node scripts/baixar-musica.cjs --atualizar",
+    "sons:compor": "node scripts/sons/compor.cjs"
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "0.2.1",

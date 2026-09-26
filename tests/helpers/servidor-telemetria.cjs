@@ -107,7 +107,9 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
     };
   } catch (erro) { await encerrar(); throw erro; }
 }
-async function conectarSocket(origem, credencial) {
+// `extra` vai no aperto de mão junto com a credencial -- é por ali que a página manda o sorteio
+// do relógio de quem não tem conta (tempos.js).
+async function conectarSocket(origem, credencial, extra = {}) {
   const ws = new WebSocket(origem.replace('http:', 'ws:') + '/socket.io/?EIO=4&transport=websocket');
   const recebidos = [], ouvintes = new Set(); let id = 0;
   ws.on('message', bruto => {
@@ -124,7 +126,7 @@ async function conectarSocket(origem, credencial) {
     });
   }
   await esperar(t => t.startsWith('0'));
-  ws.send('40' + JSON.stringify({ credencial }));
+  ws.send('40' + JSON.stringify({ credencial, ...extra }));
   const conectado = await esperar(t => t.startsWith('40') || t.startsWith('44'));
   if (conectado.startsWith('44')) { ws.close(); throw new Error(conectado); }
   return { ws, recebidos, esperar,

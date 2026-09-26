@@ -73,6 +73,41 @@
 .escolhas input:checked + .escolha.simbolo { background:var(--accent-suave-hi); }
 .escolhas input:focus-visible + .escolha { outline:2px solid #b6abff; outline-offset:2px; }
 
+/* ---------- Avisos (toast.js) ----------
+   Um canto só, a mesma peça em toda página. Cada botão daqui declara tudo o que precisa: a
+   sala e a página inicial têm regras de `button` globais (fundo violeta, largura cheia) que
+   vazariam para dentro do aviso. */
+.nexo-toasts { position:fixed; right:20px; bottom:20px; z-index:130; display:flex; flex-direction:column; align-items:flex-end; gap:10px; width:min(350px,calc(100vw - 32px)); pointer-events:none; }
+.nexo-toast { position:relative; width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; column-gap:11px; align-items:center; padding:12px 8px 13px 12px; border-radius:var(--r-lg); background:#1e1f2bf7; box-shadow:var(--sombra-menu); color:var(--text); font:13px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; pointer-events:auto; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); animation:nexo-toast-entra var(--dur-lenta) var(--curva); transition:box-shadow var(--dur) var(--curva); }
+.nexo-toast:hover { box-shadow:0 18px 40px #0000008c, 0 0 0 1px var(--line-3); }
+.nexo-toast.saindo { animation:nexo-toast-sai var(--dur) var(--curva) forwards; }
+@keyframes nexo-toast-entra { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
+@keyframes nexo-toast-sai { to { opacity:0; transform:translateX(18px); } }
+.nexo-toast-icone { display:grid; place-items:center; width:34px; height:34px; border-radius:var(--r-md); background:var(--accent-suave-hi); color:var(--accent-texto); }
+.nexo-toast-icone svg,.nexo-toast-fechar svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+.nexo-toast[data-tom="ok"] .nexo-toast-icone { background:var(--online-suave); color:var(--online); }
+.nexo-toast[data-tom="erro"] .nexo-toast-icone { background:var(--danger-suave); color:var(--danger-texto); }
+.nexo-toast-texto { min-width:0; display:grid; gap:1px; }
+.nexo-toast-texto strong { font-size:var(--fs-md); font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nexo-toast-texto small { color:var(--muted); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.nexo-toast .nexo-toast-fechar { align-self:start; display:grid; place-items:center; width:28px; min-width:0; height:28px; min-height:0; margin:0; padding:0; border:0; border-radius:var(--r-sm); background:transparent; color:var(--faint); cursor:pointer; box-shadow:none; transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva); }
+.nexo-toast .nexo-toast-fechar:hover { background:#ffffff12; color:var(--text); transform:none; }
+.nexo-toast-acoes { grid-column:2 / 4; display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; padding-right:4px; }
+.nexo-toast .nexo-toast-acoes button { width:auto; min-height:var(--ctl-p); margin:0; padding:0 12px; border:0; border-radius:var(--r-sm); background:var(--bg-3); color:var(--text); font:600 var(--fs-sm)/1 "Segoe UI",system-ui,sans-serif; cursor:pointer; box-shadow:none; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.nexo-toast .nexo-toast-acoes button:hover { background:var(--bg-4); transform:none; }
+.nexo-toast .nexo-toast-acoes button.principal { background:var(--accent-forte); color:#fff; }
+.nexo-toast .nexo-toast-acoes button.principal:hover { background:var(--accent-forte-hi); }
+.nexo-toast .nexo-toast-acoes button:active { transform:scale(.97); }
+.nexo-toast-barra { position:absolute; left:0; right:0; bottom:0; height:3px; background:#ffffff10; overflow:hidden; }
+.nexo-toast-barra i { display:block; height:100%; width:0; border-radius:0 2px 2px 0; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .3s linear; }
+.nexo-toast[data-tom="ok"] .nexo-toast-barra i { background:var(--online); }
+.nexo-toast [hidden] { display:none!important; }
+.nexo-toast-barra.indeterminada i { width:32%!important; animation:nexo-toast-vai-e-vem 1.2s ease-in-out infinite; }
+@keyframes nexo-toast-vai-e-vem { 0% { transform:translateX(-100%); } 100% { transform:translateX(320%); } }
+@media (max-width:560px) {
+  .nexo-toasts { left:16px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); width:auto; }
+}
+
 /* Ícones em SVG no lugar dos glifos: ✎, ⌁ e ⚙ mudavam de desenho, de tamanho e de linha de
    base a cada fonte do sistema. */
 .ico { display:inline-block; flex:none; width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }

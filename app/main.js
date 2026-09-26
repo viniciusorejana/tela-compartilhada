@@ -14,7 +14,7 @@
 // A interface não é copiada para cá: a janela carrega a mesma URL do servidor. Uma
 // interface só, um lugar para manter.
 
-const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
@@ -401,6 +401,119 @@ ipcMain.handle('endereco:esquecer', evento => {
   return { ok: true };
 });
 
+// ---------------------------------------------------------------- atualização
+// A versão nova baixada pelo próprio aplicativo, com o progresso na sala. Antes, "Baixar agora"
+// abria o navegador do sistema: noventa megabytes descendo lá fora, sem sinal nenhum aqui
+// dentro, e depois a pessoa ainda tinha de achar o arquivo e trocar um pelo outro na mão.
+//
+// A página é conteúdo remoto, então ela só PEDE, e só a versão: o endereço é montado aqui, na
+// origem da sala e num caminho fixo por sistema; o arquivo vai para Downloads com um nome
+// montado aqui; e abrir o que foi baixado passa por uma pergunta nativa, que página nenhuma
+// consegue responder sozinha.
+const BUILD_DO_SISTEMA = { win32: 'SalaCompartilhada.exe', linux: 'Nexo.AppImage', darwin: 'Nexo.dmg' };
+const ESTADOS_DA_ATUALIZACAO = new Set(['pedido', 'baixando', 'pronto', 'cancelado', 'falhou']);
+let atualizacao = null; // { url, versao, estado, item, caminho, recebidos, total }
+
+function avisarAtualizacao() {
+  if (!atualizacao || !janela || janela.isDestroyed()) return;
+  const { estado, versao, recebidos = 0, total = 0, caminho } = atualizacao;
+  janela.webContents.send('atualizacao:progresso', { estado, versao, recebidos, total, arquivo: caminho ? path.basename(caminho) : '' });
+}
+
+// "Nexo 1.2.0.exe", ou "Nexo 1.2.0 (2).exe" se já houver um: nunca por cima de um arquivo que
+// a pessoa guardou -- nem do próprio aplicativo aberto, que pode estar justamente em Downloads.
+function caminhoLivre(pasta, base, extensao) {
+  for (let n = 1; n < 100; n++) {
+    const candidato = path.join(pasta, `${base}${n > 1 ? ` (${n})` : ''}${extensao}`);
+    if (!fs.existsSync(candidato)) return candidato;
+  }
+  return path.join(pasta, `${base} ${Date.now()}${extensao}`);
+}
+
+function instalarDownloadDaAtualizacao() {
+  session.defaultSession.on('will-download', (_evento, item) => {
+    // Só o download que ESTE módulo pediu. Os outros (uma imagem do chat, os dados da conta)
+    // seguem o caminho de sempre, com a janela de "salvar como".
+    if (atualizacao?.estado !== 'pedido' || !item.getURLChain().includes(atualizacao.url)) return;
+    const extensao = path.extname(BUILD_DO_SISTEMA[process.platform]);
+    const destino = caminhoLivre(app.getPath('downloads'), `Nexo ${atualizacao.versao}`, extensao);
+    item.setSavePath(destino);
+    Object.assign(atualizacao, { estado: 'baixando', item, caminho: destino, recebidos: 0, total: item.getTotalBytes() });
+    avisarAtualizacao();
+    let ultimoAviso = 0;
+    item.on('updated', () => {
+      atualizacao.recebidos = item.getReceivedBytes();
+      atualizacao.total = item.getTotalBytes();
+      // Dez avisos por segundo bastam à barra; um por pedaço seriam centenas atravessando a ponte.
+      if (Date.now() - ultimoAviso < 100) return;
+      ultimoAviso = Date.now();
+      avisarAtualizacao();
+    });
+    item.once('done', (_e, desfecho) => {
+      atualizacao.item = null;
+      atualizacao.recebidos = item.getReceivedBytes();
+      if (desfecho === 'completed') {
+        // Um AppImage baixado chega sem permissão de execução, e "abrir" falharia calado.
+        if (process.platform === 'linux') { try { fs.chmodSync(destino, 0o755); } catch (_) { /* segue: a pessoa ainda pode abrir pela pasta */ } }
+        atualizacao.estado = 'pronto';
+      } else {
+        atualizacao.estado = desfecho === 'cancelled' ? 'cancelado' : 'falhou';
+        // Um arquivo pela metade em Downloads só confundiria.
+        try { fs.rmSync(destino, { force: true }); } catch (_) { /* o Chromium já pode ter apagado */ }
+        atualizacao.caminho = null;
+      }
+      avisarAtualizacao();
+    });
+  });
+}
+
+ipcMain.handle('atualizacao:baixar', (evento, versao) => {
+  if (!remetenteDaSala(evento)) return { ok: false, motivo: 'outro-servidor' };
+  const arquivo = BUILD_DO_SISTEMA[process.platform];
+  if (!arquivo || !/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(versao))) return { ok: false, motivo: 'versao-invalida' };
+  if (atualizacao && ['pedido', 'baixando'].includes(atualizacao.estado)) return { ok: true, jaEstava: true };
+  if (atualizacao?.estado === 'pronto' && atualizacao.versao === versao && fs.existsSync(atualizacao.caminho)) { avisarAtualizacao(); return { ok: true, jaEstava: true }; }
+  const url = new URL(`/downloads/${arquivo}`, origemDaSala).toString();
+  atualizacao = { url, versao: String(versao), estado: 'pedido', item: null, caminho: null, recebidos: 0, total: 0 };
+  janela.webContents.downloadURL(url);
+  // Um servidor que nem responde não chega a virar download, e a barra ficaria andando para
+  // sempre. Vinte segundos sem começar é falha, com o caminho do navegador oferecido na sala.
+  const pedida = atualizacao;
+  setTimeout(() => { if (atualizacao === pedida && pedida.estado === 'pedido') { pedida.estado = 'falhou'; avisarAtualizacao(); } }, 20000).unref?.();
+  return { ok: true };
+});
+ipcMain.handle('atualizacao:cancelar', evento => {
+  if (!remetenteDaSala(evento) || !atualizacao?.item) return false;
+  atualizacao.item.cancel();
+  return true;
+});
+// A página recarregada no meio do download volta a mostrar a barra de onde ela estava.
+ipcMain.handle('atualizacao:estado', evento => {
+  if (!remetenteDaSala(evento) || !atualizacao || !ESTADOS_DA_ATUALIZACAO.has(atualizacao.estado)) return null;
+  return { estado: atualizacao.estado, versao: atualizacao.versao, recebidos: atualizacao.recebidos || 0, total: atualizacao.total || 0 };
+});
+ipcMain.handle('atualizacao:mostrar', evento => {
+  if (!remetenteDaSala(evento) || atualizacao?.estado !== 'pronto') return false;
+  shell.showItemInFolder(atualizacao.caminho);
+  return true;
+});
+ipcMain.handle('atualizacao:abrir', async evento => {
+  if (!remetenteDaSala(evento) || atualizacao?.estado !== 'pronto' || !fs.existsSync(atualizacao.caminho)) return false;
+  // O .dmg não é o aplicativo: é o instalador do macOS, que a pessoa arrasta para Aplicativos.
+  if (process.platform === 'darwin') { shell.openPath(atualizacao.caminho); return true; }
+  const { response } = await dialog.showMessageBox(janela, {
+    type: 'question', buttons: ['Reiniciar agora', 'Depois'], defaultId: 0, cancelId: 1, noLink: true,
+    title: 'Atualizar o Nexo', message: `Abrir o Nexo ${atualizacao.versao} agora?`,
+    detail: 'Este aplicativo fecha e o novo abre no lugar. Uma chamada em andamento cai por alguns segundos; a conta, o servidor escolhido e os ajustes continuam.'
+  });
+  if (response !== 0) return false;
+  // O novo abre DEPOIS de este fechar: aberto antes, ele esbarraria na trava de instância
+  // única e fecharia sozinho, devolvendo o foco a esta janela velha.
+  app.relaunch({ execPath: atualizacao.caminho, args: [] });
+  app.quit();
+  return true;
+});
+
 // ---------------------------------------------------------------- permissões
 // Sem isto, o Electron concede a qualquer página tudo o que ela pedir -- câmera, microfone,
 // notificações --, sem perguntar a ninguém. A sala precisa dessas permissões; um conteúdo de
@@ -464,6 +577,7 @@ if (!app.requestSingleInstanceLock()) {
     instalarMenu();
     instalarSeletorDeTela();
     instalarPermissoes();
+    instalarDownloadDaAtualizacao();
     criarJanela();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
   });

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#161720">
+  <meta name="robots" content="noindex">
+  <title>Página não encontrada · Nexo</title>
+  <link rel="icon" href="/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/nao-encontrada.css">
+</head>
+<body>
+  <header class="topo"><a class="marca" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="34" height="34" alt=""><strong>NEXO</strong></a></header>
+  <main class="perdido">
+    <!-- A carinha é a marca do Nexo com olhos: o mesmo quadrado violeta e a mesma faísca verde,
+         agora procurando a página junto com quem chegou aqui. -->
+    <div class="palco-do-rosto">
+      <button class="rosto" id="rosto" type="button" aria-label="O Nexo, meio perdido. Toque para cutucar.">
+        <svg viewBox="0 0 220 214" aria-hidden="true">
+          <defs>
+            <linearGradient id="corpoNexo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9285ff"/><stop offset="1" stop-color="#6d60ee"/></linearGradient>
+          </defs>
+          <g class="duvida"><circle cx="30" cy="40" r="17" fill="#26263a" stroke="#ffffff24" stroke-width="2"/><text x="30" y="47" text-anchor="middle">?</text></g>
+          <g class="corpo">
+            <rect x="30" y="30" width="160" height="160" rx="50" fill="url(#corpoNexo)"/>
+            <path d="M62 52h44" stroke="#ffffff38" stroke-width="8" stroke-linecap="round"/>
+            <g class="sobrancelhas"><path class="sobrancelha esq" d="M68 82q12-8 24-3"/><path class="sobrancelha dir" d="M128 78q12-4 24 3"/></g>
+            <g class="olho esq"><ellipse cx="82" cy="110" rx="17" ry="20" fill="#fff"/><g class="pupila"><circle cx="82" cy="112" r="8.5" fill="#1c1a33"/><circle cx="79" cy="109" r="2.6" fill="#fff"/></g></g>
+            <g class="olho dir"><ellipse cx="138" cy="110" rx="17" ry="20" fill="#fff"/><g class="pupila"><circle cx="138" cy="112" r="8.5" fill="#1c1a33"/><circle cx="135" cy="109" r="2.6" fill="#fff"/></g></g>
+            <ellipse class="bochecha" cx="64" cy="140" rx="10" ry="6"/><ellipse class="bochecha" cx="156" cy="140" rx="10" ry="6"/>
+            <path class="boca confusa" d="M94 152q8-7 16 0t16 0"/>
+            <path class="boca feliz" d="M92 146q18 18 36 0"/>
+            <ellipse class="boca surpresa" cx="110" cy="152" rx="7" ry="9"/>
+          </g>
+          <path class="faisca" d="m176 12 4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#d1ffc1"/>
+        </svg>
+      </button>
+      <span class="sombra" aria-hidden="true"></span>
+    </div>
+
+    <span class="erro-codigo">ERRO 404</span>
+    <h1>Esta página saiu da sala.</h1>
+    <p class="explica">O endereço <code id="caminho">/</code> não leva a lugar nenhum no Nexo. Pode ser um convite cortado, um código digitado errado ou uma página que mudou de lugar.</p>
+
+    <a class="sugestao" id="sugestao" href="/" hidden><span class="sugestao-icone" aria-hidden="true">#</span><span><small>Você quis dizer a sala</small><strong id="sugestaoNome"></strong></span><span class="sugestao-seta" aria-hidden="true">→</span></a>
+
+    <div class="acoes">
+      <a class="botao" id="inicioBtn" href="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7M5 10v10h5v-6h4v6h5V10"/></svg>Ir para o início</a>
+      <button class="botao secundario" id="voltarBtn" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Voltar</button>
+    </div>
+
+    <form class="entrar" id="entrarForm" novalidate>
+      <label for="codigoSala">Tem o código de uma sala?</label>
+      <div class="campo"><span aria-hidden="true">#</span><input id="codigoSala" type="text" maxlength="32" placeholder="ex.: squad-da-noite" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="codigoErro"><button type="submit">Entrar <span aria-hidden="true">→</span></button></div>
+      <p class="erro" id="codigoErro" role="alert" hidden></p>
+    </form>
+
+    <div class="recentes" id="recentes" hidden><span>SUAS ÚLTIMAS SALAS</span><div id="recentesLinks"></div></div>
+  </main>
+  <script src="/nao-encontrada.js"></script>
+</body>
+</html>

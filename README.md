@@ -332,6 +332,34 @@ local**. Sem essa leitura, o teto viraria um teto para a sala inteira, com o pri
 gastando a cota de todos; e sem a checagem de origem, qualquer um escreveria o cabeçalho e
 burlaria o próprio limite.
 
+## Avisos sonoros
+
+Sons curtos e baixos, para saber o que acontece na sala sem olhar para ela. Cada um diz a função
+pela forma: sobe quando alguém chega, desce quando vai embora.
+
+| Na sala | Sobre você |
+| --- | --- |
+| Alguém entrou / saiu | Microfone ligado / desligado (botão e `Ctrl+Shift+M`; o push-to-talk não toca) |
+| Uma tela entrou / saiu do ar (câmera não toca) | Ensurdecer / voltar a ouvir |
+| Mensagem no chat (só as dos outros) | Sua conexão caiu por alguns segundos / voltou |
+| Menção a você (`@nome`) | Som de teste do fone, em Voz e vídeo |
+| Pedido para entrar (só para quem modera) | |
+
+Tudo se ajusta em **Configurações → Sons**: volume dos avisos, cada grupo liga e desliga, e cada
+um tem prévia. Ensurdecido, os avisos da sala silenciam; os que são sobre você continuam — ouvir o
+próprio clique de ensurdecer é saber que ele pegou.
+
+Os arquivos em `public/sons/` são montados por `npm run sons:compor` a partir de timbres gerados
+no ElevenLabs (`scripts/sons/origem/`, com os prompts anotados no próprio script): o gerador faz
+golpes isolados muito bons e frases ruins, então a nota vem dele e a frase — que intervalo, em que
+ordem — é escolhida no script. Trocar um timbre é gerar outro, pôr no lugar e rodar de novo.
+
+Discretos por regra: instrumentos macios (piano de feltro, vibrafone, marimba, kalimba), nenhuma
+nota acima de ~500 Hz, passa-baixa em todos, ataque de 5 a 12 ms e volume nivelado pela loudness
+ponderada A, que pesa as frequências como o ouvido. A primeira versão tinha sino e glockenspiel e
+incomodava — a menção concentrava 84% da energia acima de 4 kHz. Hoje nenhum aviso passa de 1% acima
+de 2 kHz, e o script imprime essas medidas a cada montagem para a regra não se perder.
+
 ## O que a sala lembra de você
 
 Cada pessoa tem escolhas que repete toda vez: o volume de quem fala alto, o fone certo, a
@@ -348,6 +376,8 @@ some sozinho quando a sala presta atenção.
 | **Volume e mudo de cada pessoa** | por nome, em qualquer sala |
 | **Volume do bot de música** (o seu) | por nome, em qualquer sala |
 | **Volume da mesa de sons** | **por sala** (a primeira vez herda o último usado) |
+| Avisos sonoros: volume e quais tocam | sempre, e seguem a conta |
+| Aparência: densidade e tamanho do chat, tempos à vista, reações, animação | sempre, e seguem a conta |
 | Barra lateral recolhida | sempre |
 
 E uma que **não** fica no navegador de ninguém, porque não é de ninguém: o **volume do bot na
@@ -499,7 +529,7 @@ por mais um minuto e meio depois de `!parar`, mudo, ocupando um lugar na lista d
 **O volume é da sala, não da passagem do bot por ela.** Quem deixou em 40% deixou a sala em 40%:
 o bot sair (por `!parar`, ou sozinho depois de 90 s sem fila) não desfaz isso, e o próximo pedido
 entra nos mesmos 40%. Antes voltava a 85% a cada ida e volta, o que é um susto no meio da conversa
-de todo mundo. `!volume` também vale **antes** de o bot chegar — dá para deixar a sala pronta em
+de todo mundo. Sala nova começa em 15%: música de fundo não chega por cima da conversa. `!volume` também vale **antes** de o bot chegar — dá para deixar a sala pronta em
 vez de chamá-lo alto para só então abaixá-lo. A escolha vive no servidor enquanto a sala existir
 e some com ela, como o histórico do chat e a mesa de sons. O slider no quadradinho do Nexo DJ
 continua sendo o seu, separado deste, e é lembrado no seu navegador.

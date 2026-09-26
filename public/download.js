@@ -25,6 +25,105 @@
 
   const megabytes = bytes => (bytes / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
+  // ---------- O download acompanhado ----------
+  //
+  // O link de download entregava o arquivo ao navegador, e o navegador não diz nada à página:
+  // noventa megabytes descendo sem sinal nenhum na tela pareciam um clique que não pegou, e a
+  // pessoa clicava de novo. Aqui a página baixa sozinha, com o progresso num aviso no canto, e
+  // entrega o arquivo pronto ao navegador no fim -- que salva como sempre salvou.
+  //
+  // Onde não dá para acompanhar (navegador sem leitura em partes, sem o aviso carregado), o
+  // clique segue o caminho antigo, e nada se perde.
+  const podeAcompanhar = () => Boolean(window.NexoToast && window.ReadableStream && window.Blob && window.URL?.createObjectURL);
+  let emCurso = null;
+
+  function nomeDoArquivo(resposta, url) {
+    const cabecalho = resposta.headers.get('content-disposition') || '';
+    const declarado = /filename\*=UTF-8''([^;]+)/i.exec(cabecalho)?.[1] || /filename="?([^";]+)"?/i.exec(cabecalho)?.[1];
+    let nome = declarado || url.split('/').pop() || 'Nexo';
+    try { nome = decodeURIComponent(nome); } catch (_) { /* fica como veio */ }
+    return nome.replace(/[\\/:*?"<>|]/g, '_');
+  }
+
+  function entregarAoNavegador(arquivo, nome) {
+    const endereco = URL.createObjectURL(arquivo);
+    const salvar = document.createElement('a');
+    salvar.href = endereco;
+    salvar.download = nome;
+    salvar.hidden = true;
+    document.body.append(salvar);
+    salvar.click();
+    salvar.remove();
+    // O navegador copia o arquivo antes de soltar o endereço; um minuto sobra.
+    setTimeout(() => URL.revokeObjectURL(endereco), 60000);
+  }
+
+  async function baixarComProgresso(sistema) {
+    // Um download por vez: o segundo clique pisca o aviso que já está na tela, em vez de
+    // começar outra cópia dos mesmos noventa megabytes.
+    if (emCurso && !emCurso.toast.fechado) {
+      emCurso.toast.elemento.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.03)' }, { transform: 'scale(1)' }], { duration: 260 });
+      return;
+    }
+    const nomeDoSistema = sistema.nome.replace(' x64', '');
+    const controle = new AbortController();
+    const toast = NexoToast.mostrar({
+      titulo: `Baixando o Nexo para ${nomeDoSistema}`, detalhe: 'Conectando ao servidor…', icone: 'download', progresso: null,
+      aoCancelar: () => controle.abort(), rotuloCancelar: 'Cancelar o download'
+    });
+    emCurso = { toast };
+    try {
+      const resposta = await fetch(sistema.url, { signal: controle.signal });
+      if (!resposta.ok) {
+        const motivo = (await resposta.text().catch(() => '')).trim().slice(0, 200);
+        throw new Error(motivo || `O servidor respondeu ${resposta.status}.`);
+      }
+      if (!resposta.body) { toast.fechar(); location.href = sistema.url; return; }
+      const total = Number(resposta.headers.get('content-length')) || sistema.size || 0;
+      const nome = nomeDoArquivo(resposta, sistema.url);
+      const leitor = resposta.body.getReader();
+      const velocidade = NexoToast.medidorDeVelocidade();
+      const pedacos = [];
+      let recebidos = 0;
+      let ultimoDesenho = 0;
+      for (;;) {
+        const { done, value } = await leitor.read();
+        if (done) break;
+        pedacos.push(value);
+        recebidos += value.byteLength;
+        const bytesPorSegundo = velocidade(recebidos);
+        // Dez desenhos por segundo bastam ao olho; um por pedaço seriam centenas.
+        if (performance.now() - ultimoDesenho > 100) {
+          ultimoDesenho = performance.now();
+          toast.atualizar({
+            titulo: total ? `Baixando o Nexo · ${Math.floor((recebidos / total) * 100)}%` : 'Baixando o Nexo',
+            detalhe: NexoToast.descreverProgresso({ recebidos, total, bytesPorSegundo }),
+            progresso: total ? recebidos / total : null
+          });
+        }
+      }
+      entregarAoNavegador(new Blob(pedacos, { type: 'application/octet-stream' }), nome);
+      toast.atualizar({
+        titulo: 'Download concluído', icone: 'ok', tom: 'ok', progresso: 1, aoCancelar: null,
+        detalhe: `${nome} · ${megabytes(recebidos)} MB. Abra o arquivo e informe o endereço deste site.`,
+        fecharEm: 12000
+      });
+    } catch (erro) {
+      if (controle.signal.aborted) {
+        toast.atualizar({ titulo: 'Download cancelado', detalhe: 'Nada foi salvo.', icone: 'erro', tom: '', progresso: false, aoCancelar: null, fecharEm: 4000 });
+        return;
+      }
+      toast.atualizar({
+        titulo: 'O download parou', detalhe: erro.message || 'A conexão caiu no meio do caminho.', icone: 'erro', tom: 'erro', progresso: false, aoCancelar: null,
+        acoes: [
+          { rotulo: 'Tentar de novo', principal: true, fazer: () => setTimeout(() => baixarComProgresso(sistema), 0) },
+          // O caminho antigo continua valendo: o navegador baixa sozinho e retoma se cair.
+          { rotulo: 'Baixar pelo navegador', fazer: () => { location.href = sistema.url; } }
+        ]
+      });
+    }
+  }
+
   function desenhar(sistemas) {
     const provavel = sistemaProvavel();
     const ordenados = [...sistemas].sort((a, b) => (b.chave === provavel) - (a.chave === provavel));
@@ -43,6 +142,14 @@
       const extensao = document.createElement('span');
       extensao.textContent = sistema.tipo;
       link.append(extensao);
+      link.addEventListener('click', evento => {
+        // Ctrl/Shift/clique do meio continuam sendo do navegador: quem pediu "abrir em outra
+        // aba" ou "salvar como" escolheu o caminho dele.
+        if (evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
+        if (!podeAcompanhar()) return;
+        evento.preventDefault();
+        baixarComProgresso(sistema);
+      });
       acao.append(link);
     });
     acao.append(label);
