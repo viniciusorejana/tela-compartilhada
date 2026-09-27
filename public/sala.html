@@ -40,13 +40,13 @@
         <span class="eyebrow">SUA SESSÃO</span>
         <strong id="missionTitle">Só você por aqui</strong>
         <small id="missionText">Chame alguém para a sala.</small>
-        <button class="cover-invite" data-action="invite" type="button"><span aria-hidden="true">＋</span> Convidar amigos</button>
+        <button class="cover-invite" data-action="invite" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg> Convidar amigos</button>
       </div>
       <div class="section-caption">CANAIS DA SALA</div>
       <button class="channel active" data-action="room" type="button"><span class="channel-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/></svg></span><span><strong id="sidebarRoom">Sala de voz</strong><small>Voz, câmera e tela</small></span><span class="channel-count" id="sidebarCount">0</span></button>
       <button class="channel" data-action="chat" type="button"><span class="channel-symbol" aria-hidden="true">#</span><span>chat da sala</span></button>
-      <button class="channel" data-action="musica" type="button"><span class="channel-symbol" aria-hidden="true">♪</span><span><strong>música</strong><small id="sidebarMusica">Peça uma música</small></span><span class="channel-live" id="musicaLive" hidden>♪</span></button>
-      <button class="channel" data-action="soundboard" type="button"><span class="channel-symbol" aria-hidden="true">◎</span><span><strong>mesa de sons</strong><small id="sidebarSons">Nenhum som ainda</small></span></button>
+      <button class="channel" data-action="musica" type="button"><span class="channel-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span><strong>música</strong><small id="sidebarMusica">Peça uma música</small></span><span class="channel-live" id="musicaLive" aria-hidden="true" hidden><i></i><i></i><i></i></span></button>
+      <button class="channel" data-action="soundboard" type="button"><span class="channel-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 11v2"/></svg></span><span><strong>mesa de sons</strong><small id="sidebarSons">Nenhum som ainda</small></span></button>
       <div class="section-caption member-caption"><span>NO SQUAD <span id="memberTotal">0</span></span><button class="caption-acao ghost" id="tempoLateralBtn" type="button" title="Há quanto tempo cada pessoa está na sala" aria-label="Ver há quanto tempo cada pessoa está na sala" aria-haspopup="true" aria-expanded="false" aria-controls="tempoSalaMenu"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg><span id="tempoLateralTexto"></span></button></div>
       <div id="memberList" class="member-list"></div>
     </div>
@@ -129,13 +129,13 @@
 
   <aside class="chat musica" id="musicaPanel" aria-label="Canal de música">
     <div class="chat-head">
-      <strong><span aria-hidden="true">♪</span> música</strong>
+      <strong><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg> música</strong>
       <div class="chat-head-actions"><button id="musicaFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no canal de música" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="musicaClose" class="ghost" type="button" title="Fechar canal de música" aria-label="Fechar canal de música"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
 
     <div class="musica-corpo">
       <div class="tocando" id="tocandoAgora" hidden>
-        <div class="tocando-capa" id="tocandoCapa" aria-hidden="true">♪</div>
+        <div class="tocando-capa" id="tocandoCapa" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></div>
         <div class="tocando-info">
           <span class="tocando-rotulo" id="tocandoRotulo">TOCANDO AGORA</span>
           <strong id="tocandoTitulo">—</strong>
@@ -532,7 +532,7 @@
     <p class="sons-vazio" id="sonsVazio">Nenhum som ainda. Envie um arquivo curto e ele aparece aqui para todo mundo.</p>
 
     <div class="sons-envio">
-      <button id="sonsEnviarBtn" class="secondary" type="button">＋ Enviar som</button>
+      <button id="sonsEnviarBtn" class="secondary" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg> Enviar som</button>
       <input id="sonsArquivo" type="file" accept="audio/*" hidden>
       <small id="sonsEspaco"></small>
       <small id="sonsSemConta" class="sons-sem-conta" hidden>Enviar sons pede uma conta grátis — tocar os que já estão aqui, não. <a href="/conta">Criar ou entrar na conta</a></small>

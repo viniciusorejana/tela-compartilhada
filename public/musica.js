@@ -382,11 +382,13 @@
   try { recolhida = localStorage.getItem('nexo.fila.recolhida') === '1'; } catch (_) { /* sem armazenamento */ }
 
   // A capa vem de fora e vai para uma propriedade de CSS: sem as aspas e a checagem de
-  // esquema, uma URL com parenteses ou com "javascript:" sairia do lugar dela.
+  // esquema, uma URL com parenteses ou com "javascript:" sairia do lugar dela. Sem capa, a nota
+  // desenhada -- a mesma do canal --, e não o glifo ♪, que cada fonte desenhava de um jeito.
+  const NOTA_SEM_CAPA = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>';
   function pintarCapa(el, capa) {
     const valida = /^https:\/\//.test(capa || '');
     el.style.backgroundImage = valida ? `url("${CSS.escape(capa).replace(/\\/g, '\\\\')}")` : '';
-    el.textContent = valida ? '' : '♪';
+    el.innerHTML = valida ? '' : NOTA_SEM_CAPA;
   }
 
   function duracaoTotal(fila) {

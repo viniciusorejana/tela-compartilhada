@@ -482,8 +482,8 @@
       ${secao('chat', '05', 'Chat, música e mesa de sons', `
           <p>O <b>chat</b> aceita imagens (cole ou arraste), respostas, edição e mensagens fixadas. Digite <b>@</b> para chamar alguém da sala.</p>
           <ul>
-            <li><b>♪ música</b>: peça pelo nome ou pelo link, e o bot toca para todo mundo. A fila se arrasta, e <kbd>Ctrl</kbd><kbd>Enter</kbd> passa na frente.</li>
-            <li><b>◎ mesa de sons</b>: efeitos curtos que o pessoal envia e dispara para a sala inteira. Vivem enquanto a sala existir.</li>
+            <li>No canal <b>música</b>, peça pelo nome ou pelo link, e o bot toca para todo mundo. A fila se arrasta, e <kbd>Ctrl</kbd><kbd>Enter</kbd> passa na frente.</li>
+            <li>Na <b>mesa de sons</b> ficam efeitos curtos que o pessoal envia e dispara para a sala inteira. Vivem enquanto a sala existir.</li>
           </ul>`, `
           <div class="nx-chat">
             <div class="nx-chat-msgs" aria-live="polite">

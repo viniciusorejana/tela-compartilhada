@@ -33,7 +33,7 @@
         { icone: 'som', titulo: 'Avisos sonoros discretos', texto: 'Sons curtos e graves contam quem entrou, quem saiu, quem começou a transmitir e quando chamaram você. Cada um liga e desliga, com prévia.', onde: 'Configurações → Sons' },
         { icone: 'relogio', titulo: 'Tempo na sala', texto: 'O relógio da sala e o de cada pessoa, que sobrevivem ao F5. Clique nele para ver quem está há quanto tempo.', onde: 'Barra de cima da sala' },
         { icone: 'volume', titulo: 'Volume de cada pessoa até 200%', texto: 'O amigo que fala baixinho agora vai a 200%, com o número à vista. Só você ouve a diferença, e o Nexo lembra na próxima vez.', onde: 'No quadradinho de cada pessoa' },
-        { icone: 'musica', titulo: 'Fila de música que se arruma', texto: 'Arraste para mudar a ordem, embaralhe ou esvazie. Ctrl+Enter pede para tocar logo a seguir.', onde: 'Canal ♪ música' },
+        { icone: 'musica', titulo: 'Fila de música que se arruma', texto: 'Arraste para mudar a ordem, embaralhe ou esvazie. Ctrl+Enter pede para tocar logo a seguir.', onde: 'Canal música, na barra lateral' },
         { icone: 'compacto', titulo: 'Vídeo compacto', texto: 'A tela que você está assistindo numa janelinha por cima das outras, para continuar vendo enquanto faz outra coisa.', onde: 'Barra do palco' },
         { icone: 'conta', titulo: 'Perfil de dentro da sala', texto: 'Apelido, cor e marca mudam sem sair da conversa, e todo mundo vê na hora. Entrou com a mesma conta em outro aparelho? A conexão antiga avisa e oferece “Usar a conta aqui”.', onde: 'Clique no seu nome, embaixo à esquerda' },
         { icone: 'onda', titulo: 'Som da tela sem chiado', texto: 'O som de quem transmite não chia mais depois de alguns minutos de sessão.' },
