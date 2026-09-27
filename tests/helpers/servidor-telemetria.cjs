@@ -63,7 +63,10 @@ async function iniciarServidor({ ambiente = {}, registros = [], observacoes = []
       NEXO_ANONIMO_ABRE_SALA: '1',
       // Pelo mesmo motivo, os testes de mídia transmitem sem o teto dos planos: eles escolhem
       // 1080p e 1440p a 60 quadros sem conta. Quem testa os planos liga com NEXO_PLANOS=1.
-      NEXO_PLANOS: '0', ...ambiente },
+      NEXO_PLANOS: '0',
+      // Todo navegador de teste é "primeira vez", e a apresentação cobriria a tela de entrada da
+      // sala em todos eles. Quem testa a apresentação liga com NEXO_NOVIDADES=1.
+      NEXO_NOVIDADES: '0', ...ambiente },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let erros = ''; filho.stderr.on('data', p => { erros = (erros + p).slice(-16000); });
   async function encerrar() {

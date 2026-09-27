@@ -32,6 +32,7 @@ npm run test:fila     # fila de música, perfil na sala, aviso de atualização
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
 npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
+npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
 ```
 
 ## Cor no CSS: sempre pelos tokens
@@ -71,6 +72,8 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Quem está vendo cada tela | `espectadores.js` (servidor) + `public/espectadores.js` |
 | Sugestão de `@` no chat | `public/mencoes.js` |
 | Barra de cima por largura | container queries `topo` no fim de `public/sala.css` |
+| Apresentação e novidades (o modal) | `public/novidades.js` + `novidades.css`; o texto de cada edição em `public/novidades-edicoes.js` |
+| Vídeos de apresentação e de lançamento | `video/` (Remotion, dependências próprias); saem em `public/midia` por `npm run video:renderizar` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
-`docs/telemetria.md`.
+`docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`.

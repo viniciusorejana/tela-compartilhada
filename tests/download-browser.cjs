@@ -18,6 +18,9 @@ const artifact = path.join(output, 'fixture.exe');
   const origin = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 } });
+  // Este servidor não tem a rota da conta, então nada diz à página que a apresentação não deve
+  // abrir sozinha -- e ela cobriria o botão de download. Aqui ela já foi lida.
+  await page.addInitScript(() => localStorage.setItem('nexo.pref.novidades', '1000000'));
   await page.goto(origin);
   await page.waitForFunction(() => document.getElementById('desktopBuild').textContent.includes('build de'));
   const downloading = page.waitForEvent('download');

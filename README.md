@@ -405,6 +405,27 @@ de `public/tema.css` (`--bg-*`, `--text*`, `rgb(var(--tinta) / N%)`, `--accent*`
 `--danger`, `--aviso`, `--rosa`). Uma cor escrita direto no CSS fica igual nos dois temas — e no
 tema claro, quase sempre, some.
 
+## Apresentação e novidades
+
+Na primeira vez de cada pessoa, um modal quase da tela inteira apresenta o Nexo: um vídeo de um
+minuto e, embaixo, cada parte com calma — dá para digitar o nome de uma sala e ver o convite, ligar
+o microfone de mentira (inclusive pelo `Ctrl+Shift+M`), clicar em Assistir numa tela, levar o volume
+de alguém a 200%, testar o `@`, tocar a mesa de sons e ver cada tema pronto numa miniatura. Abre na
+página inicial e, na sala, **por cima da tela de entrada**, antes de conectar — é por lá que chega
+quem vem por convite, e é o único momento em que o vídeo não tocaria por cima da conversa.
+
+Quando algo grande muda, uma **edição de novidades** faz o mesmo modal abrir de novo, uma vez, na
+lista do que mudou. Publicar é acrescentar uma entrada em `public/novidades-edicoes.js`. Aberto
+sozinho, ele só fecha depois de alguns segundos ou de a pessoa chegar ao fim; o botão **✦ Novidades**
+(página inicial e barra lateral da sala) reabre quando quiser. O que foi lido segue a **conta** em
+todo aparelho, e fica no navegador para quem não tem conta. `NEXO_NOVIDADES=0` impede de abrir
+sozinho.
+
+A página inicial ganhou também o **vídeo de lançamento** ("O Nexo em meio minuto"); a versão em pé
+dele, para redes, fica em `public/midia/lancamento-vertical.mp4`. Os vídeos são feitos em Remotion
+(`video/`, com dependências próprias) e o som no ElevenLabs. Como publicar novidades, refazer os
+vídeos e de onde veio cada som: [`docs/novidades.md`](docs/novidades.md).
+
 ## O que a sala lembra de você
 
 Cada pessoa tem escolhas que repete toda vez: o volume de quem fala alto, o fone certo, a
@@ -1168,6 +1189,7 @@ As variáveis principais:
 | `NEXO_PLANOS` | `1` | `0` desliga os tetos de resolução e de quadros dos planos: todo mundo transmite como premium. A outra janela de transição; o teto de pessoas continua valendo |
 | `NEXO_PESSOAS_POR_SALA` | `25,50` | Teto de pessoas por sala, sem e com alguém premium presente |
 | `NEXO_ESPERA_TETO_MS` | `5000` | Quanto tempo uma tela acima do plano tem para republicar menor antes de ser desligada |
+| `NEXO_NOVIDADES` | `1` | `0` impede a apresentação e as novidades de abrirem sozinhas; o botão ✦ Novidades continua abrindo (ver [novidades](docs/novidades.md)) |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
 | `SFU_UDP_PORTS` | `7882` | Porta UDP da midia (aceita faixa, `7882-7891`) |
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
@@ -1429,8 +1451,13 @@ transmissão e a sugestão de `@` (sem acento, palavra do meio, Esc, `email@domi
 tema pronto e destaque, confere que o palco segue escuro no tema claro, que a cor exata trava sem
 o premium, libera com ele e fica guardada quando ele vence — e que rascunho, chat fechado e a
 última seção das configurações sobrevivem ao F5.
+`npm run test:novidades` (porta `:3233`, sem servidor de mídia) abre a página inicial e a sala num
+navegador "de primeira vez" e confere a apresentação: abre sozinha, trava, destrava pelo fim e pelo
+tempo, não volta no F5, reabre pelo botão, devolve o foco ao nome na sala, chega lida a um segundo
+navegador pela conta e reabre na lista quando uma edição nova aparece.
 Os testes antigos de mídia rodam com as duas janelas de transição ligadas
-(`NEXO_ANONIMO_ABRE_SALA=1`, `NEXO_PLANOS=0`), porque testam a sala, e não os planos.
+(`NEXO_ANONIMO_ABRE_SALA=1`, `NEXO_PLANOS=0`), porque testam a sala, e não os planos — e com
+`NEXO_NOVIDADES=0`, porque a apresentação da primeira vez cobriria a tela de entrada deles.
 
 `tests/musica.test.js` e `tests/soundboard.test.js` rodam sem rede: fixam o que não pode mudar
 sem alguém perceber — que o token do bot **não** autoriza receber mídia, que a mesa de sons

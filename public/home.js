@@ -15,10 +15,10 @@
   }
   document.getElementById('roomForm').onsubmit = event => { event.preventDefault(); openRoom(input.value); };
   // Quem já tem conta vê o próprio apelido no lugar do "Entrar". O pedido não segura nada da
-  // página: sem resposta, o link continua dizendo "Entrar" e leva ao mesmo lugar.
-  const conta = fetch('/api/conta/eu', { credentials: 'same-origin' })
-    .then(resposta => (resposta.ok ? resposta.json() : { conta: null }))
-    .catch(() => ({ conta: null }));
+  // página: sem resposta, o link continua dizendo "Entrar" e leva ao mesmo lugar. É o mesmo
+  // pedido de conta-cliente.js, que também traz os ajustes da conta -- entre eles o que a pessoa
+  // já leu das novidades.
+  const conta = window.NexoConta ? window.NexoConta.pronto : Promise.resolve({ conta: null });
   conta.then(dados => {
     if (!dados?.conta) return;
     const link = document.getElementById('contaLink');

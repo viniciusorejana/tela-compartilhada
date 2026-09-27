@@ -16,6 +16,11 @@ button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .nav-acoes { display:flex; align-items:center; gap:22px; }
 .nav-link { display:inline-flex; align-items:center; min-height:var(--ctl-m); color:var(--text-2); font-size:var(--fs-sm); font-weight:600; border:1px solid var(--line-3); border-radius:var(--r-md); padding:0 14px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; transition:background-color var(--dur) var(--curva),border-color var(--dur) var(--curva); }
 .nav-link:hover { background:rgb(var(--tinta) / 5.9%); border-color:rgb(var(--tinta) / 22%); }
+/* O botão das novidades (novidades.js) é um link de navegação, não um botão de formulário: as
+   regras globais de `button` daqui o deixariam violeta e da largura da página. */
+.nav-novidades { width:auto; min-height:var(--ctl-m); padding:0 12px; gap:7px; background:transparent; color:var(--text-2); font-size:var(--fs-sm); font-weight:600; border-radius:var(--r-md); }
+.nav-novidades span { color:var(--accent-texto); font-size:15px; }
+.nav-novidades:hover { background:rgb(var(--tinta) / 5.9%); }
 main { max-width:1160px; margin:0 auto; padding:0 40px; }
 .hero { display:grid; grid-template-columns:1.15fr 1fr; align-items:center; gap:90px; padding:63px 0 68px; }
 .hero-copy { position:relative; }
@@ -101,6 +106,15 @@ footer b { color:var(--aviso-texto); margin-left:8px; }
 .download-button.secundario:hover { background:rgb(var(--tinta) / 11%); }
 .download-button[aria-disabled="true"] { opacity:.5; pointer-events:none; }
 .download-button[aria-disabled="true"] { opacity:.5; cursor:default; }
+/* O vídeo de lançamento: o Nexo em meio minuto, para quem chegou aqui sem convite. O vídeo é
+   escuro nos dois temas, então a moldura dele também. */
+.lancamento { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); align-items:center; gap:44px; padding:36px 0 44px; border-top:1px solid rgb(var(--tinta) / 7.1%); }
+.lancamento-texto h2 { margin:14px 0 10px; }
+.lancamento-texto p { margin:0 0 20px; color:var(--muted); font-size:14px; line-height:1.8; max-width:380px; }
+.lancamento-tour { width:auto; }
+.lancamento-video { overflow:hidden; aspect-ratio:16 / 9; border-radius:18px; background:#0b0b12; box-shadow:0 30px 70px #0000003d,0 0 0 1px rgb(var(--tinta) / 12%); }
+.lancamento-video video { display:block; width:100%; height:100%; object-fit:cover; background:#0b0b12; }
+@media(max-width:760px) { .lancamento { grid-template-columns:1fr; gap:22px; padding:28px 0 34px; } .nav-acoes { gap:10px; } }
 @media(max-width:760px) { .entry-orbit { display:none; } }
 @media(max-width:760px) { .desktop-download { flex-wrap:wrap; gap:14px; padding:20px; } .desktop-download>img { width:36px; height:36px; } .download-copy { flex-basis:calc(100% - 50px); } .download-copy h2 { font-size:20px; } .download-action { flex-basis:100%; } }
 @media(min-height:950px) { .hero { padding-top:105px; padding-bottom:100px; } }

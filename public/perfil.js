@@ -57,7 +57,11 @@
       densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano,
       tema: um((NexoTema?.TEMAS || []).map(t => t.id)), modo: um(['escuro', 'claro', 'sistema']),
       destaque: um(Object.keys(NexoTema?.DESTAQUES || {})), cores: grupo({ destaque: corHex, fundo: corHex })
-    })
+    }),
+    // A edição mais nova das novidades que a pessoa já fechou (public/novidades.js). Segue a
+    // conta para a apresentação não voltar em cada aparelho novo: quem leu no computador não
+    // precisa ler de novo no celular.
+    novidades: inteiroEntre(0, 1000000)
   });
 
   // Teto do JSON guardado. Com a lista fechada ele nunca chega perto disto; o teto existe para

@@ -13,7 +13,11 @@
     .then(resposta => (resposta.ok ? resposta.json() : { conta: null }))
     .catch(() => ({ conta: null }))
     .then(dados => {
-      estado = { conta: dados.conta || null, perfil: dados.perfil || null, csrf: dados.csrf || '', planosLigados: dados.planosLigados !== false };
+      estado = {
+        conta: dados.conta || null, perfil: dados.perfil || null, csrf: dados.csrf || '',
+        planosLigados: dados.planosLigados !== false, abrirSemConta: dados.abrirSemConta === true,
+        novidadesAutomaticas: dados.novidadesAutomaticas !== false
+      };
       if (!estado.conta) return estado;
       // O que a conta tem vale; o que ela ainda não tem fica como está neste navegador -- e
       // sobe, para que o primeiro aparelho em que a pessoa entra ensine os outros.

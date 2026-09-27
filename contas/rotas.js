@@ -31,7 +31,7 @@ const iguais = (a, b) => {
 
 // `aoMudarPerfil(conta)` é chamado depois de salvar apelido, cor ou marca: server.js leva a
 // mudança às salas em que essa conta está agora, sem ninguém precisar sair e voltar.
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, aoMudarPerfil = () => {} }) {
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, novidadesAutomaticas = true, aoMudarPerfil = () => {} }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
 
   app.use('/api/conta', (req, res, next) => {
@@ -84,8 +84,9 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     // `abrirSemConta` diz à página inicial se "Criar minha sala" pede conta: na janela de
     // transição (NEXO_ANONIMO_ABRE_SALA) ainda não pede.
     // `planosLigados` diz à sala se ela deve mostrar os cadeados antes mesmo de entrar.
-    if (!achada) return res.json({ conta: null, abrirSemConta, planosLigados });
-    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta, planosLigados });
+    // `novidadesAutomaticas` diz se a apresentação pode abrir sozinha (NEXO_NOVIDADES).
+    if (!achada) return res.json({ conta: null, abrirSemConta, planosLigados, novidadesAutomaticas });
+    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta, planosLigados, novidadesAutomaticas });
   });
 
   app.put('/api/conta/perfil', json, autenticada, (req, res) => {

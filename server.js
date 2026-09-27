@@ -68,6 +68,10 @@ const PESSOAS_POR_SALA = (() => {
 // e o premium de cortesia pelo painel é o caminho previsto; esta chave cobre o intervalo. O
 // teto de pessoas não depende dela.
 const PLANOS_LIGADOS = (process.env.NEXO_PLANOS || '').trim() !== '0';
+// NEXO_NOVIDADES=0 impede a apresentação e as novidades de abrirem sozinhas (public/novidades.js);
+// o botão "Novidades" continua abrindo. Serve a quem hospeda para um público que já conhece o
+// Nexo, e aos testes de navegador, que entram na sala num navegador sempre "de primeira vez".
+const NOVIDADES_AUTOMATICAS = (process.env.NEXO_NOVIDADES || '').trim() !== '0';
 // Quanto tempo quem transmite acima do plano tem para republicar menor antes de a tela cair.
 // É o que um cliente honesto e desatualizado precisa; os testes encurtam.
 const MS_PARA_AJUSTAR_A_TELA = Number(process.env.NEXO_ESPERA_TETO_MS) > 0 ? Number(process.env.NEXO_ESPERA_TETO_MS) : 5000;
@@ -113,7 +117,7 @@ telemetria = iniciarTelemetria({
   contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
   aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto
 });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta) });
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta) });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();

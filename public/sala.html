@@ -9,6 +9,7 @@
 <!-- Antes do CSS e síncrono: o tema claro tem de valer já na primeira pintura (tema.js). -->
 <script src="/tema.js"></script>
 <link rel="stylesheet" href="/sala.css">
+<link rel="stylesheet" href="/novidades.css">
 </head>
 <body>
 
@@ -32,6 +33,7 @@
 <div class="app">
   <aside class="room-sidebar" aria-label="Sala e participantes" id="roomSidebar">
     <a class="workspace-name" href="/" title="Sair da sala e voltar ao início"><img src="/mark.svg" alt="" width="30" height="30"><strong>NEXO</strong><span>seu espaço</span></a>
+    <button class="ghost icone-so novidades-da-sala" type="button" data-novidades title="Novidades e apresentação do Nexo" aria-label="Novidades e apresentação do Nexo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 3v4M17 5h4"/></svg></button>
     <div class="sidebar-content">
       <div class="space-cover">
         <span class="cover-orbit" aria-hidden="true">✳</span>
@@ -619,5 +621,9 @@
 <script src="/toast.js"></script>
 <script src="/atualizacao-app.js"></script>
 <script src="/room-ui.js"></script>
+<!-- Depois de room-ui.js de propósito: ele adota como modal todo [role="dialog"] que existir
+     quando roda, e o das novidades cuida de si mesmo (ver o topo de novidades.js). -->
+<script src="/novidades-edicoes.js"></script>
+<script src="/novidades.js"></script>
 </body>
 </html>

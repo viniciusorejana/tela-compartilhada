@@ -9,9 +9,10 @@
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <script src="/tema.js"></script>
   <link rel="stylesheet" href="/home.css">
+  <link rel="stylesheet" href="/novidades.css">
 </head>
 <body>
-  <header class="home-nav"><a class="brand" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="38" height="38" alt=""><strong>NEXO<span> / </span></strong><small>seu espaço de conexão</small></a><div class="nav-acoes"><span class="nav-note"><i></i> VOZ · CÂMERA · TELA</span><a id="contaLink" class="nav-link" href="/conta">Entrar</a></div></header>
+  <header class="home-nav"><a class="brand" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="38" height="38" alt=""><strong>NEXO<span> / </span></strong><small>seu espaço de conexão</small></a><div class="nav-acoes"><span class="nav-note"><i></i> VOZ · CÂMERA · TELA</span><button type="button" class="nav-novidades" data-novidades><span aria-hidden="true">✦</span> Novidades</button><a id="contaLink" class="nav-link" href="/conta">Entrar</a></div></header>
   <main>
     <section class="hero">
       <div class="hero-copy">
@@ -42,6 +43,10 @@
         <div class="card-caption"><span>◈</span> Microfone e câmera só ligam quando você quiser.</div>
       </div>
     </section>
+    <section class="lancamento" aria-labelledby="lancamentoTitulo">
+      <div class="lancamento-texto"><span class="eyebrow"><span>✦</span> O NEXO EM MEIO MINUTO</span><h2 id="lancamentoTitulo">Veja antes de entrar</h2><p>Voz, câmera e tela com som, uma sala por link e cada um no seu volume. Dá o play — e, se quiser o passo a passo, a apresentação mostra cada parte com calma.</p><button type="button" class="lancamento-tour secondary" data-novidades="conheca">Conheça em detalhes <span aria-hidden="true">→</span></button></div>
+      <div class="lancamento-video"><video controls preload="none" playsinline poster="/midia/lancamento.jpg"><source src="/midia/lancamento.mp4" type="video/mp4"></video></div>
+    </section>
     <section class="desktop-download" aria-labelledby="desktopTitle">
       <img src="/mark.svg" alt="" width="48" height="48">
       <div class="download-copy"><span class="eyebrow">LEVE O SQUAD PARA O DESKTOP</span><h2 id="desktopTitle">Nexo no seu computador</h2><p>O aplicativo faz o que o navegador não faz: no Windows, ele isola o som de <strong>um programa só</strong> e tira o Nexo da captura, então a voz dos outros não volta como eco.</p><small>Ao abrir, informe o mesmo endereço deste site para encontrar suas salas. No Linux e no macOS o som do sistema vai inteiro — use fones.</small></div>
@@ -50,8 +55,16 @@
     <section class="features" aria-label="O que você pode fazer"><article><span class="feature-icon voice" aria-hidden="true">◖))</span><div><h3>Na mesma sintonia</h3><p>Voz e câmera para deixar a distância do lado de fora.</p></div></article><article><span class="feature-icon screen" aria-hidden="true">▣</span><div><h3>Sua tela vira o encontro</h3><p>Compartilhe a partida, a ideia ou só o que está rolando.</p></div></article><article><span class="feature-icon link" aria-hidden="true">↗</span><div><h3>Um convite. Várias formas.</h3><p>No navegador, no celular ou no aplicativo de mesa.</p></div></article></section>
   </main>
   <footer><span>NEXO <i> / </i> Conexões que viram histórias.</span><span>Feito para pequenos squads <b>✦</b></span></footer>
+  <!-- A conta vem antes de home.js (que usa o pedido dela) e das novidades (que leem nela o que
+       a pessoa já viu). -->
+  <script src="/perfil.js"></script>
+  <script src="/preferencias.js"></script>
+  <script src="/conta-cliente.js"></script>
+  <script src="/planos.js"></script>
   <script src="/home.js"></script>
   <script src="/toast.js"></script>
   <script src="/download.js"></script>
+  <script src="/novidades-edicoes.js"></script>
+  <script src="/novidades.js"></script>
 </body>
 </html>

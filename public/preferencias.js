@@ -179,6 +179,7 @@
     reducaoDeRuido: [PREFIXO + 'reducaoDeRuido', 'json'],
     sons: [PREFIXO + 'sons', 'json'],
     aparencia: [PREFIXO + 'aparencia', 'json'],
+    novidades: [PREFIXO + 'novidades', 'numero'],
     // Daqui para baixo, só deste navegador. Ver o porquê em perfil.js.
     nome: ['salaNome', 'texto'],
     economiaDeDados: ['sala.economiaDados', 'um-ou-zero'],
