@@ -1,0 +1,19 @@
+{
+  "name": "nexo-video",
+  "private": true,
+  "description": "Os vídeos do Nexo feitos em Remotion: a apresentação (dentro do modal de boas-vindas) e o de lançamento.",
+  "scripts": {
+    "preparar": "node scripts/preparar.cjs",
+    "estudio": "node scripts/preparar.cjs && remotion studio src/index.js",
+    "renderizar": "node scripts/preparar.cjs && node scripts/renderizar.cjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.529",
+    "@remotion/cli": "4.0.529",
+    "@remotion/google-fonts": "4.0.529",
+    "@remotion/renderer": "4.0.529",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.529"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+# Cópia de public/sons, refeita por scripts/preparar.cjs.
+public/audio/sala/
+# Renderizações intermediárias; as finais vão para public/midia do Nexo.
+saida/
