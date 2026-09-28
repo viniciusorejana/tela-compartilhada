@@ -393,27 +393,27 @@ class Midia extends HTMLElement {
       const dados = await resposta.json().catch(() => ({}));
       if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível mudar a chave.');
       this.dados = dados;
-      this.aviso = ligado ? 'Caminho novo liberado. Cada aparelho volta a decidir sozinho se o usa.' : 'Caminho novo desligado para todo mundo. As telas voltam ao caminho de sempre em segundos.';
+      this.aviso = ligado ? 'WebCodecs liberado. Cada aparelho volta a decidir sozinho se o usa.' : 'WebCodecs desligado para todo mundo. As telas passam para o WebRTC em segundos.';
     } catch (erro) { this.aviso = erro.message; }
     this.pintar();
   }
   pintar() {
-    const cabeca = titulo('Tela pela placa de vídeo (WebCodecs)', 'O caminho novo da tela: codificada pela placa de quem transmite e enviada por faixa de dados. Aqui fica a chave que o desliga para todo mundo.');
+    const cabeca = titulo('Tela por WebCodecs', 'A tela codificada pela placa de vídeo de quem transmite e enviada por faixa de dados. Aqui fica a chave que a desliga para todo mundo.');
     if (this.falhou) { this.replaceChildren(...cabeca, e('p', { class: 'aviso' }, this.falhou)); return; }
     if (this.dados?.ausente) { this.replaceChildren(...cabeca, vazio('Chave indisponível', 'Este servidor subiu sem a chave de mídia.')); return; }
     const w = this.dados?.webcodecs;
     const botao = e('button', { type: 'button', class: w?.ligado ? 'perigo' : '' }, w?.ligado ? 'Desligar para todo mundo' : 'Liberar de novo');
     botao.addEventListener('click', () => {
-      if (w?.ligado && !confirm('Desligar a tela por WebCodecs em todas as salas? Quem estiver transmitindo por ela volta ao caminho de sempre em segundos.')) return;
+      if (w?.ligado && !confirm('Desligar a tela por WebCodecs em todas as salas? Quem estiver transmitindo por ela passa para o WebRTC em segundos.')) return;
       this.trocar(!w?.ligado);
     });
     if (w?.origem === 'ambiente') botao.setAttribute('disabled', '');
     // `replaceChildren` escreve "null" na página para um filho vazio: os ausentes saem antes.
     this.replaceChildren(...[...cabeca,
-      e('div', { class: 'metricas' }, metrica('Caminho novo', w ? (w.ligado ? 'liberado' : 'desligado') : '—'), metrica('Origem da chave', w ? origemDaChave[w.origem] || w.origem : '—'), metrica('Mudou em', quando(w?.em))),
+      e('div', { class: 'metricas' }, metrica('WebCodecs', w ? (w.ligado ? 'liberado' : 'desligado') : '—'), metrica('Origem da chave', w ? origemDaChave[w.origem] || w.origem : '—'), metrica('Mudou em', quando(w?.em))),
       e('div', { class: 'botoes' }, botao),
       this.aviso ? e('p', { class: 'nota', role: 'status' }, this.aviso) : null,
-      e('p', { class: 'nota' }, 'Liberado não liga nada à força: no automático, cada aparelho só usa o caminho novo com placa de vídeo, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo. Desligado, ninguém usa, nem quem escolheu "Sempre ligada".')
+      e('p', { class: 'nota' }, 'Liberado não liga nada à força: na codificação automática, cada aparelho só usa o WebCodecs com placa de vídeo, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo. Desligado, ninguém usa, nem quem escolheu "Forçar WebCodecs".')
     ].filter(Boolean));
   }
 }

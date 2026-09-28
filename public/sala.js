@@ -1082,14 +1082,31 @@ const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 // o que foi escolhido para ela. O RTP continua sendo publicado sempre -- é o anúncio e a
 // reserva --, e o transporte decide, a cada entrada e saída, por qual dos dois a imagem vai.
 //
-// O interruptor tem três posições, e o padrão é o automático: caminho novo só quando a placa de
-// vídeo codifica H.264 e a sala inteira recebe. "Sempre ligada" tenta mesmo no processador, que
-// é o modo de diagnóstico; "Desligada" é o botão de pânico, e vale também para o que esta
-// máquina RECEBE -- quem desliga aqui leva a sala para o caminho de hoje.
+// O interruptor tem três posições, e o padrão é o automático: WebCodecs só quando a placa de
+// vídeo codifica H.264 e a sala inteira recebe. "Forçar" tenta mesmo no processador, que é o
+// modo de diagnóstico; "Só WebRTC" é o botão de pânico, e vale também para o que esta máquina
+// RECEBE -- quem o escolhe leva a sala inteira para o WebRTC.
+//
+// Cada posição tem a sua explicação, trocada junto com a escolha: um parágrafo só, explicando as
+// três de uma vez, deixava sem saber o que a posição ESCOLHIDA faz -- que é a única pergunta de
+// quem está olhando para o seletor.
 const PREFERENCIAS_DE_WEBCODECS = {
-  automatico: 'automático: só com placa de vídeo, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo',
-  sempre: 'sempre ligada: tenta mesmo sem placa de vídeo, codificando no processador',
-  desligada: 'desligada: a tela vai e vem pelo caminho de sempre'
+  automatico: {
+    aviso: 'Codificação da tela automática: WebCodecs quando der.',
+    explica: 'A tela é codificada pela placa de vídeo, por WebCodecs, quando dá: esta máquina tem placa que faz H.264,'
+      + ' o servidor de mídia é o 1.13.7 ou mais novo e todos na sala conseguem receber. Se faltar alguma dessas, ela vai'
+      + ' pelo WebRTC sozinha, sem você mexer em nada.'
+  },
+  sempre: {
+    aviso: 'Codificação da tela: WebCodecs forçado, até no processador.',
+    explica: 'Para testes. Usa o WebCodecs mesmo sem placa de vídeo, codificando no processador, e mesmo com servidor de'
+      + ' mídia anterior ao 1.13.7. Continua precisando de todos na sala conseguindo receber.'
+  },
+  desligada: {
+    aviso: 'Codificação da tela: só WebRTC.',
+    explica: 'A tela vai sempre pelo WebRTC, e o navegador decide onde codificar. Vale também para o que você recebe:'
+      + ' enquanto você estiver na sala, ninguém transmite por WebCodecs.'
+  }
 };
 let preferenciaDeWebCodecs = Preferencias.lerAjuste('webcodecs', 'automatico');
 if (!PREFERENCIAS_DE_WEBCODECS[preferenciaDeWebCodecs]) preferenciaDeWebCodecs = 'automatico';
@@ -1098,17 +1115,24 @@ seletoresDeWebCodecs.forEach(select => {
   select.value = preferenciaDeWebCodecs;
   select.onchange = () => definirPreferenciaDeWebCodecs(select.value);
 });
+function explicarPreferenciaDeWebCodecs() {
+  document.querySelectorAll('[data-tela-webcodecs-explica]').forEach(el => {
+    el.textContent = PREFERENCIAS_DE_WEBCODECS[preferenciaDeWebCodecs].explica;
+  });
+}
+explicarPreferenciaDeWebCodecs();
 
 function definirPreferenciaDeWebCodecs(escolha) {
   if (!PREFERENCIAS_DE_WEBCODECS[escolha] || escolha === preferenciaDeWebCodecs) return;
   preferenciaDeWebCodecs = escolha;
   Preferencias.gravarAjuste('webcodecs', escolha);
   seletoresDeWebCodecs.forEach(select => { select.value = escolha; });
+  explicarPreferenciaDeWebCodecs();
   // Outro caminho tem outro custo por quadro: comparar o antes com o depois seria comparar
   // duas coisas diferentes, como na troca de codec.
   esquecerHistoricoDoEnvio();
   transporte?.telaWebCodecs?.definirPreferencia(escolha);
-  status.textContent = `Tela por WebCodecs ${PREFERENCIAS_DE_WEBCODECS[escolha]}.`;
+  status.textContent = PREFERENCIAS_DE_WEBCODECS[escolha].aviso;
 }
 
 // O que o transporte precisa para a tela pelo caminho novo: o mesmo perfil, a mesma taxa e a
@@ -3211,6 +3235,13 @@ function medirEnvioPorWebCodecs(wc) {
   atualizarBotaoDeQualidade();
 }
 
+// Quem pediu 1440p a 60 e a placa só aceita 1080p a 60 vê 1080p na medição -- e sem esta nota
+// concluiria que a escolha não pegou.
+function anotarLimiteDaPlaca(ao_vivo, wc) {
+  if (!wc.notaDaPlaca) return;
+  ao_vivo.append(elemento('div', 'medicao-nota', `${wc.notaDaPlaca[0].toUpperCase()}${wc.notaDaPlaca.slice(1)}.`));
+}
+
 // O painel do envio quando a tela vai pelo caminho novo. As mesmas perguntas do RTP -- quanto
 // sobe, em que tamanho, quem está segurando --, com as respostas que só existem aqui: quantas
 // pessoas estão em cada camada, e o atraso que elas estão vendo.
@@ -3219,9 +3250,10 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   if (!wc.camadas.length) {
     const espera = elemento('div', 'medicao-veredito ok');
     espera.append(elemento('strong', null, 'Em espera: ninguém abriu a sua tela ainda.'));
-    espera.append(elemento('span', null, `A tela vai pelo caminho novo (WebCodecs, ${wc.motivo}). Nada é codificado`
-      + ' nem sobe enquanto ninguém assiste; as medições aparecem quando alguém clicar em Assistir.'));
+    espera.append(elemento('span', null, 'A tela vai por WebCodecs. Nada é codificado nem sobe enquanto ninguém assiste;'
+      + ' as medições aparecem quando alguém clicar em Assistir.'));
     ao_vivo.append(espera);
+    anotarLimiteDaPlaca(ao_vivo, wc);
     return;
   }
   const alta = wc.camadas.find(c => c.camada === 'alta') || wc.camadas[0];
@@ -3258,9 +3290,11 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
         + ' Ela volta sozinha quando sobrar folga.'
       : `Os quadros foram reduzidos a ${alta.quadrosAlvo} por segundo para a imagem continuar nítida — é a prioridade de nitidez. Eles voltam quando sobrar folga.`));
   }
-  const pulados = wc.camadas.reduce((soma, c) => soma + c.descartes.rede, 0);
+  anotarLimiteDaPlaca(ao_vivo, wc);
+  const pulados = wc.camadas.reduce((soma, c) => soma + c.descartes.rede + c.descartes.fila, 0);
   const avisos = [];
-  // O mesmo critério da adaptação: um pulo isolado é um quadro-chave escoando, e não a rede.
+  // O mesmo critério da adaptação: pulos em dois segundos seguidos. Uma troca de cena, ou um
+  // quadro-chave escoando, não é a rede.
   if (wc.camadas.some(c => c.saidaApertada)) avisos.push(`${pulados} quadro(s) deixaram de sair no último segundo porque a sua subida não escoava a tempo; o orçamento está sendo reduzido.`);
   if (alta.codificadorApertado) avisos.push('O codificador não está acompanhando a taxa pedida; a imagem encolhe para caber.');
   if (alta.perda > 0.02) avisos.push(`Quem assiste está perdendo ${Math.round(alta.perda * 100)}% dos quadros no caminho.`);

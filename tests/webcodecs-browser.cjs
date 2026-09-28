@@ -2,7 +2,7 @@
 //
 // O Chromium do Playwright não tem placa de vídeo: `prefer-hardware` é recusado ali, e é isso
 // que prova o "Automático" ficando no caminho de hoje. Para exercitar o caminho novo, os testes
-// ligam "Sempre ligada" -- que aceita o codificador de software -- e é o CAMINHO que se prova
+// ligam "Forçar WebCodecs" -- que aceita o codificador de software -- e é o CAMINHO que se prova
 // aqui. A placa de vídeo de verdade fica para a validação manual, no Chrome e no aplicativo
 // (docs/plano-webcodecs.md).
 //
@@ -138,11 +138,13 @@ async function painel() {
   assert.equal(await palcoAndando(bia), true, 'pelo RTP, o palco anda');
   console.log(`PASS: automático sem placa fica no RTP (${automatico.motivo})`);
 
-  // ---------- Sempre ligada: o caminho novo de ponta a ponta, sem a imagem sumir na troca ----------
+  // ---------- Forçar WebCodecs: o caminho novo de ponta a ponta, sem a imagem sumir na troca ----------
   const elementoDoPalco = await bia.evaluateHandle(() => stageVideo);
   // Pelo seletor de verdade (fica em Dispositivos → Qualidade, num modal fechado agora).
   await ana.locator('#telaWebCodecs').selectOption('sempre', { force: true });
   assert.equal(await ana.evaluate(() => localStorage.getItem('sala.webcodecs')), 'sempre', 'a escolha fica guardada neste navegador');
+  const explicacoes = await ana.evaluate(() => [...document.querySelectorAll('[data-tela-webcodecs-explica]')].map(el => el.textContent));
+  assert.ok(explicacoes.length === 2 && explicacoes.every(texto => texto.startsWith('Para testes.')), `a explicação embaixo dos dois seletores é a da opção escolhida: ${JSON.stringify(explicacoes)}`);
   await esperarCaminho(ana, 'webcodecs', 'sempre ligada');
   // Monta antes de desmontar: o RTP que já estava no ar continua até a faixa de dados ter imagem.
   const naTransicao = await recepcao(bia, idDaAna);
@@ -168,6 +170,41 @@ async function painel() {
   assert.ok(comAtraso.atrasoMs >= 0 && comAtraso.atrasoMs < 2000, `atraso plausível: ${comAtraso.atrasoMs} ms`);
   assert.equal(comAtraso.codec.startsWith('avc1.'), true, 'H.264 quando todo mundo decodifica');
   console.log(`PASS: atraso de ponta a ponta medido (${Math.round(comAtraso.atrasoMs)} ms, ida e volta ${Math.round(comAtraso.rtt)} ms)`);
+
+  // ---------- O Diagnóstico: uma transmissão, um cartão ----------
+  //
+  // O WebCodecs escreve no mesmo cartão do envio e da recepção da tela. Um cartão à parte, ao
+  // lado das camadas RTP paradas, dava a impressão de um caminho velho convivendo com um novo.
+  const cartoesDe = pagina => pagina.evaluate(() => [...document.querySelectorAll('#diagnosticsCards .diag-cartao')].map(c => ({
+    titulo: c.querySelector('h3').textContent,
+    linhas: [...c.querySelectorAll('.diag-linha')].map(l => [l.querySelector('.diag-rotulo').textContent, l.querySelector('.diag-valor').textContent])
+  })));
+  const abrirDiagnostico = async (pagina, titulo) => {
+    await pagina.evaluate(() => document.dispatchEvent(new Event('room-diagnostics-request')));
+    await pagina.waitForFunction(t => [...document.querySelectorAll('#diagnosticsCards h3')].some(h => h.textContent === t), titulo, { timeout: 15000 });
+    return cartoesDe(pagina);
+  };
+  const cartoesDaAna = await abrirDiagnostico(ana, 'Enviando sua tela');
+  const envioDaTela = cartoesDaAna.find(c => c.titulo === 'Enviando sua tela');
+  assert.deepEqual(envioDaTela.linhas[0], ['Transmissão', 'WebCodecs · H.264'], `a primeira linha diz por onde a tela vai: ${JSON.stringify(envioDaTela.linhas)}`);
+  assert.deepEqual(envioDaTela.linhas.find(([rotulo]) => rotulo === 'Onde codifica'), ['Onde codifica', 'no processador'], 'sem placa, o Forçar codifica no processador, e o cartão diz');
+  assert.ok(envioDaTela.linhas.some(([rotulo]) => rotulo === 'Imagem'), 'a imagem que sobe');
+  assert.ok(!envioDaTela.linhas.some(([rotulo]) => /^Camada|Por quê|Pelo WebRTC/.test(rotulo)), `nem camadas RTP paradas, nem "Por quê": ${JSON.stringify(envioDaTela.linhas)}`);
+  assert.ok(!cartoesDaAna.some(c => /WebCodecs|caminho/i.test(c.titulo)), `nenhum cartão à parte: ${cartoesDaAna.map(c => c.titulo).join(' | ')}`);
+  const citamPlaca = cartoesDaAna.flatMap(c => c.linhas).filter(([rotulo, valor]) => /placa de vídeo/.test(`${rotulo} ${valor}`));
+  assert.ok(citamPlaca.every(([rotulo]) => rotulo === 'Onde codifica'), `só o "Onde codifica" fala de placa de vídeo: ${JSON.stringify(citamPlaca)}`);
+  assert.deepEqual(cartoesDaAna.find(c => c.titulo === 'Este computador').linhas.find(([rotulo]) => rotulo === 'Codificação da tela'),
+    ['Codificação da tela', 'forçar WebCodecs'], 'a escolha fora do automático aparece em "Este computador"');
+  const cartoesDaBia = await abrirDiagnostico(bia, 'Recebendo a tela de Ana');
+  const recepcaoDaTela = cartoesDaBia.find(c => c.titulo === 'Recebendo a tela de Ana');
+  assert.deepEqual(recepcaoDaTela.linhas[0], ['Transmissão', 'WebCodecs']);
+  assert.ok(recepcaoDaTela.linhas.some(([rotulo, valor]) => rotulo === 'Codec' && valor.startsWith('H.264')), JSON.stringify(recepcaoDaTela.linhas));
+  assert.ok(!cartoesDaBia.some(c => /WebCodecs|caminho/i.test(c.titulo)), `nenhum cartão à parte: ${cartoesDaBia.map(c => c.titulo).join(' | ')}`);
+  for (const pagina of [ana, bia]) {
+    await pagina.keyboard.press('Escape');
+    await pagina.waitForFunction(() => document.getElementById('diagnosticsPanel').classList.contains('hidden'), null, { timeout: 5000 });
+  }
+  console.log(`PASS: o Diagnóstico mostra a tela num cartão só (${envioDaTela.linhas.map(([r, v]) => `${r}: ${v}`).join('; ')})`);
 
   // ---------- Quem entra no meio decodifica no quadro-chave seguinte ----------
   const caio = await entrar(await navegador.newContext({ viewport: { width: 1440, height: 900 } }), 'Caio');
@@ -257,21 +294,21 @@ async function painel() {
   await esperarOrigem(bia, idDaAna, true, 'Bia depois que o Davi saiu');
   console.log(`PASS: sala mista vai toda para o RTP (${mista.motivo}), e volta quando quem não decodifica sai`);
 
-  // ---------- "Desligada" em quem assiste vale para a sala ----------
+  // ---------- "Só WebRTC" em quem assiste vale para a sala ----------
   await bia.locator('#telaWebCodecs').selectOption('desligada', { force: true });
   const desligadaPelaBia = await esperarCaminho(ana, 'rtp', 'Bia desligou');
   assert.match(desligadaPelaBia.motivo, /Bia/);
   await esperarOrigem(bia, idDaAna, false, 'Bia desligada');
   await bia.evaluate(() => definirPreferenciaDeWebCodecs('automatico'));
   await esperarCaminho(ana, 'webcodecs', 'Bia religou');
-  // E "Desligada" em quem transmite também.
+  // E "Só WebRTC" em quem transmite também.
   await ana.evaluate(() => definirPreferenciaDeWebCodecs('desligada'));
   const desligadaPelaAna = await esperarCaminho(ana, 'rtp', 'Ana desligou');
   assert.match(desligadaPelaAna.motivo, /desligado por você/);
   await esperarOrigem(bia, idDaAna, false, 'Ana desligada');
   await ana.evaluate(() => definirPreferenciaDeWebCodecs('sempre'));
   await esperarCaminho(ana, 'webcodecs', 'Ana religou');
-  console.log('PASS: o interruptor "Desligada" impede o caminho novo, dos dois lados');
+  console.log('PASS: o interruptor "Só WebRTC" impede o caminho novo, dos dois lados');
 
   // ---------- A chave do servidor: desliga para todo mundo, sem ninguém recarregar ----------
   const doPainel = await painel();

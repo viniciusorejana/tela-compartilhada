@@ -26,7 +26,7 @@
   // TRAVA a sinalização de quem assina uma faixa de dados no instante em que ela é removida:
   // dali em diante nenhum pedido daquela pessoa é atendido -- nem a volta para o RTP --, e a
   // tela fica preta até ela recarregar. Reproduzido aqui, e corrigido na 1.13.7 ("data track
-  // subscription deadlock", livekit#4843). O "Sempre ligada" passa por cima, para diagnóstico.
+  // subscription deadlock", livekit#4843). O "Forçar WebCodecs" passa por cima, para diagnóstico.
   const VERSAO_MINIMA_DO_SERVIDOR = [1, 13, 7];
   function servidorConfiavel(versao) {
     const partes = String(versao || '').split('.').map(Number);
@@ -49,7 +49,7 @@
     if (!envio.captura) return rtp('este navegador não entrega os quadros da tela ao codificador');
     const codecsDoEnvio = [];
     if (envio.h264Hardware || (preferencia === 'sempre' && envio.h264)) codecsDoEnvio.push('h264');
-    // VP8 só no "Sempre ligada": o automático existe para tirar a codificação do processador,
+    // VP8 só no "Forçar WebCodecs": o automático existe para tirar a codificação do processador,
     // e VP8 nunca sai da placa de vídeo. Ele fica para o diagnóstico -- e para os testes, que
     // rodam num Chromium sem placa.
     if (preferencia === 'sempre' && envio.vp8) codecsDoEnvio.push('vp8');
