@@ -614,6 +614,24 @@ Nenhum quadro pulado pelo codificador nem pela rede; os 47–54 de 60 medidos s�
 sintético do teste, que não entrega 60 exatos. Ele pula (e diz por quê) numa máquina sem o
 Chrome, sem codificação de H.264 pela placa, ou com servidor anterior à 1.13.7.
 
+### Falhas que não são para sempre, e a captura presa em 30
+
+Uma transmissão a 60 que caiu para 30 no meio e só voltou parando e compartilhando de novo tinha
+dois caminhos para acontecer, e os dois foram fechados:
+
+- **Uma falha do WebCodecs valia para a transmissão inteira.** O codificador que se perdeu numa
+  troca de resolução, a placa ocupada por um instante: a tela ia para o WebRTC e ficava lá — e o
+  WebRTC codificando 1080p60 no processador não entrega 60. Agora a falha agenda uma nova
+  tentativa (`esperaAteTentarDeNovo`: 10 s, 30 s, 90 s, depois a cada 5 min; a contagem zera
+  depois de 2 min no ar), e o motivo diz quando. Vale também para quem assiste: a falha ao
+  decodificar, que tirava o aparelho do WebCodecs até recarregar, tenta de novo com a mesma
+  espera.
+- **A captura do Windows presa na GDI** (`docs/captura-de-tela.md`): depois de um erro permanente
+  do DXGI, o Chrome captura pela GDI até o fim — 28 quadros medidos aqui. O caminho novo reconhece
+  a assinatura pelo intervalo entre quadros (`capturaPresa`), mostra o fluxo "pedidos →
+  capturados → codificados" na medição e avisa uma vez por captura, com o botão que captura de
+  novo.
+
 ### O que foi medido
 
 Em loopback, na mesma máquina, com o Chromium do Playwright (software):

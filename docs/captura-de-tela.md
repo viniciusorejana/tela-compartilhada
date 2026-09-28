@@ -83,6 +83,46 @@ sem copiar nada, e o codificador recebe só a região. Sobra o que não é custo
 Para o jogo em tela cheia nada disso muda a imagem — já é o monitor inteiro. O recorte serve ao
 jogo em janela, que é justamente o caso em que a captura de janela derruba o jogo.
 
+## A tela inteira que cai para 30 e não volta (28/09/2026)
+
+Relato: transmitindo a tela inteira a 60 pelo navegador, num momento a transmissão caiu para 30
+quadros e não voltou mais; parar e compartilhar de novo trouxe os 60 de volta.
+
+A causa está na captura do Chrome, abaixo do Nexo. No Windows 10 ele captura a tela pelo **DXGI**,
+com a **GDI** de reserva (`FallbackDesktopCapturerWrapper`, no WebRTC; o WGC só entra para telas a
+partir do Windows 11 24H2). Quando o DXGI devolve um erro **permanente** — monitor inválido depois
+de uma reconfiguração de telas, quadro que não pôde ser preparado no tamanho novo —, a troca
+para a GDI vale **até o fim daquela captura**. E o Chrome limita a captura a 50% de um núcleo
+(`kDefaultMaximumCpuConsumptionPercentage`): o período vira o dobro do tempo da última captura.
+Uma captura nova cria outro capturador, de novo pelo DXGI.
+
+Medido nesta máquina, com o Chrome e a tela inteira (GDI forçada por
+`--disable-features=DirectXCapturer`):
+
+| Captura | Quadros por segundo | Quadros a menos de 24 ms do anterior |
+| --- | --- | --- |
+| DXGI, em movimento | 57,8 | 581 de 581 |
+| DXGI, com pouca mudança | 58,1 | 583 de 584 |
+| GDI, em movimento | 27,6 | **0** de 277 |
+| GDI, com pouca mudança | 25,8 | **0** de 261 |
+
+A média sozinha não separa a GDI de um vídeo a 30; o intervalo separa. O DXGI entrega na cadência
+do monitor, e intervalos de ~17 ms aparecem assim que duas mudanças caem seguidas; a GDI nunca
+entrega dois quadros a menos de ~30 ms. É essa a assinatura que o caminho novo procura
+(`capturaPresa`, em `tela-decisoes.js`): mais de 20 quadros por segundo, até 40, e nenhum
+intervalo curto em dez segundos, com 60 pedidos.
+
+O remédio precisa de um clique — o navegador não abre o seletor de telas sem um gesto da pessoa —,
+então a sala avisa uma vez por captura, com o botão **Capturar de novo**, que troca a faixa sem
+tirar a tela do ar. A medição mostra "60 pedidos → 28 capturados → 28 codificados" e explica. O que
+a assinatura não separa é conteúdo que roda a 30 de verdade (um jogo travado em 30) numa tela sem
+mais nada mudando; por isso o aviso diz isso e não força nada.
+
+A outra metade do relato também tinha um culpado dentro do Nexo, e ele foi corrigido junto: uma
+falha do WebCodecs no meio da transmissão deixava a tela no WebRTC **até parar e compartilhar de
+novo** — e o WebRTC codificando 1080p60 no processador também não entrega 60. Agora a falha tenta
+de novo sozinha, em 10 s, 30 s, 90 s e depois a cada 5 min.
+
 ## Como confirmar na sua máquina
 
 1. Compartilhe pela janela e anote o FPS do jogo. Pare, compartilhe o monitor inteiro com a
