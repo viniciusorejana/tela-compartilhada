@@ -11,6 +11,10 @@ const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+// O "lido" é o id da edição mais nova. Tirado da lista de verdade, e não escrito aqui: com um
+// número fixo, publicar uma edição quebrava este teste -- a injetada colidia com a real.
+const { EDICOES } = require('../public/novidades-edicoes.js');
+const MAIS_NOVA = EDICOES[0].id;
 
 const porta = 3233;
 const origem = `http://localhost:${porta}`;
@@ -85,7 +89,7 @@ const ajustesDaConta = pagina => pagina.evaluate(() => fetch('/api/conta/eu').th
   assert.ok(Date.now() - antes < 6000, 'destravou pelo fim, e não pelo tempo');
   await inicio.locator('.nx-nov-principal').click();
   assert.equal(await aberto(inicio), false);
-  assert.equal(await inicio.evaluate(() => localStorage.getItem('nexo.pref.novidades')), '1', 'fechar grava a edição mais nova como lida');
+  assert.equal(await inicio.evaluate(() => localStorage.getItem('nexo.pref.novidades')), String(MAIS_NOVA), 'fechar grava a edição mais nova como lida');
 
   await inicio.reload();
   await inicio.waitForTimeout(1500);
@@ -142,7 +146,7 @@ const ajustesDaConta = pagina => pagina.evaluate(() => fetch('/api/conta/eu').th
   await a.locator('.nx-novidades:not([hidden])').waitFor({ timeout: 6000 });
   await a.evaluate(() => window.NexoNovidades.destravar());
   await a.locator('.nx-nov-principal').click();
-  await esperarAte(async () => (await ajustesDaConta(a)).novidades === 1, 'o "lido" devia subir para a conta');
+  await esperarAte(async () => (await ajustesDaConta(a)).novidades === MAIS_NOVA, 'o "lido" devia subir para a conta');
 
   const aparelhoB = await navegador.newContext({ viewport: { width: 1280, height: 800 } });
   const b = await novaPagina(aparelhoB);
@@ -152,11 +156,11 @@ const ajustesDaConta = pagina => pagina.evaluate(() => fetch('/api/conta/eu').th
   await b.goto(origem);
   await b.waitForTimeout(2000);
   assert.equal(await aberto(b), false, 'o outro aparelho sabe que já foi lido');
-  assert.equal(await b.evaluate(() => localStorage.getItem('nexo.pref.novidades')), '1', 'e guarda também no navegador');
+  assert.equal(await b.evaluate(() => localStorage.getItem('nexo.pref.novidades')), String(MAIS_NOVA), 'e guarda também no navegador');
 
   // ---------- Uma edição nova, marcada para aparecer ----------
   const real = fs.readFileSync(path.join(__dirname, '..', 'public', 'novidades-edicoes.js'), 'utf8');
-  const comNova = real.replace('const EDICOES = Object.freeze([', "const EDICOES = Object.freeze([ { id: 2, data: '2026-10-01', titulo: 'Edição de teste', resumo: 'Algo novo.', aparecer: true, itens: [{ icone: 'brilho', titulo: 'Novo', texto: 'Uma coisa nova.' }] },");
+  const comNova = real.replace('const EDICOES = Object.freeze([', `const EDICOES = Object.freeze([ { id: ${MAIS_NOVA + 1}, data: '2099-01-01', titulo: 'Edição de teste', resumo: 'Algo novo.', aparecer: true, itens: [{ icone: 'brilho', titulo: 'Novo', texto: 'Uma coisa nova.' }] },`);
   assert.notEqual(comNova, real, 'o teste precisa conseguir injetar a edição');
   await b.route('**/novidades-edicoes.js', rota => rota.fulfill({ status: 200, contentType: 'application/javascript', body: comNova }));
   await b.reload();
@@ -167,7 +171,7 @@ const ajustesDaConta = pagina => pagina.evaluate(() => fetch('/api/conta/eu').th
   assert.equal(await b.locator('.nx-nov-contagem').textContent(), '1');
   await b.evaluate(() => window.NexoNovidades.destravar());
   await b.locator('.nx-nov-principal').click();
-  await esperarAte(async () => (await ajustesDaConta(b)).novidades === 2, 'a edição nova devia ficar lida na conta');
+  await esperarAte(async () => (await ajustesDaConta(b)).novidades === MAIS_NOVA + 1, 'a edição nova devia ficar lida na conta');
   await aparelhoA.close();
   await aparelhoB.close();
 

@@ -161,7 +161,10 @@ A ordem aqui é decidida pelo que a comunidade reclamar mais, e não antes.
   1.13.7** (Windows e Linux, hashes conferidos) — a 1.13.6 trava a sinalização de quem assina uma
   faixa de dados no instante em que ela sai, e nela o automático não liga. Depois do primeiro
   teste em rede de verdade, a tela ganhou um ritmador contra o portão de 100 ms que o servidor
-  aplica a cada espectador. O que foi decidido e medido está no fim de `plano-webcodecs.md`.
+  aplica a cada espectador. Nos testes seguintes (28/09/2026): fluida no alt+tab, a falha que
+  tenta de novo sozinha, a captura do Windows presa em ~30 percebida e oferecida para capturar
+  de novo, e a opção e o Diagnóstico reescritos. **Publicado na edição 2 das novidades.** O que
+  foi decidido e medido está no fim de `plano-webcodecs.md`.
 - **Janela sem derrubar o jogo** (depende de decisão): com WebCodecs, recortar a janela da captura
   da tela inteira ficou barato; falta o agente nativo devolver o retângulo da janela, e aceitar
   que o que passar por cima dela aparece. Ver o fim da primeira parte de `captura-de-tela.md`.

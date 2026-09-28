@@ -55,11 +55,16 @@ testes de navegador usam isso por padrão, porque todo navegador de teste é "pr
 
 ## Publicar uma novidade
 
+| edição | data | título |
+|---|---|---|
+| 2 | 28/09/2026 | A tela pela placa de vídeo |
+| 1 | 26/09/2026 | O Nexo de cara nova |
+
 1. Em `public/novidades-edicoes.js`, acrescente a edição **no topo**, com o `id` seguinte:
 
    ```js
    {
-     id: 2,
+     id: 3,
      data: '2026-10-15',
      titulo: 'Salas que não expiram',
      resumo: 'Uma frase que resume a edição.',
@@ -74,7 +79,8 @@ testes de navegador usam isso por padrão, porque todo navegador de teste é "pr
 
    Os ícones disponíveis são as chaves de `ICONES` em `public/novidades.js` (`mic`, `tela`, `olho`,
    `tema`, `arroba`, `som`, `relogio`, `volume`, `musica`, `compacto`, `conta`, `onda`, `brilho`,
-   `link`, `chat`, `grade`…). `onde` é opcional, e é o que a pessoa mais procura depois de ler.
+   `link`, `chat`, `grade`, `pulso`, `placa`, `atualizar`, `servidor`…); faltando um, acrescente-o
+   lá, no mesmo traço dos outros. `onde` é opcional, e é o que a pessoa mais procura depois de ler.
 2. `npm test` confere a lista (ids inteiros, únicos e decrescentes; datas; ícones que existem).
 3. Suba o servidor. Quem abrir o Nexo depois disso vê a edição uma vez.
 

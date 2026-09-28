@@ -21,6 +21,23 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 2,
+      data: '2026-09-28',
+      titulo: 'A tela pela placa de vídeo',
+      resumo: 'Com placa de vídeo, é ela que codifica a sua tela agora — e a transmissão segue lisa no alt+tab, se recupera sozinha e explica melhor o que está acontecendo.',
+      aparecer: true,
+      itens: [
+        { icone: 'placa', titulo: 'Sua tela codificada pela placa de vídeo', texto: 'Com uma placa que faz H.264, é ela que codifica a sua tela, e não o processador — que fica livre para o jogo. Até 1440p, a 30 ou 60 quadros. Liga sozinho quando todo mundo na sala consegue receber; se alguém não consegue, a tela vai pelo WebRTC, sem ninguém mexer em nada.', onde: 'Automático ao compartilhar a tela' },
+        { icone: 'grade', titulo: 'Lisa no alt+tab', texto: 'Com a tela pela placa, trocar de janela, dar alt+tab, minimizar ou arrastar programas depressa não trava mais a transmissão nem derruba a nitidez.' },
+        { icone: 'tela', titulo: 'A captura que caiu para 30 avisa', texto: 'Depois de uma troca de resolução ou de monitor, o Windows às vezes prende a captura da tela em uns 30 quadros até ela ser feita de novo. O Nexo percebe e oferece “Capturar de novo”, sem tirar a tela do ar.', onde: 'Aviso no canto da sala' },
+        { icone: 'atualizar', titulo: 'Volta sozinha depois de uma falha', texto: 'Se a codificação pela placa falhar no meio da transmissão, a tela segue pelo WebRTC e tenta a placa de novo em alguns segundos — ninguém precisa parar e compartilhar outra vez.' },
+        { icone: 'volume', titulo: 'A codificação da tela, explicada', texto: 'Escolha entre Automática, Forçar WebCodecs e Só WebRTC, e leia logo embaixo o que a opção escolhida faz. Na dúvida, fique na Automática.', onde: 'Dispositivos → Qualidade → Codec e codificação da tela' },
+        { icone: 'pulso', titulo: 'Diagnóstico mais direto', texto: 'A sua tela tem um cartão só, que diz por onde ela vai e onde é codificada. A medição mostra quantos quadros você pediu, quantos a captura entregou e quantos subiram — e explica quando a imagem sai menor que o pedido.', onde: 'Diagnóstico, na barra lateral · Dispositivos → Qualidade' },
+        { icone: 'brilho', titulo: 'Ícones desenhados', texto: 'Os ícones da página inicial e da sala eram letras e símbolos que cada computador desenhava de um jeito. Agora são desenhos nítidos, iguais em todo lugar.', onde: 'Página inicial e barra lateral da sala' },
+        { icone: 'servidor', titulo: 'Para quem hospeda', texto: 'A tela pela placa pede o servidor de mídia 1.13.7, que agora é o padrão, também no Linux. E o painel ganhou a seção Mídia, com o botão que desliga o WebCodecs para todo mundo na hora.', onde: 'Painel privado → Mídia' }
+      ]
+    },
+    {
       id: 1,
       data: '2026-09-26',
       titulo: 'O Nexo de cara nova',

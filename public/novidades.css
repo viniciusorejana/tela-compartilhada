@@ -274,7 +274,9 @@ html.nx-nov-aberto { overflow:hidden; }
 .nx-itens li { display:flex; gap:14px; padding:16px; border-radius:var(--r-lg); background:var(--bg-2); box-shadow:0 0 0 1px var(--line-2); animation:nexo-surgir var(--dur-lenta) var(--curva) both; }
 .nx-itens li:nth-child(2) { animation-delay:40ms; } .nx-itens li:nth-child(3) { animation-delay:80ms; } .nx-itens li:nth-child(4) { animation-delay:120ms; } .nx-itens li:nth-child(n+5) { animation-delay:160ms; }
 .nx-item-ico { display:grid; place-items:center; flex:none; width:40px; height:40px; border-radius:var(--r-md); background:var(--accent-suave-hi); color:var(--accent-texto); }
-.nx-itens div { display:grid; gap:4px; min-width:0; }
+/* `align-content:start`: o cartão estica até a altura do mais alto da linha, e o padrão da grade
+   repartia essa sobra entre título, texto e "onde" -- o texto de um item curto descia para o meio. */
+.nx-itens div { display:grid; gap:4px; min-width:0; align-content:start; }
 .nx-itens strong { color:var(--text); font-size:var(--fs-lg); line-height:1.3; }
 .nx-itens p { color:var(--text-3); font-size:var(--fs-md); line-height:1.55; }
 .nx-itens small { display:flex; align-items:center; gap:5px; margin-top:4px; color:var(--accent-texto); font-size:var(--fs-sm); font-weight:600; }

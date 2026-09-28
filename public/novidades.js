@@ -97,7 +97,10 @@
     teclado: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
     fechar: '<path d="M18 6 6 18M6 6l12 12"/>',
     seta: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-    enviar: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>'
+    enviar: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+    placa: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+    atualizar: '<path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/>',
+    servidor: '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>'
   };
   const ico = (nome, classe = '') => `<svg class="nx-ico ${classe}" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ICONES.brilho}</svg>`;
   const esc = texto => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -433,7 +436,7 @@
       ${secao('controles', '02', 'Fale, mostre, compartilhe', `
           <p>Você entra com microfone e câmera <b>desligados</b>: nada liga sem você pedir. Tudo fica na barra de baixo da sala.</p>
           <ul>
-            <li><b>Tela</b> compartilha uma aba, uma janela ou a tela inteira — com o som junto.</li>
+            <li><b>Tela</b> compartilha uma aba, uma janela ou a tela inteira — com o som junto. Com placa de vídeo, é ela que codifica, e o processador fica para o jogo.</li>
             <li><b>Ouvir</b> ensurdece: você para de ouvir a sala e o microfone fecha junto.</li>
             <li>Prefere <b>push-to-talk</b>? Segure Espaço para falar (liga em Configurações).</li>
           </ul>`, `

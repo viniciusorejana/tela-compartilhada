@@ -22,6 +22,13 @@ descer ao clicar em **Parar**. Numa sala com várias telas no ar isso muda o cus
 conversar, e reduz o de quem transmite: sem ninguém assistindo, o servidor desliga as camadas e o
 codificador fica ocioso. Câmera e voz continuam chegando sozinhas.
 
+**Com placa de vídeo, é ela que codifica a tela** (WebCodecs): a imagem é codificada em H.264 pela
+placa de quem transmite e viaja numa faixa de dados, e o processador fica para o jogo. Liga sozinho
+quando a sala inteira consegue receber e o servidor de mídia é o 1.13.7 ou mais novo; quando não, a
+tela vai pelo WebRTC de sempre, sem ninguém mexer em nada. Ver
+[Qualidade da transmissão](#qualidade-da-transmissão-três-escolhas-independentes) e
+[`docs/plano-webcodecs.md`](docs/plano-webcodecs.md).
+
 A sala tem ainda um **bot de música por sala**, que entra na chamada como participante e toca o
 que for pedido no canal `♪ música`, e uma **mesa de sons** temporária, que vive enquanto a sala
 existir. Os dois estão descritos abaixo.
@@ -1380,6 +1387,7 @@ tela-compartilhada/
 ├── soundboard.js                   # a mesa de sons de cada sala, so na memoria
 ├── salas.js                        # ciclo de vida da sala: quem abre, a carencia de 60 s, as limpezas ao fechar
 ├── moderacao.js                    # dono, ausencia, sucessao e banimento por conta ou por nome
+├── chave-webcodecs.js              # a chave do painel que liga e desliga a tela por WebCodecs para todos
 ├── contas/                         # contas: todo o SQL (banco.js), senha, regras, rotas e a worker de manutencao
 │   └── migracoes/                  # uma migracao numerada por arquivo, em PRAGMA user_version
 ├── build-helper.ps1                # build Release x64 do helper C++
@@ -1404,6 +1412,11 @@ tela-compartilhada/
     ├── media-utils.js              # identidade das faixas, codecs e streams de vídeo
     ├── musica.js                   # o canal de música: pedidos, fila e o que está tocando
     ├── soundboard.js               # a mesa de sons: envio, disparo e volume de cada um
+    ├── tela-webcodecs.js           # a tela pela placa de vídeo: quem transmite e quem assiste
+    ├── tela-quadro.js              # o envelope, os pedaços, o ritmador e as mensagens de controle
+    ├── tela-decisoes.js            # as decisões sem navegador: caminho, adaptação, captura presa
+    ├── tela-codificador.js         # captura e VideoEncoder, uma instância por camada
+    ├── tela-decodificador.js       # VideoDecoder, reenvio e a faixa que vai para o palco
     └── room-ui.js                  # presença, acessibilidade e diagnóstico
 ```
 
@@ -1457,6 +1470,12 @@ o premium, libera com ele e fica guardada quando ele vence — e que rascunho, c
 navegador "de primeira vez" e confere a apresentação: abre sozinha, trava, destrava pelo fim e pelo
 tempo, não volta no F5, reabre pelo botão, devolve o foco ao nome na sala, chega lida a um segundo
 navegador pela conta e reabre na lista quando uma edição nova aparece.
+`npm run test:webcodecs` (porta `:3231`, com o servidor de mídia) leva a tela para o WebCodecs no
+modo "Forçar" (o Chromium de teste não tem placa de vídeo) e confere a troca sem piscar, a perda de
+pacotes, a camada leve, a banda curta, a captura presa, a sala mista, as duas chaves, a falha que
+volta sozinha e o Diagnóstico num cartão só. `npm run test:webcodecs:placa` (porta `:3233`) usa o
+Chrome instalado e a placa de verdade, nas seis combinações de 720p a 1440p60; pula numa máquina
+sem placa ou sem o Chrome.
 Os testes antigos de mídia rodam com as duas janelas de transição ligadas
 (`NEXO_ANONIMO_ABRE_SALA=1`, `NEXO_PLANOS=0`), porque testam a sala, e não os planos — e com
 `NEXO_NOVIDADES=0`, porque a apresentação da primeira vez cobriria a tela de entrada deles.
@@ -1564,6 +1583,26 @@ Dispositivos, as medições mostram o upload **total**
 (todas as camadas e o codec de reserva), a resolução e a taxa de cada camada, e quanto cada
 quadro custa de processador. Não há buffer adicional para melhorar a imagem: em vez de
 acumular atraso, reduz-se a qualidade.
+
+### A tela pela placa de vídeo (WebCodecs)
+
+Uma quarta escolha, em **Codec e codificação da tela**, decide QUEM codifica:
+
+| opção | o que faz |
+|---|---|
+| **Automática · WebCodecs quando der** (padrão) | placa de vídeo com H.264, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo: a tela vai por WebCodecs; faltando qualquer um, pelo WebRTC |
+| **Forçar WebCodecs · até no processador** | para testes: vale mesmo sem placa e com servidor anterior |
+| **Só WebRTC · sem WebCodecs** | nunca usa — nem para receber, então a sala inteira vai pelo WebRTC enquanto a pessoa estiver nela |
+
+As mesmas escolhas de resolução, taxa e prioridade valem nos dois caminhos, com a mesma camada
+leve de 360p. No WebCodecs a adaptação é do Nexo: um ritmador espaça o envio contra o portão que o
+servidor aplica a cada espectador, uma troca de cena (alt+tab, janela arrastada) não é lida como
+rede ruim, e uma falha no meio da transmissão volta ao WebRTC e tenta a placa de novo sozinha. O
+Diagnóstico mostra a tela num cartão só ("Transmissão" e "Onde codifica"), e a medição avisa quando
+a captura do Windows fica presa em ~30 quadros, com um botão para capturar de novo
+([`docs/captura-de-tela.md`](docs/captura-de-tela.md)). O que foi decidido e medido está no fim de
+[`docs/plano-webcodecs.md`](docs/plano-webcodecs.md); `NEXO_WEBCODECS` e a seção **Mídia** do painel
+desligam o caminho para todo mundo.
 
 Controles de zoom/tela cheia desaparecem após 2,5 segundos sem interação, inclusive
 quando o mouse fica parado sobre um botão que foi clicado. Mouse/toque os revela novamente;
