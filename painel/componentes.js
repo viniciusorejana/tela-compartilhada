@@ -368,6 +368,57 @@ class Contas extends HTMLElement {
 }
 customElements.define('nexo-contas', Contas);
 
+// ---------- A tela por WebCodecs ----------
+//
+// O botão de pânico do caminho novo. Desligar aqui vale para todo mundo em segundos: quem já
+// está numa sala recebe o aviso pelo socket, e quem entra recebe junto com a credencial. Cada
+// aparelho continua decidindo sozinho se USA o caminho novo -- esta chave só pode proibir.
+const origemDaChave = { ambiente: 'fixada pela variável NEXO_WEBCODECS', painel: 'escolhida aqui no painel', padrao: 'padrão, nada escolhido' };
+class Midia extends HTMLElement {
+  connectedCallback() { this.dados = null; this.falhou = ''; this.aviso = ''; this.ler(); }
+  async ler() {
+    try {
+      const resposta = await fetch('/painel/api/midia');
+      if (resposta.status === 401) { location.assign('/painel/entrar'); return; }
+      if (!resposta.ok) throw new Error();
+      this.dados = await resposta.json(); this.falhou = '';
+    } catch (_) { this.falhou = 'Não foi possível ler a chave de mídia.'; }
+    this.pintar();
+  }
+  async trocar(ligado) {
+    try {
+      const resposta = await fetch('/painel/api/midia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexo-CSRF': lerEstado().csrf || '' }, body: JSON.stringify({ webcodecs: ligado })
+      });
+      const dados = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível mudar a chave.');
+      this.dados = dados;
+      this.aviso = ligado ? 'Caminho novo liberado. Cada aparelho volta a decidir sozinho se o usa.' : 'Caminho novo desligado para todo mundo. As telas voltam ao caminho de sempre em segundos.';
+    } catch (erro) { this.aviso = erro.message; }
+    this.pintar();
+  }
+  pintar() {
+    const cabeca = titulo('Tela pela placa de vídeo (WebCodecs)', 'O caminho novo da tela: codificada pela placa de quem transmite e enviada por faixa de dados. Aqui fica a chave que o desliga para todo mundo.');
+    if (this.falhou) { this.replaceChildren(...cabeca, e('p', { class: 'aviso' }, this.falhou)); return; }
+    if (this.dados?.ausente) { this.replaceChildren(...cabeca, vazio('Chave indisponível', 'Este servidor subiu sem a chave de mídia.')); return; }
+    const w = this.dados?.webcodecs;
+    const botao = e('button', { type: 'button', class: w?.ligado ? 'perigo' : '' }, w?.ligado ? 'Desligar para todo mundo' : 'Liberar de novo');
+    botao.addEventListener('click', () => {
+      if (w?.ligado && !confirm('Desligar a tela por WebCodecs em todas as salas? Quem estiver transmitindo por ela volta ao caminho de sempre em segundos.')) return;
+      this.trocar(!w?.ligado);
+    });
+    if (w?.origem === 'ambiente') botao.setAttribute('disabled', '');
+    // `replaceChildren` escreve "null" na página para um filho vazio: os ausentes saem antes.
+    this.replaceChildren(...[...cabeca,
+      e('div', { class: 'metricas' }, metrica('Caminho novo', w ? (w.ligado ? 'liberado' : 'desligado') : '—'), metrica('Origem da chave', w ? origemDaChave[w.origem] || w.origem : '—'), metrica('Mudou em', quando(w?.em))),
+      e('div', { class: 'botoes' }, botao),
+      this.aviso ? e('p', { class: 'nota', role: 'status' }, this.aviso) : null,
+      e('p', { class: 'nota' }, 'Liberado não liga nada à força: no automático, cada aparelho só usa o caminho novo com placa de vídeo, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo. Desligado, ninguém usa, nem quem escolheu "Sempre ligada".')
+    ].filter(Boolean));
+  }
+}
+customElements.define('nexo-midia', Midia);
+
 componente('nexo-recursos', ({ atual: a, contabilidade: c }) => {
   const r = a?.recursos, s = a?.sfu;
   return [...titulo('A máquina por trás da sala', 'CPU de cada processo: 100% representa um núcleo. RAM inclui os buffers do processo.'),

@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('node:path');
 const { origemDoPainel } = require('./origem');
 
-function instalarRotas(app, { auth, consultar, instante, relatos, contas = null, pasta = path.join(__dirname, '..', 'painel') }) {
+function instalarRotas(app, { auth, consultar, instante, relatos, contas = null, midia = null, pasta = path.join(__dirname, '..', 'painel') }) {
   const clientes = new Set();
   const periodos = ['hoje', '7d', '30d', 'tudo'];
   // A porta fecha antes de tudo: antes da chave, antes do cookie, antes de servir a própria
@@ -60,6 +60,18 @@ function instalarRotas(app, { auth, consultar, instante, relatos, contas = null,
     const r = contas.agir(String(req.params.codigo || '').slice(0, 16), req.body || {});
     if (!r.ok) return res.status(r.status || 400).json({ erro: r.error });
     res.json({ conta: r.conta });
+  });
+  // A chave da tela por WebCodecs: o botão de pânico que tira o caminho novo de todo mundo.
+  // Escrita como as das contas, com CSRF e origem já conferidas por `auth.exigir`.
+  app.get('/painel/api/midia', (_req, res) => {
+    if (!midia) return res.json({ ausente: true });
+    res.json({ webcodecs: midia.estado() });
+  });
+  app.post('/painel/api/midia', express.json({ limit: 256, strict: true }), (req, res) => {
+    if (!midia) return res.status(404).json({ erro: 'Chave de mídia indisponível.' });
+    const r = midia.definir(req.body?.webcodecs);
+    if (!r.ok) return res.status(r.status || 400).json({ erro: r.error });
+    res.json({ webcodecs: r.estado });
   });
   app.get('/painel/api/eventos', (req, res) => {
     if (clientes.size >= 10 || [...clientes].filter(c => c.id === req.sessaoPainel.id).length >= 3) return res.status(429).json({ erro: 'Há painéis demais abertos.' });

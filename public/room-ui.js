@@ -371,6 +371,78 @@
     }
   }
 
+  // ---------- A tela por WebCodecs ----------
+  //
+  // O caminho novo não tem `outbound-rtp` nem `inbound-rtp`: sem esta seção, quem transmite
+  // por ele veria as camadas RTP "desligadas" e concluiria que nada está subindo, e quem
+  // assiste veria a tela sem nenhuma linha que a explicasse.
+  //
+  // A linha que mais importa é a do caminho, com o motivo. Um interruptor que troca de caminho
+  // sem dizer por quê vira superstição -- "desliguei, liguei e melhorou" --, e o motivo é o
+  // que transforma isso em diagnóstico.
+  const PREFERENCIA_EM_TEXTO = { automatico: 'Automático', sempre: 'Sempre ligada', desligada: 'Desligada' };
+  const NOME_DO_CODEC_WC = codec => (codec === 'h264' ? 'H.264' : String(codec || '').toUpperCase());
+  const mbps = bps => `${(bps / 1e6).toFixed(1).replace('.', ',')} Mbps`;
+
+  function diagnosticarTelaPorWebCodecs(lines) {
+    const wc = transporte?.telaWebCodecs;
+    if (!wc) {
+      lines.push('', 'Tela por WebCodecs: módulo ausente neste navegador (tudo pelo WebRTC).');
+      return 0;
+    }
+    const cap = wc.capacidade();
+    const c = cartao('Tela pelo caminho novo (WebCodecs)');
+    const envio = wc.estadoDoEnvio();
+    const recebendo = wc.estadoDoRecebimento();
+    const sim = valor => valor ? 'sim' : 'não';
+    lines.push('', 'Tela por WebCodecs:',
+      `  Interruptor: ${PREFERENCIA_EM_TEXTO[cap.preferencia] || cap.preferencia}; servidor: ${cap.desligadoPeloServidor ? 'desligado para todos' : 'liberado'}`,
+      `  Envio: captura=${cap.envio?.captura ? 'sim' : 'não'}; H.264 pela placa=${sim(cap.envio?.h264Hardware)}; H.264=${sim(cap.envio?.h264)}; VP8=${sim(cap.envio?.vp8)}`,
+      `  Recebimento: exibe=${sim(cap.recebimento?.exibe)}; H.264=${sim(cap.recebimento?.h264)}; VP8=${sim(cap.recebimento?.vp8)}; anuncia=${cap.anuncio.recebe ? cap.anuncio.dec.join('+') : 'não recebe'}`
+        + (cap.recebimentoFalhou ? `; falhou: ${cap.recebimentoFalhou}` : ''));
+    anotar(c, 'Interruptor', PREFERENCIA_EM_TEXTO[cap.preferencia] || cap.preferencia, cap.preferencia === 'desligada' ? 'neutro' : undefined);
+    if (cap.desligadoPeloServidor) anotar(c, 'Servidor', 'desligado para todo mundo', 'neutro');
+    anotar(c, 'Esta máquina envia', cap.envio?.h264Hardware ? 'H.264 pela placa de vídeo' : cap.envio?.h264 ? 'H.264 só no processador' : cap.envio?.vp8 ? 'só VP8, no processador' : 'não',
+      cap.envio?.h264Hardware ? 'ok' : 'neutro');
+    anotar(c, 'Esta máquina recebe', cap.anuncio.recebe ? cap.anuncio.dec.map(d => d === 'h264' ? 'H.264' : d.toUpperCase()).join(' e ') : 'não', cap.anuncio.recebe ? 'ok' : 'neutro');
+    if (cap.recebimentoFalhou) anotar(c, 'Recebimento', cap.recebimentoFalhou, 'problema');
+
+    if (envio) {
+      const pelaPlaca = envio.camadas.some(camada => camada.hardware);
+      anotar(c, 'Sua tela vai por', envio.modo === 'webcodecs' ? `WebCodecs · ${NOME_DO_CODEC_WC(envio.codec)}` : 'WebRTC (o caminho de hoje)',
+        envio.modo === 'webcodecs' ? 'ok' : 'neutro');
+      anotar(c, 'Por quê', envio.motivo, envio.falha ? 'alerta' : undefined);
+      lines.push(`  Sua tela: ${envio.modo}; motivo: ${envio.motivo}; captura=${envio.captura || 'parada'}; fonte=${envio.fonte.largura}×${envio.fonte.altura}; espectadores=${envio.espectadores}; buffer=${envio.buffer ?? '?'} B; saída estimada pelo WebRTC=${envio.saidaDisponivel ? mbps(envio.saidaDisponivel) : '?'}; envios recusados=${envio.envioRecusado}`);
+      for (const camada of envio.camadas) {
+        const atraso = camada.atrasos.length ? Math.round(camada.atrasos.sort((a, b) => a - b)[Math.floor(camada.atrasos.length / 2)]) : null;
+        anotar(c, `Camada ${camada.camada}`, `${camada.largura}×${camada.altura} · ${Math.round(camada.fps)} fps · ${mbps(camada.bps)} · ${camada.espectadores} assistindo`,
+          camada.saidaApertada || camada.codificadorApertado ? 'alerta' : 'ok');
+        if (atraso !== null) anotar(c, `Atraso até quem assiste (${camada.camada})`, `${atraso} ms`, atraso > 400 ? 'alerta' : 'ok');
+        lines.push(`  Camada ${camada.camada}: ${camada.codec} (${camada.perfil}, ${camada.hardware ? 'placa' : 'processador'}, ${camada.modoDeBitrate}, taxa ${camada.taxaDeclarada ? 'declarada' : 'não declarada'});${camada.largura}×${camada.altura} a ${Math.round(camada.fps)}/${camada.quadrosAlvo} fps; ${mbps(camada.bps)} de ${mbps(camada.bitrateAlvo)}; escala=${camada.escala}; `
+          + `codificação=${camada.msDeCodificacao != null ? camada.msDeCodificacao.toFixed(1) + ' ms' : '?'}; fila=${camada.fila}; pulados: ritmo=${camada.descartes.ritmo} codificador=${camada.descartes.codificador} rede=${camada.descartes.rede}; `
+          + `perda mediana=${Math.round(camada.perda * 100)}%; atraso mediano=${atraso ?? '?'} ms; reconfigurações só de bitrate=${camada.reconfiguracoes.soDeBitrate} (com chave espontânea: ${camada.reconfiguracoes.comChaveEspontanea})`
+          + (camada.ultimaMudanca ? `; última mudança: ${camada.ultimaMudanca}` : ''));
+      }
+      if (envio.modo === 'webcodecs' && !envio.camadas.length) anotar(c, 'Codificando', 'nada: ninguém está assistindo', 'ok');
+      if (envio.modo === 'webcodecs') anotar(c, 'Onde codifica', pelaPlaca ? 'na placa de vídeo' : envio.camadas.length ? 'no processador' : '—', pelaPlaca ? 'ok' : envio.camadas.length ? 'alerta' : undefined);
+    }
+
+    let quadros = 0;
+    for (const r of recebendo) {
+      const nome = peers.get(r.id)?.name || r.id;
+      quadros += r.decodificados;
+      anotar(c, `Tela de ${nome}`, r.comImagem
+        ? `${r.largura}×${r.altura} · ${Math.round(r.fps)} fps · camada ${r.camada || '—'}${r.alvo !== r.camada ? ` (indo para ${r.alvo})` : ''}`
+        : 'esperando o primeiro quadro-chave', r.comImagem ? (r.perda > 0.05 ? 'alerta' : 'ok') : 'neutro');
+      if (Number.isFinite(r.atrasoMs)) anotar(c, `Atraso da tela de ${nome}`, `${Math.round(r.atrasoMs)} ms`, r.atrasoMs > 400 ? 'alerta' : 'ok');
+      lines.push(`  Recebendo de ${nome}: camada=${r.camada || '—'} (alvo ${r.alvo}; disponíveis ${r.camadasDisponiveis.join('+')}); ${r.codec || 'sem configuração'}; decodificação ${r.hardware === true ? 'pela placa' : r.hardware === false ? 'no processador' : '?'}; saída=${r.saida}; `
+        + `${r.largura}×${r.altura} a ${Math.round(r.fps)} fps; ${mbps(r.bps)}; recebidos=${r.recebidos} perdidos=${r.perdidos} atrasados=${r.atrasados} pedidos de chave=${r.pedidosDeChave}; `
+        + `atraso=${Number.isFinite(r.atrasoMs) ? Math.round(r.atrasoMs) + ' ms' : '?'} (ida e volta ${r.rtt != null ? Math.round(r.rtt) + ' ms' : '?'}); decodificação=${r.msDeDecodificacao != null ? r.msDeDecodificacao.toFixed(1) + ' ms' : '?'}; `
+        + `totais: ${r.totais.recebidos} recebidos, ${r.totais.perdidos} perdidos, ${r.totais.pedidosDeChave} pedidos de chave`);
+    }
+    return quadros;
+  }
+
   async function collectDiagnostics() {
     if (collecting) return;
     collecting = true;
@@ -555,6 +627,8 @@
           lines.push(`  Faixa ${publicacao.kind}: ${RoomTransport.fonteDaPublicacao(publicacao) || 'fonte desconhecida'}; ${faixa ? faixa.readyState : 'sem faixa'}; muda=${publicacao.isMuted}; inscrita=${publicacao.isSubscribed}`);
         });
       }
+
+      recebidos += diagnosticarTelaPorWebCodecs(lines);
 
       // Um cartão para o que é desta máquina e não muda com a rede. Vem por último porque é
       // o que menos muda -- e o que a pessoa consulta uma vez, não a cada quatro segundos.

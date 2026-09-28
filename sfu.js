@@ -298,7 +298,10 @@ async function escreverConfig() {
     // do Node, entao abrir essa porta no roteador por engano nao expoe nada.
     'bind_addresses:',
     `  - ${process.env.SFU_BIND || '127.0.0.1'}`,
-    'log_level: info',
+    // `NEXO_NIVEL_SFU=debug` abre o que o servidor decide sobre cada assinatura -- é o único
+    // lugar em que aparece por que uma faixa pedida não desce. Junto de NEXO_LOG_SFU=arquivo,
+    // que é quem guarda as linhas.
+    `log_level: ${['debug', 'info', 'warn', 'error'].includes(process.env.NEXO_NIVEL_SFU) ? process.env.NEXO_NIVEL_SFU : 'info'}`,
     'rtc:',
     `  udp_port: ${PORTAS_UDP}`,
     `  tcp_port: ${PORTA_TCP}`,

@@ -185,7 +185,10 @@
     economiaDeDados: ['sala.economiaDados', 'um-ou-zero'],
     microfone: ['sala.dispositivo.microfone', 'texto'],
     saida: ['sala.dispositivo.saida', 'texto'],
-    camera: ['sala.dispositivo.camera', 'texto']
+    camera: ['sala.dispositivo.camera', 'texto'],
+    // O caminho da tela por WebCodecs. É da MÁQUINA, e não da pessoa: depende da placa de
+    // vídeo, e quem desligou no computador que trava não quer desligado no que tem placa.
+    webcodecs: ['sala.webcodecs', 'texto']
   };
   const ouvintes = new Set();
   // O que sincroniza vem de perfil.js, que o servidor também usa: uma lista só, e não duas

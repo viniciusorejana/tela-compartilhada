@@ -183,6 +183,9 @@
       ehBot: String(participante.identity || '').startsWith(PREFIXO_DO_BOT),
       state: estadoVazio(),
       remoteStreams: streamsVazios(),
+      // A tela pelo RTP, guardada mesmo quando quem aparece em `remoteStreams.screen` é a do
+      // caminho novo: é a reserva para quando ele sair do ar.
+      telaPeloRtp: null,
       ordem: { screen: 0, camera: 0 },
       publicacoes: new Map(),
       participante,
@@ -304,6 +307,9 @@
       const par = criarPar(participante, proximaOrdem);
       const retomando = voltouAssistindo(par.id);
       if (retomando) par.assistindo = true;
+      // Um par recriado (a pessoa saiu da lista e voltou) nasce com a tela vazia, mas a
+      // recepção pelo caminho novo é por identidade e pode ter continuado no meio-tempo.
+      escolherOrigemDaTela(par);
       peers.set(par.id, par);
       aoEntrar(par, { retomando });
       return par;
@@ -386,10 +392,14 @@
     }
 
     function camadaDesejada(par, publicacao) {
-      const V = LK.VideoQuality || {};
       const fonte = fonteDaPublicacao(publicacao);
       if (fonte !== 'screen' && fonte !== 'camera') return null;
-      const onde = ondeAparece(par.id, fonte);
+      return camadaPara(par.id, fonte);
+    }
+
+    function camadaPara(id, fonte) {
+      const V = LK.VideoQuality || {};
+      const onde = ondeAparece(id, fonte);
       // A TELA sobe em dois degraus, não três (o porquê está em quality-utils.js). Pedir a
       // camada do meio numa escada de dois devolve a de CIMA -- o servidor arredonda para a
       // mais próxima que existe --, e a grade passaria a custar o mesmo que o palco, que é o
@@ -401,6 +411,15 @@
       const teto = tetoDaConexao === null || tetoDaConexao === undefined ? tetoEconomico
         : tetoEconomico === null ? tetoDaConexao : Math.min(tetoDaConexao, tetoEconomico);
       return teto === null || teto === undefined ? pelaTela : Math.min(pelaTela, teto);
+    }
+
+    // A mesma conta para a tela pelo caminho novo, que tem as mesmas duas camadas: a cheia e a
+    // de 360p. A camada do meio arredonda para cima, exatamente como o servidor faz no RTP --
+    // assim as duas origens entregam a mesma imagem a quem está no mesmo lugar da tela e com a
+    // mesma conexão.
+    function camadaDaTelaPorWebCodecs(id) {
+      const V = LK.VideoQuality || {};
+      return camadaPara(id, 'screen') >= (V.MEDIUM ?? 1) ? 'alta' : 'baixa';
     }
 
     function aplicarCamada(par, publicacao) {
@@ -509,6 +528,10 @@
       // Faixa que não existe mais não pode continuar guardada: numa sala longa este mapa
       // cresceria sem parar, cheio de identificadores de sessões encerradas.
       for (const sid of [...bytesLidos.keys()]) if (!vistos.has(sid)) bytesLidos.delete(sid);
+      // A tela que veio pela faixa de dados não tem `inbound-rtp`: sem esta soma ela sairia do
+      // relatório de banda, e a tela é justamente a fonte que a medição existe para acompanhar.
+      // Já vem em delta, com o mesmo cuidado de cima.
+      if (telaWC) porFonte.screen += telaWC.lerBytesRecebidos();
       return porFonte;
     }
 
@@ -606,6 +629,18 @@
       if (!CHEGA_SOZINHA.has(fonte) && !par.assistindo) return false;
       if (pausadaPorAusencia && (fonte === 'screen' || fonte === 'camera')) return false;
       if (fonte === 'camera' && !cameraLiberada.has(par.id)) return false;
+      // A tela pelo caminho novo dispensa o RTP -- e é isso que faz o dynacast desligar as
+      // camadas dele em quem transmite, tirando o codificador do WebRTC do processador.
+      //
+      // Na transição, o RTP que JÁ estava no ar continua até a primeira imagem do caminho novo
+      // chegar: monta antes de desmontar, e ninguém vê a tela piscar. Mas quem começa a
+      // assistir agora não assina o RTP só para largá-lo meio segundo depois -- isso acordaria
+      // o codificador de quem transmite à toa.
+      if (fonte === 'screen' && telaWC) {
+        const modo = telaWC.modoDaTela(par.id);
+        if (modo === 'pronto') return false;
+        if (modo === 'iniciando') return Boolean(par.telaPeloRtp);
+      }
       return true;
     }
 
@@ -622,6 +657,8 @@
 
     function reavaliarAssinaturas() {
       cameraLiberada = escolherCameras();
+      // O caminho novo primeiro: é ele que diz, logo abaixo, se o RTP da tela ainda é preciso.
+      if (telaWC) peers.forEach(par => telaWC.sincronizar(par.id));
       peers.forEach(par => par.publicacoes.forEach(publicacao => {
         const fonte = fonteDaPublicacao(publicacao);
         if (!fonte) return;
@@ -736,9 +773,56 @@
     function guardarFaixa(par, publicacao, faixa) {
       const fonte = fonteDaPublicacao(publicacao);
       if (!fonte) return;
-      par.remoteStreams[fonte] = faixa ? new MediaStream([faixa.mediaStreamTrack]) : new MediaStream();
+      if (fonte === 'screen') {
+        // A tela tem duas origens possíveis, e a do RTP fica guardada à parte: ela é a reserva
+        // enquanto o caminho novo não tem imagem, e a imagem inteira quando ele sai do ar.
+        par.telaPeloRtp = faixa ? new MediaStream([faixa.mediaStreamTrack]) : null;
+        escolherOrigemDaTela(par);
+      } else {
+        par.remoteStreams[fonte] = faixa ? new MediaStream([faixa.mediaStreamTrack]) : new MediaStream();
+      }
       aoMudarMidia(par.id);
     }
+
+    // ---------- A tela por WebCodecs ----------
+    //
+    // A interface lê `par.remoteStreams.screen` e não sabe de onde a imagem vem. Quem escolhe é
+    // esta função: a da faixa de dados quando ela já tem imagem, senão a do RTP. O objeto só
+    // é trocado quando a origem muda de verdade -- cada troca faz o palco religar o vídeo, e
+    // trocar à toa seria uma piscada a cada conferência.
+    function escolherOrigemDaTela(par) {
+      const desejada = telaWC?.streamDe(par.id) || par.telaPeloRtp || null;
+      if (desejada) {
+        if (par.remoteStreams.screen !== desejada) par.remoteStreams.screen = desejada;
+      } else if (par.remoteStreams.screen.getTracks().length) {
+        par.remoteStreams.screen = new MediaStream();
+      }
+    }
+
+    // O caminho novo mudou de estado para a tela desta pessoa: a primeira imagem chegou, a
+    // faixa de dados apareceu ou sumiu, a recepção foi encerrada. A assinatura do RTP é
+    // refeita com a pergunta de sempre, e é ela que decide se a reserva desce ou não.
+    function aoMudarTelaPorWebCodecs(id) {
+      const par = peers.get(id);
+      if (!par) return;
+      escolherOrigemDaTela(par);
+      par.publicacoes.forEach(publicacao => {
+        if (fonteDaPublicacao(publicacao) !== 'screen') return;
+        const querer = deveReceber(par, 'screen');
+        if (publicacao.isSubscribed !== querer) publicacao.setSubscribed(querer);
+        if (querer) aplicarCamada(par, publicacao);
+      });
+      aoMudarMidia(id);
+    }
+
+    const telaWC = root.NexoTelaWebCodecs?.disponivel() ? root.NexoTelaWebCodecs.criar({
+      sala, LK,
+      querTela: id => Boolean(peers.get(id)?.assistindo) && !pausadaPorAusencia,
+      camadaPedida: id => camadaDaTelaPorWebCodecs(id),
+      aoMudarTela: aoMudarTelaPorWebCodecs,
+      agendar, cancelar, repetir,
+      registrar: (evento, detalhe) => window.registrarDiagnostico?.(evento, detalhe)
+    }) : null;
 
     sala
       .on(LK.RoomEvent.ParticipantConnected, participante => {
@@ -863,6 +947,7 @@
         conectada = false;
         pararDeRepetir(conferencia);
         conferencia = null;
+        telaWC?.aoDesconectar();
         esvaziar();
         sincronizarEstadoDeConexao();
         // Este evento significa que o cliente DESISTIU: ele ja tentou voltar sozinho, pelo
@@ -886,6 +971,7 @@
         }
         sala.remoteParticipants.forEach(adotarParticipante);
         sincronizarEstadoDeConexao();
+        telaWC?.aoRetomar();
         avisar('conectado', null);
       });
 
@@ -998,6 +1084,9 @@
     async function entrar(url, token) {
       await conectarSemCongelar(url, token);
       conectada = true;
+      // Antes de adotar quem já está na sala: a adoção pergunta ao caminho novo se a tela de
+      // cada um vem por ele, e ele precisa saber que a sala está no ar para responder.
+      telaWC?.aoConectar();
       // Quem ja estava na sala antes desta conexao nao gera evento de entrada.
       sala.remoteParticipants.forEach(adotarParticipante);
       sincronizarEstadoDeConexao();
@@ -1086,6 +1175,9 @@
       // Parar de assistir e uma decisao, nao um acidente: apaga a anotacao, ou uma queda
       // logo depois traria de volta uma tela que a pessoa acabou de dispensar.
       if (!par.assistindo) assistiaAoCair.delete(id);
+      // O caminho novo decide primeiro: com a recepção por ele já aberta, a pergunta de baixo
+      // responde que o RTP da tela não precisa descer.
+      telaWC?.sincronizar(id);
       par.publicacoes.forEach(publicacao => {
         const fonte = fonteDaPublicacao(publicacao);
         if (fonte !== 'screen' && fonte !== 'screenAudio') return;
@@ -1109,6 +1201,8 @@
       definirExibicao,
       definirAbaVisivel,
       medirRecebimento,
+      // A tela por WebCodecs. `null` num navegador sem os módulos, e então tudo segue pelo RTP.
+      telaWebCodecs: telaWC,
       definirEconomia(ativa) {
         economiaDeDados = Boolean(ativa);
         aplicarCamadaEmTodos();

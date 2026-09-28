@@ -34,6 +34,7 @@ const { criarModeracao } = require('./moderacao');
 const { criarSalas } = require('./salas');
 const { criarTempos, chaveDeTempo } = require('./tempos');
 const { criarEspectadores } = require('./espectadores');
+const { criarChaveDeWebCodecs } = require('./chave-webcodecs');
 const planos = require('./public/planos');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
@@ -108,6 +109,12 @@ const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 25000
 });
+// O botão de pânico da tela por WebCodecs (ver chave-webcodecs.js). Mora na pasta do painel,
+// que é privada, e muda pelo painel; quem já está numa sala fica sabendo pelo socket, na hora.
+const chaveDeWebCodecs = criarChaveDeWebCodecs({
+  pasta: path.resolve(process.env.NEXO_PASTA_PAINEL || path.join(__dirname, 'native', 'painel')),
+  aoMudar: estado => io.emit('midia-webcodecs', { ligado: estado.ligado })
+});
 // As contas nascem antes da telemetria porque o painel precisa delas; os alertas das contas
 // vão para a telemetria, que só existe uma linha abaixo -- daí o `telemetria?.`.
 let telemetria = null;
@@ -115,6 +122,7 @@ const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) })
 telemetria = iniciarTelemetria({
   app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers,
   contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
+  midia: { estado: chaveDeWebCodecs.estado, definir: chaveDeWebCodecs.definir },
   aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto
 });
 const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta) });
@@ -297,7 +305,10 @@ app.get('/api/sala-config', (req, res) => {
   // pares continua estável, mas conhecê-lo não permite assumir a sessão de outra pessoa.
   // Uma credencial com prazo nao pode ficar em cache de proxy nenhum.
   res.set('Cache-Control', 'no-store');
-  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, nome, plano, publicUrl, credencialSessao });
+  // `webcodecs` é a chave do servidor para o caminho novo da tela. Vai em toda credencial, e
+  // não só na primeira: cada volta de uma queda pede credencial nova, e é por ela que quem
+  // estava fora do ar quando a chave mudou fica sabendo.
+  res.json({ url: enderecoDoSfu(req), token: sfu.criarToken(sala, identidade, nome), identidade, nome, plano, publicUrl, credencialSessao, webcodecs: chaveDeWebCodecs.ligado() });
 });
 
 // O que a sala vê de quem tem conta: cor, marca e o código permanente. O id da conta nunca

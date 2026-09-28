@@ -527,6 +527,7 @@ async function iniciarConexao() {
       pedirCredencial: async () => {
         salaConfig = await buscarConfigDaSala(myName);
         myId = salaConfig?.identidade || myId;
+        aplicarChaveDoServidorParaWebCodecs(salaConfig?.webcodecs);
         return salaConfig;
       },
       aoReconectar: republicarTudo,
@@ -545,6 +546,7 @@ async function iniciarConexao() {
       aoMudarQualidade: ajustarEnvioPelaQualidade
     });
     transporte.definirEconomia?.(document.getElementById('dataSaver')?.checked);
+    configurarTelaPorWebCodecs();
     try {
       await transporte.conectar(salaConfig.url, salaConfig.token);
     } catch (erro) {
@@ -771,6 +773,8 @@ async function iniciarConexao() {
   });
 
   socket.on('sala-configuracao', aplicarConfiguracaoDaSala);
+  // O botão de pânico do servidor: vale na hora para quem já está na sala.
+  socket.on('midia-webcodecs', estado => aplicarChaveDoServidorParaWebCodecs(estado?.ligado));
 
   // ---------- O teto do plano, conferido no servidor ----------
   //
@@ -1071,6 +1075,81 @@ let qualidadeEscolhida = Preferencias.lerAjuste('qualidade', 'high');
 if (!RoomQuality.profiles[qualidadeEscolhida]) qualidadeEscolhida = 'high';
 let perfilDeQualidade = perfilPermitido(qualidadeEscolhida);
 const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
+
+// ---------- A tela por WebCodecs ----------
+//
+// O caminho novo mora no transporte (tela-webcodecs.js); daqui ele só recebe a faixa da tela e
+// o que foi escolhido para ela. O RTP continua sendo publicado sempre -- é o anúncio e a
+// reserva --, e o transporte decide, a cada entrada e saída, por qual dos dois a imagem vai.
+//
+// O interruptor tem três posições, e o padrão é o automático: caminho novo só quando a placa de
+// vídeo codifica H.264 e a sala inteira recebe. "Sempre ligada" tenta mesmo no processador, que
+// é o modo de diagnóstico; "Desligada" é o botão de pânico, e vale também para o que esta
+// máquina RECEBE -- quem desliga aqui leva a sala para o caminho de hoje.
+const PREFERENCIAS_DE_WEBCODECS = {
+  automatico: 'automático: só com placa de vídeo, servidor de mídia 1.13.7 ou mais novo e a sala inteira recebendo',
+  sempre: 'sempre ligada: tenta mesmo sem placa de vídeo, codificando no processador',
+  desligada: 'desligada: a tela vai e vem pelo caminho de sempre'
+};
+let preferenciaDeWebCodecs = Preferencias.lerAjuste('webcodecs', 'automatico');
+if (!PREFERENCIAS_DE_WEBCODECS[preferenciaDeWebCodecs]) preferenciaDeWebCodecs = 'automatico';
+const seletoresDeWebCodecs = [...document.querySelectorAll('[data-tela-webcodecs]')];
+seletoresDeWebCodecs.forEach(select => {
+  select.value = preferenciaDeWebCodecs;
+  select.onchange = () => definirPreferenciaDeWebCodecs(select.value);
+});
+
+function definirPreferenciaDeWebCodecs(escolha) {
+  if (!PREFERENCIAS_DE_WEBCODECS[escolha] || escolha === preferenciaDeWebCodecs) return;
+  preferenciaDeWebCodecs = escolha;
+  Preferencias.gravarAjuste('webcodecs', escolha);
+  seletoresDeWebCodecs.forEach(select => { select.value = escolha; });
+  // Outro caminho tem outro custo por quadro: comparar o antes com o depois seria comparar
+  // duas coisas diferentes, como na troca de codec.
+  esquecerHistoricoDoEnvio();
+  transporte?.telaWebCodecs?.definirPreferencia(escolha);
+  status.textContent = `Tela por WebCodecs ${PREFERENCIAS_DE_WEBCODECS[escolha]}.`;
+}
+
+// O que o transporte precisa para a tela pelo caminho novo: o mesmo perfil, a mesma taxa e a
+// mesma prioridade do RTP, e a mesma camada de 360p. Com o teto do plano já aplicado --
+// `perfilAtual` é o que o plano deixa valer, e o caminho novo não é um jeito de passar dele.
+function parametrosDaTelaPorWebCodecs(faixa) {
+  const perfil = perfilAtual();
+  const [largura, altura, bitrate, quadros] = perfil.camadas?.[0] || [640, 360, 300_000, 15];
+  return {
+    largura: perfil.width, altura: perfil.height, quadros: quadrosDaTela,
+    // Sem o desconto por codec: o caminho novo é H.264 (ou VP8 no diagnóstico), e os dois têm
+    // fator 1 em ORCAMENTO_POR_CODEC.
+    bitrateMax: tetoDaTela(perfil, faixa),
+    prioridade: prioridadeDaTela,
+    baixa: { largura, altura, bitrate, quadros }
+  };
+}
+
+// Chamada a cada publicação da tela. A publicação sem faixa só PARA o caminho novo quando a
+// tela parou de verdade: trocar a qualidade despublica e publica o RTP em seguida, e derrubar
+// a faixa de dados nesse meio-tempo faria quem assiste perder a imagem por nada.
+function sincronizarTelaPorWebCodecs(faixa) {
+  const wc = transporte?.telaWebCodecs;
+  if (!wc) return;
+  if (faixa && faixa.readyState === 'live') wc.transmitir(faixa, parametrosDaTelaPorWebCodecs(faixa));
+  else if (!screenStream) wc.pararTransmissao();
+}
+
+// A chave do servidor. Chega no `sala-config` (e a cada volta, que pede credencial nova) e,
+// para quem já está na sala, pelo socket: desligar no servidor vale na hora, sem ninguém
+// recarregar nada.
+function aplicarChaveDoServidorParaWebCodecs(ligado) {
+  transporte?.telaWebCodecs?.definirDesligadoPeloServidor(ligado === false);
+}
+
+function configurarTelaPorWebCodecs() {
+  const wc = transporte?.telaWebCodecs;
+  if (!wc) return;
+  wc.definirPreferencia(preferenciaDeWebCodecs);
+  aplicarChaveDoServidorParaWebCodecs(salaConfig?.webcodecs);
+}
 
 // ---------- Publicacao das proprias fontes ----------
 // Cada fonte sobe UMA vez para o servidor de midia, que a entrega a todo mundo. Antes era
@@ -1388,6 +1467,9 @@ const temCopias = faixa => Boolean(faixa && copiasDaFaixa.get(faixa)?.size);
 
 // O corpo de uma publicação, FORA da fila. Só deve ser chamado de dentro de `naFila`.
 async function aplicarPublicacao(fonte, faixa) {
+  // Antes da guarda de conexão: parar a tela com a sala fora do ar também precisa parar o
+  // caminho novo, ou ele voltaria com a conexão tentando transmitir uma captura encerrada.
+  if (fonte === 'screen') sincronizarTelaPorWebCodecs(faixa);
   if (!transporte?.conectada) return;
   const local = transporte.sala.localParticipant;
   const anterior = publicacoesLocais[fonte];
@@ -2798,6 +2880,7 @@ function linhaDeCamada(c, principal) {
 }
 
 function renderizarMedicaoDoEnvio(ao_vivo, q) {
+  if (q.webcodecs) { renderizarEnvioPorWebCodecs(ao_vivo, q.webcodecs); return; }
   ao_vivo.textContent = '';
   // Ninguém assistindo é o caso mais comum de tela compartilhada, e ele não é um problema.
   //
@@ -2963,6 +3046,11 @@ function atualizarBotaoDeQualidade() {
 // tudo vem ANTES de calibrar orçamento por codec ou por conteúdo.
 let medindoEnvio = false;
 async function medirEnvio() {
+  // Com a tela no caminho novo, as camadas RTP estão paradas pelo dynacast e medi-las diria
+  // "ninguém abriu a sua tela" com a sala inteira assistindo. Quem sabe o que está subindo é
+  // o codificador de lá.
+  const pelaFaixaDeDados = screenStream ? transporte?.telaWebCodecs?.estadoDoEnvio() : null;
+  if (pelaFaixaDeDados?.modo === 'webcodecs') { medirEnvioPorWebCodecs(pelaFaixaDeDados); return; }
   const faixa = publicacoesLocais.screen?.track;
   const remetentes = remetentesDaFaixa(faixa);
   if (!remetentes.length || medindoEnvio) return;
@@ -3079,6 +3167,94 @@ async function medirEnvio() {
   finally { medindoEnvio = false; }
 }
 setInterval(medirEnvio, 2000);
+
+// A mesma forma de `qualidadeDoEnvio`, preenchida pelo caminho novo, para o histórico e o
+// veredito de queda continuarem valendo sem saber de onde os números vieram. A escala pelo
+// custo NÃO roda aqui: o caminho novo tem a própria adaptação, e as duas brigariam pela mesma
+// imagem.
+function medirEnvioPorWebCodecs(wc) {
+  const alta = wc.camadas.find(c => c.camada === 'alta') || wc.camadas[0] || null;
+  qualidadeDoEnvio = {
+    webcodecs: wc,
+    width: alta?.largura || 0, height: alta?.altura || 0, fps: alta?.fps || 0,
+    bitrate: wc.camadas.reduce((soma, c) => soma + c.bps, 0),
+    bitrateDoPalco: alta?.bps || 0,
+    reason: alta?.codificadorApertado ? 'cpu' : alta?.saidaApertada ? 'bandwidth' : 'none',
+    codec: alta ? `video/${String(wc.codec).toUpperCase()}` : '',
+    encoder: 'WebCodecs', hardware: alta ? alta.hardware : undefined,
+    msPorQuadro: alta?.msDeCodificacao ?? null,
+    camadas: [], reserva: null,
+    capturaFps: null, capturaWidth: wc.fonte.largura, capturaHeight: wc.fonte.altura,
+    fatorDeRede: 1, escalaDaTela: alta?.escala || 1,
+    emEspera: !wc.camadas.length,
+    bruto: {}
+  };
+  registrarAmostraDoEnvio(qualidadeDoEnvio);
+  atualizarBotaoDeQualidade();
+}
+
+// O painel do envio quando a tela vai pelo caminho novo. As mesmas perguntas do RTP -- quanto
+// sobe, em que tamanho, quem está segurando --, com as respostas que só existem aqui: quantas
+// pessoas estão em cada camada, e o atraso que elas estão vendo.
+function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
+  ao_vivo.textContent = '';
+  if (!wc.camadas.length) {
+    const espera = elemento('div', 'medicao-veredito ok');
+    espera.append(elemento('strong', null, 'Em espera: ninguém abriu a sua tela ainda.'));
+    espera.append(elemento('span', null, `A tela vai pelo caminho novo (WebCodecs, ${wc.motivo}). Nada é codificado`
+      + ' nem sobe enquanto ninguém assiste; as medições aparecem quando alguém clicar em Assistir.'));
+    ao_vivo.append(espera);
+    return;
+  }
+  const alta = wc.camadas.find(c => c.camada === 'alta') || wc.camadas[0];
+  const destaque = elemento('div', 'medicao-destaque');
+  destaque.append(
+    blocoDeNumero(`${alta.largura}×${alta.altura}`, 'imagem'),
+    blocoDeNumero(String(Math.round(alta.fps)), 'quadros/s'),
+    blocoDeNumero(emMegabits(wc.camadas.reduce((soma, c) => soma + c.bps, 0)), 'subindo no total')
+  );
+  ao_vivo.append(destaque);
+  ao_vivo.append(elemento('div', 'medicao-sub', `WebCodecs · ${wc.codec === 'h264' ? 'H.264' : String(wc.codec).toUpperCase()} · ${alta.hardware ? 'na placa de vídeo' : 'no processador'}`));
+
+  ao_vivo.append(elemento('div', 'medicao-titulo', wc.camadas.length > 1 ? 'Camadas que sobem' : 'Camada única'));
+  const grade = elemento('div', 'medicao-grade');
+  wc.camadas.forEach((c, i) => {
+    const linha = elemento('div', 'medicao-linha');
+    linha.append(
+      elemento('span', 'medicao-camada-nome', `${c.altura}p`),
+      elemento('span', null, `${Math.round(c.fps)} fps`),
+      elemento('span', null, emMegabits(c.bps)),
+      elemento('span', 'medicao-custo', `${c.espectadores} assistindo`)
+    );
+    if (i > 0) linha.classList.add('medicao-linha-secundaria');
+    grade.append(linha);
+  });
+  ao_vivo.append(grade);
+
+  // A imagem encolhida é dita, pela mesma razão que no RTP: sem a frase, o ajuste que protege
+  // os quadros pareceria o problema.
+  if (alta.camada === 'alta' && (alta.escala > 1 || alta.quadrosAlvo < quadrosDaTela)) {
+    ao_vivo.append(elemento('div', 'medicao-nota', alta.escala > 1
+      ? `A imagem foi encolhida ${escalaEmTexto(alta.escala)}x para os quadros continuarem chegando`
+        + (alta.ultimaMudanca === 'codificador' ? ' — o codificador não dava conta do tamanho cheio.' : ' — a banda não comportava o tamanho cheio.')
+        + ' Ela volta sozinha quando sobrar folga.'
+      : `Os quadros foram reduzidos a ${alta.quadrosAlvo} por segundo para a imagem continuar nítida — é a prioridade de nitidez. Eles voltam quando sobrar folga.`));
+  }
+  const pulados = wc.camadas.reduce((soma, c) => soma + c.descartes.rede, 0);
+  const avisos = [];
+  if (pulados) avisos.push(`${pulados} quadro(s) deixaram de sair no último segundo porque a sua subida não escoava a tempo; o orçamento está sendo reduzido.`);
+  if (alta.codificadorApertado) avisos.push('O codificador não está acompanhando a taxa pedida; a imagem encolhe para caber.');
+  if (alta.perda > 0.02) avisos.push(`Quem assiste está perdendo ${Math.round(alta.perda * 100)}% dos quadros no caminho.`);
+  const atrasos = wc.camadas.flatMap(c => c.atrasos).sort((a, b) => a - b);
+  const atraso = atrasos.length ? Math.round(atrasos[Math.floor(atrasos.length / 2)]) : null;
+  const caixa = elemento('div', `medicao-veredito ${avisos.length ? 'alerta' : 'ok'}`);
+  caixa.append(elemento('strong', null, avisos.length ? 'A transmissão está se ajustando.' : 'Estável.'));
+  caixa.append(elemento('span', null, [
+    ...avisos,
+    atraso !== null ? `Atraso mediano até quem assiste: ${atraso} ms.` : ''
+  ].filter(Boolean).join(' ')));
+  ao_vivo.append(caixa);
+}
 
 // ---------- O histórico do envio, e o que ele conclui ----------
 //

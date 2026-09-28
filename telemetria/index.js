@@ -14,7 +14,7 @@ const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
 const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
-function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, aoFaixaDeTela = () => {}, tetoDePessoas = null }) {
+function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, midia = null, aoFaixaDeTela = () => {}, tetoDePessoas = null }) {
   const auth = criarAutenticacao();
   const alertas = criarAlertas({ pasta: PASTA_PRIVADA });
   let regras = {};
@@ -65,7 +65,7 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
     return { em: Date.now(), revisao, salas: ativos, teto: tetoDePessoas?.() || null, abuso: abuso.resumo(), origens: origens.resumo(), limites: abuso.regras, alertas: alertas.listar(), sfu: { ...sfu.diagnostico(), ...observador.resumo() }, eventosSfu, recursos: recursos.resumo(), soundboard: soundboard.usoGlobal(), coleta: { banda: medicao.estado(), uso: gravadorUso.estado(), alertas: alertas.estado(), relatos: relatos.estado() } };
   }
   const relatos = criarRelatos();
-  const rotas = instalarRotas(app, { auth, relatos, contas, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
+  const rotas = instalarRotas(app, { auth, relatos, contas, midia, consultar: async periodo => ({ contabilidade: await leitor.consultar({ periodo, fuso: process.env.NEXO_FUSO || Intl.DateTimeFormat().resolvedOptions().timeZone }), atual: vivo() }), instante: vivo });
 
   // ---------- "Não está funcionando" chegando até aqui ----------
   //

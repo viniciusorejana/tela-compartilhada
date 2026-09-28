@@ -279,8 +279,9 @@
         <div class="field"><label for="videoPriority">O que proteger quando apertar</label><select id="videoPriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>O padrão protege o movimento, porque travar estraga mais uma transmissão do que perder um pouco de definição. Escolha Nitidez só para ler código ou texto parado: ela mantém a imagem afiada e deixa os quadros caírem.</small></div>
         <div class="field" id="dataSaverField"><label class="toggle-line" for="dataSaver"><span><strong>Economia de dados e bateria</strong><small>Reduz o consumo no celular sem bloquear suas escolhas de qualidade.</small></span><input id="dataSaver" type="checkbox" role="switch"></label></div>
         <details class="avancado">
-          <summary>Codec de vídeo</summary>
+          <summary>Codec e codificação da tela</summary>
           <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">Vale para a tela; a câmera vai sempre em H.264. H.264 é o mais compatível e o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
+          <div class="field"><label for="telaWebCodecs">Codificação pela placa de vídeo (WebCodecs)</label><select id="telaWebCodecs" data-tela-webcodecs><option value="automatico">Automático · só com placa de vídeo</option><option value="sempre">Sempre ligada · mesmo no processador</option><option value="desligada">Desligada · só o caminho de sempre</option></select><small>No automático, a tela passa a ser codificada pela placa de vídeo quando esta máquina tem uma que faça H.264, o servidor de mídia é o 1.13.7 ou mais novo e todo mundo na sala consegue receber — é o que tira o peso do processador enquanto você joga. Desligada vale também para o que você recebe: a sala volta ao caminho de sempre por sua causa. O Diagnóstico diz qual caminho está no ar e por quê.</small></div>
         </details>
         <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
         <div id="qualityLive" class="medicao" aria-live="off"></div>
@@ -509,8 +510,9 @@
     <div class="field"><label for="shareFps">Quadros por segundo</label><select id="shareFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="shareFpsDica"></small><small id="shareCodecEstado" class="codec-estado"></small></div>
     <div class="field"><label for="sharePriority">O que proteger quando apertar</label><select id="sharePriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Nitidez segura os detalhes e derruba os quadros; movimento faz o contrário, e é o padrão. Quantos quadros você pede é a escolha de cima.</small></div>
     <details class="avancado">
-      <summary>Codec de vídeo</summary>
+      <summary>Codec e codificação da tela</summary>
       <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>Vale para a tela; a câmera vai sempre em H.264. Ele costuma usar a placa de vídeo e é o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. O codificador em uso aparece no Diagnóstico.</small></div>
+      <div class="field"><label for="shareTelaWebCodecs">Codificação pela placa de vídeo (WebCodecs)</label><select id="shareTelaWebCodecs" data-tela-webcodecs><option value="automatico">Automático · só com placa de vídeo</option><option value="sempre">Sempre ligada · mesmo no processador</option><option value="desligada">Desligada · só o caminho de sempre</option></select><small>O caminho novo, que tira a codificação da tela do processador. No automático ele só entra com placa de vídeo e com a sala inteira recebendo.</small></div>
     </details>
       </div>
 
@@ -604,6 +606,11 @@
 <script src="/preferencias.js"></script>
 <script src="/conta-cliente.js"></script>
 <script src="/media-utils.js"></script>
+<script src="/tela-quadro.js"></script>
+<script src="/tela-decisoes.js"></script>
+<script src="/tela-codificador.js"></script>
+<script src="/tela-decodificador.js"></script>
+<script src="/tela-webcodecs.js"></script>
 <script src="/room-transport.js"></script>
 <script src="/quality-utils.js"></script>
 <script src="/planos.js"></script>
