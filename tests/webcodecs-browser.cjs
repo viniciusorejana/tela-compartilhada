@@ -366,6 +366,44 @@ async function painel() {
   assert.equal(await palcoAndando(bia), true, 'a imagem volta pelo WebCodecs');
   console.log('PASS: depois da falha, o WebCodecs volta sozinho na nova tentativa, sem ninguém parar a tela');
 
+  // ---------- A faixa que para de chegar: quem transmite percebe pelo relato ----------
+  //
+  // Medido contra uma VPS pequena: o servidor de mídia às vezes deixa de entregar a faixa de
+  // dados a quem assiste, e a imagem ficava congelada até alguém recarregar. Aqui a faixa do Caio
+  // para de chegar, as mensagens não; o relato dele ("nada chegou") leva a tela ao RTP.
+  await esperarOrigem(caio, idDaAna, true, 'Caio antes da faixa parada');
+  await caio.evaluate(() => transporte.telaWebCodecs.simularPerda(1));
+  const semChegar = await esperarCaminho(ana, 'rtp', 'faixa parada');
+  assert.match(semChegar.motivo, /parou de chegar a Caio/, `o motivo aponta quem ficou sem imagem: ${semChegar.motivo}`);
+  await caio.evaluate(() => transporte.telaWebCodecs.simularPerda(0));
+  await esperarOrigem(caio, idDaAna, false, 'Caio depois da faixa parada');
+  assert.equal(await palcoAndando(caio), true, 'a imagem do Caio volta pelo RTP');
+  console.log(`PASS: a faixa que para de chegar leva a tela ao RTP em segundos (${semChegar.motivo})`);
+  // Mudar o interruptor é tentar de novo, sem esperar a nova tentativa.
+  await ana.evaluate(() => definirPreferenciaDeWebCodecs('automatico'));
+  await esperarCaminho(ana, 'rtp', 'automático sem placa');
+  await ana.evaluate(() => definirPreferenciaDeWebCodecs('sempre'));
+  await esperarCaminho(ana, 'webcodecs', 'depois da faixa parada');
+  await esperarOrigem(caio, idDaAna, true, 'Caio de volta ao caminho novo');
+
+  // ---------- Quem transmite parou de responder: quem assiste pergunta, e vai ao RTP ----------
+  //
+  // Tela parada também não manda pedaço nenhum (a captura só entrega quadro quando algo muda),
+  // então quem assiste só pergunta: um ping. Sem resposta, o caminho novo morreu para ele. Aqui a
+  // Ana trava por alguns segundos -- e, travada, ela nem poderia desistir sozinha.
+  await Promise.all([
+    ana.evaluate(() => { const fim = Date.now() + 7000; while (Date.now() < fim) { /* travada */ } }),
+    caio.waitForFunction(() => transporte.telaWebCodecs.capacidade().recebimentoFalhou, null, { timeout: 20000 })
+  ]);
+  const doCaio = await caio.evaluate(() => transporte.telaWebCodecs.capacidade().recebimentoFalhou);
+  assert.match(doCaio, /quem transmite não responde/, `o motivo é o silêncio: ${doCaio}`);
+  await esperarOrigem(caio, idDaAna, false, 'Caio depois do silêncio');
+  assert.equal(await palcoAndando(caio), true, 'a imagem do Caio volta pelo RTP');
+  // E a nova tentativa traz o caminho novo de volta, sem ninguém mexer em nada.
+  await ana.waitForFunction(() => transporte.telaWebCodecs.estadoDoEnvio()?.modo === 'webcodecs', null, { timeout: 40000 });
+  await esperarOrigem(caio, idDaAna, true, 'Caio depois da nova tentativa');
+  console.log(`PASS: sem pedaços e sem resposta de quem transmite, quem assiste vai ao RTP e volta depois (${doCaio})`);
+
   // ---------- Parar de assistir para a codificação; parar de compartilhar tira as faixas ----------
   await bia.locator('#stageStopBtn').click();
   await caio.locator('#stageStopBtn').click();

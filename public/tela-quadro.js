@@ -359,7 +359,10 @@
       bytes: numero(m.bytes, 1e10),
       // `null` quando o relógio ainda não foi acertado: um atraso inventado é pior do que
       // nenhum, porque a adaptação reagiria a ele.
-      atrasoMs: Number.isFinite(m.atrasoMs) ? Math.max(-60000, Math.min(60000, m.atrasoMs)) : null
+      atrasoMs: Number.isFinite(m.atrasoMs) ? Math.max(-60000, Math.min(60000, m.atrasoMs)) : null,
+      // Na camada leve pela conexão, e não por escolha (grade, economia de dados): quem
+      // transmite conta isso como imagem que não chegou inteira (`caminhoFalhando`).
+      rebaixada: m.rebaixada === true
     },
     fim: () => ({}),
     ping: m => Number.isFinite(m.enviadoEm) && { enviadoEm: m.enviadoEm },

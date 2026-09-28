@@ -194,7 +194,11 @@
       // começar a assistir são o funcionamento normal -- contá-los como sintoma rebaixaria para
       // a camada leve justamente quem acabou de pedir a cheia.
       if (MOTIVOS_DE_PERDA.has(motivo)) medindo.pedidosPorBuraco += 1;
-      aoPedirChave?.(ativa && !aguardandoChave ? ativa.camada : alvo, motivo);
+      // Na troca, o quadro-chave que falta é o da camada NOVA. Pedir o da camada que está na tela
+      // deixava a troca esperando o quadro-chave periódico da outra: medido contra a VPS, quinze
+      // segundos em 360p depois de o rebaixamento já ter acabado.
+      const camada = motivo === 'troca de camada' || !ativa || aguardandoChave ? alvo : ativa.camada;
+      aoPedirChave?.(camada, motivo);
     }
 
     function esperarChave(motivo) {

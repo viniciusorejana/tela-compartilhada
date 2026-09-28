@@ -331,11 +331,77 @@ test('o espectador pede a camada do lugar, e cai para a leve por um tempo quando
   const agora = 1_000_000;
   assert.equal(Decisoes.camadaDoEspectador({}, { pedida: 'alta', agora }).camada, 'alta');
   assert.equal(Decisoes.camadaDoEspectador({}, { pedida: 'baixa', agora }).camada, 'baixa');
-  const rebaixada = Decisoes.camadaDoEspectador({}, { pedida: 'alta', perda: 0.2, agora });
-  assert.equal(rebaixada.camada, 'baixa');
+  const umSegundoRuim = Decisoes.camadaDoEspectador({}, { pedida: 'alta', perda: 0.2, agora });
+  assert.equal(umSegundoRuim.camada, 'alta', 'um segundo ruim só não rebaixa');
+  const rebaixada = Decisoes.camadaDoEspectador(umSegundoRuim, { pedida: 'alta', perda: 0.2, agora: agora + 1000 });
+  assert.equal(rebaixada.camada, 'baixa', 'dois seguidos rebaixam');
+  assert.equal(rebaixada.rebaixada, true);
   assert.equal(Decisoes.camadaDoEspectador(rebaixada, { pedida: 'alta', agora: agora + 5000 }).camada, 'baixa', 'a melhora não é aceita na hora');
-  assert.equal(Decisoes.camadaDoEspectador(rebaixada, { pedida: 'alta', agora: agora + Decisoes.MS_REBAIXADO + 1 }).camada, 'alta');
-  assert.equal(Decisoes.camadaDoEspectador({}, { pedida: 'alta', pedidosDeChave: 3, agora }).camada, 'baixa', 'buracos em série também rebaixam');
+  const voltou = Decisoes.camadaDoEspectador(rebaixada, { pedida: 'alta', agora: agora + 1000 + Decisoes.MS_REBAIXADO + 1 });
+  assert.equal(voltou.camada, 'alta');
+  let buracos = Decisoes.camadaDoEspectador({}, { pedida: 'alta', pedidosDeChave: 3, agora });
+  buracos = Decisoes.camadaDoEspectador(buracos, { pedida: 'alta', pedidosDeChave: 3, agora: agora + 1000 });
+  assert.equal(buracos.camada, 'baixa', 'buracos em série também rebaixam');
+});
+
+test('a mesma janela contada de novo não rebaixa, e rebaixar de novo logo depois dura mais', () => {
+  const agora = 1_000_000;
+  // A camada é recalculada várias vezes por segundo; só a janela nova conta.
+  let estado = Decisoes.camadaDoEspectador({}, { pedida: 'alta', perda: 0.2, agora });
+  for (let i = 0; i < 5; i++) estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', perda: 0.2, novaJanela: false, agora: agora + 100 * i });
+  assert.equal(estado.camada, 'alta');
+  // Primeiro rebaixamento: o tempo curto.
+  estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', perda: 0.2, agora: agora + 1000 });
+  const primeiro = estado.rebaixadaAte - (agora + 1000);
+  assert.equal(primeiro, Decisoes.MS_REBAIXADO);
+  // Voltou e apertou de novo em seguida: o dobro.
+  const volta = estado.rebaixadaAte + 1;
+  estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', agora: volta });
+  assert.equal(estado.camada, 'alta');
+  estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', perda: 0.2, agora: volta + 1000 });
+  estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', perda: 0.2, agora: volta + 2000 });
+  assert.equal(estado.rebaixadaAte - (volta + 2000), 2 * Decisoes.MS_REBAIXADO);
+  // A conexão que segue ruim rebaixa de novo assim que o tempo acaba: o terceiro rebaixamento
+  // já chega ao teto, e dali não passa.
+  const duracoes = [];
+  for (let i = 0; i < 4; i++) {
+    const t = estado.rebaixadaAte + 1;
+    estado = Decisoes.camadaDoEspectador(estado, { pedida: 'alta', perda: 0.2, agora: t });
+    duracoes.push(estado.rebaixadaAte - t);
+  }
+  assert.deepEqual(duracoes, Array(4).fill(Decisoes.MS_REBAIXADO_MAXIMO));
+});
+
+// ---------- O caminho novo está entregando? ----------
+
+test('a janela de quem assiste: parada quando nada chegou do que saiu, ruim com atraso, perda ou rebaixada', () => {
+  const bom = { recebidos: 55, perdidos: 0, atrasoMs: 45, rebaixada: false };
+  assert.deepEqual(Decisoes.janelaDoEspectador(bom, 56), { parado: false, ruim: false });
+  assert.deepEqual(Decisoes.janelaDoEspectador({ ...bom, recebidos: 0 }, 56), { parado: true, ruim: true });
+  assert.deepEqual(Decisoes.janelaDoEspectador({ ...bom, recebidos: 0 }, 0), { parado: false, ruim: false }, 'tela parada: nada saiu, nada chegou');
+  assert.equal(Decisoes.janelaDoEspectador({ ...bom, atrasoMs: 600 }, 56).ruim, true, 'atraso de fila');
+  assert.equal(Decisoes.janelaDoEspectador({ ...bom, atrasoMs: null }, 56).ruim, false, 'sem relógio acertado não se inventa atraso');
+  assert.equal(Decisoes.janelaDoEspectador({ ...bom, recebidos: 40, perdidos: 16 }, 56).ruim, true, 'perda que o reenvio não cobriu');
+  assert.equal(Decisoes.janelaDoEspectador({ ...bom, rebaixada: true }, 56).ruim, true, 'na camada leve pela conexão');
+  assert.deepEqual(Decisoes.janelaDoEspectador(null, 56), { parado: true, ruim: true }, 'o relato parou de chegar');
+});
+
+test('o caminho novo desiste pela imagem congelada de uma pessoa, e pela imagem ruim da maioria', () => {
+  const ok = { parado: false, ruim: false };
+  const ruim = { parado: false, ruim: true };
+  const parado = { parado: true, ruim: true };
+  const n = (quantas, janela) => Array.from({ length: quantas }, () => janela);
+  assert.equal(Decisoes.caminhoFalhando([]), null);
+  assert.equal(Decisoes.caminhoFalhando([{ nome: 'Bia', janelas: n(8, ok) }]), null);
+  assert.equal(Decisoes.caminhoFalhando([{ nome: 'Bia', janelas: [...n(5, ok), ...n(2, parado)] }]), null, 'dois segundos parados ainda podem ser só um engasgo');
+  assert.match(Decisoes.caminhoFalhando([{ nome: 'Bia', janelas: [...n(5, ok), ...n(3, parado)] }]), /parou de chegar a Bia/);
+  // Uma pessoa com a rede ruim desce sozinha para a camada leve; a sala não troca de caminho por ela.
+  const bia = { nome: 'Bia', janelas: n(8, ruim) };
+  assert.equal(Decisoes.caminhoFalhando([bia, { nome: 'Caio', janelas: n(8, ok) }, { nome: 'Duda', janelas: n(8, ok) }]), null);
+  assert.match(Decisoes.caminhoFalhando([bia, { nome: 'Caio', janelas: n(8, ruim) }, { nome: 'Duda', janelas: n(8, ok) }]), /sem folga/);
+  // Ruim é sustentado: três segundos ruins em oito não derrubam, quatro sim.
+  assert.equal(Decisoes.caminhoFalhando([{ nome: 'Bia', janelas: [...n(5, ok), ...n(3, ruim)] }]), null);
+  assert.match(Decisoes.caminhoFalhando([{ nome: 'Bia', janelas: [...n(4, ok), ...n(4, ruim)] }]), /atrasada ou com perda/);
 });
 
 // ---------- A captura presa, e as novas tentativas ----------

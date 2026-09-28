@@ -36,6 +36,12 @@ recursos "Always Free" não cobram.
   tente mais tarde, ou use a **VM.Standard.E2.1.Micro** (AMD, também grátis). A Micro roda o
   Nexo, mas é fraca: 1 GB de RAM e 1/8 de processador. Serve para voz e tela entre poucos;
   o bot de música pode engasgar nela.
+- **A tela pela placa de vídeo (WebCodecs) pesa no servidor**: ela viaja numa faixa de dados, e o
+  servidor de mídia gasta umas quatro vezes mais processador com ela do que com a tela pelo
+  WebRTC. Na VPS medida, dois ou três assistindo em 1440p já levaram o servidor ao limite; o Nexo
+  percebe e passa a tela para o WebRTC sozinho, mas para a placa de vídeo em salas cheias dê
+  processador à máquina: a Ampere com mais OCPU, nunca a Micro (`docs/plano-webcodecs.md`, "O
+  primeiro servidor de verdade").
 - As duas funcionam com o mesmo instalador: ele detecta x86 ou ARM.
 
 Anote o **Public IP address** da instância.

@@ -632,6 +632,85 @@ dois caminhos para acontecer, e os dois foram fechados:
   capturados → codificados" na medição e avisa uma vez por captura, com o botão que captura de
   novo.
 
+### O primeiro servidor de verdade: a VPS pequena
+
+Até aqui, toda medição tinha o servidor de mídia na mesma máquina de quem transmite. O primeiro
+teste numa VPS da Oracle (~25 ms de ida e volta) mostrou o que o loopback escondia: quem
+assistia caía para 360p quase o tempo todo, a imagem travava, e às vezes congelava de vez. Pelo
+WebRTC, na mesma VPS, nada disso.
+
+Reproduzido daqui contra a VPS, com duas a quatro instâncias do Chrome (uma transmitindo uma tela
+sintética pela placa, as outras assistindo no palco) e, para testar cada correção sem publicar
+nada lá, os arquivos do cliente servidos daqui pelo Playwright (`page.route`).
+
+**A causa de fundo é o processador do servidor.** A faixa de dados passa pelo SCTP do servidor
+(pion), com confirmação, fila e temporizador por pacote e por espectador; o RTP é só repassado.
+No servidor local, mesma carga (1440p60, três espectadores):
+
+| | livekit-server |
+| --- | --- |
+| Faixa de dados (WebCodecs) | **28,6%** de um núcleo |
+| RTP (WebRTC) | **5,5%** de um núcleo |
+
+Mesmo descontando que o RTP mandou menos bits (o processador de quem transmitia não sustentou
+1440p60 e ele desceu para 720p), são umas quatro vezes mais processador por megabit. Pedaços de 14
+KB em vez de 7,2 KB baixam só 15–20% (menos mensagens, os mesmos bytes), e não foram adotados: o
+piso de 8 KB do portão voltaria a cortar o primeiro quadro-chave de cada assinatura. Na VPS, uma
+requisição trivial ao Node da mesma máquina levava 22 ms ociosa, 23–34 ms com a tela pelo RTP e
+**40–90 ms, com picos de 291 ms**, pela faixa de dados — e o RTT de ICE subia de 20 para 70 ms.
+
+**O que transformava um engasgo em colapso** era nosso, e foi corrigido:
+
+1. **Tempestade de reenvio.** Cada buraco pedia reenvio, o reenvio ia para todos os espectadores
+   e furava a fila, os quadros seguintes atrasavam e viravam buracos também: 80 quadros reenviados
+   num segundo, 325 KB parados no ritmador, 600 ms de atraso. Agora o reenvio tem orçamento (um
+   quarto do bitrate da camada por segundo), só de quadros com menos de 500 ms, e nada com a fila
+   já passando de 150 ms.
+2. **Um segundo ruim rebaixava por 20 s.** Mais de 8% de perda numa janela punha quem assiste em
+   360p por 20 s — e a sala inteira ficava na camada leve com a rede já boa de novo. Agora são
+   duas janelas seguidas, 8 s na primeira vez, dobrando se voltar a apertar logo depois (até
+   32 s). A perda que corta o orçamento de quem transmite também passou a exigir duas janelas.
+3. **A volta para a camada cheia pedia o quadro-chave da camada errada** (a de 360p), e a troca
+   esperava o quadro-chave periódico da cheia: 15 s presos em 360p depois de o rebaixamento acabar.
+
+**E o caminho novo passou a saber desistir** (`caminhoFalhando`, tela-decisoes.js). Quem
+transmite confere o relato de cada espectador a cada segundo: janela *parada* quando saíram
+quadros e nada chegou, *ruim* com atraso acima de 350 ms, perda acima de 10% depois do reenvio ou
+a pessoa rebaixada pela conexão. Três janelas paradas de uma pessoa, ou quatro ruins em oito da
+maioria, levam a tela ao RTP, com a espera de sempre até a nova tentativa. Uma pessoa só com a rede
+ruim não troca o caminho da sala: ela desce sozinha para a camada leve.
+
+**E a imagem congelada de vez tem saída.** Às vezes o servidor deixava de entregar a faixa a quem
+assistia, às vezes junto com todas as mensagens, e não voltava — com dois espectadores, os dois no
+mesmo segundo, o que aponta para o servidor sufocado, e não para a rede de cada um (a causa exata
+fica dentro do SCTP do servidor; a simulação do portão, com a conta de bitrate da 1.13.7, se
+recupera sozinha). Quem assiste sem pedaço nenhum por 2,5 s manda um ping a quem transmite; sem
+resposta em mais 2,5 s, a tela volta pelo RTP. Tela parada é legítima (a captura só entrega
+quadro quando algo muda), por isso a falta de pedaços só pergunta.
+
+Contra a VPS, três espectadores a 1440p60, antes e depois:
+
+| | Antes | Depois |
+| --- | --- | --- |
+| Camada de quem assiste | todos em 360p por 20 s ou mais | 1440p o tempo todo |
+| Palco | 9–15 quadros por segundo nos colapsos | ~55 de 60 |
+| Atraso | até 614 ms | ~50 ms |
+| Reenvios | 80 num segundo | 10 em 75 s |
+| Pior 100 ms da subida | 21–26 Mbps (tela de 6) | 16,7 no pico, 9,9 na mediana |
+
+Num teste bem mais duro (tela inteira mudando a cada segundo, 150 s), a VPS engasgou uma vez: dois
+espectadores caíram para 360p, o caminho novo desistiu em 5 s, a tela seguiu pelo RTP e voltou
+sozinha ao WebCodecs 10 s depois, em 1440p até o fim.
+
+**A subida de quem transmite** (a pergunta dos engasgos no Discord): em regime, o pior intervalo de
+100 ms de cada segundo fica perto do RTP (mediana de 9,9 contra 9,3 Mbps, para 6 Mbps de tela). O
+que passava de 20 Mbps eram as tempestades — quadros-chave e reenvios em série —, e com elas a
+fila do roteador de casa, que é onde a voz de outro programa engasga. Sem tempestade, sem esse
+pico.
+
+`npm run test:webcodecs` prova as duas saídas: a faixa que para de chegar (o relato leva ao RTP) e
+quem transmite travado (quem assiste pergunta, não tem resposta, vai ao RTP e volta depois).
+
 ### O que foi medido
 
 Em loopback, na mesma máquina, com o Chromium do Playwright (software):
@@ -659,6 +738,12 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 
 ### Limites conhecidos
 
+- **A faixa de dados custa ao servidor umas quatro vezes o processador do RTP.** O caminho novo
+  tira a codificação de quem joga e põe o transporte no servidor. Numa máquina com folga isso não
+  aparece; numa VPS pequena, dois ou três espectadores na camada cheia já deixam o servidor no
+  limite, e aí o caminho novo desiste e a tela segue pelo RTP (ver "O primeiro servidor de
+  verdade"). Para salas cheias com o WebCodecs, dê processador ao servidor: na Oracle, a Ampere
+  (até 4 OCPU no grátis, `docs/oracle.md`), e não a Micro.
 - **A codificação roda na thread principal da página.** Ler quadros e empacotar é barato, mas é
   a mesma thread da interface. Mover captura e codificação para um Worker é a otimização natural,
   com medição que a justifique.

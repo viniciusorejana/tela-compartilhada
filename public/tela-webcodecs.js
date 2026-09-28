@@ -49,6 +49,15 @@
   // camada; numa sala cheia de gente perdendo pacote, atender todo pedido multiplicaria o
   // tráfego exatamente quando ele menos cabe. Passado o teto, quem pediu cai no quadro-chave.
   const REENVIOS_POR_SEGUNDO = 60;
+  // E um orçamento em bytes: um quarto do bitrate da camada por segundo, só de quadros novos o
+  // bastante para quem pediu ainda estar esperando (o decodificador desiste em 400 ms), e nada
+  // com a fila do ritmador já longa. Sem isso, numa rede de verdade, um engasgo virava
+  // tempestade: cada buraco pedia reenvio, o reenvio ia para todos e furava a fila, os quadros
+  // seguintes atrasavam e viravam buracos também. Medido contra a VPS: 80 quadros reenviados num
+  // segundo, 325 KB parados no ritmador, 600 ms de atraso e a subida a 26 Mbps para uma tela de 6.
+  const FRACAO_DO_REENVIO = 0.25;
+  const MS_DE_VALIDADE_DO_REENVIO = 500;
+  const MS_DE_FILA_QUE_SUSPENDE_O_REENVIO = 150;
   // Depois de ligar ou redimensionar uma camada, os sinais de aperto ficam desligados por este
   // tempo. O codificador de hardware leva um instante para inicializar, e nesse instante a fila
   // enche -- sem esta espera, a própria partida parecia saturação, a imagem encolhia, o
@@ -329,6 +338,7 @@
       const faixas = [...t.faixasDeDados.values()];
       t.faixasDeDados.clear();
       t.espectadores.clear();
+      t.saude?.clear();
       t.modo = 'rtp';
       t.codec = null;
       t.limiteDaPlaca = null;
@@ -437,9 +447,13 @@
     // rede de casa. Pelo console:
     //   transporte.telaWebCodecs.simularPerda(0.05)   descarta 5% dos PACOTES recebidos
     //   transporte.telaWebCodecs.simularAperto(0.5)   o portão de envio recusa metade dos quadros
-    // Zero desliga. Nenhuma das duas é chamada pela sala.
+    //   transporte.telaWebCodecs.simularPerda(1)      a faixa para de chegar, e as mensagens não
+    //   transporte.telaWebCodecs.simularSilencio(true)  a faixa E as respostas de quem transmite
+    //                                                  param: o travamento visto contra a VPS
+    // Zero (ou `false`) desliga. Nenhuma delas é chamada pela sala.
     let apertoSimulado = 0;
     let perdaSimulada = 0;
+    let silencioSimulado = false;
     let perdaInstalada = false;
     function instalarPerdaSimulada() {
       // Por pacote, e não por quadro: um quadro-chave tem vários pacotes, e perder qualquer um
@@ -447,7 +461,7 @@
       const gerente = sala.incomingDataTrackManager;
       if (perdaInstalada || typeof gerente?.packetReceived !== 'function') return perdaInstalada;
       const original = gerente.packetReceived.bind(gerente);
-      gerente.packetReceived = bytes => (perdaSimulada > 0 && Math.random() < perdaSimulada ? undefined : original(bytes));
+      gerente.packetReceived = bytes => (silencioSimulado || (perdaSimulada > 0 && Math.random() < perdaSimulada) ? undefined : original(bytes));
       perdaInstalada = true;
       return true;
     }
@@ -500,7 +514,7 @@
       t.bytesEnviados += envelope.byteLength;
       const c = t.camadas.get(saida.camada);
       if (c) {
-        c.recentes.set(saida.sequencia, { envelope, capturaUs: saida.capturaUs });
+        c.recentes.set(saida.sequencia, { envelope, capturaUs: saida.capturaUs, em: performance.now() });
         if (c.recentes.size > QUADROS_GUARDADOS_PARA_REENVIO) c.recentes.delete(c.recentes.keys().next().value);
       }
       enfileirarQuadro(t, faixa, envelope, saida);
@@ -521,18 +535,32 @@
       const c = t?.camadas.get(mensagem.camada);
       const faixa = t?.faixasDeDados.get(mensagem.camada);
       if (!c || !faixa || c.geracao !== mensagem.geracao || podeEnviar(t) !== true) return;
+      // Com a fila já longa, o reenvio chegaria depois de quem pediu desistir -- e ainda
+      // atrasaria todo o resto.
+      if (t.ritmador.atrasoMs > MS_DE_FILA_QUE_SUSPENDE_O_REENVIO) return;
       const agora = Date.now();
-      if (agora - c.janelaDeReenvio >= 1000) { c.janelaDeReenvio = agora; c.reenviosNaJanela = 0; }
+      if (agora - c.janelaDeReenvio >= 1000) { c.janelaDeReenvio = agora; c.reenviosNaJanela = 0; c.bytesReenviadosNaJanela = 0; }
+      const orcamento = Math.max(2 * Quadro.TAMANHO_DO_PEDACO, c.estado.bitrate / 8 * FRACAO_DO_REENVIO);
+      const instante = performance.now();
+      // O começo do buraco primeiro: é ele que segura a imagem. O que não coube no orçamento
+      // fica para o quadro-chave.
+      const escolhidos = [];
+      let bytes = c.bytesReenviadosNaJanela || 0;
+      for (let sequencia = mensagem.de; sequencia <= mensagem.ate; sequencia++) {
+        const guardado = c.recentes.get(sequencia);
+        if (!guardado || instante - guardado.em > MS_DE_VALIDADE_DO_REENVIO) continue;
+        if (c.reenviosNaJanela + escolhidos.length >= REENVIOS_POR_SEGUNDO || bytes + guardado.envelope.byteLength > orcamento) break;
+        bytes += guardado.envelope.byteLength;
+        escolhidos.push([sequencia, guardado]);
+      }
       // Do último para o primeiro, cada um furando a fila: assim o buraco sai em ordem, na
       // frente de tudo.
-      for (let sequencia = mensagem.ate; sequencia >= mensagem.de; sequencia--) {
-        if (c.reenviosNaJanela >= REENVIOS_POR_SEGUNDO) return;
-        const guardado = c.recentes.get(sequencia);
-        if (!guardado) continue;
+      for (const [sequencia, guardado] of escolhidos.reverse()) {
         enfileirarQuadro(t, faixa, guardado.envelope, { camada: mensagem.camada, sequencia, geracao: c.geracao, capturaUs: guardado.capturaUs }, { primeiro: true });
-        c.reenviados += 1;
-        c.reenviosNaJanela += 1;
       }
+      c.reenviados += escolhidos.length;
+      c.reenviosNaJanela += escolhidos.length;
+      c.bytesReenviadosNaJanela = bytes;
     }
 
     function falhar(t, motivo) {
@@ -552,9 +580,9 @@
       if (!t.espectadores.has(de)) t.espectadores.set(de, new Map());
       const porCamada = t.espectadores.get(de);
       const novo = !porCamada.has(mensagem.camada);
-      const registro = porCamada.get(mensagem.camada) || {};
+      const registro = porCamada.get(mensagem.camada) || { desde: Date.now() };
       registro.visto = Date.now();
-      if (mensagem.tipo === 'relato') registro.relato = mensagem;
+      if (mensagem.tipo === 'relato') { registro.relato = mensagem; registro.relatoNovo = true; }
       porCamada.set(mensagem.camada, registro);
       if (mensagem.tipo === 'quero' || novo) {
         iniciarCodificacao(t, mensagem.camada);
@@ -640,8 +668,10 @@
       // teto derrubaria a tela para o tamanho do microfone.
       if (agora - (t.saidaLidaEm || 0) > 2000) { t.saidaLidaEm = agora; lerSaidaDisponivel(t); }
 
+      const enviadosPorCamada = new Map();
       for (const [camada, c] of t.camadas) {
         const s = c.codificador.fecharJanela();
+        enviadosPorCamada.set(camada, s.quadrosNaJanela - s.descartes.codificador - s.descartes.fila - s.descartes.rede);
         const perdas = [];
         for (const porCamada of t.espectadores.values()) {
           const r = porCamada.get(camada)?.relato;
@@ -658,12 +688,17 @@
         const fracao = n => (s.quadrosNaJanela > 0 ? n / s.quadrosNaJanela : 0);
         const saidaNaJanela = fracao(s.descartes.rede + s.descartes.fila) > FRACAO_PULADA_QUE_APERTA;
         const codificadorNaJanela = fracao(s.descartes.codificador) > FRACAO_PULADA_QUE_APERTA;
+        const perdaNaJanela = aquecendo ? 0 : mediana(perdas);
         const sinais = {
           saidaApertada: !aquecendo && saidaNaJanela && c.saidaNaJanelaAnterior,
-          perda: aquecendo ? 0 : mediana(perdas),
+          // A perda também precisa de duas janelas: um segundo ruim é o engasgo que o reenvio e
+          // o quadro-chave já resolvem, e cortar o orçamento por ele deixava a imagem menor por
+          // dez segundos.
+          perda: Math.min(perdaNaJanela, c.perdaNaJanelaAnterior ?? 0),
           codificadorApertado: !aquecendo && codificadorNaJanela
         };
         c.saidaNaJanelaAnterior = saidaNaJanela;
+        c.perdaNaJanelaAnterior = perdaNaJanela;
         const novo = Decisoes.ajustarCamada(c.estado, sinais, tetoPara);
         const mudouTamanho = novo.largura !== c.estado.largura || novo.altura !== c.estado.altura || novo.quadros !== c.estado.quadros;
         if (mudouTamanho || novo.bitrate !== c.estado.bitrate) c.codificador.reconfigurar(novo);
@@ -675,6 +710,52 @@
         c.sinais = sinais;
         c.ultima = s;
       }
+      avaliarSaude(t, enviadosPorCamada, agora);
+    }
+
+    // O caminho novo está entregando? (`caminhoFalhando`, tela-decisoes.js). Um relato conta uma
+    // vez só: o de cada espectador chega a cada segundo, mas não alinhado com este passo, e contar
+    // o mesmo duas vezes dobraria uma janela ruim. A folga -- depois de entrar no caminho novo, e
+    // depois de cada pessoa pedir cada camada -- cobre a assinatura e o primeiro quadro-chave: quem
+    // começa a assistir passa um ou dois segundos sem imagem, e isso não é a faixa parada.
+    const MS_DE_FOLGA_DA_SAUDE = 5000;
+    // O relato que para de chegar, com a pessoa ainda na sala e sem ter soltado a camada, é a
+    // faixa e as mensagens paradas juntas -- medido contra a VPS, um travamento que não voltava.
+    const MS_SEM_RELATO_QUE_PREOCUPA = 2500;
+    function avaliarSaude(t, enviados, agora) {
+      t.saude ||= new Map();
+      for (const id of t.saude.keys()) if (!t.espectadores.has(id)) t.saude.delete(id);
+      if (agora - (t.entrouEm || 0) < MS_DE_FOLGA_DA_SAUDE) return;
+      for (const [id, porCamada] of t.espectadores) {
+        let parado = false, ruim = false, avaliou = false;
+        for (const [camada, registro] of porCamada) {
+          if (agora - (registro.desde || 0) < MS_DE_FOLGA_DA_SAUDE) { registro.relatoNovo = false; continue; }
+          const enviadosAqui = enviados.get(camada) || 0;
+          if (registro.relatoNovo) {
+            registro.relatoNovo = false;
+            const janela = Decisoes.janelaDoEspectador(registro.relato, enviadosAqui);
+            parado ||= janela.parado; ruim ||= janela.ruim; avaliou = true;
+          } else if (agora - registro.visto > MS_SEM_RELATO_QUE_PREOCUPA && sala.remoteParticipants.has(id)) {
+            const janela = Decisoes.janelaDoEspectador(null, enviadosAqui);
+            parado ||= janela.parado; ruim ||= janela.ruim; avaliou = true;
+          }
+        }
+        if (!avaliou) continue;
+        if (!t.saude.has(id)) t.saude.set(id, { nome: nomeDe(id), janelas: [] });
+        const saude = t.saude.get(id);
+        saude.janelas.push({ parado, ruim });
+        if (saude.janelas.length > Decisoes.JANELAS_DA_SAUDE) saude.janelas.shift();
+      }
+      const motivo = Decisoes.caminhoFalhando([...t.saude.values()]);
+      if (motivo) {
+        t.saude.clear();
+        falhar(t, motivo);
+      }
+    }
+
+    function nomeDe(id) {
+      const p = sala.remoteParticipants.get(id);
+      return p?.name || String(id).split('#')[0] || 'alguém';
     }
 
     // ========== Quem assiste ==========
@@ -758,6 +839,7 @@
           if (lido.done) break;
           const bruto = lido.value;
           if (tela.recepcao !== recepcao) continue;
+          recepcao.ultimoPedaco = Date.now();
           // Cada quadro da faixa é um pedaço (ver o ritmador, em tela-quadro.js); o envelope só
           // existe depois de todos os pedaços dele chegarem.
           const pedaco = Quadro.lerPedaco(bruto.payload);
@@ -801,6 +883,7 @@
     function acertarRelogio(de, mensagem) {
       const tela = telas.get(de);
       if (!tela) return;
+      tela.ultimoPong = Date.now();
       const ida = agoraMs() - mensagem.enviadoEm;
       if (ida < 0 || ida > 10000) return;
       tela.relogio.push({ ida, desvio: mensagem.respondidoEm - (mensagem.enviadoEm + ida / 2) });
@@ -820,8 +903,10 @@
       const recepcao = tela.recepcao;
       if (!recepcao) return;
       const janela = tela.ultimaJanela;
+      const novaJanela = Boolean(janela) && janela !== tela.janelaAvaliada;
+      if (novaJanela) tela.janelaAvaliada = janela;
       tela.adaptacao = Decisoes.camadaDoEspectador(tela.adaptacao, {
-        pedida: camadaPedida(id), perda: janela?.perda || 0, pedidosDeChave: janela?.pedidosPorBuraco || 0
+        pedida: camadaPedida(id), perda: janela?.perda || 0, pedidosDeChave: janela?.pedidosPorBuraco || 0, novaJanela
       });
       let camada = tela.adaptacao.camada;
       if (!tela.faixas.has(camada)) camada = tela.faixas.has('alta') ? 'alta' : 'baixa';
@@ -833,10 +918,39 @@
       }
     }
 
+    // A faixa que para de chegar e não volta. Medido contra a VPS: o servidor de mídia às vezes
+    // deixa de entregar a faixa de dados a quem assiste -- às vezes junto com todas as mensagens
+    // --, e a imagem ficava congelada até alguém recarregar. Tela parada também é legítima (a
+    // captura só entrega quadro quando algo muda na tela), então a falta de pedaços só PERGUNTA:
+    // um ping a quem transmite. Sem resposta, o caminho novo está morto para este aparelho, e a
+    // tela volta pelo RTP. Com resposta, quem transmite está lá e sabe se está mandando -- ele
+    // próprio desiste quando o relato daqui diz que nada chega (`caminhoFalhando`).
+    const MS_SEM_PEDACOS_QUE_PREOCUPA = 2500;
+    const MS_PELA_RESPOSTA_DA_SONDA = 2500;
+    const MS_ENTRE_SONDAS = 10000;
+    function chegadaMorreu(tela, recepcao, agora) {
+      const parada = recepcao.assinaturas.size > 0
+        && agora - Math.max(recepcao.ultimoPedaco || 0, recepcao.iniciadaEm) > MS_SEM_PEDACOS_QUE_PREOCUPA;
+      if (!parada) { tela.sondaEm = 0; return false; }
+      const respondeu = (tela.ultimoPong || 0) >= tela.sondaEm;
+      if (!tela.sondaEm || (respondeu && agora - tela.sondaEm > MS_ENTRE_SONDAS)) {
+        tela.sondaEm = agora;
+        pingar(tela);
+        return false;
+      }
+      return !respondeu && agora - tela.sondaEm > MS_PELA_RESPOSTA_DA_SONDA;
+    }
+
     function passoDoRecebimento() {
+      const agora = Date.now();
       for (const tela of telas.values()) {
         const recepcao = tela.recepcao;
         if (!recepcao) continue;
+        if (chegadaMorreu(tela, recepcao, agora)) {
+          // Fecha a recepção de todas as telas: é o mesmo servidor, e o RTP as traz de volta.
+          falharRecebimento('a tela parou de chegar e quem transmite não responde');
+          return;
+        }
         recepcao.decodificador.vigiar();
         recepcao.montador.limpar();
         const janela = recepcao.decodificador.fecharJanela();
@@ -847,7 +961,8 @@
           enviar('relato', {
             camada, recebidos: janela.recebidos, perdidos: janela.perdidos, decodificados: janela.decodificados,
             pedidosDeChave: janela.pedidosDeChave, bytes: janela.bytesNaJanela,
-            atrasoMs: Number.isFinite(janela.atrasoMs) ? janela.atrasoMs : null
+            atrasoMs: Number.isFinite(janela.atrasoMs) ? janela.atrasoMs : null,
+            rebaixada: Boolean(tela.adaptacao?.rebaixada)
           }, tela.id);
         }
         if (Date.now() - tela.ultimoPing > MS_ENTRE_PINGS) pingar(tela);
@@ -892,7 +1007,7 @@
             enviar('pong', { enviadoEm: mensagem.enviadoEm, respondidoEm: agoraMs() }, de);
             break;
           case 'pong':
-            acertarRelogio(de, mensagem);
+            if (!silencioSimulado) acertarRelogio(de, mensagem);
             break;
         }
       })
@@ -1140,9 +1255,16 @@
       },
 
       simularPerda(fracao) {
-        perdaSimulada = Math.max(0, Math.min(0.9, Number(fracao) || 0));
+        perdaSimulada = Math.max(0, Math.min(1, Number(fracao) || 0));
         const ok = instalarPerdaSimulada();
         anotar('tela.simulacao', `perda de ${Math.round(perdaSimulada * 100)}% dos pacotes recebidos${ok ? '' : ' (indisponível nesta versão da biblioteca)'}`);
+        return ok;
+      },
+
+      simularSilencio(ligado) {
+        silencioSimulado = Boolean(ligado);
+        const ok = instalarPerdaSimulada();
+        anotar('tela.simulacao', silencioSimulado ? 'a faixa e as respostas de quem transmite pararam de chegar' : 'silêncio desligado');
         return ok;
       },
 

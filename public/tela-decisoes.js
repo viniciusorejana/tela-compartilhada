@@ -71,7 +71,7 @@
         if (agora - (p.chegouEm || 0) < MS_DE_FOLGA_PARA_SE_APRESENTAR) { aguardando = true; continue; }
         return rtp(`${p.nome} está numa versão do Nexo que não recebe por aqui`);
       }
-      if (!p.cap.recebe) return rtp(`${p.nome} não pode receber por WebCodecs (desligado ou sem suporte)`);
+      if (!p.cap.recebe) return rtp(`${p.nome} não pode receber por WebCodecs (desligado, sem suporte ou depois de uma falha)`);
       codecs = codecs.filter(c => p.cap.dec.includes(c));
       if (!codecs.length) return rtp(`${p.nome} não decodifica ${codecsDoEnvio.map(c => NOME_DO_CODEC[c] || c).join(' nem ')} por WebCodecs`);
     }
@@ -263,15 +263,91 @@
   // grade e o quadradinho ficam com a de 360p. Depois vem a conexão de quem assiste: perda
   // sustentada, ou pedidos de quadro-chave em série, rebaixam para a camada leve por um tempo.
   // É a versão desta sala do "a camada que a conexão aguenta" que o servidor fazia no RTP.
+  //
+  // Sustentada quer dizer DUAS janelas seguidas. Um segundo ruim só -- um quadro-chave que se
+  // perdeu, uma troca de cena que atrasou -- rebaixava por 20 s, e numa rede de verdade isso
+  // punha a sala inteira em 360p quase o tempo todo (medido contra a VPS: um único segundo de
+  // perda deixou os três espectadores 20 s na camada leve, com a rede já boa de novo). O tempo
+  // rebaixado começa curto e só cresce se a conexão voltar a apertar logo depois.
   const PERDA_QUE_REBAIXA = 0.08;
   const PEDIDOS_QUE_REBAIXAM = 3;
-  const MS_REBAIXADO = 20000;
+  const JANELAS_RUINS_PARA_REBAIXAR = 2;
+  const MS_REBAIXADO = 8000;
+  const MS_REBAIXADO_MAXIMO = 32000;
+  const MS_PARA_ESQUECER_O_REBAIXAMENTO = 60000;
 
-  function camadaDoEspectador(estado, { pedida, perda = 0, pedidosDeChave = 0, agora = Date.now() }) {
-    const rebaixadaAte = (perda > PERDA_QUE_REBAIXA || pedidosDeChave >= PEDIDOS_QUE_REBAIXAM)
-      ? agora + MS_REBAIXADO : (estado?.rebaixadaAte || 0);
-    const camada = pedida === 'baixa' || agora < rebaixadaAte ? 'baixa' : 'alta';
-    return { camada, rebaixadaAte };
+  // `novaJanela`: a medição é de um segundo que ainda não foi contado. A camada é recalculada
+  // sempre que algo muda na tela, várias vezes por segundo, e a mesma janela contada de novo a
+  // cada vez rebaixaria por um segundo ruim só.
+  function camadaDoEspectador(estado, { pedida, perda = 0, pedidosDeChave = 0, novaJanela = true, agora = Date.now() }) {
+    let seguidas = estado?.seguidas || 0;
+    let rebaixadaAte = estado?.rebaixadaAte || 0;
+    let vezes = estado?.vezes || 0;
+    if (novaJanela) {
+      const ruim = perda > PERDA_QUE_REBAIXA || pedidosDeChave >= PEDIDOS_QUE_REBAIXAM;
+      seguidas = ruim ? seguidas + 1 : 0;
+      if (seguidas >= JANELAS_RUINS_PARA_REBAIXAR && agora >= rebaixadaAte) {
+        // Rebaixar de novo pouco depois de voltar é sinal de que a volta foi cedo demais.
+        vezes = rebaixadaAte && agora - rebaixadaAte < MS_PARA_ESQUECER_O_REBAIXAMENTO ? vezes + 1 : 1;
+        rebaixadaAte = agora + Math.min(MS_REBAIXADO * 2 ** (vezes - 1), MS_REBAIXADO_MAXIMO);
+      }
+    }
+    const rebaixada = agora < rebaixadaAte;
+    const camada = pedida === 'baixa' || rebaixada ? 'baixa' : 'alta';
+    return { camada, rebaixada, rebaixadaAte, seguidas, vezes };
+  }
+
+  // ---------- O caminho novo está entregando? ----------
+  //
+  // A faixa de dados custa ao servidor de mídia umas quatro vezes o processador do RTP por
+  // megabit: ali cada pacote passa pelo SCTP, com confirmação, fila e temporizador, e não é só
+  // repassado. Medido no mesmo servidor, 1440p60 para três espectadores: 28,6% de um núcleo pela
+  // faixa de dados contra 5,5% pelo RTP. Numa máquina pequena (a VPS da Oracle do primeiro teste
+  // de verdade), isso basta para o servidor engasgar: a tela chega atrasada, com perda, todo mundo cai para 360p --
+  // e às vezes a faixa para de chegar de vez, sem voltar. Pelo RTP, a mesma máquina fica folgada.
+  //
+  // Então quem transmite confere, a cada segundo, o que cada espectador relata, e desiste do
+  // caminho novo quando ele não entrega o que o RTP entregaria (a espera até tentar de novo é a
+  // mesma de qualquer falha, `esperaAteTentarDeNovo`).
+  //
+  // Uma janela de um espectador é:
+  //  - PARADA quando a camada saiu da placa e o relato diz que nada chegou;
+  //  - RUIM quando chegou com atraso de fila, com perda que o reenvio não cobriu, ou quando a
+  //    pessoa está rebaixada para a camada leve pela conexão.
+  const MS_DE_ATRASO_RUIM = 350;
+  const PERDA_RUIM = 0.1;
+  const QUADROS_PARA_JULGAR_PARADA = 5;
+  const JANELAS_PARADAS_QUE_DERRUBAM = 3;
+  const JANELAS_DA_SAUDE = 8;
+  const JANELAS_RUINS_QUE_DERRUBAM = 4;
+
+  function janelaDoEspectador(relato, quadrosEnviados) {
+    if (!relato) return { parado: quadrosEnviados >= QUADROS_PARA_JULGAR_PARADA, ruim: true };
+    const parado = quadrosEnviados >= QUADROS_PARA_JULGAR_PARADA && !(relato.recebidos > 0);
+    const total = (relato.recebidos || 0) + (relato.perdidos || 0);
+    const perda = total ? relato.perdidos / total : 0;
+    const ruim = parado || perda > PERDA_RUIM || (Number.isFinite(relato.atrasoMs) && relato.atrasoMs > MS_DE_ATRASO_RUIM) || relato.rebaixada === true;
+    return { parado, ruim };
+  }
+
+  // `espectadores`: [{ nome, janelas: [{ parado, ruim }, ...] }], da janela mais velha para a mais
+  // nova. Devolve o motivo de desistir, ou `null`.
+  //
+  // Parada derruba por UMA pessoa: é imagem congelada, e o RTP a traz de volta. Ruim só derruba
+  // quando é a MAIORIA: uma pessoa com a rede ruim desce sozinha para a camada leve, e a sala
+  // inteira não troca de caminho por causa dela.
+  function caminhoFalhando(espectadores) {
+    for (const { nome, janelas } of espectadores) {
+      const ultimas = janelas.slice(-JANELAS_PARADAS_QUE_DERRUBAM);
+      if (ultimas.length === JANELAS_PARADAS_QUE_DERRUBAM && ultimas.every(j => j.parado)) {
+        return `a imagem parou de chegar a ${nome}`;
+      }
+    }
+    const comProblema = espectadores.filter(({ janelas }) => janelas.slice(-JANELAS_DA_SAUDE).filter(j => j.ruim).length >= JANELAS_RUINS_QUE_DERRUBAM);
+    if (espectadores.length && comProblema.length > espectadores.length / 2) {
+      return 'a imagem chegava atrasada ou com perda a quem assiste (o servidor de mídia pode estar sem folga)';
+    }
+    return null;
   }
 
   // ---------- O nome do codec ----------
@@ -343,7 +419,8 @@
     decidirModo, MS_DE_FOLGA_PARA_SE_APRESENTAR, servidorConfiavel, VERSAO_MINIMA_DO_SERVIDOR,
     necessario, ESCALAS, QUADROS_POSSIVEIS, dimensoesNaEscala, caberNaCaixa, iniciarCamada, ajustarCamada, degrausDaPlaca,
     SEGUNDOS_PARA_SUBIR_DE_DEGRAU, PERDA_QUE_APERTA,
-    camadaDoEspectador, MS_REBAIXADO,
+    camadaDoEspectador, MS_REBAIXADO, MS_REBAIXADO_MAXIMO, JANELAS_RUINS_PARA_REBAIXAR,
+    janelaDoEspectador, caminhoFalhando, JANELAS_PARADAS_QUE_DERRUBAM, JANELAS_RUINS_QUE_DERRUBAM, JANELAS_DA_SAUDE, MS_DE_ATRASO_RUIM,
     nivelH264, codecsH264
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
