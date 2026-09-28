@@ -227,6 +227,18 @@ quantas salas estão no teto base agora, o pico no período e quantas entradas f
 lotação. Os dois últimos vão para `uso.jsonl` a cada minuto (`salasNoTetoBase`,
 `recusasPorLotacao`), sem nome e sem sala. É esta linha que diz se 25 e 50 são os números certos.
 
+## Mídia: a chave da tela por WebCodecs
+
+A seção **Mídia** tem o botão de pânico do caminho novo da tela (`docs/plano-webcodecs.md`):
+**Desligar para todo mundo** tira o WebCodecs de todas as salas em segundos, sem ninguém
+recarregar — quem está numa sala recebe o aviso pelo socket, e quem entra recebe a chave junto com
+a credencial. **Liberar de novo** não liga nada à força: cada aparelho volta a decidir sozinho, e
+no automático só entra com placa de vídeo, servidor 1.13.7+ e a sala inteira recebendo.
+
+A escolha fica em `webcodecs.json`, na pasta privada do painel, e sobrevive a reinícios. A
+variável `NEXO_WEBCODECS` (`0` desliga, `1` libera) vence o painel e o trava: é a chave de quem
+opera a máquina, e precisa valer mesmo que o painel tenha guardado outra coisa semanas antes.
+
 ## Coleta, retenção e recursos
 
 - Prometheus local: `SFU_METRICAS_PORT`, padrão 7883, com Basic Auth derivada do segredo

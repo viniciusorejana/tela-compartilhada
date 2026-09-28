@@ -1195,7 +1195,7 @@ As variáveis principais:
 | `SFU_TCP_PORT` | `7881` | Porta TCP alternativa |
 | `SFU_PORT` | `7880` | Porta local do servidor de midia; nao abrir no roteador |
 | `NEXO_BINARIO_SFU` | dentro de `NEXO_PASTA_SFU` | Caminho do executavel do servidor de midia. Separado da pasta de configuracao porque a regra de firewall do Windows e por caminho: binario em pasta nova pede permissao de novo |
-| `NEXO_LIVEKIT` | `1.13.6` | Versao do servidor de midia a baixar, entre as DECLARADAS no `scripts/baixar-livekit.cjs` (hoje `1.13.6` e `1.13.7`) -- nunca "a mais recente", e sempre com SHA-256 conferido. A `1.13.7` e a primeira que recebe VP9 e AV1 como simulcast de verdade, ou seja, com o degrau leve de 360p que a grade e a rede ruim usam; ela ainda nao e o padrao porque falta validar numa sala real. Trocar re-baixa por cima: a pasta e uma so, de proposito (ver o comentario no script) |
+| `NEXO_LIVEKIT` | `1.13.6` | Versao do servidor de midia a baixar, entre as DECLARADAS no `scripts/baixar-livekit.cjs` (hoje `1.13.6` e `1.13.7`) -- nunca "a mais recente", e sempre com SHA-256 conferido. A `1.13.7` e a primeira que recebe VP9 e AV1 como simulcast de verdade, ou seja, com o degrau leve de 360p que a grade e a rede ruim usam, e a primeira sem o travamento das faixas de dados -- a tela por WebCodecs no automatico so liga a partir dela; ela ainda nao e o padrao porque falta validar numa sala real. Trocar re-baixa por cima: a pasta e uma so, de proposito (ver o comentario no script) |
 | `NEXO_MAXIMO_DE_BOTS` | `8` | Salas com musica tocando ao mesmo tempo |
 | `NEXO_DURACAO_MAXIMA` | `10800` | Segundos que uma faixa pode ter |
 | `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
@@ -1203,6 +1203,8 @@ As variáveis principais:
 | `NEXO_SOUNDBOARD_MAXIMO_MB` | `256` | Memoria da mesa de sons somando TODAS as salas |
 | `NEXO_ANUNCIAR_TAILSCALE` | `0` | `1` oferece o endereco da tailnet como candidato ICE. So vale a pena se `tailscale status` listar mais de uma maquina: quem chega pelo Funnel nao alcanca um `100.x` e so ganharia espera |
 | `NEXO_LOG_SFU` | vazio | Vazio mostra so ERROR/FATAL/WARN do servidor de midia; `1` mostra tudo (util para ICE, mas traz nome e endereco dos participantes); `arquivo` grava tudo em `native/livekit/sfu.log`; `0` silencia |
+| `NEXO_NIVEL_SFU` | `info` | Nível do registro do servidor de mídia (`debug`, `info`, `warn`, `error`). `debug`, junto de `NEXO_LOG_SFU=arquivo`, mostra o que o servidor decide sobre cada assinatura -- o único lugar em que aparece por que uma faixa pedida não desce |
+| `NEXO_WEBCODECS` | vazio | Chave da tela por WebCodecs para todo mundo: `0` desliga, `1` libera, e as duas travam a escolha do painel. Vazio deixa o painel (seção Mídia) decidir, liberado por padrão. Ver `docs/plano-webcodecs.md` |
 | `NEXO_PAINEL_REMOTO` | `0` | `1` permite abrir `/painel` fora da maquina do servidor. Exige `PUBLIC_URL` https e proxy declarado |
 | `NEXO_PROXIES_CONFIAVEIS` | vazio | IPs dos proxies de quem o servidor aceita `X-Forwarded-For`. Sem isso, todos atras de um tunel dividem o mesmo limite por origem |
 | `NEXO_SEM_MIDIA` | `0` | `1` sobe só o chat, as contas e o painel, sem servidor de mídia |

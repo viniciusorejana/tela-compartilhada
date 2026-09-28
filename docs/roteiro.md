@@ -152,9 +152,14 @@ Estimativa deste roteiro; nenhum plano mediu esta fase ainda.
 
 A ordem aqui é decidida pelo que a comunidade reclamar mais, e não antes.
 
-- **WebCodecs** (degrau 7): começa pela etapa 0 — quatro medições de até um dia. A 0.4 (quanto
-  o jogo ainda perde com 0, 1 e 3 espectadores) é o portão de valor. Se valer, são dez etapas,
-  abandonáveis em qualquer ponto sem deixar a sala pior.
+- **WebCodecs** (degrau 7): **implementado na branch `nexo-webcodecs`** (27/09/2026), as dez
+  etapas, com `npm run test:webcodecs`. A 0.2 foi respondida (a 1.13.6 aceita faixa de dados) e a
+  0.1 e a 0.3 foram medidas em loopback, e a placa de vídeo desta máquina entrega as seis
+  combinações de 720p a 1440p60 (`npm run test:webcodecs:placa`); o que falta é de campo: a
+  **0.4** (quanto o jogo ganha, com 0, 1 e 3 espectadores — o portão de valor), a faixa de dados
+  pelo túnel, uma placa AMD ou Intel, e o iPhone. **Antes de pôr no ar: servidor de mídia 1.13.7** — a 1.13.6 trava a
+  sinalização de quem assina uma faixa de dados no instante em que ela sai, e sem a 1.13.7 o
+  automático não liga. O que foi decidido e medido está no fim de `plano-webcodecs.md`.
 - **Salas e conversas persistentes**, preparadas no plano de contas. A sala que não expira é
   por onde o premium cresce.
 - Entrar com Discord; senha de sala; avatar enviado por arquivo; agentes de áudio nativos no

@@ -1,7 +1,9 @@
 # Plano — a tela por WebCodecs sobre faixas de dados do LiveKit
 
-Branch proposta: `nexo-webcodecs`, a partir de `nexo-sfu`, fora de `codex/`.
-Escrito para ser executado depois; nada aqui foi implementado.
+Branch: `nexo-webcodecs`, a partir de `fase-1-contas`. **Implementado** (27/09/2026): o que a
+implementação decidiu, o que mediu e o que ainda falta validar está em
+["O que a implementação decidiu"](#o-que-a-implementação-decidiu), no fim. O resto do documento
+continua sendo o porquê.
 
 ## O que este plano precisa atender
 
@@ -427,3 +429,149 @@ a placa de vídeo: a codificação continua no processador, disputando com o jog
 
 E por isso ele muda o peso da pergunta **0.4**, sem responder por ela. Medir agora, com a
 escala no ar, é o que diz se ainda existe problema para este plano resolver.
+
+---
+
+## O que a implementação decidiu
+
+Implementado em 27/09/2026, na branch `nexo-webcodecs`. O portão da etapa 0 foi atravessado
+por decisão explícita — implementar primeiro e medir com o código na mão —, e por isso as
+medições que dependem de rede real e de jogo real continuam abertas (ver "O que falta medir").
+
+### Onde mora
+
+| Peça | Arquivo |
+| --- | --- |
+| Envelope do quadro e mensagens de controle | `public/tela-quadro.js` |
+| Decisões puras: caminho, adaptação, camada do espectador, nível do H.264 | `public/tela-decisoes.js` |
+| Captura → `VideoEncoder`, uma instância por camada | `public/tela-codificador.js` |
+| `VideoDecoder` → `MediaStream`, com reordenação e reenvio | `public/tela-decodificador.js` |
+| O orquestrador: capacidade, caminho, faixas, espectadores, relógio | `public/tela-webcodecs.js` |
+| Integração (a superfície `peers` não mudou) | `public/room-transport.js` |
+| Interruptor, medição do envio, parâmetros do perfil | `public/sala.js`, `sala.html` |
+| Cartão no Diagnóstico | `public/room-ui.js` |
+| Chave do servidor (botão de pânico) | `chave-webcodecs.js`, `/painel/api/midia`, seção "Mídia" do painel |
+| Testes | `tests/tela-webcodecs.test.js` (`npm test`), `tests/webcodecs-browser.cjs` (`npm run test:webcodecs`, sem placa) e `tests/webcodecs-placa.cjs` (`npm run test:webcodecs:placa`, Chrome instalado e placa de vídeo de verdade) |
+
+### Onde a implementação diverge do plano, e por quê
+
+| O plano dizia | O que foi feito | Por quê |
+| --- | --- | --- |
+| Tudo ou nada: publicar pelos dois caminhos custaria o software de qualquer jeito | A publicação RTP da tela **continua sempre no ar**, e a imagem vai pela faixa de dados | Quem assiste pela faixa de dados não assina o RTP, e o dynacast desliga todas as camadas dele — nada é codificado ali. Em troca, "fulano compartilha", o Assistir, os espectadores e a conferência do plano no servidor ficam intactos, e a queda para o caminho de hoje é só reassinar |
+| O canal `_data_track` descarta com o portão de ~100 ms | **Não descarta**: na 2.22.3 ele faz contrapressão (`bufferFullBehavior: 'wait'`) | O portão virou nosso: o quadro é pulado ANTES de codificar quando o buffer passa de ~100 ms da taxa. É o único descarte que não quebra a cadeia de referências |
+| Capacidade anunciada (implícito: atributos) | Mensagem `cap` pelo canal confiável, com pergunta e resposta | O token não concede `canUpdateOwnMetadata`, e concedê-lo deixaria qualquer cliente trocar o próprio nome. E a mensagem que o recém-chegado manda ao entrar chega aos outros **sem remetente** (a sala ainda não o conhece): quem já está pergunta, e ele responde |
+| Retransmissão some; o PLI talvez baste | **Reenvio por quadro** (o NACK que se perdeu), antes do quadro-chave | Sem ele, 8% de perda de pacotes congelava a imagem por segundos: cada pacote perdido virava um quadro-chave, e o quadro-chave, com vários pacotes, é o que mais se perde. Quem envia guarda ~3 s por camada; quem assiste pede o buraco e espera 1,5 ida e volta |
+| `availableOutgoingBitrate` como um dos quatro sinais | Só no Diagnóstico | Ele é o controle de congestionamento do RTP, que não vê o SCTP. Medido: 300 kbps estimados com a tela saindo a 1,2 Mbps pela faixa de dados. Como teto, derrubaria a tela ao tamanho do microfone. Os sinais que decidem são o portão de envio, a perda relatada (mediana de quem assiste a camada) e a fila do codificador |
+| Uma faixa com id de camada, ou duas faixas | **Duas faixas**, `nexo-tela:alta` e `nexo-tela:baixa` | O servidor roteia por assinatura: quem está na camada leve não paga pela cheia. Cada camada só é codificada enquanto alguém a assiste |
+| Testes com VP8, porque o Chromium do Playwright pode não ter H.264 | Os testes rodam em **H.264** | O Chromium do Playwright tem H.264 no WebCodecs, em software (`prefer-hardware` recusado). Isso ainda exercita o "Automático sem placa fica no caminho de hoje" |
+| Desligamento remoto numa chave do `sala-config` | Chave no `sala-config` **e** aviso pelo socket, mudada pelo painel (ou fixada por `NEXO_WEBCODECS=0/1`) | Sem o aviso, quem já estava na sala só saberia na próxima reconexão |
+
+### O defeito do servidor 1.13.6, e o que ele mudou
+
+Reproduzido aqui: na 1.13.6, **assinar uma faixa de dados no instante em que ela é removida
+trava a sinalização de quem assinou** — dali em diante nenhum pedido daquela pessoa é atendido,
+nem a volta para o RTP, e a tela fica preta até ela recarregar. O registro do servidor mostra os
+pedidos chegando (`received signal request`) e nenhum mais sendo tratado. A 1.13.7 corrige
+("Fix/reconcile data track subscription deadlock", livekit#4843).
+
+Três consequências, todas no código:
+
+1. **O automático exige o servidor 1.13.7 ou mais novo** (`sala.serverInfo.version`). Na 1.13.6,
+   só o "Sempre ligada" usa o caminho novo — e o Diagnóstico diz por quê.
+2. **Quem transmite avisa antes de tirar as faixas** (`fim`) e espera 300 ms: quem assiste solta
+   a assinatura antes da remoção, e não durante.
+3. **Quem assiste nunca recua de camada quando uma delas some** — as camadas saem juntas, e a
+   outra é a próxima a sumir. Era exatamente o recuo para a camada de 360p, no meio da remoção,
+   que disparava o travamento.
+
+`NEXO_NIVEL_SFU=debug` (com `NEXO_LOG_SFU=arquivo`) foi o que mostrou isso, e ficou.
+
+### A placa de vídeo de verdade: o que o primeiro teste em casa revelou
+
+O primeiro teste manual, com o servidor na 1.13.7 e a NVENC desta máquina, caiu para o caminho
+de hoje com "o codificador recusou a configuração da imagem cheia". O Chromium do Playwright não
+tem placa, então nenhum teste automático podia ter visto. Perguntando ao Chrome 153 instalado (e
+ao Electron 44 do aplicativo, que se comporta igual):
+
+| Com `prefer-hardware` | Taxa declarada | Sem declarar a taxa |
+| --- | --- | --- |
+| 720p30, 720p60, 1080p30, 1080p60, 1440p30, 4K30 | aceita | aceita |
+| **1440p60, 4K60** | **recusa** | aceita, e codifica de verdade |
+
+O codificador do Windows usado pelo Chrome publica uma tabela conservadora (acima de 1080p, no
+máximo 30 quadros). A NVENC faz 1440p60 com folga: sem a taxa declarada, codificou 233 de 240
+quadros a 10 ms cada, com o bitrate obedecendo (6,4 Mbps para 6 pedidos) — o Chrome usa os
+carimbos de tempo dos quadros. Em software, a mesma cena estourava o bitrate (7,5 Mbps).
+
+O que mudou por causa disso:
+
+1. **A taxa só é declarada quando a placa aceita**; quando não, a mesma configuração vai sem ela.
+   A camada lembra a escolha ao configurar e ao reconfigurar.
+2. **Escada ainda na placa** (`degrausDaPlaca`): se nem assim ela aceitar — gráfico integrado,
+   notebook —, desce um degrau na placa em vez de cair para o processador no tamanho cheio. Em
+   movimento cede a resolução (1440p60 → 1080p60 → 720p60); em nitidez, os quadros (1440p60 →
+   1440p30). O motivo diz qual degrau subiu e por quê.
+3. **Trocar a qualidade no meio da transmissão refaz a escolha.** Antes, de 1080p30 para 1440p60
+   ao vivo reaproveitava a escolha antiga, declarava a taxa e caía no mesmo defeito.
+4. **O aquecimento do codificador não é aperto.** Na placa, os primeiros instantes depois de
+   configurar enchem a fila; isso contava como "codificador não acompanha", a imagem encolhia,
+   o encolhimento reconfigurava, e o codificador aquecia de novo — 1080p virou 864p sem aperto
+   nenhum. Agora os sinais ficam desligados por 3 s depois de ligar ou redimensionar, e aperto
+   exige mais de 10% dos quadros pulados numa janela (ou pulos em duas seguidas), nunca um pulo
+   isolado — um quadro-chave, sozinho, fecha o portão por um instante e não é a rede.
+5. **A fila do codificador tolera três quadros em voo**, e não dois: a placa trabalha em linha de
+   montagem, e com o limite em dois perdia ~5 de cada 60 quadros sem estar apertada.
+6. A sondagem de "tem placa?" aceita 720p30 como prova, para a escada ter chance em placas que
+   não vão até 1080p.
+
+`npm run test:webcodecs:placa` é o teste que teria pegado: usa o Chrome instalado, o
+**Automático**, e confere as seis combinações (720p/1080p/1440p × 30/60) saindo pela placa no
+tamanho e na taxa pedidos, mais a troca de 1080p30 para 1440p60 ao vivo. Resultado nesta máquina:
+
+| Pedido | Saiu | Por quadro na placa |
+| --- | --- | --- |
+| 720p30 / 720p60 | 1280×720, taxa declarada | 2,7 / 3,0 ms |
+| 1080p30 / 1080p60 | 1920×1080, taxa declarada | 5,8 / 6,4 ms |
+| 1440p30 | 2560×1440, taxa declarada | 10,1 ms |
+| 1440p60 | 2560×1440, **taxa não declarada** | 10,2 ms |
+
+Nenhum quadro pulado pelo codificador nem pela rede; os 47–54 de 60 medidos são o canvas
+sintético do teste, que não entrega 60 exatos. Ele pula (e diz por quê) numa máquina sem o
+Chrome, sem codificação de H.264 pela placa, ou com servidor anterior à 1.13.7.
+
+### O que foi medido
+
+Em loopback, na mesma máquina, com o Chromium do Playwright (software):
+
+| Medida | Resultado |
+| --- | --- |
+| **0.2** — o servidor 1.13.6 aceita publicar e assinar faixa de dados? | Sim. Quadros de 1 KB, 50 KB e 200 KB chegam inteiros |
+| **0.1** — quanto a faixa sustenta (loopback) | 2, 4, 8 e 16 Mbps a 30 quadros/s, sem perda; atraso p50 de 1 a 4 ms |
+| Atraso de ponta a ponta (relógios acertados por ping/pong) | ~5 ms |
+| **0.3** sintética — perda de pacotes simulada no receptor | 1%, 5% e 10%: palco parado de 0% a ~3% do tempo na maioria das execuções (uma execução a 5% deu 14%); quase todo buraco recuperado por reenvio, sem quadro-chave |
+| `configure()` só para mudar o bitrate exige quadro-chave? | **Não**, no codificador de software do Chrome: 3 reconfigurações, 0 quadros-chave espontâneos. Na placa de vídeo, conferir no Diagnóstico ("reconfigurações só de bitrate … com chave espontânea") |
+| Banda curta simulada (portão recusando metade) | 720p encolheu para 1024×576, quadros pedidos mantidos em 30 |
+
+### O que falta medir — e é seu
+
+| # | O quê | Como |
+| --- | --- | --- |
+| **0.4** | Quanto o jogo ganha: FPS e processador com 0, 1 e 3 espectadores, nos dois caminhos | O portão de valor do plano. Interruptor em "Desligada" contra "Automático", mesma cena |
+| **0.1** real | A faixa de dados pelo túnel e na LAN | O Diagnóstico mostra buffer, atraso e perda por camada |
+| **0.3** real | Perda de verdade (4G ruim, Wi-Fi cheio) | E, sem rede ruim à mão, `transporte.telaWebCodecs.simularPerda(0.05)` no console de quem assiste |
+| Placa de vídeo | ~~Que `prefer-hardware` sai mesmo na NVENC~~ — **medido**: as seis combinações saem pela placa no Chrome (`npm run test:webcodecs:placa`), e o Electron do aplicativo se comporta igual. Falta o mesmo numa placa AMD ou Intel | Diagnóstico → "Onde codifica: na placa de vídeo" |
+| iPhone | Recebe pelo `canvas.captureStream()`, e a bateria | O teste que decide, na ordem do plano |
+| Servidor | ~~Trocar para a 1.13.7~~ — feito nesta máquina | `$env:NEXO_LIVEKIT = '1.13.7'; npm run build:sfu` — sem ela o automático não liga. Falta tornar a 1.13.7 o padrão do `baixar-livekit.cjs` depois de validada numa sala real |
+
+### Limites conhecidos
+
+- **A codificação roda na thread principal da página.** Ler quadros e empacotar é barato, mas é
+  a mesma thread da interface. Mover captura e codificação para um Worker é a otimização natural,
+  com medição que a justifique.
+- **O teto do plano continua sendo conferido pelo que o cliente declara.** O caminho novo usa o
+  mesmo perfil já limitado pelo plano, mas um cliente modificado passaria dele como passaria no
+  RTP (`plano-contas.md`).
+- **"Sempre ligada" na 1.13.6** continua exposto ao travamento em corridas raras (alguém começar a
+  assistir no exato instante em que a transmissão sai do caminho novo). É diagnóstico, não padrão.
+- **A camada de 360p pode cair no processador** mesmo com placa: as placas de consumo limitam as
+  codificações simultâneas, e 360p a 15 quadros custa pouco.
