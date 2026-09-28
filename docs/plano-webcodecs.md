@@ -119,7 +119,7 @@ Então a decisão automática é:
 | --- | --- |
 | `VideoEncoder.isConfigSupported` aceita H.264 com `prefer-hardware` | O caminho novo |
 | Não aceita, ou a sala tem alguém sem `VideoDecoder` | O caminho de hoje |
-| A pessoa escolheu "Sempre ligada" | O caminho novo, com hardware ou sem |
+| A pessoa escolheu "Forçar WebCodecs" | O caminho novo, com hardware ou sem |
 
 Há **um** ganho real sem hardware, e ele é grande o bastante para o modo software não ser
 só diagnóstico: com WebCodecs o laço de codificação é nosso. Hoje, quando o codificador
@@ -268,16 +268,19 @@ depacketizer e entrar na mesma soma, com o mesmo cuidado de delta que já existe
 
 ### 8. Os interruptores
 
-Em **Dispositivos → Qualidade**, um campo novo:
+Em **Dispositivos → Qualidade → Codec e codificação da tela**, o campo "Codificação da tela"
+(nomes como ficaram na implementação; a explicação embaixo do seletor muda com a opção):
 
 | Opção | Comportamento |
 | --- | --- |
-| **Automático** (padrão) | Caminho novo quando há hardware e a sala inteira suporta |
-| **Sempre ligada** | Tenta mesmo sem hardware. Para diagnóstico e para o modo software |
-| **Desligada** | Só o caminho de hoje. É o botão de pânico |
+| **Automática · WebCodecs quando der** (padrão) | WebCodecs quando há hardware, servidor 1.13.7 ou mais novo e a sala inteira suporta |
+| **Forçar WebCodecs · até no processador** | Tenta mesmo sem hardware e com servidor anterior. Para diagnóstico e para o modo software |
+| **Só WebRTC · sem WebCodecs** | Nunca usa, nem para receber. É o botão de pânico |
 
-Guardado em `localStorage`, como os outros perfis. O Diagnóstico ganha uma linha dizendo
-qual caminho está no ar e, quando não é o acelerado, **por quê**.
+Guardado em `localStorage`, como os outros perfis. No Diagnóstico, o WebCodecs não tem cartão
+próprio: escreve no mesmo "Enviando sua tela" e no mesmo "Recebendo a tela de…" do WebRTC,
+com "Transmissão" na primeira linha e "Onde codifica" logo abaixo. O **porquê** de cada
+escolha fica no relatório técnico.
 
 E precisa existir **desligamento remoto**: uma chave em `/api/sala-config` que desabilita o
 caminho novo para todo mundo sem ninguém atualizar nada. Uma reescrita de transporte sem
@@ -372,7 +375,7 @@ explicada:
 - quem entra no meio recebe `decoderConfig` no quadro-chave seguinte e decodifica;
 - sala mista (um sem `VideoDecoder`) força todo mundo ao caminho de hoje;
 - falha do `VideoEncoder` no meio da transmissão cai de volta sem a imagem sumir;
-- o interruptor "Desligada" realmente impede o caminho novo;
+- o interruptor "Só WebRTC" realmente impede o caminho novo;
 - a tela por faixa de dados aparece no relatório de banda;
 - a interface é a mesma nos dois caminhos: mesmos `<video>`, mesmo palco, mesmo tema.
 
@@ -477,7 +480,7 @@ pedidos chegando (`received signal request`) e nenhum mais sendo tratado. A 1.13
 Três consequências, todas no código:
 
 1. **O automático exige o servidor 1.13.7 ou mais novo** (`sala.serverInfo.version`). Na 1.13.6,
-   só o "Sempre ligada" usa o caminho novo — e o Diagnóstico diz por quê.
+   só o "Forçar WebCodecs" usa o caminho novo — e o relatório do Diagnóstico diz por quê.
 2. **Quem transmite avisa antes de tirar as faixas** (`fim`) e espera 300 ms: quem assiste solta
    a assinatura antes da remoção, e não durante.
 3. **Quem assiste nunca recua de camada quando uma delas some** — as camadas saem juntas, e a
@@ -517,8 +520,9 @@ O que mudou por causa disso:
    configurar enchem a fila; isso contava como "codificador não acompanha", a imagem encolhia,
    o encolhimento reconfigurava, e o codificador aquecia de novo — 1080p virou 864p sem aperto
    nenhum. Agora os sinais ficam desligados por 3 s depois de ligar ou redimensionar, e aperto
-   exige mais de 10% dos quadros pulados numa janela (ou pulos em duas seguidas), nunca um pulo
-   isolado — um quadro-chave, sozinho, fecha o portão por um instante e não é a rede.
+   exige mais de 10% dos quadros pulados em **duas janelas seguidas**, nunca um pulo isolado —
+   um quadro-chave, ou uma troca de cena, fecha o portão por um instante e não é a rede (ver
+   "Trocas de cena", abaixo).
 5. **A fila do codificador tolera três quadros em voo**, e não dois: a placa trabalha em linha de
    montagem, e com o limite em dois perdia ~5 de cada 60 quadros sem estar apertada.
 6. A sondagem de "tem placa?" aceita 720p30 como prova, para a escada ter chance em placas que
@@ -549,18 +553,51 @@ O remédio é o que o WebRTC faz por dentro: **ritmar**. A biblioteca fatia o qu
 nosso (`tela-quadro.js`):
 
 - **pedaços de até 7,2 KB**, abaixo do piso de 8 KB — cada um vai como um quadro de um pacote só;
-- **um balde de fichas que guarda um pedaço só**, a 1,5 × o bitrate da transmissão (piso de
-  3,2 Mbps): nunca saem dois pedaços grudados, e o intervalo entre eles é o tempo que o buffer
-  de cada espectador tem para escoar. Um quadro-chave sai em ~100 ms em vez de de uma vez;
+- **um balde de fichas** a 1,5 × o bitrate da transmissão (piso de 3,2 Mbps), que parado guarda
+  um pedaço: o primeiro pedaço de cada quadro sai sozinho, e o intervalo até o seguinte é o
+  tempo que o buffer de cada espectador tem para escoar;
 - no **relógio do Worker**, porque a aba de quem joga fica em segundo plano e o relógio da
   página seria estrangulado;
-- o **reenvio fura a fila** (quem pediu está com a imagem parada), e a fila do ritmador acima
-  de 250 ms conta como saída que não escoa — o quadro seguinte é pulado antes de codificar.
+- o **reenvio fura a fila** (quem pediu está com a imagem parada).
 
-Na placa de vídeo, o ritmador não custou nada: as seis combinações continuaram com zero quadros
-pulados pela rede e as mesmas taxas. **A validação que falta é o registro do servidor numa
-rede de verdade**, no mesmo cenário do primeiro teste: as linhas `data dropped due to high
-buffered amount` devem sumir, ou ficar raras.
+No registro seguinte, numa sala de verdade, as linhas `data dropped due to high buffered amount`
+sumiram.
+
+### Trocas de cena: alt+tab, janela arrastada, minimizar
+
+Com a tela inteira compartilhada, trocar de janela, dar alt+tab, minimizar ou arrastar
+aplicativos depressa fazia os quadros e a nitidez despencarem, com travadas de instantes. Uma
+tela sintética na placa (1080p60, 4 s de calma e 3 s trocando de janela a cada 300 ms)
+reproduziu:
+
+| | Palco, pior segundo | Atraso, pior | Imagem | Orçamento |
+| --- | --- | --- | --- | --- |
+| Antes | **5 quadros** | 470 ms | 1080p → 864p → 720p | 5,6 → 1,3 Mbps |
+| Depois | 50 quadros | 85 ms | 1080p o tempo todo | 5,6 Mbps o tempo todo |
+
+A troca de cena é um quadro enorme (a placa, pedida a 5,6 Mbps, entrega 8–10 Mbps enquanto a
+cena muda). Três coisas se somavam:
+
+1. **O ritmador perdia vazão.** O relógio do Worker acorda ~1 ms depois do pedido (medido: 4 ms
+   viram 4,9), e com o balde de um pedaço só esse atraso era jogado fora a cada pedaço — a
+   15 Mbps, um quinto a menos do que a taxa dizia. Agora o balde, com fila, guarda até **dois**
+   pedaços: é o que o portão do servidor deixa passar, porque ele olha o buffer *antes* de
+   escrever (o segundo encontra 7,2 KB, abaixo de 8 KB). O terceiro seria cortado no começo de
+   uma assinatura.
+2. **O ritmo de regime segurava o quadro grande**, a fila passava do limite e o portão pulava os
+   quadros seguintes — justamente os da cena nova. Agora o ritmador **acelera para esvaziar a
+   fila em ~150 ms**, até 4 × o bitrate, e só pula quadro quando nem assim a fila escoa em um
+   quarto de segundo.
+3. **A adaptação lia os pulos como rede ruim**, cortava o orçamento e encolhia a imagem, que só
+   voltava depois de 10 s de folga — e a troca de cena seguinte cortava de novo. Agora o portão
+   diz por que fechou (`fila` do ritmador ou `rede`, o canal que não escoa), e aperto exige mais
+   de 10% dos quadros pulados em duas janelas seguidas.
+
+O custo é o atraso de quem assiste subir enquanto a cena muda sem parar (até 85 ms trocando de
+janela a cada 300 ms; ~130 ms numa cena totalmente nova a cada quadro, por 3 s) e voltar a
+~8 ms na calma. O ritmo mais alto também chega mais depressa ao servidor: **quem assiste com
+menos de ~4 × o bitrate de descida pode ver descarte no portão dele durante a rajada**, e o
+registro do servidor é onde isso aparece. A camada de 360p é a saída para essa pessoa.
 
 `npm run test:webcodecs:placa` é o teste que teria pegado: usa o Chrome instalado, o
 **Automático**, e confere as seis combinações (720p/1080p/1440p × 30/60) saindo pela placa no
@@ -594,13 +631,13 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 
 | # | O quê | Como |
 | --- | --- | --- |
-| **0.4** | Quanto o jogo ganha: FPS e processador com 0, 1 e 3 espectadores, nos dois caminhos | O portão de valor do plano. Interruptor em "Desligada" contra "Automático", mesma cena |
+| **0.4** | Quanto o jogo ganha: FPS e processador com 0, 1 e 3 espectadores, nos dois caminhos | O portão de valor do plano. Interruptor em "Só WebRTC" contra "Automática", mesma cena |
 | **0.1** real | A faixa de dados pelo túnel e na LAN | O Diagnóstico mostra buffer, atraso e perda por camada |
 | **0.3** real | Perda de verdade (4G ruim, Wi-Fi cheio) | E, sem rede ruim à mão, `transporte.telaWebCodecs.simularPerda(0.05)` no console de quem assiste |
 | Placa de vídeo | ~~Que `prefer-hardware` sai mesmo na NVENC~~ — **medido**: as seis combinações saem pela placa no Chrome (`npm run test:webcodecs:placa`), e o Electron do aplicativo se comporta igual. Falta o mesmo numa placa AMD ou Intel | Diagnóstico → "Onde codifica: na placa de vídeo" |
 | iPhone | Recebe pelo `canvas.captureStream()`, e a bateria | O teste que decide, na ordem do plano |
 | Servidor | ~~Trocar para a 1.13.7~~ — **é o padrão** desde a primeira sala de verdade transmitindo por ela, com os hashes de Linux x64 e ARM64 conferidos no checksums.txt do release e na API do GitHub | `npm run build:sfu` — no Linux, falta rodar uma vez para ver o binário descer e abrir |
-| Ritmador | Que o portão do servidor deixou de descartar | O registro do servidor numa rede de verdade, sem as linhas `data dropped due to high buffered amount` |
+| Ritmador | ~~Que o portão do servidor deixou de descartar~~ — **sumiu** do registro seguinte. Falta conferir de novo com a aceleração nas trocas de cena | O registro do servidor numa rede de verdade, trocando de janela depressa, sem as linhas `data dropped due to high buffered amount` |
 
 ### Limites conhecidos
 
@@ -610,7 +647,7 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 - **O teto do plano continua sendo conferido pelo que o cliente declara.** O caminho novo usa o
   mesmo perfil já limitado pelo plano, mas um cliente modificado passaria dele como passaria no
   RTP (`plano-contas.md`).
-- **"Sempre ligada" na 1.13.6** continua exposto ao travamento em corridas raras (alguém começar a
+- **"Forçar WebCodecs" na 1.13.6** continua exposto ao travamento em corridas raras (alguém começar a
   assistir no exato instante em que a transmissão sai do caminho novo). É diagnóstico, não padrão
   — e a 1.13.6 deixou de ser o padrão.
 - **Nenhuma versão anterior à 1.13.x serve**: é nela que o servidor passou a ter faixas de dados.
