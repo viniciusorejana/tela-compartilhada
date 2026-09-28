@@ -250,17 +250,25 @@
 
   // ---------- O ritmador ----------
   //
-  // Um balde de fichas que guarda no máximo UM pedaço. Dois pedaços grudados chegam grudados ao
-  // servidor, e o segundo encontra o buffer do espectador acima do piso de 8 KB -- é exatamente
-  // o que o portão dele descarta no começo de uma assinatura. Com o balde de um pedaço, cada
-  // pedaço sai sozinho, e o intervalo entre eles é o tempo que o buffer tem para escoar.
+  // Um balde de fichas que, parado, guarda UM pedaço: o primeiro pedaço de cada quadro sai
+  // sozinho, e o intervalo até o seguinte é o tempo que o buffer de cada espectador tem para
+  // escoar.
+  //
+  // Com fila, o balde guarda até DOIS. Não é para mandar em rajada: é para não perder vazão. O
+  // relógio do Worker acorda perto de 1 ms depois do pedido, e com o balde de um pedaço só esse
+  // atraso era jogado fora a cada pedaço -- a 15 Mbps o ritmador entregava um quinto a menos do
+  // que a taxa dizia, e a fila crescia sem a rede ter culpa nenhuma. Dois grudados, quando o
+  // relógio atrasa um intervalo inteiro, passam pelo portão do servidor: ele olha o buffer ANTES
+  // de escrever, e o segundo pedaço encontra só o primeiro lá (7,2 KB, abaixo do piso de 8 KB).
+  // O terceiro encontraria dois, e no começo de uma assinatura seria cortado.
   //
   // O reenvio fura a fila (`primeiro`): quem pediu está esperando, com a imagem parada.
   function criarRitmador({ enviar, agendar, cancelar, bytesPorSegundo, agora = () => performance.now() }) {
-    const capacidade = TAMANHO_DO_PEDACO + CABECALHO_DO_PEDACO;
+    const pedaco = TAMANHO_DO_PEDACO + CABECALHO_DO_PEDACO;
     const fila = [];
     let bytesNaFila = 0;
-    let fichas = capacidade;
+    let fichas = pedaco;
+    let ocioso = true;
     let ultimo = agora();
     let timer = null;
     let taxa = Math.max(1, bytesPorSegundo());
@@ -269,7 +277,8 @@
       timer = null;
       const instante = agora();
       taxa = Math.max(1, bytesPorSegundo());
-      fichas = Math.min(capacidade, fichas + (instante - ultimo) / 1000 * taxa);
+      fichas = Math.min(ocioso ? pedaco : 2 * pedaco, fichas + (instante - ultimo) / 1000 * taxa);
+      ocioso = false;
       ultimo = instante;
       while (fila.length && fichas >= fila[0].bytes.length) {
         const item = fila.shift();
@@ -278,6 +287,7 @@
         try { enviar(item); } catch (_) { /* quem envia conta a própria falha */ }
       }
       if (fila.length) timer = agendar(bombear, Math.max(1, Math.ceil((fila[0].bytes.length - fichas) / taxa * 1000)));
+      else ocioso = true;
     }
 
     return {
@@ -293,6 +303,7 @@
       esvaziar() {
         fila.length = 0;
         bytesNaFila = 0;
+        ocioso = true;
         if (timer !== null) cancelar(timer);
         timer = null;
       }

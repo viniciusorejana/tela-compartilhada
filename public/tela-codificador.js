@@ -236,7 +236,7 @@
     const naFila = new Map();
     let reconfiguracaoSoDeBitrate = false;
 
-    const janela = () => ({ codificados: 0, bytes: 0, chaves: 0, descartes: { ritmo: 0, codificador: 0, rede: 0 }, msDeCodificacao: 0, amostras: 0 });
+    const janela = () => ({ codificados: 0, bytes: 0, chaves: 0, descartes: { ritmo: 0, codificador: 0, fila: 0, rede: 0 }, msDeCodificacao: 0, amostras: 0 });
     let medindo = janela();
     let ultimaJanela = { ...janela(), segundos: 0 };
     let inicioDaJanela = performance.now();
@@ -303,8 +303,14 @@
         if (codificador.encodeQueueSize >= FILA_MAXIMA_NO_CODIFICADOR) { medindo.descartes.codificador += 1; return 'codificador'; }
         // O portão de envio. Pular o quadro ANTES de codificar é o único descarte que não
         // quebra a cadeia de referências: jogar fora um quadro já codificado estragaria todos
-        // os seguintes até o próximo quadro-chave.
-        if (!podeEnviar()) { medindo.descartes.rede += 1; return 'rede'; }
+        // os seguintes até o próximo quadro-chave. O portão diz POR QUE fechou -- a fila do
+        // nosso ritmador ou o canal que não escoa --, porque só o segundo é a rede.
+        const portao = podeEnviar();
+        if (portao !== true) {
+          const motivo = portao === 'fila' ? 'fila' : 'rede';
+          medindo.descartes[motivo] += 1;
+          return motivo;
+        }
         baldeAnterior = balde;
         const agora = performance.now();
         const chave = precisaDeChave || agora - ultimaChave >= MS_ENTRE_CHAVES_PERIODICAS;
@@ -354,7 +360,7 @@
           largura: atual.largura, altura: atual.altura, quadrosAlvo: atual.quadros, bitrateAlvo: atual.bitrate,
           fps: j.codificados / s, bps: j.bytes * 8 / s, chaves: j.chaves,
           descartes: { ...j.descartes },
-          quadrosNaJanela: j.codificados + j.descartes.codificador + j.descartes.rede,
+          quadrosNaJanela: j.codificados + j.descartes.codificador + j.descartes.fila + j.descartes.rede,
           msDeCodificacao: j.amostras ? j.msDeCodificacao / j.amostras : null,
           fila: codificador.encodeQueueSize,
           reconfiguracoes: { ...reconfiguracoes }

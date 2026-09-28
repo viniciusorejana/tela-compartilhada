@@ -55,15 +55,22 @@
   // encolhimento reconfigurava o codificador, que aquecia de novo: uma cascata que levou 1080p
   // a 864p na placa de vídeo sem aperto nenhum.
   const MS_DE_AQUECIMENTO = 3000;
-  // Quanto dos quadros de uma janela precisa ter sido pulado para contar como aperto. Um
-  // quadro-chave, sozinho, fecha o portão por um ou dois quadros enquanto escoa -- isso é o
-  // quadro-chave, e não a rede.
+  // Quanto dos quadros de uma janela precisa ter sido pulado para contar como aperto -- e em
+  // duas janelas seguidas. Trocar de janela, dar alt+tab, minimizar: cada troca de cena é um
+  // quadro enorme, e em série elas fecham o portão por alguns quadros. Isso passa em menos de um
+  // segundo; aperto de verdade, a subida que não comporta o orçamento, continua no seguinte.
   const FRACAO_PULADA_QUE_APERTA = 0.1;
-  // O ritmador (tela-quadro.js). A folga sobre o bitrate é o que deixa um quadro-chave sair em
-  // ~100 ms; o piso cobre a camada de 360p sozinha, que de outro modo levaria um quadro-chave
-  // inteiro para atravessar. A fila acima de um quarto de segundo é saída que não escoa.
+  // O ritmador (tela-quadro.js). Em regime ele anda a 1,5 × o bitrate, o que espaça os pedaços
+  // para o buffer de cada espectador escoar entre eles. Quando a fila cresce -- a troca de cena
+  // que produziu um quadro de 200 KB --, ele acelera para esvaziá-la em ~150 ms, até 4 × o
+  // bitrate: segurar esse quadro no ritmo de regime fechava o portão, e os quadros seguintes eram
+  // pulados justamente no instante em que a imagem mudava. O piso cobre a camada de 360p sozinha.
   const FOLGA_DO_RITMADOR = 1.5;
+  const FOLGA_MAXIMA_DO_RITMADOR = 4;
+  const SEGUNDOS_PARA_ESVAZIAR_A_FILA = 0.15;
   const PISO_DO_RITMADOR = 400_000;
+  // A fila que nem o ritmo máximo esvazia em um quarto de segundo é o codificador produzindo muito
+  // mais do que o orçamento, e o quadro seguinte é pulado.
   const SEGUNDOS_NA_FILA_DO_RITMADOR = 0.25;
 
   // Entre o aviso de fim e tirar as faixas de dados do ar. Cobre com folga a ida da mensagem e
@@ -364,7 +371,7 @@
       }
       t.camadas.set(camada, {
         codificador, estado, geracao: geracoes[camada], vaziaDesde: 0, sinais: null, ultima: null,
-        aquecendoAte: Date.now() + MS_DE_AQUECIMENTO, redeNaJanelaAnterior: false,
+        aquecendoAte: Date.now() + MS_DE_AQUECIMENTO, saidaNaJanelaAnterior: false,
         recentes: new Map(), reenviados: 0, reenviosNaJanela: 0, janelaDeReenvio: 0
       });
       anotar('tela.camada', `${camada} ligada em ${estado.largura}×${estado.altura} a ${estado.quadros} quadros`);
@@ -412,25 +419,27 @@
       return bps;
     };
 
-    // A fila do ritmador também é fila de envio: com ela acima de um quarto de segundo, a saída
-    // não está escoando o que o codificador produz, e o quadro seguinte é pulado antes de ser
-    // codificado -- como no buffer do canal, logo abaixo.
+    // Os limites do ritmo de saída, em bytes por segundo: o de regime e o máximo, para esvaziar
+    // a fila de uma troca de cena.
+    const ritmoDeRegime = t => Math.max(PISO_DO_RITMADOR, (bitrateDasCamadas(t) / 8) * FOLGA_DO_RITMADOR);
+    const ritmoMaximo = t => Math.max(PISO_DO_RITMADOR, (bitrateDasCamadas(t) / 8) * FOLGA_MAXIMA_DO_RITMADOR);
+
+    // Devolve `true`, ou por que o quadro seguinte não pode sair: `fila` (o ritmador não dá
+    // conta do que o codificador produz) ou `rede` (o canal não escoa o que o ritmador entrega).
+    // Só o segundo diz alguma coisa sobre a subida.
     function podeEnviar(t) {
-      if (apertoSimulado > 0 && Math.random() < apertoSimulado) return false;
-      const bps = bitrateDasCamadas(t);
-      if (t.ritmador && t.ritmador.bytesNaFila > Math.max(BYTES_MINIMOS_DE_BUFFER, (bps / 8) * SEGUNDOS_NA_FILA_DO_RITMADOR)) return false;
+      if (apertoSimulado > 0 && Math.random() < apertoSimulado) return 'rede';
+      if (t.ritmador && t.ritmador.bytesNaFila > Math.max(BYTES_MINIMOS_DE_BUFFER, ritmoMaximo(t) * SEGUNDOS_NA_FILA_DO_RITMADOR)) return 'fila';
       const canal = canalDaTela();
       if (!canal) return true;
-      return canal.bufferedAmount <= Math.max(BYTES_MINIMOS_DE_BUFFER, (bps / 8) * SEGUNDOS_DE_BUFFER);
+      return canal.bufferedAmount <= Math.max(BYTES_MINIMOS_DE_BUFFER, (bitrateDasCamadas(t) / 8) * SEGUNDOS_DE_BUFFER) || 'rede';
     }
 
-    // O ritmo de saída: uma vez e meia o que as camadas deveriam gastar, com piso de 3,2 Mbps.
-    // Folga suficiente para um quadro-chave sair em ~100 ms sem atrasar os quadros comuns, e
-    // espaçada o bastante para o buffer de cada espectador escoar entre dois pedaços.
     function criarRitmadorDa(t) {
       return Quadro.criarRitmador({
         agendar, cancelar,
-        bytesPorSegundo: () => Math.max(PISO_DO_RITMADOR, (bitrateDasCamadas(t) / 8) * FOLGA_DO_RITMADOR),
+        bytesPorSegundo: () => Math.max(ritmoDeRegime(t),
+          Math.min(ritmoMaximo(t), (t.ritmador?.bytesNaFila || 0) / SEGUNDOS_PARA_ESVAZIAR_A_FILA)),
         enviar: item => empurrar(t, item.faixa, item.bytes, item.capturaUs)
       });
     }
@@ -472,7 +481,7 @@
       const t = transmissao;
       const c = t?.camadas.get(mensagem.camada);
       const faixa = t?.faixasDeDados.get(mensagem.camada);
-      if (!c || !faixa || c.geracao !== mensagem.geracao || !podeEnviar(t)) return;
+      if (!c || !faixa || c.geracao !== mensagem.geracao || podeEnviar(t) !== true) return;
       const agora = Date.now();
       if (agora - c.janelaDeReenvio >= 1000) { c.janelaDeReenvio = agora; c.reenviosNaJanela = 0; }
       // Do último para o primeiro, cada um furando a fila: assim o buraco sai em ordem, na
@@ -589,18 +598,19 @@
         // para a camada leve; se a camada inteira cedesse por ele, todo mundo pagaria pela
         // conexão de uma pessoa.
         //
-        // Os apertos precisam de evidência: uma fração dos quadros pulada numa janela, ou pulos
-        // em duas janelas seguidas -- nunca um pulo isolado. E nada conta durante o aquecimento
-        // (MS_DE_AQUECIMENTO).
+        // Os apertos precisam de evidência: uma fração dos quadros pulada em DUAS janelas
+        // seguidas (FRACAO_PULADA_QUE_APERTA) -- nunca um pulo isolado, nem a rajada de uma troca
+        // de cena. E nada conta durante o aquecimento (MS_DE_AQUECIMENTO).
         const aquecendo = agora < c.aquecendoAte;
         const fracao = n => (s.quadrosNaJanela > 0 ? n / s.quadrosNaJanela : 0);
-        const redeAgora = s.descartes.rede > 0;
+        const saidaNaJanela = fracao(s.descartes.rede + s.descartes.fila) > FRACAO_PULADA_QUE_APERTA;
+        const codificadorNaJanela = fracao(s.descartes.codificador) > FRACAO_PULADA_QUE_APERTA;
         const sinais = {
-          saidaApertada: !aquecendo && (fracao(s.descartes.rede) > FRACAO_PULADA_QUE_APERTA || (redeAgora && c.redeNaJanelaAnterior)),
+          saidaApertada: !aquecendo && saidaNaJanela && c.saidaNaJanelaAnterior,
           perda: aquecendo ? 0 : mediana(perdas),
-          codificadorApertado: !aquecendo && fracao(s.descartes.codificador) > FRACAO_PULADA_QUE_APERTA
+          codificadorApertado: !aquecendo && codificadorNaJanela
         };
-        c.redeNaJanelaAnterior = redeAgora;
+        c.saidaNaJanelaAnterior = saidaNaJanela;
         const novo = Decisoes.ajustarCamada(c.estado, sinais, tetoPara);
         const mudouTamanho = novo.largura !== c.estado.largura || novo.altura !== c.estado.altura || novo.quadros !== c.estado.quadros;
         if (mudouTamanho || novo.bitrate !== c.estado.bitrate) c.codificador.reconfigurar(novo);
@@ -992,7 +1002,7 @@
         if (!t) return null;
         const canal = canalDaTela();
         return {
-          modo: t.modo, motivo: t.motivo, codec: t.codec, preferencia, falha: t.falha,
+          modo: t.modo, motivo: t.motivo, codec: t.codec, preferencia, falha: t.falha, notaDaPlaca: t.notaDaPlaca,
           captura: t.captura?.tipo || null,
           fonte: { ...t.fonte },
           espectadores: t.espectadores.size,

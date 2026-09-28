@@ -113,6 +113,40 @@ test('o ritmador espaça os pedaços: nunca dois grudados, e o reenvio fura a fi
   assert.equal(ritmador.bytesNaFila, 0);
 });
 
+test('o ritmador não perde vazão com o relógio atrasado, e parado não junta rajada', () => {
+  // O relógio do Worker acorda ~1 ms depois do pedido. Antes, cada atraso era vazão jogada
+  // fora, e a fila crescia com a taxa sobrando.
+  let agora = 0;
+  const saidas = [];
+  const agendados = [];
+  const ritmador = Quadro.criarRitmador({
+    agora: () => agora,
+    agendar: (fn, ms) => { agendados.push({ quando: agora + ms + 1, fn }); return agendados.length; },
+    cancelar: () => {},
+    bytesPorSegundo: () => 2_000_000,
+    enviar: item => saidas.push({ em: agora, bytes: item.bytes.length })
+  });
+  for (let i = 0; i < 100; i++) ritmador.enfileirar({ bytes: new Uint8Array(7200) });
+  while (agendados.length) {
+    agendados.sort((x, y) => x.quando - y.quando);
+    const proximo = agendados.shift();
+    agora = proximo.quando;
+    proximo.fn();
+  }
+  const bytesPorSegundo = (99 * 7200) / (saidas[99].em - saidas[0].em) * 1000;
+  assert.ok(bytesPorSegundo > 1_900_000, `vazão de ${Math.round(bytesPorSegundo)} B/s com a taxa em 2 000 000`);
+  const porInstante = new Map();
+  for (const s of saidas) porInstante.set(s.em, (porInstante.get(s.em) || 0) + 1);
+  assert.ok(Math.max(...porInstante.values()) <= 2, 'no máximo dois pedaços no mesmo instante');
+
+  // Depois de um tempo parado, o primeiro pedaço do quadro seguinte sai sozinho.
+  agora += 1000;
+  saidas.length = 0;
+  ritmador.enfileirar({ bytes: new Uint8Array(7200) });
+  ritmador.enfileirar({ bytes: new Uint8Array(7200) });
+  assert.equal(saidas.length, 1, 'o balde parado guarda um pedaço, e não dois');
+});
+
 // ---------- As mensagens ----------
 
 test('as mensagens de controle vão e voltam, e o tipo não pode ser sobrescrito por um campo', () => {
