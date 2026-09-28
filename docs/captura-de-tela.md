@@ -50,6 +50,39 @@ Não existe forma mais barata de capturar **uma janela isolada** no Windows 10:
 Na prática, quem quer mostrar só o jogo e nada mais: jogo em tela cheia num monitor,
 compartilhe **aquele monitor**.
 
+## Com WebCodecs, o recorte ficou barato (27/09/2026)
+
+Medido no Electron 44 do aplicativo, Windows 10 19045, com uma janela comum desenhando a 60
+quadros:
+
+| Captura | Quadros entregues | A janela capturada desenhava |
+| --- | --- | --- |
+| Janela (WGC) | 60 | 60 antes, 60 durante |
+| Tela inteira (DXGI) | 57,8 | 60 antes, 60 durante |
+
+Ou seja: o WGC **não** corta a transmissão pela metade. O que cai pela metade com um jogo é o
+próprio jogo: capturado como janela, ele perde o caminho direto até o monitor (*independent
+flip*) e passa a ser composto; com vsync, um jogo composto que não fecha todo intervalo de
+16,6 ms cai direto para 30. A transmissão só reflete o que o jogo desenha. Para confirmar numa
+sessão real: o contador de FPS do próprio jogo cai junto; o "Fonte capturando" do Diagnóstico
+acompanha.
+
+O recorte da tela inteira foi descartado acima porque, no RTP, ele custava redesenhar cada
+quadro. **No caminho novo, esse custo sumiu**: `new VideoFrame(quadro, { visibleRect })` recorta
+sem copiar nada, e o codificador recebe só a região. Sobra o que não é custo de máquina:
+
+- **o retângulo da janela**, que só o aplicativo pode saber (o navegador não enxerga janelas
+  alheias). O agente nativo já recebe a janela escolhida (`--janela <hwnd>`) e devolve o
+  processo; devolver também a região (`DwmGetWindowAttribute` com `DWMWA_EXTENDED_FRAME_BOUNDS`,
+  em pixels físicos, como a captura DXGI) e acompanhar quando a janela se move é pouco código —
+  mas exige recompilar o agente;
+- **a privacidade**: o que passar por cima da janela (uma notificação, outro programa) aparece
+  no recorte, porque é a tela que está sendo lida;
+- **o monitor certo**: a janela num monitor, a captura no mesmo.
+
+Para o jogo em tela cheia nada disso muda a imagem — já é o monitor inteiro. O recorte serve ao
+jogo em janela, que é justamente o caso em que a captura de janela derruba o jogo.
+
 ## Como confirmar na sua máquina
 
 1. Compartilhe pela janela e anote o FPS do jogo. Pare, compartilhe o monitor inteiro com a

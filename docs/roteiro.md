@@ -157,9 +157,14 @@ A ordem aqui é decidida pelo que a comunidade reclamar mais, e não antes.
   0.1 e a 0.3 foram medidas em loopback, e a placa de vídeo desta máquina entrega as seis
   combinações de 720p a 1440p60 (`npm run test:webcodecs:placa`); o que falta é de campo: a
   **0.4** (quanto o jogo ganha, com 0, 1 e 3 espectadores — o portão de valor), a faixa de dados
-  pelo túnel, uma placa AMD ou Intel, e o iPhone. **Antes de pôr no ar: servidor de mídia 1.13.7** — a 1.13.6 trava a
-  sinalização de quem assina uma faixa de dados no instante em que ela sai, e sem a 1.13.7 o
-  automático não liga. O que foi decidido e medido está no fim de `plano-webcodecs.md`.
+  pelo túnel, uma placa AMD ou Intel, e o iPhone. **O servidor de mídia padrão passou a ser a
+  1.13.7** (Windows e Linux, hashes conferidos) — a 1.13.6 trava a sinalização de quem assina uma
+  faixa de dados no instante em que ela sai, e nela o automático não liga. Depois do primeiro
+  teste em rede de verdade, a tela ganhou um ritmador contra o portão de 100 ms que o servidor
+  aplica a cada espectador. O que foi decidido e medido está no fim de `plano-webcodecs.md`.
+- **Janela sem derrubar o jogo** (depende de decisão): com WebCodecs, recortar a janela da captura
+  da tela inteira ficou barato; falta o agente nativo devolver o retângulo da janela, e aceitar
+  que o que passar por cima dela aparece. Ver o fim da primeira parte de `captura-de-tela.md`.
 - **Salas e conversas persistentes**, preparadas no plano de contas. A sala que não expira é
   por onde o premium cresce.
 - Entrar com Discord; senha de sala; avatar enviado por arquivo; agentes de áudio nativos no

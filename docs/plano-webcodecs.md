@@ -524,6 +524,44 @@ O que mudou por causa disso:
 6. A sondagem de "tem placa?" aceita 720p30 como prova, para a escada ter chance em placas que
    não vão até 1080p.
 
+### O portão do servidor, e o ritmador
+
+O registro do servidor no primeiro teste em rede de verdade veio cheio de
+`could not send data track message … data dropped due to high buffered amount`. Lendo o código
+da 1.13.7 (`DataChannelWriterUnreliable`, em `pkg/sfu/datachannel`): cada **espectador** tem um
+portão próprio no canal das faixas de dados, e o servidor descarta o pacote quando o buffer
+daquela pessoa passa de **100 ms do bitrate medido e de 8 KB**. A conta bate com o registro
+(5,45 Mbps × 100 ms ÷ 8 = 68 111 bytes).
+
+É o "portão de ~100 ms" que este plano atribuía à biblioteca do navegador — ele existe, mas no
+servidor, por espectador. E morde em dois momentos:
+
+- **no começo de cada assinatura**, quando o bitrate medido ainda é quase zero e o limite fica
+  no piso de 8 KB: o primeiro quadro-chave, com dezenas de KB mandados de uma vez, é cortado —
+  e o seguinte também, até a medição subir. Era isso que fazia a primeira imagem demorar;
+- **em quadro-chave grande em regime**: 91 KB no buffer contra um limite de 88 KB.
+
+Em loopback nada disso aparece (a mesma máquina escoa o buffer na hora: zero descartes
+medidos), e é por isso que nenhum teste automático viu.
+
+O remédio é o que o WebRTC faz por dentro: **ritmar**. A biblioteca fatia o quadro em pacotes de
+16 KB e manda todos no mesmo instante, sem jeito de espaçá-los; então o fatiamento passou a ser
+nosso (`tela-quadro.js`):
+
+- **pedaços de até 7,2 KB**, abaixo do piso de 8 KB — cada um vai como um quadro de um pacote só;
+- **um balde de fichas que guarda um pedaço só**, a 1,5 × o bitrate da transmissão (piso de
+  3,2 Mbps): nunca saem dois pedaços grudados, e o intervalo entre eles é o tempo que o buffer
+  de cada espectador tem para escoar. Um quadro-chave sai em ~100 ms em vez de de uma vez;
+- no **relógio do Worker**, porque a aba de quem joga fica em segundo plano e o relógio da
+  página seria estrangulado;
+- o **reenvio fura a fila** (quem pediu está com a imagem parada), e a fila do ritmador acima
+  de 250 ms conta como saída que não escoa — o quadro seguinte é pulado antes de codificar.
+
+Na placa de vídeo, o ritmador não custou nada: as seis combinações continuaram com zero quadros
+pulados pela rede e as mesmas taxas. **A validação que falta é o registro do servidor numa
+rede de verdade**, no mesmo cenário do primeiro teste: as linhas `data dropped due to high
+buffered amount` devem sumir, ou ficar raras.
+
 `npm run test:webcodecs:placa` é o teste que teria pegado: usa o Chrome instalado, o
 **Automático**, e confere as seis combinações (720p/1080p/1440p × 30/60) saindo pela placa no
 tamanho e na taxa pedidos, mais a troca de 1080p30 para 1440p60 ao vivo. Resultado nesta máquina:
@@ -561,7 +599,8 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 | **0.3** real | Perda de verdade (4G ruim, Wi-Fi cheio) | E, sem rede ruim à mão, `transporte.telaWebCodecs.simularPerda(0.05)` no console de quem assiste |
 | Placa de vídeo | ~~Que `prefer-hardware` sai mesmo na NVENC~~ — **medido**: as seis combinações saem pela placa no Chrome (`npm run test:webcodecs:placa`), e o Electron do aplicativo se comporta igual. Falta o mesmo numa placa AMD ou Intel | Diagnóstico → "Onde codifica: na placa de vídeo" |
 | iPhone | Recebe pelo `canvas.captureStream()`, e a bateria | O teste que decide, na ordem do plano |
-| Servidor | ~~Trocar para a 1.13.7~~ — feito nesta máquina | `$env:NEXO_LIVEKIT = '1.13.7'; npm run build:sfu` — sem ela o automático não liga. Falta tornar a 1.13.7 o padrão do `baixar-livekit.cjs` depois de validada numa sala real |
+| Servidor | ~~Trocar para a 1.13.7~~ — **é o padrão** desde a primeira sala de verdade transmitindo por ela, com os hashes de Linux x64 e ARM64 conferidos no checksums.txt do release e na API do GitHub | `npm run build:sfu` — no Linux, falta rodar uma vez para ver o binário descer e abrir |
+| Ritmador | Que o portão do servidor deixou de descartar | O registro do servidor numa rede de verdade, sem as linhas `data dropped due to high buffered amount` |
 
 ### Limites conhecidos
 
@@ -572,6 +611,11 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
   mesmo perfil já limitado pelo plano, mas um cliente modificado passaria dele como passaria no
   RTP (`plano-contas.md`).
 - **"Sempre ligada" na 1.13.6** continua exposto ao travamento em corridas raras (alguém começar a
-  assistir no exato instante em que a transmissão sai do caminho novo). É diagnóstico, não padrão.
+  assistir no exato instante em que a transmissão sai do caminho novo). É diagnóstico, não padrão
+  — e a 1.13.6 deixou de ser o padrão.
+- **Nenhuma versão anterior à 1.13.x serve**: é nela que o servidor passou a ter faixas de dados.
+- **A resolução nunca passa da fonte.** Com um monitor de 1080p, 1440p escolhido sobe em 1080p:
+  esticar gastaria banda e codificação em pixels inventados, com a mesma nitidez. O painel de
+  medição diz isso, e aponta a saída de verdade (monitor maior, ou DSR/VSR).
 - **A camada de 360p pode cair no processador** mesmo com placa: as placas de consumo limitam as
   codificações simultâneas, e 360p a 15 quadros custa pouco.
