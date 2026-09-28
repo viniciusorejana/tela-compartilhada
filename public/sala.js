@@ -2903,6 +2903,52 @@ function linhaDeCamada(c, principal) {
   return linha;
 }
 
+// Os TRÊS degraus do caminho, lado a lado: o que foi pedido, o que a fonte entregou, o que
+// saiu codificado.
+//
+// Eram dois, e faltava justamente o primeiro. Com "48 capturados → 49 codificados" o painel
+// dizia que o codificador estava acompanhando, o que era verdade, e deixava sem resposta a
+// pergunta de quem pediu 60: onde foram os outros 12? O degrau estava antes da captura, e não
+// havia como ver isso.
+function anotarFluxoDaCaptura(ao_vivo, capturaFps, codificado, presa = null) {
+  const fluxo = elemento('div', 'medicao-fluxo');
+  const captura = Math.round(capturaFps);
+  codificado = Math.round(codificado);
+  fluxo.append(
+    elemento('span', 'medicao-fluxo-ponta medicao-fluxo-pedido', `${quadrosDaTela} pedidos`),
+    elemento('span', 'medicao-seta', '→'),
+    elemento('span', 'medicao-fluxo-ponta', `${captura} capturados`),
+    elemento('span', 'medicao-seta', '→'),
+    elemento('span', 'medicao-fluxo-ponta', `${codificado} codificados`)
+  );
+  // Um quarto de diferença é folga para arredondamento e para o codificador respirar. Além
+  // disso, alguém ficou para trás -- e QUAL dos dois muda completamente o que fazer a
+  // respeito, que é a razão de os três números estarem aqui.
+  const fonteEntrega = captura >= quadrosDaTela * 0.75;
+  const codificadorAcompanha = codificado >= captura * 0.75;
+  const selo = !codificadorAcompanha ? { classe: 'alerta', texto: 'o codificador não acompanha a fonte' }
+    : !fonteEntrega ? { classe: 'alerta', texto: 'a fonte entrega menos do que você pediu' }
+    : { classe: 'ok', texto: 'o caminho inteiro acompanha o que você pediu' };
+  fluxo.append(elemento('span', `medicao-selo ${selo.classe}`, selo.texto));
+  ao_vivo.append(fluxo);
+  // Quando o degrau está entre o pedido e a captura, dizer o que isso significa: é o ponto em
+  // que nenhum ajuste desta página tem efeito, e saber disso evita a pessoa ficar trocando
+  // resolução e codec atrás de quadros que nunca existiram. A captura presa tem remédio, e ele
+  // vem primeiro.
+  if (presa) {
+    ao_vivo.append(elemento('div', 'medicao-nota', `A captura não passa de ${presa.fps} quadros por segundo, e`
+      + ' nunca entrega dois quadros mais perto que isso. É o jeito da captura lenta do Windows, que entra'
+      + ' depois de uma troca de resolução ou de monitor e fica até a tela ser capturada de novo: use Trocar,'
+      + ' na barra de baixo, e escolha a mesma tela. Se o que está na tela roda a 30 (um vídeo, um jogo'
+      + ' travado em 30), é só isso mesmo.'));
+  } else if (fonteEntrega === false && codificadorAcompanha) {
+    ao_vivo.append(elemento('div', 'medicao-nota', 'A fonte não tem mais quadros para dar:'
+      + ' a captura de tela só produz quadro quando a imagem muda, e não passa da taxa em que o'
+      + ' programa capturado está desenhando. Se o jogo está a ' + captura + ' quadros, é isso que'
+      + ' sobe — e a placa de vídeo ocupada também afeta a captura, mesmo com o processador folgado.'));
+  }
+}
+
 function renderizarMedicaoDoEnvio(ao_vivo, q) {
   if (q.webcodecs) { renderizarEnvioPorWebCodecs(ao_vivo, q.webcodecs); return; }
   ao_vivo.textContent = '';
@@ -2938,50 +2984,12 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
     ao_vivo.append(elemento('div', 'medicao-sub', [codec, ondeCodifica].filter(Boolean).join(' · ')));
   }
 
-  // Os TRÊS degraus do caminho, lado a lado: o que foi pedido, o que a fonte entregou, o que
-  // saiu codificado.
-  //
-  // Eram dois, e faltava justamente o primeiro. Com "48 capturados → 49 codificados" o
-  // painel dizia que o codificador estava acompanhando, o que era verdade, e deixava sem
-  // resposta a pergunta de quem pediu 60: onde foram os outros 12? O degrau estava antes da
-  // captura, e não havia como ver isso.
-  //
   // A comparação de saída é só com a camada de MAIOR resolução, e só quando ela está ativa.
   // O degrau de baixo é 15 quadros de propósito -- numa conexão apertada, texto legível a 15
   // vale mais que borrão a 30 -- então incluí-lo aqui faria o painel acusar o codificador de
   // não acompanhar por estar funcionando exatamente como foi projetado.
   const principal = q.camadas?.[0];
-  if (q.capturaFps != null && principal?.ativo) {
-    const fluxo = elemento('div', 'medicao-fluxo');
-    const captura = Math.round(q.capturaFps);
-    const codificado = principal.fps;
-    fluxo.append(
-      elemento('span', 'medicao-fluxo-ponta medicao-fluxo-pedido', `${quadrosDaTela} pedidos`),
-      elemento('span', 'medicao-seta', '→'),
-      elemento('span', 'medicao-fluxo-ponta', `${captura} capturados`),
-      elemento('span', 'medicao-seta', '→'),
-      elemento('span', 'medicao-fluxo-ponta', `${codificado} codificados`)
-    );
-    // Um quarto de diferença é folga para arredondamento e para o codificador respirar. Além
-    // disso, alguém ficou para trás -- e QUAL dos dois muda completamente o que fazer a
-    // respeito, que é a razão de os três números estarem aqui.
-    const fonteEntrega = captura >= quadrosDaTela * 0.75;
-    const codificadorAcompanha = codificado >= captura * 0.75;
-    const selo = !codificadorAcompanha ? { classe: 'alerta', texto: 'o codificador não acompanha a fonte' }
-      : !fonteEntrega ? { classe: 'alerta', texto: 'a fonte entrega menos do que você pediu' }
-      : { classe: 'ok', texto: 'o caminho inteiro acompanha o que você pediu' };
-    fluxo.append(elemento('span', `medicao-selo ${selo.classe}`, selo.texto));
-    ao_vivo.append(fluxo);
-    // Quando o degrau está entre o pedido e a captura, dizer o que isso significa: é o
-    // ponto em que nenhum ajuste desta página tem efeito, e saber disso evita a pessoa
-    // ficar trocando resolução e codec atrás de quadros que nunca existiram.
-    if (fonteEntrega === false && codificadorAcompanha) {
-      ao_vivo.append(elemento('div', 'medicao-nota', 'A fonte não tem mais quadros para dar:'
-        + ' a captura de tela só produz quadro quando a imagem muda, e não passa da taxa em que o'
-        + ' programa capturado está desenhando. Se o jogo está a ' + captura + ' quadros, é isso que'
-        + ' sobe — e a placa de vídeo ocupada também afeta a captura, mesmo com o processador folgado.'));
-    }
-  }
+  if (q.capturaFps != null && principal?.ativo) anotarFluxoDaCaptura(ao_vivo, q.capturaFps, principal.fps);
 
   if (q.camadas?.length) {
     ao_vivo.append(elemento('div', 'medicao-titulo', q.camadas.length > 1 ? 'Camadas que sobem' : 'Camada única'));
@@ -3226,13 +3234,36 @@ function medirEnvioPorWebCodecs(wc) {
     encoder: 'WebCodecs', hardware: alta ? alta.hardware : undefined,
     msPorQuadro: alta?.msDeCodificacao ?? null,
     camadas: [], reserva: null,
-    capturaFps: null, capturaWidth: wc.fonte.largura, capturaHeight: wc.fonte.altura,
+    capturaFps: wc.capturaFps ?? null, capturaWidth: wc.fonte.largura, capturaHeight: wc.fonte.altura,
     fatorDeRede: 1, escalaDaTela: alta?.escala || 1,
     emEspera: !wc.camadas.length,
     bruto: {}
   };
   registrarAmostraDoEnvio(qualidadeDoEnvio);
   atualizarBotaoDeQualidade();
+  avisarCapturaPresa(wc);
+}
+
+// A captura presa no modo lento do Windows (`capturaPresa`, tela-decisoes.js) não volta
+// sozinha, e o remédio -- capturar de novo -- precisa de um clique: o navegador não abre o
+// seletor de telas sem um gesto da pessoa. Um aviso por captura: quem já viu e decidiu seguir
+// assim não precisa ouvir de novo a cada medição.
+let capturaPresaAvisada = null;
+function avisarCapturaPresa(wc) {
+  if (!wc.capturaPresa || !window.NexoToast || capturaPresaAvisada === wc.faixaId) return;
+  capturaPresaAvisada = wc.faixaId;
+  registrarDiagnostico('tela.capturaPresa', `${wc.capturaPresa.fps} quadros, ${wc.quadrosPedidos} pedidos`);
+  NexoToast.mostrar({
+    icone: 'atualizar',
+    titulo: `A captura da tela caiu para ${wc.capturaPresa.fps} quadros por segundo`,
+    detalhe: `Você pediu ${wc.quadrosPedidos}. Depois de uma troca de resolução ou de monitor, o Windows às vezes passa`
+      + ' a captura para um modo mais lento, que só sai capturando a tela de novo. Se o que está na tela roda a 30,'
+      + ' é só isso mesmo.',
+    acoes: [
+      { rotulo: 'Capturar de novo', principal: true, fazer: () => { if (screenStream) confirmScreenBtn.onclick(); } },
+      { rotulo: 'Agora não' }
+    ]
+  });
 }
 
 // Quem pediu 1440p a 60 e a placa só aceita 1080p a 60 vê 1080p na medição -- e sem esta nota
@@ -3265,6 +3296,12 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   );
   ao_vivo.append(destaque);
   ao_vivo.append(elemento('div', 'medicao-sub', `WebCodecs · ${wc.codec === 'h264' ? 'H.264' : String(wc.codec).toUpperCase()} · ${alta.hardware ? 'na placa de vídeo' : 'no processador'}`));
+  // Com a camada abaixo do pedido de propósito (nitidez, ou a placa que só aceitou um degrau
+  // abaixo), "codificados" menor que "capturados" é a escolha funcionando, e o selo acusaria o
+  // codificador.
+  if (wc.capturaFps != null && alta.camada === 'alta' && alta.quadrosAlvo >= quadrosDaTela) {
+    anotarFluxoDaCaptura(ao_vivo, wc.capturaFps, alta.fps, wc.capturaPresa);
+  }
 
   ao_vivo.append(elemento('div', 'medicao-titulo', wc.camadas.length > 1 ? 'Camadas que sobem' : 'Camada única'));
   const grade = elemento('div', 'medicao-grade');
@@ -3300,8 +3337,12 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   if (alta.perda > 0.02) avisos.push(`Quem assiste está perdendo ${Math.round(alta.perda * 100)}% dos quadros no caminho.`);
   const atrasos = wc.camadas.flatMap(c => c.atrasos).sort((a, b) => a - b);
   const atraso = atrasos.length ? Math.round(atrasos[Math.floor(atrasos.length / 2)]) : null;
-  const caixa = elemento('div', `medicao-veredito ${avisos.length ? 'alerta' : 'ok'}`);
-  caixa.append(elemento('strong', null, avisos.length ? 'A transmissão está se ajustando.' : 'Estável.'));
+  // A captura presa não é "Estável": a transmissão acompanha tudo que chega, mas chega metade
+  // do que foi pedido. Neutro, e não laranja, porque o conteúdo pode rodar a 30 de verdade.
+  const presa = !avisos.length && wc.capturaPresa;
+  const caixa = elemento('div', `medicao-veredito ${avisos.length ? 'alerta' : presa ? 'neutro' : 'ok'}`);
+  caixa.append(elemento('strong', null, avisos.length ? 'A transmissão está se ajustando.'
+    : presa ? `A captura não passa de ${wc.capturaPresa.fps} quadros por segundo.` : 'Estável.'));
   caixa.append(elemento('span', null, [
     ...avisos,
     atraso !== null ? `Atraso mediano até quem assiste: ${atraso} ms.` : ''
@@ -3496,7 +3537,9 @@ function diagnosticoDaQueda(medicao) {
       + ' movimento, ou a fonte travou (jogo em tela cheia exclusiva, janela minimizada) ou a própria captura de'
       + ` tela não sustenta ${quadrosDaTela} quadros nesta resolução — copiar a imagem da placa de vídeo para o`
       + ' navegador tem um custo por quadro, e ele cresce com os pixels. Nos três casos, mexer em codec não ajuda;'
-      + ' no último, uma resolução menor ajuda, porque há menos para copiar.' };
+      + ' no último, uma resolução menor ajuda, porque há menos para copiar. No Windows há um quarto: depois de uma'
+      + ' troca de resolução ou de monitor, a captura pode ficar presa num modo mais lento, perto de 30 quadros, até'
+      + ' ser feita de novo — use Trocar, na barra de baixo, e escolha a mesma tela.' };
   }
   // Caiu, a fonte entrega, e o navegador não diz estar limitando nada. Não inventar causa.
   return { nivel: 'indefinido', titulo: abertura, texto: 'A captura continua entregando e o navegador não aponta'

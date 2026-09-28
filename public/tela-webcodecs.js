@@ -91,9 +91,11 @@
     const anotar = (evento, detalhe) => { try { registrar?.(evento, detalhe); } catch (_) { /* diagnóstico nunca derruba nada */ } };
     let preferencia = 'automatico';
     let desligadoPeloServidor = false;
-    // Uma falha ao decodificar tira ESTE aparelho do caminho novo até recarregar: a sala
-    // inteira volta ao caminho de hoje por causa dele, que é o tudo ou nada funcionando.
+    // Uma falha ao decodificar tira ESTE aparelho do caminho novo por um tempo: a sala inteira
+    // volta ao caminho de hoje por causa dele, que é o tudo ou nada funcionando. Era até
+    // recarregar; agora ele tenta de novo, com a mesma espera crescente de quem transmite.
     let recebimentoFalhou = null;
+    let falhasDoRecebimento = 0;
     let conectado = false;
     let envio = null;
     let recebimento = null;
@@ -268,9 +270,28 @@
       return null;
     }
 
+    // A falha tira a tela do WebCodecs agora e marca quando tentar de novo
+    // (`esperaAteTentarDeNovo`). A contagem zera depois de dois minutos no ar: uma falha isolada
+    // numa transmissão longa não herda a espera de uma série antiga.
+    const MS_NO_AR_QUE_ZERA_AS_FALHAS = 120_000;
+    function anotarFalha(t, motivo) {
+      if (t.entrouEm && Date.now() - t.entrouEm > MS_NO_AR_QUE_ZERA_AS_FALHAS) t.falhas = 0;
+      t.falhas = (t.falhas || 0) + 1;
+      const espera = Decisoes.esperaAteTentarDeNovo(t.falhas);
+      t.falha = `${motivo}; nova tentativa em ${Math.round(espera / 1000)} s`;
+      if (t.timerDaNovaTentativa) cancelar(t.timerDaNovaTentativa);
+      t.timerDaNovaTentativa = agendar(() => {
+        t.timerDaNovaTentativa = null;
+        if (t !== transmissao || !t.falha) return;
+        t.falha = null;
+        anotar('tela.novaTentativa', `depois de ${t.falhas} falha(s)`);
+        reavaliarCaminho();
+      }, espera);
+    }
+
     async function entrarNoWebCodecs(t, codec, motivo) {
       const recusa = await escolherCodificadores(t, codec);
-      if (recusa) { t.falha = recusa; return false; }
+      if (recusa) { anotarFalha(t, recusa); return false; }
       if (t !== transmissao) return false;
       const escolhaAlta = t.escolhas.alta;
       const escolhaBaixa = t.escolhas.baixa;
@@ -283,7 +304,7 @@
         const faixas = [...t.faixasDeDados.values()];
         t.faixasDeDados.clear();
         await tirarFaixas(faixas);
-        t.falha = `o servidor de mídia recusou a faixa de dados (${erro?.reasonName || erro?.message || erro})`;
+        anotarFalha(t, `o servidor de mídia recusou a faixa de dados (${erro?.reasonName || erro?.message || erro})`);
         return false;
       }
       if (t !== transmissao) {
@@ -294,6 +315,7 @@
       }
       t.modo = 'webcodecs';
       t.codec = codec;
+      t.entrouEm = Date.now();
       trocarMotivo(t, motivo);
       anotar('tela.webcodecs', `${codec.toUpperCase()} ${escolhaAlta.hardware ? 'pela placa' : 'no processador'} · ${escolhaAlta.config.codec}`
         + `${escolhaAlta.declararTaxa ? '' : ' · taxa não declarada (a placa só aceita assim)'}${escolhaBaixa ? '' : ' · sem camada de 360p'}`);
@@ -329,6 +351,14 @@
       if (t.captura) return true;
       t.captura = Codificador.criarCaptura(t.faixa, quadro => aoQuadro(t, quadro));
       if (!t.captura) { falhar(t, 'este navegador não entrega os quadros da tela ao codificador'); return false; }
+      // Quantos quadros a captura entrega, e quantos chegam a menos de 24 ms do anterior: é o
+      // que separa a captura presa na GDI (`capturaPresa`, tela-decisoes.js) de uma tela que
+      // simplesmente mudou pouco. Só com o processador de faixa: no caminho pelo `<video>`, a
+      // cadência é a da página, e não a da captura.
+      t.medidaDaCaptura = t.captura.tipo === 'processador' ? { quadros: 0, curtos: 0, ultimo: null, desde: performance.now() } : null;
+      t.janelasDaCaptura = [];
+      t.capturaFps = null;
+      t.capturaPresa = null;
       return true;
     }
 
@@ -339,6 +369,15 @@
 
     function aoQuadro(t, quadro) {
       if (t !== transmissao) return;
+      const medida = t.medidaDaCaptura;
+      if (medida) {
+        if (medida.ultimo !== null) {
+          const intervaloMs = (quadro.timestamp - medida.ultimo) / 1000;
+          if (intervaloMs > 0 && intervaloMs < Decisoes.MS_DE_INTERVALO_CURTO) medida.curtos += 1;
+        }
+        medida.ultimo = quadro.timestamp;
+        medida.quadros += 1;
+      }
       // A fonte mudou de tamanho: janela redimensionada, ou outra tela escolhida. As camadas
       // recomeçam a conta a partir do tamanho novo, em vez de esticar a imagem velha.
       if (quadro.displayWidth !== t.fonte.largura || quadro.displayHeight !== t.fonte.altura) {
@@ -498,8 +537,8 @@
 
     function falhar(t, motivo) {
       if (t !== transmissao || t.falha) return;
-      t.falha = motivo;
-      anotar('tela.falhou', motivo);
+      anotarFalha(t, motivo);
+      anotar('tela.falhou', t.falha);
       reavaliarCaminho();
     }
 
@@ -546,6 +585,7 @@
       if (!t) return;
       transmissao = null;
       cancelar(timerDoCaminho);
+      if (t.timerDaNovaTentativa) cancelar(t.timerDaNovaTentativa);
       timerDoCaminho = null;
       for (const camada of [...t.camadas.keys()]) pararCodificacao(t, camada);
       pararCaptura(t);
@@ -580,6 +620,19 @@
       // Ninguém assistindo, nada codificando: nem a captura precisa ler quadros. É o dynacast
       // do caminho novo, e é o que mantém o custo zero quando a tela está só anunciada.
       if (!t.camadas.size) pararCaptura(t);
+
+      const medida = t.captura && t.medidaDaCaptura;
+      if (medida) {
+        const instante = performance.now();
+        const segundos = (instante - medida.desde) / 1000;
+        t.janelasDaCaptura.push({ quadros: medida.quadros, curtos: medida.curtos, segundos });
+        if (t.janelasDaCaptura.length > Decisoes.SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA) t.janelasDaCaptura.shift();
+        t.capturaFps = segundos > 0 ? medida.quadros / segundos : null;
+        medida.quadros = 0; medida.curtos = 0; medida.desde = instante;
+        const presa = Decisoes.capturaPresa(t.janelasDaCaptura, t.parametros.quadros);
+        if (presa && !t.capturaPresa) anotar('tela.capturaPresa', `a captura não passa de ${presa.fps} quadros, sem nenhum intervalo curto em ${Decisoes.SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA} s`);
+        t.capturaPresa = presa;
+      }
 
       // A disponibilidade de saída que o WebRTC estima fica no Diagnóstico, e só lá. Ela é
       // medida pelo controle de congestionamento do RTP, que não vê o tráfego da faixa de
@@ -640,10 +693,19 @@
 
     function falharRecebimento(motivo) {
       if (recebimentoFalhou) return;
-      recebimentoFalhou = motivo;
-      anotar('tela.recebimentoFalhou', motivo);
+      falhasDoRecebimento += 1;
+      const espera = Decisoes.esperaAteTentarDeNovo(falhasDoRecebimento);
+      recebimentoFalhou = `${motivo}; nova tentativa em ${Math.round(espera / 1000)} s`;
+      anotar('tela.recebimentoFalhou', recebimentoFalhou);
       anunciar();
       for (const tela of telas.values()) encerrarRecepcao(tela);
+      agendar(() => {
+        if (!recebimentoFalhou) return;
+        recebimentoFalhou = null;
+        anotar('tela.recebimentoDeNovo', `depois de ${falhasDoRecebimento} falha(s)`);
+        anunciar();
+        for (const id of telas.keys()) { sincronizar(id); aoMudarTela(id); }
+      }, espera);
     }
 
     function iniciarRecepcao(tela) {
@@ -1004,6 +1066,10 @@
         return {
           modo: t.modo, motivo: t.motivo, codec: t.codec, preferencia, falha: t.falha, notaDaPlaca: t.notaDaPlaca,
           captura: t.captura?.tipo || null,
+          capturaFps: t.captura ? t.capturaFps ?? null : null,
+          capturaPresa: t.captura ? t.capturaPresa || null : null,
+          faixaId: t.faixa.id,
+          quadrosPedidos: t.parametros.quadros,
           fonte: { ...t.fonte },
           espectadores: t.espectadores.size,
           buffer: canal ? canal.bufferedAmount : null,

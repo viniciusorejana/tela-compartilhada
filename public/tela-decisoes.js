@@ -82,7 +82,7 @@
     const pelaPlaca = codec === 'h264' && envio.h264Hardware;
     return {
       modo: 'webcodecs', codec, aguardando,
-      motivo: pelaPlaca ? 'codificação pela placa de vídeo' : 'ligado em "Sempre", codificando no processador'
+      motivo: pelaPlaca ? 'codificação pela placa de vídeo' : 'WebCodecs forçado, codificando no processador'
     };
   }
 
@@ -300,7 +300,46 @@
     return PERFIS_H264.map(([perfil, prefixo]) => ({ perfil, codec: `avc1.${prefixo}${nivel}` }));
   }
 
+  // ---------- A captura que não passa de ~30 ----------
+  //
+  // No Windows 10 o Chrome captura a tela pelo DXGI, com a GDI de reserva
+  // (`FallbackDesktopCapturerWrapper`, no WebRTC). Um erro PERMANENTE do DXGI -- o monitor que
+  // some numa troca de resolução, o quadro que não pôde ser preparado no tamanho novo -- passa a
+  // captura para a GDI até o fim dela. E o Chrome limita a captura a 50% de um núcleo: o período
+  // vira o dobro do tempo de cada captura. Medido nesta máquina, com a tela em movimento: 57
+  // quadros pelo DXGI, 29 pela GDI. Só uma captura nova volta ao DXGI.
+  //
+  // A assinatura é o intervalo entre quadros, e não a média. O DXGI entrega na cadência do
+  // monitor, e bastam duas mudanças seguidas para aparecer um intervalo de ~17 ms; a GDI nunca
+  // entrega dois quadros a menos de ~30 ms. Movimento de sobra (mais de 20 quadros por segundo)
+  // e nenhum intervalo curto em dez segundos: a captura está presa.
+  //
+  // O que isto não separa é o conteúdo que roda a 30 de verdade -- um vídeo, um jogo travado em
+  // 30 --, com nada mais mudando na tela. Por isso a sala só SUGERE compartilhar de novo.
+  const MS_DE_INTERVALO_CURTO = 24;
+  const SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA = 10;
+  function capturaPresa(janelas, quadrosPedidos) {
+    if (!(quadrosPedidos >= 50) || janelas.length < SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA) return null;
+    let quadros = 0, curtos = 0, segundos = 0;
+    for (const j of janelas.slice(-SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA)) {
+      quadros += j.quadros; curtos += j.curtos; segundos += j.segundos;
+    }
+    if (segundos <= 0) return null;
+    const fps = quadros / segundos;
+    if (fps < 20 || fps > 40 || curtos > quadros * 0.02) return null;
+    return { fps: Math.round(fps) };
+  }
+
+  // Quanto esperar antes de tentar o WebCodecs de novo, depois de uma falha no meio da
+  // transmissão. Uma falha só era para sempre: o codificador que se perdeu numa troca de
+  // resolução, ou a placa ocupada por um instante, deixavam a tela no WebRTC até alguém parar e
+  // compartilhar de novo. A espera cresce para uma falha que se repete não virar troca de
+  // caminho à vista de todos a cada dez segundos.
+  const MS_ATE_TENTAR_DE_NOVO = [10_000, 30_000, 90_000, 300_000];
+  const esperaAteTentarDeNovo = falhas => MS_ATE_TENTAR_DE_NOVO[Math.min(Math.max(falhas, 1), MS_ATE_TENTAR_DE_NOVO.length) - 1];
+
   const api = {
+    capturaPresa, MS_DE_INTERVALO_CURTO, SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA, esperaAteTentarDeNovo, MS_ATE_TENTAR_DE_NOVO,
     decidirModo, MS_DE_FOLGA_PARA_SE_APRESENTAR, servidorConfiavel, VERSAO_MINIMA_DO_SERVIDOR,
     necessario, ESCALAS, QUADROS_POSSIVEIS, dimensoesNaEscala, caberNaCaixa, iniciarCamada, ajustarCamada, degrausDaPlaca,
     SEGUNDOS_PARA_SUBIR_DE_DEGRAU, PERDA_QUE_APERTA,

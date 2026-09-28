@@ -203,7 +203,7 @@ test('cada motivo de ficar no caminho de hoje é dito, na ordem do que a pessoa 
   }
 });
 
-test('"sempre ligada" aceita o processador e o servidor antigo, mas não passa por cima do servidor desligado', () => {
+test('"forçar WebCodecs" aceita o processador e o servidor antigo, mas não passa por cima do servidor desligado', () => {
   const sempre = { ...base, preferencia: 'sempre', envio: semPlaca, versaoDoServidor: '1.13.6' };
   const decisao = Decisoes.decidirModo(sempre);
   assert.deepEqual([decisao.modo, decisao.codec], ['webcodecs', 'h264']);
@@ -336,6 +336,28 @@ test('o espectador pede a camada do lugar, e cai para a leve por um tempo quando
   assert.equal(Decisoes.camadaDoEspectador(rebaixada, { pedida: 'alta', agora: agora + 5000 }).camada, 'baixa', 'a melhora não é aceita na hora');
   assert.equal(Decisoes.camadaDoEspectador(rebaixada, { pedida: 'alta', agora: agora + Decisoes.MS_REBAIXADO + 1 }).camada, 'alta');
   assert.equal(Decisoes.camadaDoEspectador({}, { pedida: 'alta', pedidosDeChave: 3, agora }).camada, 'baixa', 'buracos em série também rebaixam');
+});
+
+// ---------- A captura presa, e as novas tentativas ----------
+
+test('a captura presa na GDI é reconhecida pelo intervalo entre quadros, e não pela média', () => {
+  const segundos = (n, janela) => Array.from({ length: n }, () => ({ segundos: 1, ...janela }));
+  // Medido no Chrome desta máquina: pela GDI, 29 quadros por segundo e nenhum a menos de 30 ms.
+  assert.deepEqual(Decisoes.capturaPresa(segundos(10, { quadros: 29, curtos: 0 }), 60), { fps: 29 });
+  // Pelo DXGI com movimento, a cadência do monitor aparece: intervalos de ~17 ms.
+  assert.equal(Decisoes.capturaPresa(segundos(10, { quadros: 57, curtos: 50 }), 60), null);
+  // A mesma média de 30, com parte dos quadros colados, é tela que muda em rajadas -- não GDI.
+  assert.equal(Decisoes.capturaPresa(segundos(10, { quadros: 30, curtos: 6 }), 60), null);
+  assert.equal(Decisoes.capturaPresa(segundos(10, { quadros: 3, curtos: 0 }), 60), null, 'tela parada não é captura presa');
+  assert.equal(Decisoes.capturaPresa(segundos(10, { quadros: 29, curtos: 0 }), 30), null, 'quem pediu 30 recebe o que pediu');
+  assert.equal(Decisoes.capturaPresa(segundos(9, { quadros: 29, curtos: 0 }), 60), null, 'antes de dez segundos não se conclui');
+  // Só os dez segundos mais recentes contam: a captura que voltou ao normal deixa de estar presa.
+  assert.equal(Decisoes.capturaPresa([...segundos(10, { quadros: 29, curtos: 0 }), ...segundos(1, { quadros: 58, curtos: 55 })], 60), null);
+});
+
+test('a falha tenta de novo, com espera que cresce e para de crescer', () => {
+  assert.deepEqual([1, 2, 3, 4, 9].map(Decisoes.esperaAteTentarDeNovo), [10_000, 30_000, 90_000, 300_000, 300_000]);
+  assert.equal(Decisoes.esperaAteTentarDeNovo(0), 10_000);
 });
 
 // ---------- O nome do codec ----------

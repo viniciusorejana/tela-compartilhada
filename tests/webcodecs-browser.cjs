@@ -276,6 +276,27 @@ async function painel() {
   console.log(`PASS: com a saída apertada a imagem encolhe para ${apertada.largura}×${apertada.altura} e os quadros pedidos ficam em ${apertada.quadrosAlvo}`
     + ` (reconfigurações só de bitrate: ${apertada.reconfiguracoes.soDeBitrate}, com quadro-chave espontâneo: ${apertada.reconfiguracoes.comChaveEspontanea})`);
 
+  // ---------- A captura presa em ~30: a sala percebe e oferece capturar de novo ----------
+  //
+  // A tela sintética desenha a 30. Pedindo 60, ela tem a mesma assinatura da captura presa na
+  // GDI do Windows: movimento de sobra e nenhum quadro a menos de 24 ms do anterior.
+  await ana.locator('#videoFps').selectOption('60', { force: true });
+  await ana.waitForFunction(() => transporte.telaWebCodecs.estadoDoEnvio()?.quadrosPedidos === 60, null, { timeout: 15000 });
+  await ana.waitForFunction(() => transporte.telaWebCodecs.estadoDoEnvio()?.capturaPresa, null, { timeout: 30000 })
+    .catch(async erro => { console.error('captura presa: envio =', JSON.stringify(await envio(ana))); throw erro; });
+  const presa = await envio(ana);
+  assert.ok(presa.capturaPresa.fps >= 25 && presa.capturaPresa.fps <= 32, `a captura presa em ~30: ${JSON.stringify(presa.capturaPresa)}`);
+  await ana.waitForFunction(() => [...document.querySelectorAll('.nexo-toast strong')].some(s => s.textContent.startsWith('A captura da tela caiu para')), null, { timeout: 10000 });
+  assert.ok(await ana.locator('.nexo-toast button', { hasText: 'Capturar de novo' }).count(), 'o aviso oferece capturar de novo');
+  await ana.locator('.nexo-toast button', { hasText: 'Agora não' }).click();
+  // Um aviso por captura: a medição seguinte não traz outro.
+  await ana.waitForTimeout(4500);
+  assert.equal(await ana.locator('.nexo-toast', { hasText: 'A captura da tela caiu' }).count(), 0, 'o aviso não volta para a mesma captura');
+  await ana.locator('#videoFps').selectOption('30', { force: true });
+  await ana.waitForFunction(() => transporte.telaWebCodecs.estadoDoEnvio()?.quadrosPedidos === 30, null, { timeout: 15000 });
+  assert.equal(await palcoAndando(bia), true);
+  console.log(`PASS: a captura presa em ${presa.capturaPresa.fps} com 60 pedidos é percebida, e o aviso oferece capturar de novo uma vez só`);
+
   // ---------- Sala mista: quem não decodifica leva todo mundo para o caminho de hoje ----------
   const contextoDavi = await navegador.newContext({ viewport: { width: 1280, height: 800 } });
   await contextoDavi.addInitScript(() => { delete window.VideoDecoder; delete window.EncodedVideoChunk; });
@@ -337,13 +358,15 @@ async function painel() {
   assert.equal(await bia.evaluate(id => peers.get(id).state.screen && peers.get(id).assistindo, idDaAna), true, 'a tela continua anunciada e assistida');
   console.log(`PASS: falha do codificador cai para o RTP sem a tela sumir (${aposFalha.motivo})`);
 
-  // ---------- Parar de assistir para a codificação; parar de compartilhar tira as faixas ----------
-  // Trocar o interruptor é tentar de novo: a falha anterior não vale para a escolha nova.
+  // ---------- E volta sozinha: a falha deixou de ser para a transmissão inteira ----------
+  assert.match(aposFalha.motivo, /nova tentativa em 10 s/, 'o motivo diz quando tenta de novo');
   await ana.evaluate(() => { VideoEncoder.prototype.encode = window.codificarDeVerdade; });
-  await ana.evaluate(() => definirPreferenciaDeWebCodecs('automatico'));
-  await ana.evaluate(() => definirPreferenciaDeWebCodecs('sempre'));
-  await esperarCaminho(ana, 'webcodecs', 'depois da falha, de novo');
-  await esperarOrigem(bia, idDaAna, true, 'de novo');
+  await esperarCaminho(ana, 'webcodecs', 'nova tentativa depois da falha');
+  await esperarOrigem(bia, idDaAna, true, 'depois da nova tentativa');
+  assert.equal(await palcoAndando(bia), true, 'a imagem volta pelo WebCodecs');
+  console.log('PASS: depois da falha, o WebCodecs volta sozinho na nova tentativa, sem ninguém parar a tela');
+
+  // ---------- Parar de assistir para a codificação; parar de compartilhar tira as faixas ----------
   await bia.locator('#stageStopBtn').click();
   await caio.locator('#stageStopBtn').click();
   await ana.waitForFunction(() => { const e = transporte.telaWebCodecs.estadoDoEnvio(); return e && !e.camadas.length && !e.captura; }, null, { timeout: 15000 });
