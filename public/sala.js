@@ -3022,6 +3022,24 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
   } else if (MOTIVOS_DE_LIMITE[q.reason]) {
     ao_vivo.append(elemento('div', 'medicao-veredito alerta', MOTIVOS_DE_LIMITE[q.reason]));
   }
+  anotarFonteMenorQueOPedido(ao_vivo, q.capturaWidth, q.capturaHeight);
+}
+
+// A resolução escolhida é um TETO, e a captura entrega o que a tela tem. Quem escolhe 1440p num
+// monitor de 1080p recebe 1080p -- e, sem esta frase, conclui que a escolha não pegou.
+//
+// Esticar até o pedido não é oferecido, de propósito: a imagem esticada tem a mesma nitidez e
+// espalha o mesmo orçamento por mais pixels inventados, ficando mais borrada por pixel real, com
+// mais banda e mais trabalho de codificação. Quem assiste num monitor maior amplia do mesmo
+// jeito, de graça. A saída de verdade é a fonte ter os pixels: um monitor maior, ou a resolução
+// virtual do driver (DSR, VSR), que faz a área de trabalho ter 1440p num monitor de 1080p.
+function anotarFonteMenorQueOPedido(ao_vivo, largura, altura) {
+  const perfil = perfilAtual();
+  if (!largura || !altura || (altura >= perfil.height && largura >= perfil.width)) return;
+  ao_vivo.append(elemento('div', 'medicao-nota', `Sua tela tem ${largura}×${altura}, então a imagem sobe em ${altura}p mesmo`
+    + ` com ${perfil.label.split(' · ')[0]} escolhido. Esticar só gastaria banda sem ganhar detalhe — quem assiste num monitor`
+    + ' maior amplia do mesmo jeito. Para mais resolução de verdade, a fonte precisa ter os pixels: um monitor maior, ou a'
+    + ' resolução virtual do driver (DSR na NVIDIA, VSR na AMD) com a área de trabalho na resolução maior.'));
 }
 
 function atualizarBotaoDeQualidade() {
@@ -3242,7 +3260,8 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   }
   const pulados = wc.camadas.reduce((soma, c) => soma + c.descartes.rede, 0);
   const avisos = [];
-  if (pulados) avisos.push(`${pulados} quadro(s) deixaram de sair no último segundo porque a sua subida não escoava a tempo; o orçamento está sendo reduzido.`);
+  // O mesmo critério da adaptação: um pulo isolado é um quadro-chave escoando, e não a rede.
+  if (wc.camadas.some(c => c.saidaApertada)) avisos.push(`${pulados} quadro(s) deixaram de sair no último segundo porque a sua subida não escoava a tempo; o orçamento está sendo reduzido.`);
   if (alta.codificadorApertado) avisos.push('O codificador não está acompanhando a taxa pedida; a imagem encolhe para caber.');
   if (alta.perda > 0.02) avisos.push(`Quem assiste está perdendo ${Math.round(alta.perda * 100)}% dos quadros no caminho.`);
   const atrasos = wc.camadas.flatMap(c => c.atrasos).sort((a, b) => a - b);
@@ -3254,6 +3273,7 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
     atraso !== null ? `Atraso mediano até quem assiste: ${atraso} ms.` : ''
   ].filter(Boolean).join(' ')));
   ao_vivo.append(caixa);
+  anotarFonteMenorQueOPedido(ao_vivo, wc.fonte.largura, wc.fonte.altura);
 }
 
 // ---------- O histórico do envio, e o que ele conclui ----------

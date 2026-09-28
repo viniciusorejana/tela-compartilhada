@@ -522,6 +522,11 @@
       }
 
       let rotaImpressa = false;
+      // Com a tela no caminho novo, as camadas RTP dela estão paradas de propósito (ninguém as
+      // assina, e o dynacast as desliga). Listá-las como "sem medida · desligada" com um
+      // "em software" em laranja ao lado fazia o painel acusar o processador justamente quando a
+      // placa estava codificando -- o cartão do caminho novo, logo abaixo, é quem diz a verdade.
+      const telaPeloCaminhoNovo = transporte?.telaWebCodecs?.estadoDoEnvio()?.modo === 'webcodecs';
       // Um cartão por origem, criado só quando há o que pôr nele: um painel com seções
       // vazias é pior do que um painel curto.
       const cartoesPorRotulo = new Map();
@@ -581,8 +586,9 @@
           }
           // Do lado de quem envia, e aqui que se ve se a GPU esta sendo usada de verdade.
           if (item.type === 'outbound-rtp' && item.kind === 'video') {
-            lines.push(`  Camada ${item.rid || 'única'}: ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}`);
+            lines.push(`  Camada ${item.rid || 'única'}: ${stats.get(item.codecId)?.mimeType || 'codec não informado'}; ${item.frameWidth || '?'}×${item.frameHeight || '?'}; FPS=${item.framesPerSecond ?? '?'}; limitado por=${item.qualityLimitationReason || 'nada'}${item.active === false ? '; desligada' : ''}`);
             lines.push(`  codificador=${item.encoderImplementation || 'não informado'}; economia de energia=${describeEfficiency(item.powerEfficientEncoder)}`);
+            if (rotulo === 'enviando screen' && telaPeloCaminhoNovo) return;
             const c = cartaoDe(titulo);
             // O rid ("q", "h", "f") é nome de protocolo e não diz nada a quem lê. A altura
             // diz: "camada 360p" é a pequena, e quem abriu o painel sabe o que isso significa
@@ -603,8 +609,9 @@
               anotar(c, 'Limitado por', motivo === 'cpu' ? 'processador' : motivo === 'bandwidth' ? 'banda de subida' : motivo, 'alerta');
             }
             // Onde a codificação está acontecendo é a pergunta que decide se vale mexer em
-            // resolução ou se o problema está fora do Nexo.
-            if (item.powerEfficientEncoder !== undefined) {
+            // resolução ou se o problema está fora do Nexo. Só para camada ATIVA: a desligada
+            // não codifica nada, e o navegador relata para ela o codificador de reserva.
+            if (item.powerEfficientEncoder !== undefined && item.active !== false) {
               anotar(c, 'Codificação', item.powerEfficientEncoder ? 'em hardware' : 'em software (pesa no processador)',
                 item.powerEfficientEncoder ? 'ok' : 'alerta');
             }
@@ -617,6 +624,11 @@
             anotar(cartaoDe(titulo), 'Fonte capturando', `${item.width || '?'}×${item.height || '?'} · ${Math.round(item.framesPerSecond || 0)} fps`);
           }
         });
+      }
+
+      if (telaPeloCaminhoNovo) {
+        const tituloDaTela = faixasLocais.find(([rotulo]) => rotulo === 'enviando screen')?.[2];
+        if (tituloDaTela) anotar(cartaoDe(tituloDaTela), 'Pelo WebRTC', 'em espera: a tela vai pelo caminho novo (abaixo)', 'neutro');
       }
 
       for (const par of peers.values()) {
