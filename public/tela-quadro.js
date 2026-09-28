@@ -157,6 +157,148 @@
     };
   }
 
+  // ---------- Pedaços: o quadro fatiado para o ritmador ----------
+  //
+  // O servidor de mídia tem um portão POR ESPECTADOR no canal das faixas de dados: descarta o
+  // pacote quando o buffer daquela pessoa passa de 100 ms do bitrate medido E de 8 KB
+  // (`DataChannelWriterUnreliable`, na 1.13.7). Um quadro-chave de 100 KB mandado de uma vez
+  // passa dos dois -- e no começo de cada assinatura o bitrate medido é quase zero, então quase
+  // qualquer quadro-chave passa. Foi o que o registro do servidor mostrou no primeiro teste em
+  // rede de verdade: "data dropped due to high buffered amount", a cada começo de assinatura.
+  //
+  // A biblioteca fatia o quadro em pacotes de 16 KB e manda todos no mesmo instante, sem jeito
+  // de espaçá-los. Então o fatiamento é nosso: pedaços que cabem abaixo do piso de 8 KB, cada um
+  // enviado como um quadro de um pacote só, no ritmo que quem envia escolher.
+  const TAMANHO_DO_PEDACO = 7200;
+  const CABECALHO_DO_PEDACO = 16;
+  const MAGICO_DO_PEDACO = 0x50;   // 'P'
+
+  // Cabeçalho de 16 bytes: 0 mágico · 1 versão · 2 camada · 3 reservado · 4-7 sequência ·
+  // 8-9 geração · 10-11 índice · 12-13 total · 14-15 reservado. Depois, a fatia do envelope.
+  function fatiar(envelope, { camada, sequencia, geracao }, tamanho = TAMANHO_DO_PEDACO) {
+    const indiceDaCamada = CAMADAS.indexOf(camada);
+    const total = Math.max(1, Math.ceil(envelope.length / tamanho));
+    if (total > 0xffff) throw new Error('quadro grande demais');
+    const pedacos = [];
+    for (let indice = 0; indice < total; indice++) {
+      const fatia = envelope.subarray(indice * tamanho, Math.min(envelope.length, (indice + 1) * tamanho));
+      const pedaco = new Uint8Array(CABECALHO_DO_PEDACO + fatia.length);
+      const visao = new DataView(pedaco.buffer);
+      visao.setUint8(0, MAGICO_DO_PEDACO);
+      visao.setUint8(1, VERSAO);
+      visao.setUint8(2, indiceDaCamada);
+      visao.setUint32(4, sequencia >>> 0, true);
+      visao.setUint16(8, geracao & 0xffff, true);
+      visao.setUint16(10, indice, true);
+      visao.setUint16(12, total, true);
+      pedaco.set(fatia, CABECALHO_DO_PEDACO);
+      pedacos.push(pedaco);
+    }
+    return pedacos;
+  }
+
+  function lerPedaco(bytes) {
+    if (!(bytes instanceof Uint8Array) || bytes.length < CABECALHO_DO_PEDACO) return null;
+    const visao = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (visao.getUint8(0) !== MAGICO_DO_PEDACO || visao.getUint8(1) !== VERSAO) return null;
+    const camada = CAMADAS[visao.getUint8(2)];
+    const indice = visao.getUint16(10, true);
+    const total = visao.getUint16(12, true);
+    if (!camada || !total || indice >= total) return null;
+    return {
+      camada, indice, total,
+      sequencia: visao.getUint32(4, true),
+      geracao: visao.getUint16(8, true),
+      dados: bytes.subarray(CABECALHO_DO_PEDACO)
+    };
+  }
+
+  // Junta os pedaços de volta no envelope. Um quadro com pedaço faltando não é montado nunca: ele
+  // vira buraco na sequência, e o buraco é o que o decodificador sabe tratar (reenvio, e depois
+  // quadro-chave). Pedaços velhos saem depois de `msDeValidade`, para um quadro perdido não
+  // ocupar memória para sempre.
+  function criarMontador({ msDeValidade = 1500, maximoDeQuadros = 64 } = {}) {
+    const emMontagem = new Map();   // chave → { total, recebidos, fatias, desde }
+    return {
+      receber(pedaco, agora = Date.now()) {
+        if (pedaco.total === 1) return pedaco.dados;
+        const chave = `${pedaco.camada}:${pedaco.geracao}:${pedaco.sequencia}`;
+        let quadro = emMontagem.get(chave);
+        if (!quadro) {
+          quadro = { total: pedaco.total, recebidos: 0, fatias: new Array(pedaco.total), desde: agora };
+          emMontagem.set(chave, quadro);
+          if (emMontagem.size > maximoDeQuadros) emMontagem.delete(emMontagem.keys().next().value);
+        }
+        if (quadro.total !== pedaco.total || quadro.fatias[pedaco.indice]) return null;
+        quadro.fatias[pedaco.indice] = pedaco.dados;
+        quadro.recebidos += 1;
+        if (quadro.recebidos < quadro.total) return null;
+        emMontagem.delete(chave);
+        let tamanho = 0;
+        for (const fatia of quadro.fatias) tamanho += fatia.length;
+        const envelope = new Uint8Array(tamanho);
+        let posicao = 0;
+        for (const fatia of quadro.fatias) { envelope.set(fatia, posicao); posicao += fatia.length; }
+        return envelope;
+      },
+      limpar(agora = Date.now()) {
+        for (const [chave, quadro] of emMontagem) if (agora - quadro.desde > msDeValidade) emMontagem.delete(chave);
+      },
+      get emMontagem() { return emMontagem.size; }
+    };
+  }
+
+  // ---------- O ritmador ----------
+  //
+  // Um balde de fichas que guarda no máximo UM pedaço. Dois pedaços grudados chegam grudados ao
+  // servidor, e o segundo encontra o buffer do espectador acima do piso de 8 KB -- é exatamente
+  // o que o portão dele descarta no começo de uma assinatura. Com o balde de um pedaço, cada
+  // pedaço sai sozinho, e o intervalo entre eles é o tempo que o buffer tem para escoar.
+  //
+  // O reenvio fura a fila (`primeiro`): quem pediu está esperando, com a imagem parada.
+  function criarRitmador({ enviar, agendar, cancelar, bytesPorSegundo, agora = () => performance.now() }) {
+    const capacidade = TAMANHO_DO_PEDACO + CABECALHO_DO_PEDACO;
+    const fila = [];
+    let bytesNaFila = 0;
+    let fichas = capacidade;
+    let ultimo = agora();
+    let timer = null;
+    let taxa = Math.max(1, bytesPorSegundo());
+
+    function bombear() {
+      timer = null;
+      const instante = agora();
+      taxa = Math.max(1, bytesPorSegundo());
+      fichas = Math.min(capacidade, fichas + (instante - ultimo) / 1000 * taxa);
+      ultimo = instante;
+      while (fila.length && fichas >= fila[0].bytes.length) {
+        const item = fila.shift();
+        bytesNaFila -= item.bytes.length;
+        fichas -= item.bytes.length;
+        try { enviar(item); } catch (_) { /* quem envia conta a própria falha */ }
+      }
+      if (fila.length) timer = agendar(bombear, Math.max(1, Math.ceil((fila[0].bytes.length - fichas) / taxa * 1000)));
+    }
+
+    return {
+      enfileirar(item, { primeiro = false } = {}) {
+        if (primeiro) fila.unshift(item); else fila.push(item);
+        bytesNaFila += item.bytes.length;
+        if (!timer) bombear();
+      },
+      get bytesNaFila() { return bytesNaFila; },
+      get pedacosNaFila() { return fila.length; },
+      // Quanto o último pedaço da fila ainda vai esperar para sair.
+      get atrasoMs() { return bytesNaFila / taxa * 1000; },
+      esvaziar() {
+        fila.length = 0;
+        bytesNaFila = 0;
+        if (timer !== null) cancelar(timer);
+        timer = null;
+      }
+    };
+  }
+
   // ---------- Mensagens de controle ----------
   //
   // Viajam pelo canal CONFIÁVEL. São dezenas de bytes, e perder uma delas custa caro: um
@@ -230,8 +372,9 @@
   }
 
   const api = {
-    CAMADAS, TOPICO, CODECS_CONHECIDOS, TAMANHO_DO_CABECALHO, MAXIMO_DO_REENVIO,
-    nomeDaFaixa, camadaDaFaixa, montar, ler, mensagem, lerMensagem, configParaEnvio, configRecebida
+    CAMADAS, TOPICO, CODECS_CONHECIDOS, TAMANHO_DO_CABECALHO, MAXIMO_DO_REENVIO, TAMANHO_DO_PEDACO,
+    nomeDaFaixa, camadaDaFaixa, montar, ler, mensagem, lerMensagem, configParaEnvio, configRecebida,
+    fatiar, lerPedaco, criarMontador, criarRitmador
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NexoTelaQuadro = api;

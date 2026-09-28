@@ -58,6 +58,61 @@ test('o nome da faixa diz a camada, e só as nossas são reconhecidas', () => {
   assert.equal(Quadro.camadaDaFaixa('outra-coisa'), null);
 });
 
+// ---------- Pedaços e ritmador ----------
+
+test('o quadro é fatiado abaixo do piso de 8 KB do servidor e remontado igual, em qualquer ordem', () => {
+  const envelope = Uint8Array.from({ length: 50_000 }, (_, i) => i % 251);
+  const pedacos = Quadro.fatiar(envelope, { camada: 'alta', sequencia: 9, geracao: 2 });
+  assert.equal(pedacos.length, Math.ceil(50_000 / Quadro.TAMANHO_DO_PEDACO));
+  assert.ok(pedacos.every(p => p.length < 8192), 'cada pedaço cabe abaixo do piso do portão do servidor');
+  const montador = Quadro.criarMontador();
+  const embaralhados = [...pedacos].reverse();
+  let inteiro = null;
+  for (const p of embaralhados) inteiro = montador.receber(Quadro.lerPedaco(p)) || inteiro;
+  assert.deepEqual([...inteiro], [...envelope]);
+  assert.equal(montador.emMontagem, 0);
+  assert.equal(montador.receber(Quadro.lerPedaco(pedacos[0])), null, 'um pedaço repetido depois de montado recomeça, e não remonta sozinho');
+});
+
+test('um pedaço faltando nunca monta o quadro, e o que ficou pela metade expira', () => {
+  const pedacos = Quadro.fatiar(new Uint8Array(20_000), { camada: 'baixa', sequencia: 1, geracao: 1 });
+  const montador = Quadro.criarMontador({ msDeValidade: 1000 });
+  for (const p of pedacos.slice(1)) assert.equal(montador.receber(Quadro.lerPedaco(p), 0), null);
+  assert.equal(montador.emMontagem, 1);
+  montador.limpar(2000);
+  assert.equal(montador.emMontagem, 0);
+  assert.equal(Quadro.lerPedaco(new Uint8Array(10)), null);
+  assert.equal(Quadro.fatiar(new Uint8Array(3), { camada: 'alta', sequencia: 0, geracao: 0 }).length, 1, 'quadro pequeno é um pedaço só');
+});
+
+test('o ritmador espaça os pedaços: nunca dois grudados, e o reenvio fura a fila', () => {
+  let agora = 0;
+  const saidas = [];
+  const agendados = [];
+  const ritmador = Quadro.criarRitmador({
+    agora: () => agora,
+    agendar: (fn, ms) => { agendados.push({ quando: agora + ms, fn }); return agendados.length; },
+    cancelar: () => {},
+    bytesPorSegundo: () => 1_000_000,
+    enviar: item => saidas.push({ em: agora, nome: item.nome, bytes: item.bytes.length })
+  });
+  const pedaco = nome => ({ nome, bytes: new Uint8Array(7000) });
+  for (const nome of ['a', 'b', 'c', 'd']) ritmador.enfileirar(pedaco(nome));
+  ritmador.enfileirar(pedaco('reenvio'), { primeiro: true });
+  // Corre o relógio de mentira até esvaziar.
+  while (agendados.length) {
+    agendados.sort((x, y) => x.quando - y.quando);
+    const proximo = agendados.shift();
+    agora = proximo.quando;
+    proximo.fn();
+  }
+  assert.deepEqual(saidas.map(s => s.nome), ['a', 'reenvio', 'b', 'c', 'd'], 'o primeiro já tinha saído; o reenvio passa na frente dos outros');
+  for (let i = 1; i < saidas.length; i++) {
+    assert.ok(saidas[i].em - saidas[i - 1].em >= 6.9, `intervalo de ${saidas[i].em - saidas[i - 1].em} ms entre dois pedaços de 7 KB a 1 MB/s`);
+  }
+  assert.equal(ritmador.bytesNaFila, 0);
+});
+
 // ---------- As mensagens ----------
 
 test('as mensagens de controle vão e voltam, e o tipo não pode ser sobrescrito por um campo', () => {

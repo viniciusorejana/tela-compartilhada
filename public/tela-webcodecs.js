@@ -59,6 +59,12 @@
   // quadro-chave, sozinho, fecha o portão por um ou dois quadros enquanto escoa -- isso é o
   // quadro-chave, e não a rede.
   const FRACAO_PULADA_QUE_APERTA = 0.1;
+  // O ritmador (tela-quadro.js). A folga sobre o bitrate é o que deixa um quadro-chave sair em
+  // ~100 ms; o piso cobre a camada de 360p sozinha, que de outro modo levaria um quadro-chave
+  // inteiro para atravessar. A fila acima de um quarto de segundo é saída que não escoa.
+  const FOLGA_DO_RITMADOR = 1.5;
+  const PISO_DO_RITMADOR = 400_000;
+  const SEGUNDOS_NA_FILA_DO_RITMADOR = 0.25;
 
   // Entre o aviso de fim e tirar as faixas de dados do ar. Cobre com folga a ida da mensagem e
   // o "solto" de quem assiste; é um atraso só na SAÍDA do caminho novo, e quem assiste já
@@ -290,6 +296,7 @@
     async function sairDoWebCodecs(t, motivo) {
       for (const camada of [...t.camadas.keys()]) pararCodificacao(t, camada);
       pararCaptura(t);
+      t.ritmador.esvaziar();
       const faixas = [...t.faixasDeDados.values()];
       t.faixasDeDados.clear();
       t.espectadores.clear();
@@ -399,28 +406,56 @@
       return true;
     }
 
-    function podeEnviar(t) {
-      if (apertoSimulado > 0 && Math.random() < apertoSimulado) return false;
-      const canal = canalDaTela();
-      if (!canal) return true;
+    const bitrateDasCamadas = t => {
       let bps = 0;
       for (const c of t.camadas.values()) bps += c.estado.bitrate;
+      return bps;
+    };
+
+    // A fila do ritmador também é fila de envio: com ela acima de um quarto de segundo, a saída
+    // não está escoando o que o codificador produz, e o quadro seguinte é pulado antes de ser
+    // codificado -- como no buffer do canal, logo abaixo.
+    function podeEnviar(t) {
+      if (apertoSimulado > 0 && Math.random() < apertoSimulado) return false;
+      const bps = bitrateDasCamadas(t);
+      if (t.ritmador && t.ritmador.bytesNaFila > Math.max(BYTES_MINIMOS_DE_BUFFER, (bps / 8) * SEGUNDOS_NA_FILA_DO_RITMADOR)) return false;
+      const canal = canalDaTela();
+      if (!canal) return true;
       return canal.bufferedAmount <= Math.max(BYTES_MINIMOS_DE_BUFFER, (bps / 8) * SEGUNDOS_DE_BUFFER);
+    }
+
+    // O ritmo de saída: uma vez e meia o que as camadas deveriam gastar, com piso de 3,2 Mbps.
+    // Folga suficiente para um quadro-chave sair em ~100 ms sem atrasar os quadros comuns, e
+    // espaçada o bastante para o buffer de cada espectador escoar entre dois pedaços.
+    function criarRitmadorDa(t) {
+      return Quadro.criarRitmador({
+        agendar, cancelar,
+        bytesPorSegundo: () => Math.max(PISO_DO_RITMADOR, (bitrateDasCamadas(t) / 8) * FOLGA_DO_RITMADOR),
+        enviar: item => empurrar(t, item.faixa, item.bytes, item.capturaUs)
+      });
+    }
+
+    function enfileirarQuadro(t, faixa, envelope, { camada, sequencia, geracao, capturaUs }, opcoes) {
+      let pedacos;
+      try { pedacos = Quadro.fatiar(envelope, { camada, sequencia, geracao }); } catch (_) { return; }
+      // Furando a fila, os pedaços entram em ordem inversa para saírem na ordem certa.
+      const ordem = opcoes?.primeiro ? [...pedacos].reverse() : pedacos;
+      for (const bytes of ordem) t.ritmador.enfileirar({ faixa, bytes, capturaUs }, opcoes);
     }
 
     function enviarQuadro(t, saida) {
       if (t !== transmissao) return;
       const faixa = t.faixasDeDados.get(saida.camada);
       if (!faixa) return;
-      let payload;
-      try { payload = Quadro.montar(saida); } catch (_) { return; }
-      t.bytesEnviados += payload.byteLength;
+      let envelope;
+      try { envelope = Quadro.montar(saida); } catch (_) { return; }
+      t.bytesEnviados += envelope.byteLength;
       const c = t.camadas.get(saida.camada);
       if (c) {
-        c.recentes.set(saida.sequencia, { payload, capturaUs: saida.capturaUs });
+        c.recentes.set(saida.sequencia, { envelope, capturaUs: saida.capturaUs });
         if (c.recentes.size > QUADROS_GUARDADOS_PARA_REENVIO) c.recentes.delete(c.recentes.keys().next().value);
       }
-      empurrar(t, faixa, payload, saida.capturaUs);
+      enfileirarQuadro(t, faixa, envelope, saida);
     }
 
     function empurrar(t, faixa, payload, capturaUs) {
@@ -440,11 +475,13 @@
       if (!c || !faixa || c.geracao !== mensagem.geracao || !podeEnviar(t)) return;
       const agora = Date.now();
       if (agora - c.janelaDeReenvio >= 1000) { c.janelaDeReenvio = agora; c.reenviosNaJanela = 0; }
-      for (let sequencia = mensagem.de; sequencia <= mensagem.ate; sequencia++) {
+      // Do último para o primeiro, cada um furando a fila: assim o buraco sai em ordem, na
+      // frente de tudo.
+      for (let sequencia = mensagem.ate; sequencia >= mensagem.de; sequencia--) {
         if (c.reenviosNaJanela >= REENVIOS_POR_SEGUNDO) return;
         const guardado = c.recentes.get(sequencia);
         if (!guardado) continue;
-        empurrar(t, faixa, guardado.payload, guardado.capturaUs);
+        enfileirarQuadro(t, faixa, guardado.envelope, { camada: mensagem.camada, sequencia, geracao: c.geracao, capturaUs: guardado.capturaUs }, { primeiro: true });
         c.reenviados += 1;
         c.reenviosNaJanela += 1;
       }
@@ -503,6 +540,7 @@
       timerDoCaminho = null;
       for (const camada of [...t.camadas.keys()]) pararCodificacao(t, camada);
       pararCaptura(t);
+      t.ritmador.esvaziar();
       const faixas = [...t.faixasDeDados.values()];
       t.faixasDeDados.clear();
       // Na fila: uma transmissão nova logo em seguida publica faixas com os MESMOS nomes, e o
@@ -600,7 +638,7 @@
 
     function iniciarRecepcao(tela) {
       try {
-        const recepcao = { assinaturas: new Map(), comImagem: false, iniciadaEm: Date.now(), decodificador: null };
+        const recepcao = { assinaturas: new Map(), comImagem: false, iniciadaEm: Date.now(), decodificador: null, montador: Quadro.criarMontador() };
         recepcao.decodificador = Decodificador.criarDecodificador({
           aoPedirChave: camada => enviar('chave', { camada }, tela.id),
           aoPedirReenvio: (camada, geracao, de, ate) => enviar('reenvio', { camada, geracao, de, ate }, tela.id),
@@ -634,7 +672,9 @@
       try { faixa.setPipelineOptions({ maxPartialFrames: 8 }); } catch (_) { /* versão sem a opção */ }
       const controle = new AbortController();
       let leitor;
-      try { leitor = faixa.subscribe({ signal: controle.signal, bufferSize: 32 }).getReader(); }
+      // A fila de leitura cabe um quadro-chave inteiro em pedaços: acima dela a biblioteca
+      // descarta, e um pedaço descartado aqui é um quadro-chave perdido.
+      try { leitor = faixa.subscribe({ signal: controle.signal, bufferSize: 128 }).getReader(); }
       catch (erro) { anotar('tela.assinaturaFalhou', erro?.message || String(erro)); return; }
       const assinatura = { camada, controle };
       recepcao.assinaturas.set(camada, assinatura);
@@ -645,9 +685,16 @@
           try { lido = await leitor.read(); } catch (_) { break; }
           if (lido.done) break;
           const bruto = lido.value;
-          const envelope = Quadro.ler(bruto.payload);
-          if (!envelope || envelope.camada !== camada || tela.recepcao !== recepcao) continue;
-          recepcao.decodificador.receber(envelope, bruto.userTimestamp !== undefined ? Number(bruto.userTimestamp) : 0, bruto.payload.byteLength);
+          if (tela.recepcao !== recepcao) continue;
+          // Cada quadro da faixa é um pedaço (ver o ritmador, em tela-quadro.js); o envelope só
+          // existe depois de todos os pedaços dele chegarem.
+          const pedaco = Quadro.lerPedaco(bruto.payload);
+          if (!pedaco || pedaco.camada !== camada) continue;
+          const inteiro = recepcao.montador.receber(pedaco);
+          if (!inteiro) continue;
+          const envelope = Quadro.ler(inteiro);
+          if (!envelope || envelope.camada !== camada) continue;
+          recepcao.decodificador.receber(envelope, bruto.userTimestamp !== undefined ? Number(bruto.userTimestamp) : 0, inteiro.byteLength);
         }
         if (recepcao.assinaturas.get(camada) === assinatura) recepcao.assinaturas.delete(camada);
       })();
@@ -719,6 +766,7 @@
         const recepcao = tela.recepcao;
         if (!recepcao) continue;
         recepcao.decodificador.vigiar();
+        recepcao.montador.limpar();
         const janela = recepcao.decodificador.fecharJanela();
         tela.ultimaJanela = janela;
         // Um relato por camada assinada. Ele é também o "continuo aqui": quem transmite
@@ -885,6 +933,7 @@
         if (t && t.modo === 'webcodecs') {
           for (const camada of [...t.camadas.keys()]) pararCodificacao(t, camada);
           pararCaptura(t);
+          t.ritmador.esvaziar();
           t.faixasDeDados.clear();
           t.espectadores.clear();
           t.modo = 'rtp';
@@ -932,6 +981,7 @@
           fonte: { largura: medidas.width || parametros.largura, altura: medidas.height || parametros.altura },
           bytesEnviados: 0, envioRecusado: 0, saidaDisponivel: null, saidaLidaEm: 0, iniciadaEm: Date.now()
         };
+        transmissao.ritmador = criarRitmadorDa(transmissao);
         reavaliarCaminho();
       },
 
@@ -947,6 +997,7 @@
           fonte: { ...t.fonte },
           espectadores: t.espectadores.size,
           buffer: canal ? canal.bufferedAmount : null,
+          ritmador: { bytes: t.ritmador.bytesNaFila, pedacos: t.ritmador.pedacosNaFila, atrasoMs: t.ritmador.atrasoMs },
           saidaDisponivel: t.saidaDisponivel,
           envioRecusado: t.envioRecusado,
           camadas: [...t.camadas.entries()].map(([camada, c]) => ({
