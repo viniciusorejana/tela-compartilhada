@@ -5,18 +5,22 @@
 // no seu computador sem aviso e sem revisao -- e um binario e a coisa menos indicada para
 // se atualizar sozinha.
 //
-// Ha DUAS versoes declaradas, e continua nao havendo nenhuma buscada. A 1.13.7 e a primeira
-// que sabe receber VP9 e AV1 como simulcast de verdade -- varias resolucoes independentes em
-// vez de uma faixa com as camadas dentro. Sem ela, esses dois codecs sobem sem o degrau
-// barato de 360p que a grade e a rede ruim usam (o porque esta em public/sala.js, em
-// ESCADA_SVC), e e por isso que a troca interessa.
+// Ha DUAS versoes declaradas, e continua nao havendo nenhuma buscada. A 1.13.7 e o padrao, por
+// dois motivos:
 //
-// O padrao continua sendo a 1.13.6 porque a validacao que falta nao e de codigo: e ligar uma
-// sala com gente de verdade, em rede de verdade, e conferir que o degrau de 360p aparece e
-// nao congela. Trocar o padrao antes disso seria trocar um problema conhecido por um
-// desconhecido. Quem for validar escolhe assim:
+// - A tela por WebCodecs (docs/plano-webcodecs.md) anda sobre faixas de dados, e a 1.13.6
+//   TRAVA a sinalizacao de quem assina uma faixa de dados no instante em que ela e removida --
+//   dali em diante nenhum pedido daquela pessoa e atendido, e a tela fica preta ate recarregar.
+//   A 1.13.7 corrige ("data track subscription deadlock", livekit#4843), e o automatico do
+//   caminho novo so liga a partir dela.
+// - E a primeira que recebe VP9 e AV1 como simulcast de verdade -- varias resolucoes
+//   independentes em vez de uma faixa com as camadas dentro --, com o degrau barato de 360p que
+//   a grade e a rede ruim usam (o porque esta em public/sala.js, em ESCADA_SVC).
 //
-//   $env:NEXO_LIVEKIT = '1.13.7'; npm run build:sfu; npm start
+// Ela virou o padrao depois de uma sala de verdade transmitindo por ela, em 27/09/2026. Quem
+// precisar voltar para a 1.13.6 escolhe assim (e perde o automatico do WebCodecs):
+//
+//   $env:NEXO_LIVEKIT = '1.13.6'; npm run build:sfu; npm start
 //
 // Voltar e apagar a variavel e rodar `build:sfu` de novo. A pasta e UMA, e a troca re-baixa
 // por cima: nao ha pasta por versao de proposito. O encerrador de orfaos em sfu.js casa pelo
@@ -29,17 +33,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const VERSAO_PADRAO = '1.13.6';
+const VERSAO_PADRAO = '1.13.7';
 
-// Hash de cada arquivo que pode entrar nesta maquina, por sistema e processador. Os do Linux
-// da 1.13.7 estao ausentes de proposito: nao foram conferidos aqui, e um `null` faz o download
-// recusar -- que e o que deve acontecer. Inventar um hash, ou aceitar sem conferir, e pior do
-// que nao ter a versao.
+// Hash de cada arquivo que pode entrar nesta maquina, por sistema e processador. Um `null` faz o
+// download recusar -- que e o que deve acontecer para um arquivo que ninguem conferiu. Inventar
+// um hash, ou aceitar sem conferir, e pior do que nao ter a versao.
 //
-// O `linux-arm64` existe pelo Oracle Cloud grátis, que é ARM (Ampere). Conferido em duas
-// fontes que concordam -- o checksums.txt do release e o digest que a API do GitHub mostra de
-// cada arquivo --, e as mesmas duas fontes dão exatamente os hashes de x64 e Windows que já
-// estavam aqui.
+// Todos conferidos em duas fontes que concordam: o checksums.txt do release e o digest que a
+// API do GitHub mostra de cada arquivo. O `linux-arm64` existe pelo Oracle Cloud gratis, que e
+// ARM (Ampere). Os do Linux da 1.13.7 entraram em 27/09/2026, nas mesmas duas fontes -- que
+// deram, para o Windows, exatamente o hash que ja estava aqui.
 const VERSOES = {
   '1.13.6': {
     'win32-x64': '9df299b6c6c32f1be88d3d106a9a63f8f921b424b353cc59f57d6b84532a4475',
@@ -48,8 +51,8 @@ const VERSOES = {
   },
   '1.13.7': {
     'win32-x64': 'e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f',
-    'linux-x64': null,
-    'linux-arm64': null
+    'linux-x64': '6634aeeb2fb1366b6723708ae4320b9d5408106a4c63457c5e845ae3979c90e2',
+    'linux-arm64': '5d167fdf52cf43c0c72972f25325364479f41f854bfef651056eab2504da5de9'
   }
 };
 

@@ -101,7 +101,7 @@ function criarObservador({ sfu, aoEvento = () => {}, agora = Date.now } = {}) {
       const saida = delta('livekit_node_packet_total:out'), descartados = delta('livekit_node_packet_total:dropped');
       atual = { disponivel: true, em: instante, pacotesSaidaSegundo: segundos > 0 && saida !== null ? saida / segundos : null,
         descartadosSegundo: segundos > 0 && descartados !== null ? descartados / segundos : null,
-        // O ForwardStats da versão 1.13.6 publica as gauges em nanossegundos.
+        // O ForwardStats publica as gauges em nanossegundos (conferido na 1.13.6 e na 1.13.7).
         latencia: medidas.livekit_forward_latency !== undefined ? medidas.livekit_forward_latency / 1e6 : null,
         jitter: medidas.livekit_forward_jitter !== undefined ? medidas.livekit_forward_jitter / 1e6 : null,
         salas: medidas.livekit_room_total ?? null, participantes: medidas.livekit_participant_total ?? null,

@@ -91,7 +91,7 @@ async function esperarCamadaCheia(pagina, rotulo) {
   if (!capacidade.envio?.h264Hardware) { console.log('SKIP: este Chrome não codifica H.264 pela placa de vídeo nesta máquina.'); return; }
   const [a, b, c] = versao.split('.').map(Number);
   if (!(a > 1 || (a === 1 && (b > 13 || (b === 13 && c >= 7))))) {
-    console.log(`SKIP: o servidor de mídia é a ${versao}; o automático pede a 1.13.7 ou mais nova ($env:NEXO_LIVEKIT = '1.13.7'; npm run build:sfu).`);
+    console.log(`SKIP: o servidor de mídia instalado é a ${versao}; o automático pede a 1.13.7 ou mais nova (o padrão -- rode npm run build:sfu).`);
     return;
   }
   const bia = await entrar(await navegador.newContext({ viewport: { width: 1440, height: 900 } }), 'Bia');
