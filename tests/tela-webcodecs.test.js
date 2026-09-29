@@ -426,6 +426,86 @@ test('a falha tenta de novo, com espera que cresce e para de crescer', () => {
   assert.equal(Decisoes.esperaAteTentarDeNovo(0), 10_000);
 });
 
+// ---------- A placa de vídeo pelo RTP ----------
+
+test('a tela vai pela placa só no automático, com placa, sem a chave do servidor e fora da espera de uma falha', () => {
+  const base = { preferencia: 'automatico', desligadoPeloServidor: false, suportado: true, h264Hardware: true, falhaAte: 0, agora: 1000 };
+  assert.equal(Decisoes.decidirTelaPelaPlaca(base).usar, true);
+  // Quem assiste não entra na conta: RTP todo mundo recebe.
+  assert.match(Decisoes.decidirTelaPelaPlaca({ ...base, preferencia: 'desligada' }).motivo, /desligado por você/);
+  assert.match(Decisoes.decidirTelaPelaPlaca({ ...base, preferencia: 'sempre' }).motivo, /faixa de dados/);
+  assert.match(Decisoes.decidirTelaPelaPlaca({ ...base, desligadoPeloServidor: true }).motivo, /servidor/);
+  assert.match(Decisoes.decidirTelaPelaPlaca({ ...base, suportado: false }).motivo, /este navegador/);
+  assert.match(Decisoes.decidirTelaPelaPlaca({ ...base, h264Hardware: false }).motivo, /sem codificação de H.264 pela placa/);
+  assert.equal(Decisoes.decidirTelaPelaPlaca({ ...base, falhaAte: 5000 }).usar, false);
+  assert.equal(Decisoes.decidirTelaPelaPlaca({ ...base, falhaAte: 900 }).usar, true);
+});
+
+test('as miniaturas: a camada cheia 8x menor, a leve 32x, e nada mais das codificações muda', () => {
+  const [leve, cheia] = Decisoes.miniaturas([
+    { rid: 'q', scaleResolutionDownBy: 4, maxBitrate: 300_000, maxFramerate: 15 },
+    { rid: 'h', scaleResolutionDownBy: 1, maxBitrate: 6_000_000, maxFramerate: 60 }
+  ]);
+  assert.deepEqual(leve, { rid: 'q', scaleResolutionDownBy: 32, maxBitrate: 300_000, maxFramerate: 15 });
+  assert.deepEqual(cheia, { rid: 'h', scaleResolutionDownBy: 8, maxBitrate: 6_000_000, maxFramerate: 60 });
+  assert.equal(Decisoes.miniaturas([{}])[0].scaleResolutionDownBy, 8);
+  assert.deepEqual(['q', 'h', 'f', undefined].map(Decisoes.camadaDoRid), ['baixa', 'alta', 'alta', 'alta']);
+});
+
+test('o quadro da captura é o mais próximo do esperado entre os mais novos que o último usado', () => {
+  // Captura a 60 (µs) e o RTP (ms) com um deslocamento qualquer entre os dois relógios.
+  const fonte = [0, 16_667, 33_333, 50_000, 66_667];
+  let estado = { deslocamentoMs: null, ultimoUs: -Infinity };
+  // Sem deslocamento aprendido: o mais novo.
+  let r = Decisoes.casarComACaptura(estado, 90_000.0, fonte);
+  assert.equal(r.indice, 4);
+  estado = r.estado;
+  assert.equal(estado.deslocamentoMs, 90_000 - 66.667);
+  // O próximo quadro do RTP chega 16,7 ms depois, com 1,5 ms de deriva: o quadro seguinte.
+  const maisUm = [...fonte, 83_333, 100_000];
+  r = Decisoes.casarComACaptura(estado, 90_000 + 16.667 + 1.5, maisUm);
+  assert.equal(r.indice, 5);
+  estado = r.estado;
+  // O WebRTC pulou um quadro (o dele caiu): casa com o de 33 ms depois, e nunca volta atrás.
+  r = Decisoes.casarComACaptura(estado, 90_000 + 50, [...maisUm, 116_667]);
+  assert.equal(maisUm.concat(116_667)[r.indice], 116_667);
+  // Nada mais novo que o último usado: não casa (e a cadeia de referências fica intacta).
+  assert.equal(Decisoes.casarComACaptura(r.estado, 90_000 + 70, [0, 16_667]).indice, -1);
+});
+
+test('um quadro que faltou não arrasta o deslocamento aprendido', () => {
+  const estado = { deslocamentoMs: 1000, ultimoUs: 0 };
+  // O esperado era 50 ms; o único quadro novo tem 90 ms. Serve (a ordem manda), mas o
+  // deslocamento continua o que era.
+  const r = Decisoes.casarComACaptura(estado, 1050, [90_000]);
+  assert.equal(r.indice, 0);
+  assert.equal(r.estado.deslocamentoMs, 1000);
+  assert.equal(r.estado.ultimoUs, 90_000);
+});
+
+test('troca de cena: o quadro-chave que o WebRTC fez sozinho, ou a miniatura que saltou de tamanho', () => {
+  assert.equal(Decisoes.trocaDeCena({}, { bytesDaMiniatura: 900, chaveDoWebrtc: true }).cena, true);
+  let estado = {};
+  for (let i = 0; i < 20; i++) estado = Decisoes.trocaDeCena(estado, { bytesDaMiniatura: 1000, chaveDoWebrtc: false }).estado;
+  assert.equal(Decisoes.trocaDeCena(estado, { bytesDaMiniatura: 3500, chaveDoWebrtc: false }).cena, false);
+  assert.equal(Decisoes.trocaDeCena(estado, { bytesDaMiniatura: 4500, chaveDoWebrtc: false }).cena, true);
+  // Miniatura minúscula não vira troca de cena por ter dobrado de tamanho.
+  let pequeno = {};
+  for (let i = 0; i < 20; i++) pequeno = Decisoes.trocaDeCena(pequeno, { bytesDaMiniatura: 100, chaveDoWebrtc: false }).estado;
+  assert.equal(Decisoes.trocaDeCena(pequeno, { bytesDaMiniatura: 1500, chaveDoWebrtc: false }).cena, false);
+});
+
+test('o orçamento da placa segue o que o WebRTC destina, com teto, piso e histerese', () => {
+  const base = { atual: 6_000_000, maximo: 6_000_000, minimo: 300_000, agora: 10_000, ultimaMudanca: 0 };
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: 5_500_000 }), null);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: 3_000_000 }), 3_000_000);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: 9_000_000 }), null);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, atual: 2_000_000, destinado: 9_000_000 }), 6_000_000);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: 100_000 }), 300_000);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: 3_000_000, ultimaMudanca: 9_500 }), null);
+  assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: undefined }), null);
+});
+
 // ---------- O nome do codec ----------
 
 test('o nível do H.264 é o menor que cabe no tamanho e na taxa', () => {

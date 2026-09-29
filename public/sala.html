@@ -281,7 +281,7 @@
         <details class="avancado">
           <summary>Codec e codificação da tela</summary>
           <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">Vale para a tela; a câmera vai sempre em H.264. H.264 é o mais compatível e o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
-          <div class="field"><label for="telaWebCodecs">Codificação da tela</label><select id="telaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · WebCodecs quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · até no processador</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
+          <div class="field"><label for="telaWebCodecs">Codificação da tela</label><select id="telaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · pela placa de vídeo quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · pela faixa de dados</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
         </details>
         <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
         <div id="qualityLive" class="medicao" aria-live="off"></div>
@@ -512,7 +512,7 @@
     <details class="avancado">
       <summary>Codec e codificação da tela</summary>
       <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>Vale para a tela; a câmera vai sempre em H.264. Ele costuma usar a placa de vídeo e é o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. O codificador em uso aparece no Diagnóstico.</small></div>
-      <div class="field"><label for="shareTelaWebCodecs">Codificação da tela</label><select id="shareTelaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · WebCodecs quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · até no processador</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
+      <div class="field"><label for="shareTelaWebCodecs">Codificação da tela</label><select id="shareTelaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · pela placa de vídeo quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · pela faixa de dados</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
     </details>
       </div>
 
@@ -611,6 +611,7 @@
 <script src="/tela-codificador.js"></script>
 <script src="/tela-decodificador.js"></script>
 <script src="/tela-webcodecs.js"></script>
+<script src="/tela-placa-rtp.js"></script>
 <script src="/room-transport.js"></script>
 <script src="/quality-utils.js"></script>
 <script src="/planos.js"></script>

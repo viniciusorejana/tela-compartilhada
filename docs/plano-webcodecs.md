@@ -451,6 +451,7 @@ medições que dependem de rede real e de jogo real continuam abertas (ver "O qu
 | `VideoDecoder` → `MediaStream`, com reordenação e reenvio | `public/tela-decodificador.js` |
 | O orquestrador: capacidade, caminho, faixas, espectadores, relógio | `public/tela-webcodecs.js` |
 | Integração (a superfície `peers` não mudou) | `public/room-transport.js` |
+| A placa pelo RTP, o caminho do Automático (ver "A placa pelo RTP") | `public/tela-placa-rtp.js` + `tela-placa-rtp-trabalhador.js` |
 | Interruptor, medição do envio, parâmetros do perfil | `public/sala.js`, `sala.html` |
 | Cartão no Diagnóstico | `public/room-ui.js` |
 | Chave do servidor (botão de pânico) | `chave-webcodecs.js`, `/painel/api/midia`, seção "Mídia" do painel |
@@ -757,6 +758,123 @@ uma faixa de vídeo comum pelo quadro da NVENC em 2560×1440; o codificador do W
 numa cópia de 320×180 (`scaleResolutionDownBy: 8`), e o outro lado decodificou a 44–56 fps num
 `<video>` comum. O servidor pagaria o preço do RTP, e quem assiste decodificaria fora da página.
 
+### A placa pelo RTP: o caminho do Automático (28/09/2026)
+
+A sonda virou o caminho padrão. No **Automático**, com placa de vídeo e navegador que troca o
+conteúdo dos quadros do RTP (Chrome, Edge, o aplicativo), a tela é codificada pela placa e sai
+por uma publicação RTP comum. O **Forçar WebCodecs** continua levando à faixa de dados. Quem
+assiste não precisa de nada: recebe RTP, em qualquer navegador, e decodifica fora da página.
+
+| Peça | Arquivo |
+| --- | --- |
+| Decisões puras: usar ou não, miniaturas, casamento com a captura, troca de cena, orçamento | `public/tela-decisoes.js` |
+| O controlador na página: codificadores, embrulho do `addTransceiver`, estatísticas, falha | `public/tela-placa-rtp.js` |
+| O Worker: lê a captura, codifica na placa e é a `RTCRtpScriptTransform` do remetente | `public/tela-placa-rtp-trabalhador.js` |
+| Onde a escolha é feita e a publicação é armada | `aplicarPublicacao` em `public/sala.js` |
+
+**Como funciona.** A tela é publicada como sempre (H.264, simulcast `q` e `h`), mas com
+miniaturas: a camada cheia a 1/8 do tamanho, a leve a 1/32. O codificador do WebRTC trabalha só
+nelas, e é o quadro **dele** que o RTP empacota, com o carimbo, o número e os pedidos de
+quadro-chave dele. Uma encoded transform, no Worker, troca o conteúdo de cada quadro pelo quadro
+que a placa codificou a partir da captura cheia. O servidor de mídia vê RTP comum.
+
+O que precisou ser descoberto no caminho:
+
+- **A transform tem de nascer com o transceptor.** Posta depois que o envio começou, o Chrome a
+  ignora (104 quadros enviados, 0 trocados). Ela é armada embrulhando
+  `RTCPeerConnection.prototype.addTransceiver` para a faixa da tela.
+- **Os metadados do quadro não trazem o rid nem a hora da captura.** A camada vem do SSRC (pelas
+  estatísticas `outbound-rtp`, a cada 250 ms) e, antes disso, pela largura da miniatura. O quadro
+  da captura é escolhido pela ordem, com o carimbo do RTP só desempatando vizinhos, e cada SSRC
+  começa o carimbo dele num valor sorteado.
+- **Quadro-chave só a pedido.** O OpenH264 das miniaturas faz quadro-chave sozinho a cada troca
+  de cena; seguir esses quadros produzia chaves demais. A placa faz chave quando chega um PLI ou
+  FIR (as estatísticas de envio) e quando a cena muda (o WebRTC decidiu fazer chave, ou a
+  miniatura cresceu mais de 4× a média). Na troca de cena, porque o quadro comum da placa sai
+  **maior** que a chave da mesma cena (~300 KB contra ~120 KB em 1440p) e levava ~160 ms para
+  sair. Pular quadros depois do grande piorou (o CBR acumula orçamento), bitrate `variable`
+  estourou (10–14 Mbps pedidos 6) e detectar cena por pixels no Worker custava ~10 ms por quadro.
+- **O orçamento segue o controle de congestionamento do WebRTC** (`targetBitrate` de cada
+  camada), com 15% de folga e no mínimo 1 s entre reconfigurações.
+- **Só se codifica o que o WebRTC vai mandar**: a camada pausada pelo servidor não custa nada à
+  placa, e a cadeia de referências nunca tem um buraco.
+- **A publicação só é dada por concluída depois do primeiro quadro trocado.** O servidor só cria a
+  faixa quando a mídia chega; trocar de qualidade nesse intervalo deixava uma publicação pendente
+  sem mídia, e a seguinte, com o mesmo id de faixa, ficava na fila atrás dela para sempre (a tela
+  sumia). Por isso os codificadores também aquecem antes de publicar: a placa abrindo a sessão
+  atrasava o primeiro quadro.
+- **Falhou, volta ao WebRTC** sem republicar: a transform passa os quadros do próprio WebRTC
+  adiante, as escalas originais voltam, e a placa é tentada de novo com a espera de sempre
+  (`esperaAteTentarDeNovo`).
+
+**A captura tem poucos buffers.** A primeira versão guardava no Worker os últimos 20 quadros da
+captura, para casar com os do WebRTC. Com o canvas dos testes, tudo passava. Com a câmera falsa
+do Chrome, e com a captura de uma aba, chegavam 3 quadros ao Worker e mais nenhum; o WebRTC
+seguia recebendo os dele. Uma cópia nova da faixa, lida na página, também não recebia nada, e
+liberar os 3 quadros guardados fazia chegar exatamente mais 3. A captura entrega à página quadros
+de um conjunto pequeno de buffers, e cada quadro guardado é um buffer a menos. Agora o Worker
+guarda **só o mais novo**; quando o quadro do WebRTC chega antes do da captura, espera até 12 ms
+por ele; e, sem imagem nova, o quadro do WebRTC leva a última imagem de novo, em vez de ser
+descartado — ele podia ser justamente o quadro-chave que alguém pediu, e com a tela parada não
+viria outro tão cedo.
+
+Essa repetição, sozinha, esconderia a captura travada: guardando 20 quadros de novo, quem
+assistia recebia 57 quadros por segundo **da mesma imagem**. Então três segundos seguidos sem
+captura, com o WebRTC produzindo quadros em ritmo de vídeo (numa tela parada de verdade os dois
+param juntos), levam a tela de volta ao WebRTC: "a captura parou de chegar à placa". Conferido
+com o defeito de volta: em 3 s a tela saiu da placa, e quem assistia passou a receber 1080p
+vivo. `npm run test:webcodecs:placa` agora transmite também pela câmera falsa (conferindo os
+quadros que **chegam da captura**, e não só os que saem) e por uma aba parada capturada de
+verdade, com alguém chegando depois — e falha com 20 quadros guardados.
+
+**O servidor**, medido como no teste de carga (um fio do Ryzen, `GOMAXPROCS=1`, `GOGC=400`),
+1440p60 pela placa:
+
+| Espectadores | Placa pelo RTP: média (p95) do fio | Entregue |
+| --- | --- | --- |
+| 4 | 6,5% (11,9%) | 23,5 Mbps |
+| 7 | 8,2% (13,3%) | 41,4 Mbps |
+| 11 | 14,1% (21,2%) | 65,7 Mbps |
+| 15 | 19,2% (27,1%) | 91,3 Mbps |
+
+Pela faixa de dados, 10 espectadores com a mesma tela custaram 29,7% (p95 40,6%). Na margem,
+0,19% de um fio por Mbps contra 0,50–0,59%: **de 2,5 a 3 vezes menos processador no servidor**.
+Pela inclinação do p95, um fio chegaria aos 70% de folga perto de 45 espectadores em 1440p60,
+contra 18 pela faixa de dados; acima de 15 não foi medido, porque quem assiste é que não
+aguentou (abaixo). Onde a faixa de dados dava 2–3 espectadores (a Micro), a conta dá 5–7 — e a
+Micro também é limitada a 50 Mbps de rede, ~7 espectadores de 6 Mbps.
+
+Com 11 ou mais espectadores, os quadros de quem assiste caíram (26 fps, ~45 congelamentos por
+minuto) com o servidor folgado em 14%. É a máquina do teste: todos os espectadores decodificam
+de verdade na mesma placa de vídeo, e o `nvidia-smi` mostrou o decodificador em 90–100%. Numa
+sala de verdade, cada pessoa decodifica na própria máquina.
+
+**A thread da página.** O mesmo teste da thread principal (câmera falsa em 1080p60, página
+ocupada 40% do tempo), agora nos três caminhos:
+
+| Desvio entre quadros no palco | Livre | Quem assiste ocupado | Quem transmite ocupado |
+| --- | --- | --- | --- |
+| WebRTC puro | 6,4 ms | 6,7 ms | 7,3 ms, sem congelamento |
+| Faixa de dados | 6,1 ms | 17,4 ms, 86 buracos > 50 ms | 17,6 ms, 85 buracos > 50 ms |
+| Placa pelo RTP | 7,3 ms | 6,5 ms | 6,3 ms, sem congelamento |
+
+Nada do caminho novo passa pela thread da página: a captura, a placa e a transform ficam no
+Worker, e quem assiste decodifica no `<video>`.
+
+**Quem transmite.** O Chrome inteiro de quem transmite (todos os processos), com a mesma tela
+sintética em 1440p60 e uma pessoa assistindo:
+
+| Caminho | Processador | O que chega a quem assiste |
+| --- | --- | --- |
+| Placa pelo RTP | 122% de um fio (10,1% da máquina) | 2560×1440, 57 fps |
+| Faixa de dados | 113% de um fio (9,4%) | 2560×1440, 56 fps |
+| WebRTC puro | 81% de um fio (6,8%) | **1706×960**, 56 fps |
+
+A tela sintética é desenhada na própria página e pesa em todos. O caminho novo custa ~9 pontos
+de um fio a mais que a faixa de dados — o WebRTC ainda lê a captura e codifica as miniaturas —, e
+o WebRTC puro só gasta menos porque desistiu do tamanho: codificando no processador, não sustenta
+1440p60.
+
 ### O que foi medido
 
 Em loopback, na mesma máquina, com o Chromium do Playwright (software):
@@ -781,19 +899,24 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 | iPhone | Recebe pelo `canvas.captureStream()`, e a bateria | O teste que decide, na ordem do plano |
 | Servidor | ~~Trocar para a 1.13.7~~ — **é o padrão** desde a primeira sala de verdade transmitindo por ela, com os hashes de Linux x64 e ARM64 conferidos no checksums.txt do release e na API do GitHub | `npm run build:sfu` — no Linux, falta rodar uma vez para ver o binário descer e abrir |
 | Ritmador | ~~Que o portão do servidor deixou de descartar~~ — **sumiu** do registro seguinte. Falta conferir de novo com a aceleração nas trocas de cena | O registro do servidor numa rede de verdade, trocando de janela depressa, sem as linhas `data dropped due to high buffered amount` |
+| Placa pelo RTP | Numa VPS de verdade, com a captura da tela de verdade e um jogo: quadros de quem assiste, congelamentos nas trocas de cena (o quadro grande da placa), e o processador do servidor | Diagnóstico → "Tela pela placa, pelo RTP"; "imagem repetida" alta com a tela mexendo é captura que não chega ao Worker |
 
 ### Limites conhecidos
 
-- **A faixa de dados custa ao servidor umas cinco vezes o processador do RTP.** O caminho novo
-  tira a codificação de quem joga e põe o transporte no servidor. Numa máquina com folga isso não
-  aparece; na Micro da Oracle, dois ou três espectadores na camada cheia já deixam o servidor no
-  limite, e aí o caminho novo desiste e a tela segue pelo RTP (ver "O primeiro servidor de
-  verdade" e "Teste de carga"). Um fio de um processador de desktop recente aguenta ~18
-  espectadores em 1440p60 com folga. Para salas cheias com o WebCodecs, dê processador ao
-  servidor: na Oracle, a Ampere (2 OCPU no grátis, `docs/oracle.md`), e não a Micro.
-- **A codificação roda na thread principal da página.** Ler quadros e empacotar é barato, mas é
-  a mesma thread da interface. Mover captura e codificação para um Worker é a otimização natural,
-  com medição que a justifique.
+- **A faixa de dados custa ao servidor umas cinco vezes o processador do RTP.** Desde a placa
+  pelo RTP, isso vale só para o "Forçar WebCodecs" e para quem não tem o caminho novo. Na Micro
+  da Oracle, dois ou três espectadores na camada cheia pela faixa de dados já deixam o servidor no
+  limite (ver "O primeiro servidor de verdade" e "Teste de carga"); pelo RTP, a conta dá umas 2,5
+  vezes mais. Para salas cheias, dê processador ao servidor: na Oracle, a Ampere (2 OCPU no
+  grátis, `docs/oracle.md`), e não a Micro.
+- **Pela faixa de dados, a codificação roda na thread principal da página**, e com a página
+  ocupada a imagem ganha buracos (ver "A placa pelo RTP", a thread da página). A placa pelo RTP
+  roda inteira num Worker.
+- **A placa pelo RTP só existe onde há `RTCRtpScriptTransform`, `MediaStreamTrackProcessor` e
+  fluxos transferíveis**: Chrome, Edge e o aplicativo. Em outro navegador, o Automático fica no
+  WebRTC. Quem assiste, por ser RTP, pode estar em qualquer um.
+- **Quem transmite pela placa pelo RTP gasta um pouco mais que pela faixa de dados** (~9 pontos de
+  um fio, na medição): o WebRTC continua lendo a captura cheia para fazer as miniaturas.
 - **O teto do plano continua sendo conferido pelo que o cliente declara.** O caminho novo usa o
   mesmo perfil já limitado pelo plano, mas um cliente modificado passaria dele como passaria no
   RTP (`plano-contas.md`).

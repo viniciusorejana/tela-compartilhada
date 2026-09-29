@@ -33,12 +33,17 @@ npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
 npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
 npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
-npm run test:webcodecs     # tela por WebCodecs: caminho, perda, camadas, sala mista, chave do painel
-npm run test:webcodecs:placa  # a mesma tela na placa de vídeo de verdade (Chrome instalado; pula sem placa)
+npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel
+npm run test:webcodecs:placa  # a placa de verdade pelo RTP: combinações, câmera, aba parada (Chrome instalado; pula sem placa)
 ```
 
 O Chromium do Playwright não tem placa de vídeo: tudo que depende de `prefer-hardware` só se
 prova com `test:webcodecs:placa`, que usa o Chrome da máquina.
+
+A tela falsa dos testes é um canvas, e o canvas não tem o limite da captura de verdade, que
+entrega à página quadros de um conjunto pequeno de buffers: código que guarda quadros da
+captura se prova com a câmera falsa do Chrome ou com uma aba capturada de verdade (ver o fim de
+`tests/webcodecs-placa.cjs`).
 
 ## Cor no CSS: sempre pelos tokens
 
@@ -79,7 +84,8 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Barra de cima por largura | container queries `topo` no fim de `public/sala.css` |
 | Apresentação e novidades (o modal) | `public/novidades.js` + `novidades.css`; o texto de cada edição em `public/novidades-edicoes.js` |
 | Vídeos de apresentação e de lançamento | `video/` (Remotion, dependências próprias); saem em `public/midia` por `npm run video:renderizar` |
-| Tela por WebCodecs (placa de vídeo + faixa de dados) | `public/tela-webcodecs.js` + `tela-{quadro,decisoes,codificador,decodificador}.js`; ligado em `room-transport.js`; chave do servidor em `chave-webcodecs.js` |
+| Tela pela placa, transportada pelo RTP (o Automático) | `public/tela-placa-rtp.js` + o Worker `tela-placa-rtp-trabalhador.js`; escolhida em `aplicarPublicacao` (`sala.js`) |
+| Tela por WebCodecs pela faixa de dados (o "Forçar") | `public/tela-webcodecs.js` + `tela-{quadro,decisoes,codificador,decodificador}.js`; ligado em `room-transport.js`; chave do servidor em `chave-webcodecs.js` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`; a

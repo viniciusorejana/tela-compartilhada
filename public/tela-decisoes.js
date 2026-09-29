@@ -414,7 +414,97 @@
   const MS_ATE_TENTAR_DE_NOVO = [10_000, 30_000, 90_000, 300_000];
   const esperaAteTentarDeNovo = falhas => MS_ATE_TENTAR_DE_NOVO[Math.min(Math.max(falhas, 1), MS_ATE_TENTAR_DE_NOVO.length) - 1];
 
+  // ========== A placa de vídeo pelo RTP (tela-placa-rtp.js) ==========
+  //
+  // A tela sai por uma publicação RTP comum, mas o conteúdo de cada quadro é trocado, numa
+  // encoded transform, pelo quadro que a placa codificou. O servidor de mídia só repassa RTP --
+  // umas três vezes menos processador por megabit do que a faixa de dados (medido,
+  // docs/plano-webcodecs.md, "A placa pelo RTP") --, e quem assiste decodifica como sempre, em
+  // qualquer navegador.
+
+  // Por que a tela vai (ou não) pela placa. Ao contrário da faixa de dados, quem assiste não
+  // entra na conta: RTP todo mundo recebe. Só o "Automático" usa: "Forçar WebCodecs" continua
+  // levando à faixa de dados, que é o que ele sempre quis dizer e o que os testes exercitam.
+  function decidirTelaPelaPlaca({ preferencia, desligadoPeloServidor, suportado, h264Hardware, falhaAte = 0, agora = Date.now() }) {
+    const nao = motivo => ({ usar: false, motivo });
+    if (preferencia !== 'automatico') return nao(preferencia === 'desligada' ? 'desligado por você, em Qualidade' : 'WebCodecs forçado: vai pela faixa de dados');
+    if (desligadoPeloServidor) return nao('desligado no servidor para todo mundo');
+    if (!suportado) return nao('este navegador não troca o conteúdo dos quadros do RTP');
+    if (!h264Hardware) return nao('sem codificação de H.264 pela placa de vídeo nesta máquina');
+    if (agora < falhaAte) return nao('a placa falhou há pouco; nova tentativa em seguida');
+    return { usar: true, motivo: 'codificação pela placa de vídeo, transportada pelo RTP' };
+  }
+
+  // As miniaturas. O codificador do WebRTC continua trabalhando -- é o quadro DELE que o RTP
+  // empacota, com o carimbo, o número e os pedidos de quadro-chave dele --, mas o conteúdo vai
+  // ser trocado. Quanto menor a miniatura, menos processador de quem joga: 8x deixa 1440p em
+  // 320x180. A camada leve (rid 'q', que o LiveKit já encolhe a 360p) vai mais longe, porque
+  // miniatura de miniatura também custa.
+  const ESCALA_DA_MINIATURA = 8;
+  const ESCALA_DA_MINIATURA_LEVE = 32;
+  function miniaturas(encodings) {
+    return encodings.map(e => ({ ...e, scaleResolutionDownBy: e.rid === 'q' ? ESCALA_DA_MINIATURA_LEVE : ESCALA_DA_MINIATURA }));
+  }
+  const camadaDoRid = rid => (rid === 'q' ? 'baixa' : 'alta');
+
+  // Qual quadro da captura vai no lugar do quadro que o WebRTC codificou. Os metadados do quadro
+  // não trazem a hora da captura, só o carimbo do RTP, e cada camada (SSRC) começa o dela num
+  // valor sorteado. O WebRTC ainda suaviza os carimbos (1–2 ms de deriva, medido). Então:
+  //  - a ORDEM manda: só serve um quadro mais novo que o último usado nesta camada. É ela que
+  //    mantém a cadeia de referências do nosso codificador; o carimbo só escolhe entre vizinhos;
+  //  - o deslocamento entre os dois relógios é aprendido e acompanha a deriva, mas só com um
+  //    casamento bom -- um quadro que faltou não pode arrastá-lo.
+  // `fonte` é a lista de carimbos (µs) guardados; devolve o índice escolhido (ou -1) e o estado.
+  const MS_DE_CASAMENTO_BOM = 8;
+  function casarComACaptura(estado, rtpMs, fonte) {
+    const ultimo = estado.ultimoUs ?? -Infinity;
+    let escolhido = -1, distancia = Infinity;
+    for (let i = 0; i < fonte.length; i++) {
+      if (fonte[i] <= ultimo) continue;
+      // Sem deslocamento aprendido, o mais novo: o WebRTC acabou de codificar o quadro mais
+      // recente que viu.
+      const d = estado.deslocamentoMs == null ? -fonte[i] : Math.abs(fonte[i] / 1000 - (rtpMs - estado.deslocamentoMs));
+      if (d < distancia) { distancia = d; escolhido = i; }
+    }
+    if (escolhido < 0) return { indice: -1, estado };
+    const bom = estado.deslocamentoMs == null || distancia <= MS_DE_CASAMENTO_BOM;
+    return {
+      indice: escolhido,
+      estado: { deslocamentoMs: bom ? rtpMs - fonte[escolhido] / 1000 : estado.deslocamentoMs, ultimoUs: fonte[escolhido] }
+    };
+  }
+
+  // Troca de cena. Na placa, o quadro comum de uma cena nova sai MAIOR que o quadro-chave dela
+  // (~330 KB contra ~120 KB em 1440p, medido) -- e um quadro de 300 KB leva ~160 ms para sair
+  // no ritmo do WebRTC, o bastante para quem assiste ver um congelamento. Dois sinais, os dois
+  // de graça: o codificador do WebRTC decidiu fazer quadro-chave sozinho (ele tem detector de
+  // cena), ou a miniatura dele saltou de tamanho. O quadro-chave que ele faz a PEDIDO de alguém
+  // chega por outro caminho (as estatísticas de PLI), e é sempre atendido.
+  const SALTO_DE_CENA = 4;
+  const BYTES_MINIMOS_DE_CENA = 2000;
+  function trocaDeCena(estado, { bytesDaMiniatura, chaveDoWebrtc }) {
+    if (chaveDoWebrtc) return { cena: true, estado };
+    const media = estado.mediaMiniatura;
+    const cena = media != null && bytesDaMiniatura > SALTO_DE_CENA * media && bytesDaMiniatura > BYTES_MINIMOS_DE_CENA;
+    return { cena, estado: { mediaMiniatura: media == null ? bytesDaMiniatura : media * 0.9 + bytesDaMiniatura * 0.1 } };
+  }
+
+  // O orçamento do nosso codificador segue o que o controle de congestionamento do WebRTC
+  // destina à camada (`targetBitrate`): é ele que mede a rede, e o ritmo de saída dos pacotes é
+  // dele. Com histerese, porque reconfigurar tem custo -- e numa placa pode custar um quadro-chave.
+  const FOLGA_PARA_RECONFIGURAR = 0.15;
+  const MS_ENTRE_RECONFIGURACOES = 1000;
+  function orcamentoDaCamada({ atual, destinado, maximo, minimo = 100_000, agora, ultimaMudanca = 0 }) {
+    if (!(destinado > 0)) return null;
+    const alvo = Math.round(Math.max(minimo, Math.min(maximo, destinado)));
+    if (Math.abs(alvo - atual) <= atual * FOLGA_PARA_RECONFIGURAR) return null;
+    if (agora - ultimaMudanca < MS_ENTRE_RECONFIGURACOES) return null;
+    return alvo;
+  }
+
   const api = {
+    decidirTelaPelaPlaca, miniaturas, camadaDoRid, ESCALA_DA_MINIATURA, ESCALA_DA_MINIATURA_LEVE,
+    casarComACaptura, MS_DE_CASAMENTO_BOM, trocaDeCena, SALTO_DE_CENA, orcamentoDaCamada, FOLGA_PARA_RECONFIGURAR,
     capturaPresa, MS_DE_INTERVALO_CURTO, SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA, esperaAteTentarDeNovo, MS_ATE_TENTAR_DE_NOVO,
     decidirModo, MS_DE_FOLGA_PARA_SE_APRESENTAR, servidorConfiavel, VERSAO_MINIMA_DO_SERVIDOR,
     necessario, ESCALAS, QUADROS_POSSIVEIS, dimensoesNaEscala, caberNaCaixa, iniciarCamada, ajustarCamada, degrausDaPlaca,

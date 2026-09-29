@@ -394,7 +394,7 @@
   };
 
   function anotarEnvioPorWebCodecs(c, envio) {
-    anotar(c, 'Transmissão', `WebCodecs · ${NOME_DO_CODEC_WC(envio.codec)}`, 'ok');
+    anotar(c, 'Transmissão', `WebCodecs · ${NOME_DO_CODEC_WC(envio.codec)}${envio.transporte === 'rtp' ? ' pelo RTP' : ''}`, 'ok');
     const camadas = envio.camadas;
     if (!camadas.length) {
       anotar(c, 'Imagem', 'parada até alguém assistir', 'neutro');
@@ -409,7 +409,8 @@
     }
     if (camadas.some(camada => camada.codificadorApertado)) anotar(c, 'Limitado por', 'codificação', 'alerta');
     else if (camadas.some(camada => camada.saidaApertada)) anotar(c, 'Limitado por', 'banda de subida', 'alerta');
-    anotar(c, 'Assistindo', envio.espectadores === 1 ? '1 pessoa' : `${envio.espectadores} pessoas`);
+    // Pelo RTP, quantos assistem só o servidor sabe: a linha some em vez de dizer "null pessoas".
+    if (envio.espectadores != null) anotar(c, 'Assistindo', envio.espectadores === 1 ? '1 pessoa' : `${envio.espectadores} pessoas`);
     const atraso = medianaDe(camadas.flatMap(camada => camada.atrasos));
     if (atraso !== null) anotar(c, 'Atraso até quem assiste', `${Math.round(atraso)} ms`, atraso > 400 ? 'alerta' : 'ok');
   }
@@ -438,6 +439,19 @@
           + `codificação=${camada.msDeCodificacao != null ? camada.msDeCodificacao.toFixed(1) + ' ms' : '?'}; fila=${camada.fila}; pulados: ritmo=${camada.descartes.ritmo} codificador=${camada.descartes.codificador} fila=${camada.descartes.fila} rede=${camada.descartes.rede}; `
           + `perda mediana=${Math.round(camada.perda * 100)}%; atraso mediano=${atraso !== null ? Math.round(atraso) : '?'} ms; espectadores=${camada.espectadores}; reconfigurações só de bitrate=${camada.reconfiguracoes.soDeBitrate} (com chave espontânea: ${camada.reconfiguracoes.comChaveEspontanea})`
           + (camada.ultimaMudanca ? `; última mudança: ${camada.ultimaMudanca}` : ''));
+      }
+    }
+
+    // A tela pela placa, transportada pelo RTP (tela-placa-rtp.js): as camadas RTP dela estão
+    // em miniatura de propósito, e o que interessa é o que a placa codificou no lugar.
+    const placa = typeof telaPelaPlaca !== 'undefined' ? telaPelaPlaca : null;
+    if (placa) {
+      lines.push(`  Tela pela placa, pelo RTP: ${placa.ativo() ? 'no ar' : 'fora do ar'}${placa.ultimaFalha() ? `; última falha: ${placa.ultimaFalha()}` : ''}`);
+      for (const camada of placa.estadoDoEnvio()?.camadas || []) {
+        lines.push(`  Camada ${camada.camada} (placa, RTP): ${camada.codec} (${camada.perfil || '?'}, ${camada.hardware ? 'placa' : 'processador'}, ${camada.modoDeBitrate}, taxa ${camada.taxaDeclarada ? 'declarada' : 'não declarada'}); `
+          + `${camada.largura}×${camada.altura} a ${Math.round(camada.fps)}/${camada.quadrosAlvo} fps; ${mbps(camada.bps)} de ${mbps(camada.bitrateAlvo)}; `
+          + `codificação=${camada.msDeCodificacao != null ? camada.msDeCodificacao.toFixed(1) + ' ms' : '?'}; quadros-chave=${camada.chaves}; trocas de cena=${camada.cenas}; `
+          + `sem captura=${camada.semCaptura}; imagem repetida (tela parada)=${camada.repetidos}; atrasados na placa=${camada.atrasados}; reconfigurações de orçamento=${camada.reconfiguracoes.soDeBitrate}`);
       }
     }
 
@@ -547,7 +561,7 @@
       // assina, e o dynacast as desliga). Listá-las como "sem medida · desligada" com um
       // "em software" em laranja ao lado fazia o painel acusar o processador justamente quando a
       // placa estava codificando. Elas ficam só no relatório técnico.
-      const envioPorWebCodecs = transporte?.telaWebCodecs?.estadoDoEnvio();
+      const envioPorWebCodecs = (typeof telaPelaPlaca !== 'undefined' && telaPelaPlaca?.estadoDoEnvio()) || transporte?.telaWebCodecs?.estadoDoEnvio();
       const telaPorWebCodecs = envioPorWebCodecs?.modo === 'webcodecs';
       // Um cartão por origem, criado só quando há o que pôr nele: um painel com seções
       // vazias é pior do que um painel curto.

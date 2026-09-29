@@ -1092,15 +1092,16 @@ const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 // quem está olhando para o seletor.
 const PREFERENCIAS_DE_WEBCODECS = {
   automatico: {
-    aviso: 'Codificação da tela automática: WebCodecs quando der.',
-    explica: 'A tela é codificada pela placa de vídeo, por WebCodecs, quando dá: esta máquina tem placa que faz H.264,'
-      + ' o servidor de mídia é o 1.13.7 ou mais novo e todos na sala conseguem receber. Se faltar alguma dessas, ela vai'
-      + ' pelo WebRTC sozinha, sem você mexer em nada.'
+    aviso: 'Codificação da tela automática: pela placa de vídeo quando der.',
+    explica: 'Com placa de vídeo que faz H.264 nesta máquina, a tela é codificada por ela, pelo WebCodecs, e viaja pelo'
+      + ' WebRTC como sempre: todo mundo na sala recebe, em qualquer navegador, e o servidor de mídia gasta o mesmo que'
+      + ' gastaria sem a placa. Sem placa, o navegador codifica, sem você mexer em nada.'
   },
   sempre: {
-    aviso: 'Codificação da tela: WebCodecs forçado, até no processador.',
-    explica: 'Para testes. Usa o WebCodecs mesmo sem placa de vídeo, codificando no processador, e mesmo com servidor de'
-      + ' mídia anterior ao 1.13.7. Continua precisando de todos na sala conseguindo receber.'
+    aviso: 'Codificação da tela: WebCodecs forçado, pela faixa de dados.',
+    explica: 'Para testes. A tela vai pela faixa de dados, o caminho anterior do WebCodecs, mesmo sem placa de vídeo'
+      + ' (codificando no processador) e mesmo com servidor de mídia anterior ao 1.13.7. Precisa de todos na sala'
+      + ' conseguindo receber, e custa ao servidor umas cinco vezes o processador do outro caminho.'
   },
   desligada: {
     aviso: 'Codificação da tela: só WebRTC.',
@@ -1132,6 +1133,7 @@ function definirPreferenciaDeWebCodecs(escolha) {
   // duas coisas diferentes, como na troca de codec.
   esquecerHistoricoDoEnvio();
   transporte?.telaWebCodecs?.definirPreferencia(escolha);
+  redecidirTelaPelaPlaca().catch(() => {});
   status.textContent = PREFERENCIAS_DE_WEBCODECS[escolha].aviso;
 }
 
@@ -1165,7 +1167,12 @@ function sincronizarTelaPorWebCodecs(faixa) {
 // para quem já está na sala, pelo socket: desligar no servidor vale na hora, sem ninguém
 // recarregar nada.
 function aplicarChaveDoServidorParaWebCodecs(ligado) {
-  transporte?.telaWebCodecs?.definirDesligadoPeloServidor(ligado === false);
+  const antes = webCodecsDesligadoPeloServidor;
+  webCodecsDesligadoPeloServidor = ligado === false;
+  transporte?.telaWebCodecs?.definirDesligadoPeloServidor(webCodecsDesligadoPeloServidor);
+  // A chave também vale para a tela pela placa, que é WebCodecs do mesmo jeito: desligar no
+  // painel republica a tela pelo caminho de hoje, e ligar a traz de volta.
+  if (antes !== webCodecsDesligadoPeloServidor) redecidirTelaPelaPlaca();
 }
 
 function configurarTelaPorWebCodecs() {
@@ -1173,6 +1180,58 @@ function configurarTelaPorWebCodecs() {
   if (!wc) return;
   wc.definirPreferencia(preferenciaDeWebCodecs);
   aplicarChaveDoServidorParaWebCodecs(salaConfig?.webcodecs);
+}
+
+// ---------- A tela pela placa de vídeo, transportada pelo RTP ----------
+//
+// O "Automático" com placa que faz H.264 manda a tela pela placa e pelo RTP ao mesmo tempo
+// (tela-placa-rtp.js): a mesma publicação de sempre, com o conteúdo dos quadros trocado pelo da
+// placa. Quem assiste não muda nada -- é RTP --, e por isso a decisão é tomada aqui, na hora de
+// publicar, sem esperar ninguém da sala se apresentar. A faixa de dados continua existindo para
+// o "Forçar WebCodecs" e para quem ainda estiver numa página antiga.
+let webCodecsDesligadoPeloServidor = false;
+const telaPelaPlaca = window.NexoTelaPlacaRtp?.suportado() ? NexoTelaPlacaRtp.criar({
+  registrar: (evento, detalhe) => registrarDiagnostico(evento, detalhe),
+  naFilaDeParametros: tarefa => naFilaDeParametros(tarefa),
+  aoFalhar: (_motivo, espera) => tentarAPlacaDeNovoEm(espera)
+}) : null;
+// Por onde a tela publicada está indo: é o que decide se uma mudança de preferência ou da
+// chave do servidor precisa republicar.
+let telaPublicadaPelaPlaca = false;
+
+async function decidirTelaPelaPlaca() {
+  if (!telaPelaPlaca) return { usar: false, motivo: 'este navegador não troca o conteúdo dos quadros do RTP' };
+  const envio = await NexoTelaCodificador.sondarEnvio().catch(() => ({}));
+  return NexoTelaDecisoes.decidirTelaPelaPlaca({
+    preferencia: preferenciaDeWebCodecs, desligadoPeloServidor: webCodecsDesligadoPeloServidor,
+    suportado: true, h264Hardware: Boolean(envio.h264Hardware), falhaAte: telaPelaPlaca.falhaAte()
+  });
+}
+
+// Republica a tela quando o caminho que ela deveria usar mudou. Republicar custa a quem assiste
+// um instante sem imagem, então só quando muda de verdade.
+async function redecidirTelaPelaPlaca() {
+  const faixa = screenStream?.getVideoTracks()[0];
+  if (!faixa || !telaPelaPlaca) return;
+  const decisao = await decidirTelaPelaPlaca();
+  if (decisao.usar === telaPublicadaPelaPlaca || faixa !== screenStream?.getVideoTracks()[0]) return;
+  await sequenciaDePublicacao('screen', async () => {
+    await aplicarPublicacao('screen', null);
+    await aplicarPublicacao('screen', faixa);
+  });
+}
+
+// Depois de uma falha, a tela já seguiu pelo RTP comum sem republicar (tela-placa-rtp.js). A
+// volta para a placa precisa de um remetente novo -- a transform só entra no nascimento dele --,
+// e por isso ela é uma republicação, na espera de sempre.
+let timerDaPlaca = null;
+function tentarAPlacaDeNovoEm(espera) {
+  clearTimeout(timerDaPlaca);
+  timerDaPlaca = setTimeout(() => {
+    timerDaPlaca = null;
+    telaPublicadaPelaPlaca = false;
+    redecidirTelaPelaPlaca().catch(() => {});
+  }, espera + 500);
 }
 
 // ---------- Publicacao das proprias fontes ----------
@@ -1491,9 +1550,16 @@ const temCopias = faixa => Boolean(faixa && copiasDaFaixa.get(faixa)?.size);
 
 // O corpo de uma publicação, FORA da fila. Só deve ser chamado de dentro de `naFila`.
 async function aplicarPublicacao(fonte, faixa) {
+  // A tela pela placa decide antes de tudo, porque ela muda o que se publica (o codec) e desliga
+  // a faixa de dados: as duas nunca sobem juntas.
+  let pelaPlaca = { usar: false };
+  if (fonte === 'screen' && faixa?.readyState === 'live') pelaPlaca = await decidirTelaPelaPlaca();
   // Antes da guarda de conexão: parar a tela com a sala fora do ar também precisa parar o
   // caminho novo, ou ele voltaria com a conexão tentando transmitir uma captura encerrada.
-  if (fonte === 'screen') sincronizarTelaPorWebCodecs(faixa);
+  if (fonte === 'screen') {
+    if (pelaPlaca.usar) transporte?.telaWebCodecs?.pararTransmissao();
+    else sincronizarTelaPorWebCodecs(faixa);
+  }
   if (!transporte?.conectada) return;
   const local = transporte.sala.localParticipant;
   const anterior = publicacoesLocais[fonte];
@@ -1508,6 +1574,7 @@ async function aplicarPublicacao(fonte, faixa) {
     encerrarCopias(faixaPublicada);
     publicacoesLocais[fonte] = null;
     assinaturasPublicadas[fonte] = null;
+    if (fonte === 'screen') { telaPelaPlaca?.encerrar(); telaPublicadaPelaPlaca = false; }
   };
 
   if (!faixa || faixa.readyState === 'ended') {
@@ -1516,8 +1583,18 @@ async function aplicarPublicacao(fonte, faixa) {
   }
 
   vigiarCopias(faixa);
-  const opcoes = opcoesDePublicacao(fonte, faixa);
-  const assinatura = assinaturaDePublicacao(opcoes);
+  let opcoes = opcoesDePublicacao(fonte, faixa);
+  // Pela placa, o codec é H.264: é o que ela produz, e o conteúdo de cada quadro RTP vai ser o
+  // dela. Sem codec reserva -- a cópia seria codificada no processador, no tamanho cheio.
+  const comAPlaca = base => {
+    const comPlaca = { ...base, videoCodec: 'h264', backupCodec: false };
+    delete comPlaca.scalabilityMode;
+    return comPlaca;
+  };
+  if (pelaPlaca.usar) opcoes = comAPlaca(opcoes);
+  // O caminho entra na assinatura: trocar de caminho exige republicar, porque a transform só
+  // entra no nascimento do remetente.
+  const assinatura = assinaturaDePublicacao(opcoes) + (pelaPlaca.usar ? '|placa' : '');
 
   // Trocar de camera ou de tela nao precisa republicar: a faixa entra no lugar da atual,
   // sem renegociar e sem piscar para quem esta assistindo.
@@ -1539,8 +1616,29 @@ async function aplicarPublicacao(fonte, faixa) {
   } else if (anterior) {
     await despublicar(anterior);
   }
-  publicacoesLocais[fonte] = await local.publishTrack(faixa, opcoes);
-  assinaturasPublicadas[fonte] = assinatura;
+  let assinaturaFinal = assinatura;
+  if (pelaPlaca.usar) {
+    // O Worker, a captura e os codificadores ficam prontos ANTES de publicar; se a placa não
+    // aceitar, a tela sobe pelo caminho de hoje, com o codec que a pessoa escolheu.
+    const pronta = await telaPelaPlaca.preparar(faixa, parametrosDaTelaPorWebCodecs(faixa), pelaPlaca.motivo);
+    if (!pronta.ok) {
+      registrarDiagnostico('tela.caminho', `RTP: ${pronta.motivo}`);
+      pelaPlaca = { usar: false };
+      opcoes = opcoesDePublicacao(fonte, faixa);
+      assinaturaFinal = assinaturaDePublicacao(opcoes);
+      sincronizarTelaPorWebCodecs(faixa);
+    }
+  }
+  try {
+    publicacoesLocais[fonte] = await local.publishTrack(faixa, opcoes);
+  } catch (erro) {
+    if (pelaPlaca.usar) telaPelaPlaca.encerrar();
+    throw erro;
+  }
+  assinaturasPublicadas[fonte] = assinaturaFinal;
+  // Espera o primeiro quadro da placa sair (ver `anexar`): a próxima mudança da fila não pode
+  // despublicar antes de o servidor ter recebido mídia.
+  if (fonte === 'screen') telaPublicadaPelaPlaca = pelaPlaca.usar && await telaPelaPlaca.anexar(publicacoesLocais[fonte]);
 }
 
 // Substitui o que "definirFaixaEmTodosOsPares" fazia na malha: agora ha um destino so.
@@ -1827,7 +1925,9 @@ function indiceDaCamadaAlta(escalas) {
 }
 
 async function aplicarEscalaPeloCusto(q) {
-  if (!escalaAutomatica) return;
+  // Pela placa, a escala do remetente é a das miniaturas, e o custo medido é o delas: encolher
+  // "a camada de cima" aqui a faria CRESCER de volta para o processador.
+  if (!escalaAutomatica || telaPelaPlaca?.ativo()) return;
   const remetentes = remetentesDaFaixa(publicacoesLocais.screen?.track);
   if (!remetentes.length) return;
   // Em espera não se decide nada: sem ninguém assistindo, o servidor desliga as camadas e
@@ -3099,6 +3199,10 @@ async function medirEnvio() {
   // Com a tela no caminho novo, as camadas RTP estão paradas pelo dynacast e medi-las diria
   // "ninguém abriu a sua tela" com a sala inteira assistindo. Quem sabe o que está subindo é
   // o codificador de lá.
+  // Pela placa e pelo RTP, as camadas RTP estão no ar, mas em miniatura: medi-las diria 320x180
+  // no processador com a placa codificando 1440p.
+  const pelaPlaca = screenStream ? telaPelaPlaca?.estadoDoEnvio() : null;
+  if (pelaPlaca) { medirEnvioPorWebCodecs(pelaPlaca); return; }
   const pelaFaixaDeDados = screenStream ? transporte?.telaWebCodecs?.estadoDoEnvio() : null;
   if (pelaFaixaDeDados?.modo === 'webcodecs') { medirEnvioPorWebCodecs(pelaFaixaDeDados); return; }
   const faixa = publicacoesLocais.screen?.track;
@@ -3295,7 +3399,8 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
     blocoDeNumero(emMegabits(wc.camadas.reduce((soma, c) => soma + c.bps, 0)), 'subindo no total')
   );
   ao_vivo.append(destaque);
-  ao_vivo.append(elemento('div', 'medicao-sub', `WebCodecs · ${wc.codec === 'h264' ? 'H.264' : String(wc.codec).toUpperCase()} · ${alta.hardware ? 'na placa de vídeo' : 'no processador'}`));
+  ao_vivo.append(elemento('div', 'medicao-sub', `WebCodecs · ${wc.codec === 'h264' ? 'H.264' : String(wc.codec).toUpperCase()} · ${alta.hardware ? 'na placa de vídeo' : 'no processador'}`
+    + (wc.transporte === 'rtp' ? ' · pelo RTP' : '')));
   // Com a camada abaixo do pedido de propósito (nitidez, ou a placa que só aceitou um degrau
   // abaixo), "codificados" menor que "capturados" é a escolha funcionando, e o selo acusaria o
   // codificador.
@@ -3311,7 +3416,11 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
       elemento('span', 'medicao-camada-nome', `${c.altura}p`),
       elemento('span', null, `${Math.round(c.fps)} fps`),
       elemento('span', null, emMegabits(c.bps)),
-      elemento('span', 'medicao-custo', `${c.espectadores} assistindo`)
+      // Pelo RTP quem sabe quantos assistem cada camada é o servidor; aqui só se sabe que ela está
+      // no ar, e o custo de codificar cada quadro na placa diz mais.
+      elemento('span', 'medicao-custo', c.espectadores == null
+        ? (c.msDeCodificacao != null ? `${comVirgula(c.msDeCodificacao)} ms/quadro` : 'no ar')
+        : `${c.espectadores} assistindo`)
     );
     if (i > 0) linha.classList.add('medicao-linha-secundaria');
     grade.append(linha);
