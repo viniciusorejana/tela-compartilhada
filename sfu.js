@@ -148,6 +148,27 @@ function enderecosParaEscutar() {
   }
   return escolhidos;
 }
+// O coletor de lixo do Go, afrouxado. O servidor de mídia aloca por pacote e por espectador, e
+// com o padrão (GOGC=100) coleta o tempo todo: medido num fio do Ryzen, com 22 espectadores em
+// 1440p60 pela faixa de dados, GOGC=400 baixou o processador de 74,9% para 66,7% (p95 de 86% para
+// 78%). O preço é memória -- 165 para 345 MB naquela carga --, e por isso vai junto um teto
+// (GOMEMLIMIT): perto dele o Go volta a coletar mais, em vez de o processo crescer até a máquina
+// matar. Um quarto da memória cabe com folga ao lado do Node e do Caddy até na Micro da Oracle
+// (1 GB); o piso existe porque abaixo dele o teto vira coleta sem parar.
+const GOGC_DO_SFU = '400';
+const FRACAO_DA_MEMORIA_DO_SFU = 0.25;
+const PISO_DA_MEMORIA_DO_SFU = 192 * 1024 * 1024;
+
+function ambienteDoSfu(ambiente = process.env, memoriaTotal = os.totalmem()) {
+  const teto = Math.max(PISO_DA_MEMORIA_DO_SFU, Math.floor(memoriaTotal * FRACAO_DA_MEMORIA_DO_SFU));
+  // Quem opera manda: um GOGC ou GOMEMLIMIT já definido no ambiente passa intocado.
+  return {
+    ...ambiente,
+    GOGC: ambiente.GOGC || GOGC_DO_SFU,
+    GOMEMLIMIT: ambiente.GOMEMLIMIT || `${Math.floor(teto / (1024 * 1024))}MiB`
+  };
+}
+
 const VALIDADE_DO_TOKEN = 6 * 60 * 60;
 const SERVIDORES_STUN = [['stun.l.google.com', 19302], ['stun.cloudflare.com', 3478], ['stun1.l.google.com', 19302]];
 
@@ -368,7 +389,7 @@ async function iniciarSfu(portaHttp) {
   const { ipPublico, anunciarLan, publicoEhDaMaquina } = await escreverConfig();
   if (encerrando) return estado;
   horaDoUltimoInicio = Date.now();
-  processo = spawn(binario, ['--config', ARQUIVO_DE_CONFIG], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  processo = spawn(binario, ['--config', ARQUIVO_DE_CONFIG], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: ambienteDoSfu() });
   // "iniciado" nao e o mesmo que "pronto": ele ainda descobre o proprio IP por STUN, o que
   // leva alguns segundos. Anunciar antes disso faz quem abre a sala nesse intervalo receber
   // um erro e ficar sem midia ate recarregar.
@@ -601,7 +622,7 @@ function identidadeDoToken(token) {
     return { sala: claims.video.room, identidade: claims.sub };
   } catch (_) { return null; }
 }
-module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken, LINHA_DE_PROBLEMA,
+module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken, LINHA_DE_PROBLEMA, ambienteDoSfu,
   configurarAcesso: fn => { validarAcesso = fn; },
   validarWebhook: (corpo, autorizacao) => telemetriaLivekit.validarWebhook(corpo, autorizacao, lerOuCriarChaves()),
   diagnostico: () => ({ ...estado, pid: processo?.pid || null, uptime: processo ? Math.max(0, (Date.now() - horaDoUltimoInicio) / 1000) : 0, reinicios: reiniciosTotais, tentativasSeguidas }) };

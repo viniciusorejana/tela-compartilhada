@@ -711,6 +711,52 @@ pico.
 `npm run test:webcodecs` prova as duas saídas: a faixa que para de chegar (o relato leva ao RTP) e
 quem transmite travado (quem assiste pergunta, não tem resposta, vai ao RTP e volta depois).
 
+### Teste de carga: quanto cada máquina aguenta (28/09/2026)
+
+Depois da VPS, a pergunta passou a ser de capacidade. Medido no Ryzen 5 5600X, com os clientes
+entrando pelo endereço público (Caddy + sslip.io). Quem transmite: tela sintética em 1440p60 pela
+NVENC, a 6 Mbps. Quem assiste: um espectador de verdade por sala, e o resto "leves" — a página
+inteira do Nexo com o `VideoDecoder` trocado por um falso, o que para o servidor não muda nada. Para
+imitar uma VPS pequena, o servidor de mídia ficou preso a um fio lógico, com prioridade alta e
+`GOMAXPROCS=1`; o que se mediu foi o processador desse processo.
+
+| Espectadores em 1440p60 | WebCodecs: p95 do fio | WebRTC: p95 do fio |
+| --- | --- | --- |
+| 6 | 24% | — |
+| 10–11 | 41% | 15% |
+| 18 | 70% (a folga segura) | — |
+| 22 | 86%, ainda limpo (atraso p95 38 ms) | — |
+| 26 | **quebra**: atraso p95 584 ms, metade na camada leve, a tela vai ao RTP | — |
+
+Na margem, 0,59% de um fio por Mbps pela faixa de dados e 0,11% pelo RTP: **~5×**. (O RTP desceu
+para 720p–960p: o Chrome codifica a tela no processador de quem transmite e não sustenta 1440p60.)
+Outras medidas do mesmo servidor:
+
+- **Várias salas**: 18 espectadores numa sala custaram 26% de um fio; os mesmos 18 em três salas,
+  38%. Cada transmissão a mais sai por ~6% de um fio.
+- **Voz**: 11 microfones abertos ao mesmo tempo, ~10%.
+- **Solto nos 12 fios**, o mesmo trabalho custa o dobro de processador por Mbps (espalhar goroutines
+  por núcleos que o resto da máquina usa); `GOMAXPROCS=4` só tira 10–17% disso.
+- **`GOGC=400`**: −10% de processador, memória de 165 para 345 MB. Virou o padrão do `sfu.js`, com
+  `GOMEMLIMIT` de um quarto da memória da máquina.
+- Node do Nexo e Caddy: no máximo 2% e 1% de um fio. Não são gargalo.
+
+Convertendo por Geekbench 6 (pontos de vários núcleos ÷ 771 por fio do Ryzen × 0,6, fator
+calibrado para dar os 2–3 espectadores que a Micro de fato aguentou): Ampere de 2 OCPU ~25
+espectadores em 1440p60 pelo WebCodecs; uma VPS de 2 vCPU EPYC recente (Hostinger KVM 2) ~50.
+
+**A thread principal**, com a fonte fora da página (a câmera falsa do Chrome em 1080p60, como uma
+captura de tela de verdade) e a medida sem depender dela: com as páginas livres, o desvio entre
+quadros no palco foi de 4,6 ms no WebCodecs e 6,2 ms no RTP. Com a página ocupada 40% do tempo, em
+quem assiste ou em quem transmite, o WebCodecs foi a 17,6–17,9 ms, com 6–9 buracos acima de 50 ms
+por segundo; o RTP não mudou. Todo o caminho da tela passa pela thread da página; no RTP, nada passa.
+
+**E a saída que muda a conta**: codificar pelo WebCodecs e transportar pelo RTP. Numa sonda (duas
+conexões na mesma página, sem servidor), uma encoded transform trocou o conteúdo de cada quadro de
+uma faixa de vídeo comum pelo quadro da NVENC em 2560×1440; o codificador do WebRTC só trabalhou
+numa cópia de 320×180 (`scaleResolutionDownBy: 8`), e o outro lado decodificou a 44–56 fps num
+`<video>` comum. O servidor pagaria o preço do RTP, e quem assiste decodificaria fora da página.
+
 ### O que foi medido
 
 Em loopback, na mesma máquina, com o Chromium do Playwright (software):
@@ -738,12 +784,13 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 
 ### Limites conhecidos
 
-- **A faixa de dados custa ao servidor umas quatro vezes o processador do RTP.** O caminho novo
+- **A faixa de dados custa ao servidor umas cinco vezes o processador do RTP.** O caminho novo
   tira a codificação de quem joga e põe o transporte no servidor. Numa máquina com folga isso não
-  aparece; numa VPS pequena, dois ou três espectadores na camada cheia já deixam o servidor no
+  aparece; na Micro da Oracle, dois ou três espectadores na camada cheia já deixam o servidor no
   limite, e aí o caminho novo desiste e a tela segue pelo RTP (ver "O primeiro servidor de
-  verdade"). Para salas cheias com o WebCodecs, dê processador ao servidor: na Oracle, a Ampere
-  (até 4 OCPU no grátis, `docs/oracle.md`), e não a Micro.
+  verdade" e "Teste de carga"). Um fio de um processador de desktop recente aguenta ~18
+  espectadores em 1440p60 com folga. Para salas cheias com o WebCodecs, dê processador ao
+  servidor: na Oracle, a Ampere (2 OCPU no grátis, `docs/oracle.md`), e não a Micro.
 - **A codificação roda na thread principal da página.** Ler quadros e empacotar é barato, mas é
   a mesma thread da interface. Mover captura e codificação para um Worker é a otimização natural,
   com medição que a justifique.

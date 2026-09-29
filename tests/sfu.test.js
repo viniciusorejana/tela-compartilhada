@@ -60,6 +60,19 @@ test('a porta Prometheus exige autenticação e o YAML aponta o webhook para a p
   assert.equal((await fetch(servidor.origem + '/rtc/validate')).status, 403);
 });
 
+// GOGC=400 tirou 10% do processador do servidor de mídia, e dobrou a memória: o teto precisa
+// caber na menor máquina em que o Nexo roda, e quem opera precisa poder trocar os dois.
+test('o servidor de mídia coleta lixo com menos pressa, mas com teto de memória', () => {
+  const { ambienteDoSfu } = require('../sfu');
+  const MiB = 1024 * 1024;
+  const micro = ambienteDoSfu({ PATH: 'x' }, 1024 * MiB);
+  assert.equal(micro.GOGC, '400'); assert.equal(micro.GOMEMLIMIT, '256MiB'); assert.equal(micro.PATH, 'x');
+  assert.equal(ambienteDoSfu({}, 12 * 1024 * MiB).GOMEMLIMIT, '3072MiB');
+  assert.equal(ambienteDoSfu({}, 512 * MiB).GOMEMLIMIT, '192MiB');
+  const escolhido = ambienteDoSfu({ GOGC: 'off', GOMEMLIMIT: '1GiB' }, 1024 * MiB);
+  assert.equal(escolhido.GOGC, 'off'); assert.equal(escolhido.GOMEMLIMIT, '1GiB');
+});
+
 // O terminal mostra só o que é problema. A tentação é procurar "error" na linha inteira, e
 // aí metade do INFO do LiveKit vaza: ele descreve em campo "error" por que desistiu de uma
 // faixa, o que é rotina toda vez que alguém troca de tela. O nível é o segundo campo, e é

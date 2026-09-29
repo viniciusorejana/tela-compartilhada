@@ -28,20 +28,25 @@ recursos "Always Free" não cobram.
 | Campo | O que escolher |
 |---|---|
 | Image | **Canonical Ubuntu 24.04** (serve 22.04) |
-| Shape | **Ampere → VM.Standard.A1.Flex**, 2 OCPU e 12 GB (o grátis vai até 4 e 24) |
+| Shape | **Ampere → VM.Standard.A1.Flex**, 2 OCPU e 12 GB (o limite grátis desde junho de 2026) |
 | Rede | a VCN padrão, sub-rede **pública**, **Assign a public IPv4 address** marcado |
 | SSH | **Generate a key pair for me** → **Save private key** (guarde o `.key`) |
 
 - **"Out of capacity" no Ampere** é comum. Tente outro *Availability Domain* na mesma tela,
   tente mais tarde, ou use a **VM.Standard.E2.1.Micro** (AMD, também grátis). A Micro roda o
-  Nexo, mas é fraca: 1 GB de RAM e 1/8 de processador. Serve para voz e tela entre poucos;
-  o bot de música pode engasgar nela.
+  Nexo, mas é fraca: 1 GB de RAM, 1/8 de núcleo sustentado (com rajada de até uma hora) e
+  **50 Mbps de internet** — uns 7 espectadores de tela em 1440p, somando todas as salas. Serve
+  para voz e tela entre poucos; o bot de música pode engasgar nela.
+- **Até junho de 2026 o grátis ia até 4 OCPU e 24 GB**; hoje são 1 500 OCPU-hora e 9 000 GB-hora
+  por mês, ou seja, 2 OCPU e 12 GB. Cada OCPU a mais custa US$ 0,01 por hora (~US$ 7,30 por mês),
+  e a memória US$ 0,0015 por GB-hora: 4 OCPU com os mesmos 12 GB saem por ~US$ 15 por mês.
 - **A tela pela placa de vídeo (WebCodecs) pesa no servidor**: ela viaja numa faixa de dados, e o
-  servidor de mídia gasta umas quatro vezes mais processador com ela do que com a tela pelo
-  WebRTC. Na VPS medida, dois ou três assistindo em 1440p já levaram o servidor ao limite; o Nexo
-  percebe e passa a tela para o WebRTC sozinho, mas para a placa de vídeo em salas cheias dê
-  processador à máquina: a Ampere com mais OCPU, nunca a Micro (`docs/plano-webcodecs.md`, "O
-  primeiro servidor de verdade").
+  servidor de mídia gasta umas cinco vezes mais processador por espectador com ela do que com a
+  tela pelo WebRTC. Na Micro, dois ou três assistindo em 1440p já levam o servidor ao limite; o
+  Nexo percebe e passa a tela para o WebRTC sozinho. Nela, desligue o caminho novo
+  (`NEXO_WEBCODECS=0` no `.env.prod`). Na Ampere de 2 OCPU a conta dá uns 25 espectadores em
+  1440p pelo WebCodecs (`docs/plano-webcodecs.md`, "O primeiro servidor de verdade" e "Teste de
+  carga").
 - As duas funcionam com o mesmo instalador: ele detecta x86 ou ARM.
 
 Anote o **Public IP address** da instância.
