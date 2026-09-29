@@ -81,6 +81,13 @@
     let falhas = 0;
     let falhaAte = 0;
     let ultimaFalha = null;
+    let ultimaFalhaFoiSubida = false;
+    // Para diagnóstico, pelo console de quem transmite -- nenhuma parte da sala chama:
+    //   telaPelaPlaca.simularFalha('captura')  a captura não chega à placa (vale desde a próxima
+    //                                          transmissão, se chamada antes de compartilhar)
+    //   telaPelaPlaca.simularFalha('placa')    a placa não devolve os quadros
+    //   telaPelaPlaca.simularFalha(null)       desliga
+    let falhaSimulada = null;
 
     const emTexto = d => `${d.altura}p a ${d.quadros} quadros`;
 
@@ -138,7 +145,7 @@
       const tr = {
         faixa, parametros, fonte, escolha, trabalhador, motivo,
         remetente: null, originais: null, publicacao: null, copia: null,
-        timer: null, lendo: false, pedidosVistos: {}, envio: null, estatisticas: null,
+        timer: null, lendo: false, pedidosVistos: {}, envio: null, estatisticas: null, saidas: {}, subidas: {},
         ultimasEstatisticas: 0, falha: null, desde: Date.now()
       };
       let aoAquecer = null;
@@ -151,6 +158,7 @@
         else if (m.tipo === 'primeiroQuadro') tr.aoPrimeiroQuadro();
       };
       trabalhador.onerror = evento => { evento.preventDefault?.(); falhar(tr, `o Worker da placa parou (${evento.message || 'erro'})`); };
+      if (falhaSimulada) trabalhador.postMessage({ tipo: 'simular', falha: falhaSimulada });
       try { enviarFonte(tr, faixa); }
       catch (erro) { trabalhador.terminate(); return { ok: false, motivo: `a captura não chegou ao Worker da placa (${erro?.message || erro})` }; }
       trabalhador.postMessage({ tipo: 'camadas', configs: escolha.configs, infos: escolha.infos });
@@ -202,6 +210,7 @@
         return false;
       }
       tr.publicacao = publicacao;
+      tr.noAr = Date.now();
       tr.timer = setInterval(() => ler(tr), MS_ENTRE_LEITURAS);
       ler(tr);
       await Promise.race([tr.primeiroQuadro, new Promise(resolve => setTimeout(resolve, MS_ATE_DESISTIR_DO_PRIMEIRO_QUADRO))]);
@@ -228,9 +237,10 @@
           const total = (s.pliCount || 0) + (s.firCount || 0);
           if (tr.pedidosVistos[rid] !== undefined && total > tr.pedidosVistos[rid]) pedidos.push(rid);
           tr.pedidosVistos[rid] = total;
-          envio[rid] = { ativa: s.active !== false, fps: s.framesPerSecond || 0 };
+          envio[rid] = { ativa: s.active !== false, fps: s.framesPerSecond || 0, codificados: s.framesEncoded || 0, bytes: s.bytesSent || 0, destinado: s.targetBitrate || 0 };
         });
         if (tr !== t) return;
+        if (conferirSaida(tr, envio) || conferirSubida(tr, envio)) return;
         tr.envio = envio;
         tr.trabalhador.postMessage({ tipo: 'rids', mapa });
         if (Object.keys(destinados).length) tr.trabalhador.postMessage({ tipo: 'destinados', destinados });
@@ -242,6 +252,44 @@
         }
       } catch (_) { /* a leitura seguinte tenta de novo */ }
       finally { tr.lendo = false; }
+    }
+
+    // A transform que engole tudo (`saidaDaCamada`, tela-decisoes.js) devolve a tela ao WebRTC.
+    // Por camada: a de 360p saindo não salva quem assiste a cheia.
+    function conferirSaida(tr, envio) {
+      const agora = Date.now();
+      for (const [rid, e] of Object.entries(envio)) {
+        const conta = Decisoes.saidaDaCamada(tr.saidas[rid] || [], { agora, codificados: e.codificados, bytes: e.bytes });
+        tr.saidas[rid] = conta.historico;
+        if (!conta.parada) continue;
+        const camada = Decisoes.camadaDoRid(rid);
+        falhar(tr, `${porQueNadaSai(tr, camada)}: nenhum quadro da camada ${camada} saiu em ${Decisoes.MS_SEM_SAIDA_ATE_DESISTIR / 1000} s`);
+        return true;
+      }
+      return false;
+    }
+
+    // A placa que não cabe na subida (`placaNaoCabe`, tela-decisoes.js) também devolve a tela ao
+    // WebRTC: ele sabe encolher e desligar a camada cheia quando falta banda; a placa, não.
+    function conferirSubida(tr, envio) {
+      const agora = Date.now();
+      for (const [rid, e] of Object.entries(envio)) {
+        const conta = Decisoes.placaNaoCabe(tr.subidas[rid] || [], { agora, desde: tr.noAr, destinado: e.destinado, bytes: e.bytes, ativa: e.ativa });
+        tr.subidas[rid] = conta.historico;
+        if (!conta.naoCabe) continue;
+        falhar(tr, `a placa não cabe na subida de quem transmite: a imagem ${Decisoes.camadaDoRid(rid)} mandou ${Math.round(conta.enviado / 1000)} kbps onde cabiam ${Math.round(conta.destinado / 1000)}`, { subida: true });
+        return true;
+      }
+      return false;
+    }
+
+    // O melhor palpite pelas últimas contas do Worker; o Diagnóstico mostra as contas inteiras.
+    function porQueNadaSai(tr, camada) {
+      const e = tr.estatisticas?.camadas?.[camada];
+      if (!e) return `a camada ${camada} não tem codificador na placa`;
+      if (e.semCaptura > 0 || tr.estatisticas.capturaFps === 0) return 'a captura não chega à placa';
+      if (e.atrasados > 0) return 'a placa de vídeo não devolve os quadros';
+      return 'a placa de vídeo não entrega quadros';
     }
 
     // O LiveKit mexe nos parâmetros do remetente (o dynacast liga e desliga camadas), e a página
@@ -264,10 +312,11 @@
     // tamanho de verdade -- a tela segue pelo RTP comum, sem republicar e sem ninguém perder a
     // imagem por mais que um quadro-chave. A próxima publicação tenta a placa de novo, depois da
     // espera de sempre.
-    async function falhar(tr, motivo) {
+    async function falhar(tr, motivo, { subida = false } = {}) {
       if (tr.falha) return;
       tr.falha = motivo;
       ultimaFalha = motivo;
+      ultimaFalhaFoiSubida = subida;
       if (Date.now() - tr.desde > MS_NO_AR_QUE_ZERA_AS_FALHAS) falhas = 0;
       falhas += 1;
       const espera = Decisoes.esperaAteTentarDeNovo(falhas);
@@ -336,7 +385,24 @@
       // mesmos parâmetros do remetente, precisa ficar de fora.
       ativo: () => Boolean(t && t.remetente && !t.falha),
       falhaAte: () => falhaAte,
-      ultimaFalha: () => ultimaFalha
+      ultimaFalha: () => ultimaFalha,
+      // Na hora da nova tentativa: depois de a placa não caber na subida, só com banda medida para
+      // ela (`subidaComportaAPlaca`). A transmissão que falhou segue no ar pelo WebRTC, e é o
+      // remetente dela que diz quanto a rede comporta agora.
+      async subidaComporta() {
+        if (!ultimaFalhaFoiSubida || !t?.remetente) return true;
+        let bps = null;
+        try {
+          (await t.remetente.getStats()).forEach(s => {
+            if (s.type === 'candidate-pair' && s.nominated && s.availableOutgoingBitrate) bps = s.availableOutgoingBitrate;
+          });
+        } catch (_) { /* sem leitura: tenta */ }
+        return Decisoes.subidaComportaAPlaca(bps, t.escolha.infos.alta?.bitrateMax);
+      },
+      simularFalha(tipo) {
+        falhaSimulada = tipo || null;
+        try { t?.trabalhador.postMessage({ tipo: 'simular', falha: falhaSimulada }); } catch (_) { /* sem Worker no ar */ }
+      }
     };
   }
 

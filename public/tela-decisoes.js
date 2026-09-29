@@ -489,6 +489,84 @@
     return { cena, estado: { mediaMiniatura: media == null ? bytesDaMiniatura : media * 0.9 + bytesDaMiniatura * 0.1 } };
   }
 
+  // O SPS e o PPS no começo de um quadro H.264 em Annex B (ver `chaveComParametros`, no Worker
+  // da placa). Só o começo é lido: os dois vêm antes da primeira fatia, e o resto do quadro-chave
+  // tem centenas de KB. Devolve os bytes de cada um, sem o código de início.
+  const NAL_SPS = 7, NAL_PPS = 8;
+  function parametrosDoH264(bytes) {
+    const achados = { sps: null, pps: null };
+    let inicio = -1;
+    const fechar = fim => {
+      const tipo = bytes[inicio] & 0x1f;
+      if (tipo === NAL_SPS) achados.sps = bytes.subarray(inicio, fim);
+      if (tipo === NAL_PPS) achados.pps = bytes.subarray(inicio, fim);
+      return tipo >= 1 && tipo <= 5;   // uma fatia: dali em diante não há mais parâmetros
+    };
+    for (let i = 0; i + 2 < bytes.length; i++) {
+      if (bytes[i] !== 0 || bytes[i + 1] !== 0 || bytes[i + 2] !== 1) continue;
+      // O zero antes de 00 00 01 é do código de início de 4 bytes, e não do fim da unidade.
+      if (inicio >= 0 && fechar(bytes[i - 1] === 0 ? i - 1 : i)) return achados;
+      inicio = i + 3;
+      i += 2;
+    }
+    if (inicio >= 0 && inicio < bytes.length) fechar(bytes.length);
+    return achados;
+  }
+
+  // A transform que engole todos os quadros de uma camada: o codificador do WebRTC produzindo
+  // miniaturas e nenhum byte saindo, por um prazo inteiro. Quem transmite aparece
+  // "compartilhando", o som da tela passa (é outra faixa) e ninguém vê imagem -- o servidor
+  // registra "publish time out". A conta usa só as estatísticas do remetente, de fora do Worker:
+  // vale para qualquer motivo, até o Worker travado. `historico` são leituras
+  // { agora, codificados, bytes } da camada; devolve o histórico aparado e se ela parou.
+  // Camada pausada pelo servidor não conta: sem assinante, o WebRTC nem codifica.
+  const MS_SEM_SAIDA_ATE_DESISTIR = 3000;
+  const QUADROS_MINIMOS_SEM_SAIDA = 10;
+  function saidaDaCamada(historico, leitura) {
+    const lista = [...historico, leitura];
+    // O primeiro da lista fica sendo a leitura mais nova com pelo menos o prazo de idade.
+    while (lista.length > 1 && leitura.agora - lista[1].agora >= MS_SEM_SAIDA_ATE_DESISTIR) lista.shift();
+    const antes = lista[0];
+    const parada = leitura.agora - antes.agora >= MS_SEM_SAIDA_ATE_DESISTIR
+      && leitura.codificados - antes.codificados >= QUADROS_MINIMOS_SEM_SAIDA
+      && leitura.bytes === antes.bytes;
+    return { historico: lista, parada };
+  }
+
+  // A placa que não cabe na subida. O WebRTC calcula os limites de cada camada pelo tamanho que
+  // ELE codifica -- a miniatura --, e por isso nunca desliga nem encolhe a camada cheia por falta
+  // de banda: com 400 kbps de subida destinou 60–100 kbps a ela, e com 1,5 Mbps, ~440 kbps
+  // (medido). A placa não desce tanto: em 1440p60 mandou 500–650 kbps no primeiro caso e
+  // 1,2–1,7 Mbps no segundo, e quem assistia via a imagem parar, com até meio segundo de atraso.
+  // O WebRTC sozinho, com as mesmas subidas, mandou 360p a 15 quadros e 960p–1152p a 30, lisos.
+  // Então a camada que passa uma janela inteira mandando bem mais do que o WebRTC destina a ela
+  // devolve a tela ao WebRTC. O começo da transmissão não conta: ali o controle de
+  // congestionamento ainda está subindo. `leitura` é { agora, desde, destinado, bytes, ativa }
+  // (`desde`: quando a transmissão começou); a camada pausada pelo servidor recomeça a conta.
+  const MS_DE_JANELA_DA_SUBIDA = 5000;
+  const MS_DE_CARENCIA_DA_SUBIDA = 5000;
+  const EXCESSO_SOBRE_O_DESTINADO = 1.5;
+  const BPS_DE_EXCESSO_TOLERADO = 200_000;
+  function placaNaoCabe(historico, leitura) {
+    if (!leitura.ativa || leitura.agora - leitura.desde < MS_DE_CARENCIA_DA_SUBIDA) return { historico: [], naoCabe: false };
+    const lista = [...historico, leitura];
+    // O primeiro da lista fica sendo a leitura mais nova com pelo menos a janela de idade.
+    while (lista.length > 1 && leitura.agora - lista[1].agora >= MS_DE_JANELA_DA_SUBIDA) lista.shift();
+    const antes = lista[0];
+    if (leitura.agora - antes.agora < MS_DE_JANELA_DA_SUBIDA) return { historico: lista, naoCabe: false };
+    const enviado = (leitura.bytes - antes.bytes) * 8000 / (leitura.agora - antes.agora);
+    const destinado = lista.reduce((soma, l) => soma + l.destinado, 0) / lista.length;
+    const naoCabe = enviado > destinado * EXCESSO_SOBRE_O_DESTINADO && enviado - destinado > BPS_DE_EXCESSO_TOLERADO;
+    return { historico: lista, naoCabe, enviado, destinado };
+  }
+
+  // Depois disso, a placa só é tentada de novo quando o controle de congestionamento medir banda
+  // para ela -- pelo menos metade do que a camada cheia pediu: tentar às cegas trazia de volta a
+  // imagem ruim a cada tentativa, e a tela piscava na republicação. O WebRTC continua sondando a
+  // rede enquanto isso. Sem leitura, tenta.
+  const FRACAO_DA_SUBIDA_PARA_TENTAR_A_PLACA = 0.5;
+  const subidaComportaAPlaca = (bps, pedido) => !(bps > 0) || !(pedido > 0) || bps >= pedido * FRACAO_DA_SUBIDA_PARA_TENTAR_A_PLACA;
+
   // O orçamento do nosso codificador segue o que o controle de congestionamento do WebRTC
   // destina à camada (`targetBitrate`): é ele que mede a rede, e o ritmo de saída dos pacotes é
   // dele. Com histerese, porque reconfigurar tem custo -- e numa placa pode custar um quadro-chave.
@@ -505,6 +583,8 @@
   const api = {
     decidirTelaPelaPlaca, miniaturas, camadaDoRid, ESCALA_DA_MINIATURA, ESCALA_DA_MINIATURA_LEVE,
     casarComACaptura, MS_DE_CASAMENTO_BOM, trocaDeCena, SALTO_DE_CENA, orcamentoDaCamada, FOLGA_PARA_RECONFIGURAR,
+    saidaDaCamada, MS_SEM_SAIDA_ATE_DESISTIR, QUADROS_MINIMOS_SEM_SAIDA, parametrosDoH264,
+    placaNaoCabe, MS_DE_JANELA_DA_SUBIDA, MS_DE_CARENCIA_DA_SUBIDA, subidaComportaAPlaca, FRACAO_DA_SUBIDA_PARA_TENTAR_A_PLACA,
     capturaPresa, MS_DE_INTERVALO_CURTO, SEGUNDOS_PARA_CONCLUIR_CAPTURA_PRESA, esperaAteTentarDeNovo, MS_ATE_TENTAR_DE_NOVO,
     decidirModo, MS_DE_FOLGA_PARA_SE_APRESENTAR, servidorConfiavel, VERSAO_MINIMA_DO_SERVIDOR,
     necessario, ESCALAS, QUADROS_POSSIVEIS, dimensoesNaEscala, caberNaCaixa, iniciarCamada, ajustarCamada, degrausDaPlaca,

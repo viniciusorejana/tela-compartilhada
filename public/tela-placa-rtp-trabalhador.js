@@ -56,11 +56,14 @@ let ridPorSsrc = {};
 let limiteDaMiniaturaLeve = 0;
 let primeiroQuadroAvisado = false;
 const destinados = {};            // rid -> bits/s que o WebRTC destina à camada
+// Para diagnóstico e testes (`simularFalha`, tela-placa-rtp.js): 'captura' descarta os quadros
+// da captura antes de chegarem aqui; 'placa' descarta o que a placa devolve.
+let falhaSimulada = null;
 const camadas = {};               // 'alta' | 'baixa' -> estado da camada
 const porSsrc = new Map();        // ssrc -> { casamento, cena, voltas, ultimoRtp }
 
 function novaJanela() {
-  return { trocados: 0, bytes: 0, chaves: 0, semCaptura: 0, repetidos: 0, atrasados: 0, msNaPlaca: 0, amostras: 0, cenas: 0, pedidos: 0 };
+  return { trocados: 0, bytes: 0, chaves: 0, chavesCompletadas: 0, semCaptura: 0, repetidos: 0, atrasados: 0, msNaPlaca: 0, amostras: 0, cenas: 0, pedidos: 0 };
 }
 
 // Quem espera um quadro de captura novo (a transform, por no máximo MS_DE_ESPERA_PELA_CAPTURA_NOVA).
@@ -85,6 +88,7 @@ async function lerFonte(leitor, geracao) {
     let lido;
     try { lido = await leitor.read(); } catch (_) { break; }
     if (lido.done || geracao !== geracaoDaFonte) { lido.value?.close(); break; }
+    if (falhaSimulada === 'captura') { lido.value.close(); continue; }
     capturadosNaJanela += 1;
     fonte.push({ us: lido.value.timestamp, quadro: lido.value });
     while (fonte.length > QUADROS_DE_CAPTURA_GUARDADOS) fonte.shift().quadro.close();
@@ -107,6 +111,29 @@ function trocarFonte(leitor) {
   lerFonte(leitorDaFonte, geracaoDaFonte);
 }
 
+// ---------- Os parâmetros do H.264 ----------
+// Todo quadro-chave precisa levar o SPS e o PPS: é com eles que quem chega, ou quem perdeu o
+// anterior, começa a decodificar. A NVENC manda os dois em toda chave; nada garante que todo
+// codificador de placa faça o mesmo, e o primeiro quadro-chave -- o do aquecimento, que nem sai
+// -- pode ter sido o único com eles. Sem eles, quem assiste recebe bytes e nunca forma uma
+// imagem, e do lado de quem transmite nada acusa. Então os últimos ficam guardados, e a chave
+// que vier sem eles é completada (`parametrosDoH264`, tela-decisoes.js).
+function chaveComParametros(c, dados) {
+  const bytes = new Uint8Array(dados);
+  const achados = Decisoes.parametrosDoH264(bytes);
+  if (achados.sps && achados.pps) {
+    const codigo = [0, 0, 0, 1];
+    c.parametros = Uint8Array.from([...codigo, ...achados.sps, ...codigo, ...achados.pps]);
+    return dados;
+  }
+  if (!c.parametros) return dados;
+  const completa = new Uint8Array(c.parametros.length + bytes.length);
+  completa.set(c.parametros);
+  completa.set(bytes, c.parametros.length);
+  c.janela.chavesCompletadas += 1;
+  return completa.buffer;
+}
+
 // ---------- As camadas ----------
 function criarCamada(nome, config, info) {
   const esperando = new Map();    // carimbo (µs) -> resolve
@@ -118,8 +145,10 @@ function criarCamada(nome, config, info) {
   };
   c.encoder = new VideoEncoder({
     output(pedaco) {
-      const dados = new ArrayBuffer(pedaco.byteLength);
+      if (falhaSimulada === 'placa') return;
+      let dados = new ArrayBuffer(pedaco.byteLength);
       pedaco.copyTo(dados);
+      if (pedaco.type === 'key') dados = chaveComParametros(c, dados);
       const resolver = esperando.get(pedaco.timestamp);
       esperando.delete(pedaco.timestamp);
       if (resolver) resolver({ dados, chave: pedaco.type === 'key' });
@@ -290,7 +319,7 @@ function estatisticas() {
       perfil: c.info.perfil || null, modoDeBitrate: c.config.bitrateMode || 'variable', taxaDeclarada: 'framerate' in c.config,
       quadrosAlvo: c.info.quadros || null, bitrateAlvo: c.bitrate,
       fps: j.trocados / segundos, bps: j.bytes * 8 / segundos, chaves: j.chaves, cenas: j.cenas,
-      semCaptura: j.semCaptura, repetidos: j.repetidos, atrasados: j.atrasados,
+      semCaptura: j.semCaptura, repetidos: j.repetidos, atrasados: j.atrasados, chavesCompletadas: j.chavesCompletadas,
       msDeCodificacao: j.amostras ? j.msNaPlaca / j.amostras : null,
       reconfiguracoes: c.reconfiguracoes
     };
@@ -330,6 +359,9 @@ self.onmessage = evento => {
       const c = camadas[Decisoes.camadaDoRid(rid)];
       if (c) { c.precisaDeChave = true; c.janela.pedidos += 1; }
     }
+  } else if (m.tipo === 'simular') {
+    falhaSimulada = m.falha || null;
+    if (falhaSimulada === 'captura') while (fonte.length) fonte.shift().quadro.close();
   } else if (m.tipo === 'passar') passarAdiante = true;
   else if (m.tipo === 'estatisticas') postMessage({ tipo: 'estatisticas', id: m.id, dados: estatisticas() });
   else if (m.tipo === 'encerrar') {

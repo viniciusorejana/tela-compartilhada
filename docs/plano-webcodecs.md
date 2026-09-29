@@ -875,6 +875,80 @@ de um fio a mais que a faixa de dados — o WebRTC ainda lê a captura e codific
 o WebRTC puro só gasta menos porque desistiu do tamanho: codificando no processador, não sustenta
 1440p60.
 
+### Na Micro de verdade (29/09/2026)
+
+A placa pelo RTP publicada na Micro da Oracle (1/8 de OCPU com rajada, 2 vCPUs, 1 GB). Clientes
+daqui (Chrome instalado, tela sintética pela NVENC, quem assiste decodificando de verdade), e o
+servidor lido pela SSH a cada segundo, só leitura: o processador do `livekit-server`, o *steal*
+(o tempo que o hipervisor segura a máquina, que é só uma fração de núcleo) e os bytes da placa
+de rede.
+
+| 1440p60, 6 Mbps | livekit-server: média (p95) de um núcleo | Steal | Saída da VPS | Quem assiste |
+| --- | --- | --- | --- | --- |
+| Placa pelo RTP, 1 espectador | 9% (12%) | 4,6% | 6,3 Mbps | 1440p, 56 fps |
+| Placa pelo RTP, 3 | 17% (24%) | 7,7% | 19 Mbps | 1440p, 56 fps |
+| Placa pelo RTP, 5 | 25% (43%) | 13,5% | 32 Mbps | 1440p, 56 fps |
+| Placa pelo RTP, 7 | 35% (62%) | 21,8% | 44 Mbps | 1440p, 54 fps (pior 5%: 32) |
+| Faixa de dados, 1 | 23% (32%) | 11% | 7 Mbps | 55 fps, atraso p95 164 ms |
+| Faixa de dados, 3 | 52% (70%) | 34% | 21 Mbps | 46 fps (pior 5%: 12), 1.743 reenvios |
+| Faixa de dados, 5 | 63% (90%) | 40% | 23 Mbps | **colapso**: 31 fps, pior 5% a 1 |
+
+Em 1080p30 a 4 Mbps, para passar do teto de banda: 4 espectadores, 13%; 8, 22%; 12, 39% com a
+saída em 52 Mbps; com 16 a saída **caiu** para 44 Mbps e quem assistia desceu a 23 fps. O teto da
+Micro é a banda de saída, uns 50 Mbps sustentados (picos de 75), junto com o *steal*, que sobe com
+a carga. E ela aguenta o tempo: dez minutos seguidos com 5 espectadores em 1440p60 ficaram em
+23,5–26,8% de um núcleo, *steal* de 12–14% e 56–57 fps do primeiro ao último minuto.
+
+**Na Micro, a placa pelo RTP aguenta ~7 espectadores em 1440p60, ou ~12 em 1080p30; pela faixa
+de dados eram 2 ou 3.** Com 7 espectadores, o servidor gasta menos do que a faixa de dados gastava
+com 3.
+
+### Anunciada sem vídeo: o que um amigo viu na VPS
+
+Um amigo compartilhou a tela: o Nexo mostrava que ele estava compartilhando, o som da tela
+chegava, e ninguém via imagem. Com os outros, e com a mesma VPS, tudo funcionava. O registro do
+servidor tinha o rastro do mesmo sintoma noutro momento: `supervisor error on publication ...
+publish time out` -- a faixa anunciada e nenhum pacote de vídeo chegando em 30 s.
+
+O som da tela prova que a rede dele (com CGNAT) entregava mídia ao servidor: o PCM do agente vira
+uma faixa WebRTC comum na página de quem transmite, pela mesma conexão do vídeo. O defeito era do
+vídeo, e o caminho novo tinha três jeitos de produzi-lo sem que nada acusasse:
+
+1. **A transform engolindo tudo.** Se a captura não chega ao Worker (ou a placa não devolve os
+   quadros), cada quadro do WebRTC é descartado. `anexar` esperava o primeiro quadro por 3 s e
+   seguia em frente assim mesmo, e o vigia da captura parada só olhava a captura que parou
+   *depois* de ter chegado. Agora `saidaDaCamada` confere, nas estatísticas do próprio remetente,
+   se o WebRTC está codificando e nenhum byte sai; em 3 s a tela volta ao WebRTC. Vale para
+   qualquer motivo, até o Worker travado, porque a conta é feita fora dele. Reproduzido com
+   `telaPelaPlaca.simularFalha('captura')` antes de compartilhar: em 3 s, "a captura não chega à
+   placa", quem assiste recebe 1080p pelo WebRTC, e a nova tentativa volta à placa sozinha.
+2. **Quadro-chave sem SPS e PPS.** A NVENC manda os dois em toda chave, mas nada garante isso em
+   outro codificador de placa, e o primeiro quadro-chave -- o do aquecimento -- é jogado fora. Sem
+   eles, quem assiste recebe bytes e nunca forma imagem, e do lado de quem transmite tudo parece
+   normal. O Worker guarda os últimos e completa a chave que vier sem eles
+   (`parametrosDoH264`); o Diagnóstico conta quantas foram completadas.
+3. **A placa não cabe na subida.** O WebRTC calcula os limites de cada camada pelo tamanho que
+   ele codifica -- a miniatura -- e por isso nunca desliga nem encolhe a camada cheia por falta de
+   banda. Com a subida limitada por `b=AS` (sem perda):
+
+   | Subida | WebRTC destina à cheia | A placa mandava | Quem assistia | WebRTC puro, mesma subida |
+   | --- | --- | --- | --- | --- |
+   | 400 kbps | 60–100 kbps | 500–650 kbps | 1440p, 0–19 fps, 9 congelamentos em 25 s | 360p, 15 fps, liso |
+   | 1,5 Mbps | ~440 kbps | 1,2–1,7 Mbps | 1440p, até 240 ms de atraso | 960p–1152p, 30 fps |
+   | 8 Mbps | ~5 Mbps | 3–4 Mbps | 1440p, 56 fps | — |
+
+   Com perda de verdade -- a operadora que policia UDP, o upload fraco --, esse excesso vira
+   tempestade de quadros-chave, e pode não sobrar imagem nenhuma. Agora `placaNaoCabe` compara o
+   que cada camada manda com o que o WebRTC destina a ela: 5 s seguidos acima de 1,5 vez (e 200
+   kbps a mais), passados os primeiros 5 s da transmissão, e a tela volta ao WebRTC, que sabe
+   descer. A nova tentativa só acontece com banda medida para metade do que a camada cheia pediu
+   (`subidaComportaAPlaca`) -- às cegas, a tela ia e voltava com a imagem ruim a cada tentativa.
+
+Qual dos três pegou o amigo não dá para saber daqui: o registro de cada pessoa fica no navegador
+dela (Diagnóstico → copiar), e as linhas de INFO do servidor, que diriam o que chegou dele, ficam
+escondidas por padrão (`NEXO_LOG_SFU`). O que o sintoma descarta: ICE e CGNAT em si (o som passou
+pela mesma conexão).
+
 ### O que foi medido
 
 Em loopback, na mesma máquina, com o Chromium do Playwright (software):
@@ -899,7 +973,7 @@ Em loopback, na mesma máquina, com o Chromium do Playwright (software):
 | iPhone | Recebe pelo `canvas.captureStream()`, e a bateria | O teste que decide, na ordem do plano |
 | Servidor | ~~Trocar para a 1.13.7~~ — **é o padrão** desde a primeira sala de verdade transmitindo por ela, com os hashes de Linux x64 e ARM64 conferidos no checksums.txt do release e na API do GitHub | `npm run build:sfu` — no Linux, falta rodar uma vez para ver o binário descer e abrir |
 | Ritmador | ~~Que o portão do servidor deixou de descartar~~ — **sumiu** do registro seguinte. Falta conferir de novo com a aceleração nas trocas de cena | O registro do servidor numa rede de verdade, trocando de janela depressa, sem as linhas `data dropped due to high buffered amount` |
-| Placa pelo RTP | Numa VPS de verdade, com a captura da tela de verdade e um jogo: quadros de quem assiste, congelamentos nas trocas de cena (o quadro grande da placa), e o processador do servidor | Diagnóstico → "Tela pela placa, pelo RTP"; "imagem repetida" alta com a tela mexendo é captura que não chega ao Worker |
+| Placa pelo RTP | ~~Numa VPS de verdade~~ — **medido na Micro** ("Na Micro de verdade"). Falta: um jogo de verdade (congelamentos nas trocas de cena, o quadro grande da placa), uma placa AMD ou Intel (os parâmetros do H.264 completados?) e uma subida fraca **com perda** | Diagnóstico → "Tela pela placa, pelo RTP": "chaves completadas com SPS/PPS" acima de zero é o codificador que não manda os parâmetros; "imagem repetida" alta com a tela mexendo é captura que não chega ao Worker; "a placa não cabe na subida" é a rede de quem transmite |
 
 ### Limites conhecidos
 

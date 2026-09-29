@@ -243,6 +243,39 @@ const recebido = pagina => pagina.evaluate(async () => {
     .catch(async erro => { console.error('tela parada: palco de Caio =', await caio.evaluate(() => `${stageVideo.videoWidth}×${stageVideo.videoHeight}`), '· envio =', JSON.stringify(await envio(ana))); throw erro; });
   const parada = (await envio(ana))?.camadas.find(c => c.camada === 'alta');
   console.log(`PASS: com a tela parada há 3 s, quem chega depois vê a imagem (${parada ? `${parada.repetidos} repetições e ${parada.chaves} quadros-chave na última janela` : 'camada sem quadros na última janela'})`);
+  await pararDeCompartilhar(ana, bia, caio);
+
+  // ---------- A placa que não entrega nada ----------
+  // Visto na VPS: alguém aparecia compartilhando, o som da tela passava (é outra faixa) e ninguém
+  // via imagem; o servidor registrava "publish time out" -- a faixa anunciada e nenhum pacote de
+  // vídeo. Qualquer coisa que faça a transform engolir todos os quadros precisa devolver a tela
+  // ao codificador do WebRTC em segundos. Aqui, desde o início, a captura que não chega à placa.
+  await ana.evaluate(() => { window.fonteDoTeste = undefined; telaPelaPlaca.simularFalha('captura'); });
+  await compartilhar(ana, 'high', 30);
+  await assistir(bia);
+  await ana.waitForFunction(() => /a captura não chega à placa/.test(telaPelaPlaca.ultimaFalha() || ''), null, { timeout: 15000 })
+    .catch(async erro => { console.error('sem captura: última falha =', await ana.evaluate(() => telaPelaPlaca.ultimaFalha()), '· ativo =', await ana.evaluate(() => telaPelaPlaca.ativo())); throw erro; });
+  await bia.waitForFunction(() => stageVideo.videoHeight === 1080, null, { timeout: 15000 })
+    .catch(async erro => { console.error('sem captura: palco =', await bia.evaluate(() => `${stageVideo.videoWidth}×${stageVideo.videoHeight}`)); throw erro; });
+  await bia.waitForTimeout(2000);
+  const peloWebrtc = await recebido(bia);
+  assert.ok(peloWebrtc?.fps > 10, `sem captura na placa: ${Math.round(peloWebrtc?.fps || 0)} quadros por segundo chegando pelo WebRTC`);
+  console.log(`PASS: a captura que não chega à placa devolve a tela ao WebRTC (${await ana.evaluate(() => telaPelaPlaca.ultimaFalha())}) · quem assiste: ${peloWebrtc.altura}p a ${Math.round(peloWebrtc.fps)} fps`);
+  // Sem a falha, a nova tentativa (10 s) leva a tela de volta à placa, sem ninguém parar nada.
+  await ana.evaluate(() => telaPelaPlaca.simularFalha(null));
+  await ana.waitForFunction(() => telaPelaPlaca.ativo() && telaPelaPlaca.estadoDoEnvio()?.camadas.some(c => c.camada === 'alta' && c.fps > 0), null, { timeout: 30000 });
+  await bia.waitForFunction(() => stageVideo.videoHeight === 1080, null, { timeout: 15000 });
+  console.log('PASS: e a nova tentativa volta à placa sozinha');
+
+  // No meio da transmissão, a placa que para de devolver os quadros.
+  await ana.evaluate(() => telaPelaPlaca.simularFalha('placa'));
+  await ana.waitForFunction(() => /a placa de vídeo não devolve os quadros/.test(telaPelaPlaca.ultimaFalha() || '') && !telaPelaPlaca.ativo(), null, { timeout: 15000 })
+    .catch(async erro => { console.error('placa muda: última falha =', await ana.evaluate(() => telaPelaPlaca.ultimaFalha())); throw erro; });
+  await bia.waitForTimeout(3000);
+  const depoisDaPlaca = await recebido(bia);
+  assert.ok(depoisDaPlaca?.fps > 10, `placa muda: ${Math.round(depoisDaPlaca?.fps || 0)} quadros por segundo chegando pelo WebRTC`);
+  console.log(`PASS: a placa que para de devolver no meio da transmissão também volta ao WebRTC (quem assiste: ${depoisDaPlaca.altura}p a ${Math.round(depoisDaPlaca.fps)} fps)`);
+  await ana.evaluate(() => telaPelaPlaca.simularFalha(null));
   console.log('Tela pela placa de vídeo, pelo RTP: tudo certo.');
 })().catch(erro => {
   console.error(erro);

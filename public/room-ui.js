@@ -451,7 +451,8 @@
         lines.push(`  Camada ${camada.camada} (placa, RTP): ${camada.codec} (${camada.perfil || '?'}, ${camada.hardware ? 'placa' : 'processador'}, ${camada.modoDeBitrate}, taxa ${camada.taxaDeclarada ? 'declarada' : 'não declarada'}); `
           + `${camada.largura}×${camada.altura} a ${Math.round(camada.fps)}/${camada.quadrosAlvo} fps; ${mbps(camada.bps)} de ${mbps(camada.bitrateAlvo)}; `
           + `codificação=${camada.msDeCodificacao != null ? camada.msDeCodificacao.toFixed(1) + ' ms' : '?'}; quadros-chave=${camada.chaves}; trocas de cena=${camada.cenas}; `
-          + `sem captura=${camada.semCaptura}; imagem repetida (tela parada)=${camada.repetidos}; atrasados na placa=${camada.atrasados}; reconfigurações de orçamento=${camada.reconfiguracoes.soDeBitrate}`);
+          + `sem captura=${camada.semCaptura}; imagem repetida (tela parada)=${camada.repetidos}; atrasados na placa=${camada.atrasados}; `
+          + `chaves completadas com SPS/PPS=${camada.chavesCompletadas ?? 0}; reconfigurações de orçamento=${camada.reconfiguracoes.soDeBitrate}`);
       }
     }
 

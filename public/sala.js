@@ -1227,8 +1227,11 @@ async function redecidirTelaPelaPlaca() {
 let timerDaPlaca = null;
 function tentarAPlacaDeNovoEm(espera) {
   clearTimeout(timerDaPlaca);
-  timerDaPlaca = setTimeout(() => {
+  timerDaPlaca = setTimeout(async () => {
     timerDaPlaca = null;
+    // Depois de uma subida curta, a nova tentativa espera a rede comportar a placa: às cegas, a
+    // tela ia e voltava com a imagem ruim a cada tentativa.
+    if (!await telaPelaPlaca.subidaComporta().catch(() => true)) { tentarAPlacaDeNovoEm(espera); return; }
     telaPublicadaPelaPlaca = false;
     redecidirTelaPelaPlaca().catch(() => {});
   }, espera + 500);

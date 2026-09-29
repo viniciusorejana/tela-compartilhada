@@ -506,6 +506,73 @@ test('o orçamento da placa segue o que o WebRTC destina, com teto, piso e histe
   assert.equal(Decisoes.orcamentoDaCamada({ ...base, destinado: undefined }), null);
 });
 
+test('a placa que manda bem mais do que o WebRTC destina, por uma janela inteira, não cabe na subida', () => {
+  // Leituras a cada 250 ms: `enviando` e `destinado` em bits/s.
+  const correr = ({ ate, enviando, destinado, ativa = () => true }) => {
+    let conta = { historico: [], naoCabe: false }, bytes = 0, primeira = null;
+    for (let agora = 0; agora <= ate; agora += 250) {
+      bytes += enviando(agora) / 8 / 4;
+      conta = Decisoes.placaNaoCabe(conta.historico, { agora, desde: 0, destinado: destinado(agora), bytes, ativa: ativa(agora) });
+      if (conta.naoCabe && primeira === null) primeira = agora;
+    }
+    return primeira;
+  };
+  // 1,5 Mbps de subida, medido: ~440 kbps destinados à cheia e a placa mandando ~1,4 Mbps.
+  const quando = correr({ ate: 20_000, enviando: () => 1_400_000, destinado: () => 440_000 });
+  assert.equal(quando, Decisoes.MS_DE_CARENCIA_DA_SUBIDA + Decisoes.MS_DE_JANELA_DA_SUBIDA, 'na primeira janela inteira depois da carência');
+  // Rede boa: a placa segue o orçamento, com as rajadas de quadro-chave.
+  assert.equal(correr({ ate: 30_000, enviando: t => (t % 5000 < 250 ? 12_000_000 : 3_800_000), destinado: () => 4_900_000 }), null);
+  // O começo não conta: o orçamento sobe depois do primeiro quadro-chave.
+  assert.equal(correr({ ate: 30_000, enviando: t => (t < 3000 ? 3_800_000 : 3_000_000), destinado: t => (t < 3000 ? 300_000 : 4_000_000) }), null);
+  // Um excesso pequeno, abaixo dos 200 kbps de tolerância, não derruba a camada leve.
+  assert.equal(correr({ ate: 20_000, enviando: () => 250_000, destinado: () => 150_000 }), null);
+  // A camada pausada pelo servidor recomeça a conta.
+  assert.equal(correr({ ate: 30_000, enviando: () => 1_400_000, destinado: () => 440_000, ativa: t => t % 4000 >= 250 }), null);
+  // Depois disso, a nova tentativa espera banda para metade do que a cheia pediu; sem leitura, tenta.
+  assert.equal(Decisoes.subidaComportaAPlaca(1_500_000, 6_000_000), false);
+  assert.equal(Decisoes.subidaComportaAPlaca(3_000_000, 6_000_000), true);
+  assert.equal(Decisoes.subidaComportaAPlaca(null, 6_000_000), true);
+});
+
+test('o SPS e o PPS são achados no começo do quadro-chave, com código de início de 3 ou 4 bytes', () => {
+  const sps = [0x67, 0x64, 0x00, 0x28, 0xac];
+  const pps = [0x68, 0xee, 0x3c, 0x80];
+  const fatia = [0x65, 0x88, 0x84, 0x00, 0x00, 0x03, 0x01];
+  const chave = Uint8Array.from([0, 0, 0, 1, 0x09, 0xf0, 0, 0, 0, 1, ...sps, 0, 0, 1, ...pps, 0, 0, 0, 1, ...fatia]);
+  const achados = Decisoes.parametrosDoH264(chave);
+  assert.deepEqual([...achados.sps], sps);
+  assert.deepEqual([...achados.pps], pps);
+  // Quadro-chave sem os parâmetros: é esse que precisa ser completado.
+  const semParametros = Decisoes.parametrosDoH264(Uint8Array.from([0, 0, 0, 1, ...fatia]));
+  assert.equal(semParametros.sps, null);
+  assert.equal(semParametros.pps, null);
+  // Uma sequência 00 00 01 dentro da fatia (a prevenção de emulação garante que não existe, mas o
+  // leitor para na primeira fatia de qualquer jeito) não é lida como parâmetro.
+  const depois = Decisoes.parametrosDoH264(Uint8Array.from([0, 0, 1, ...fatia, 0, 0, 1, ...sps]));
+  assert.equal(depois.sps, null);
+});
+
+test('a camada que o WebRTC codifica e de onde nenhum byte sai é dada como parada depois do prazo inteiro', () => {
+  // Leituras a cada 250 ms, como as do remetente; `bytes` parado, `codificados` subindo a 30 por segundo.
+  const ler = (historico, agora, bytes, codificados = agora * 0.03) => Decisoes.saidaDaCamada(historico, { agora, codificados, bytes });
+  let conta = { historico: [] };
+  for (let agora = 0; agora < Decisoes.MS_SEM_SAIDA_ATE_DESISTIR; agora += 250) {
+    conta = ler(conta.historico, agora, 5000);
+    assert.equal(conta.parada, false, `antes do prazo (${agora} ms) ainda não`);
+  }
+  assert.equal(ler(conta.historico, Decisoes.MS_SEM_SAIDA_ATE_DESISTIR, 5000).parada, true, 'no prazo, parada');
+  // Um único quadro saindo no meio já basta para não ser "nada sai".
+  assert.equal(ler(conta.historico, Decisoes.MS_SEM_SAIDA_ATE_DESISTIR, 5200).parada, false);
+  // Camada pausada pelo servidor: o WebRTC nem codifica, e isso não é defeito.
+  let pausada = { historico: [] };
+  for (let agora = 0; agora <= 5000; agora += 250) pausada = ler(pausada.historico, agora, 5000, 90);
+  assert.equal(pausada.parada, false);
+  // O histórico não cresce sem fim: fica só o que cobre o prazo.
+  let longa = { historico: [] };
+  for (let agora = 0; agora <= 60_000; agora += 250) longa = ler(longa.historico, agora, agora);
+  assert.ok(longa.historico.length <= Decisoes.MS_SEM_SAIDA_ATE_DESISTIR / 250 + 2, `${longa.historico.length} leituras guardadas`);
+});
+
 // ---------- O nome do codec ----------
 
 test('o nível do H.264 é o menor que cabe no tamanho e na taxa', () => {
