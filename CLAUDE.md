@@ -33,6 +33,7 @@ npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
 npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
 npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
+npm run test:estudio       # Estúdio: foto, link da câmera para o OBS, selo na sala, rostos que reagem, permissão
 npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel
 npm run test:webcodecs:placa  # a placa de verdade pelo RTP: combinações, câmera, aba parada (Chrome instalado; pula sem placa)
 ```
@@ -86,7 +87,10 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Vídeos de apresentação e de lançamento | `video/` (Remotion, dependências próprias); saem em `public/midia` por `npm run video:renderizar` |
 | Tela pela placa, transportada pelo RTP (o Automático) | `public/tela-placa-rtp.js` + o Worker `tela-placa-rtp-trabalhador.js`; escolhida em `aplicarPublicacao` (`sala.js`) |
 | Tela por WebCodecs pela faixa de dados (o "Forçar") | `public/tela-webcodecs.js` + `tela-{quadro,decisoes,codificador,decodificador}.js`; ligado em `room-transport.js`; chave do servidor em `chave-webcodecs.js` |
+| Estúdio: links para o OBS e rostos que reagem à voz | regra em `estudio.js`, no ar em `estudio-ao-vivo.js` (namespace `/estudio`); `public/obs.js` (a fonte do OBS), `reativo.js` (os rostos), `estudio.js` + `estudio.css` (o painel do Estúdio, na sala, só com conta), `estudio-sala.js` (permissão, cartão de perfil, selo OBS, botão da barra); o controle do dono é `estudio` na configuração da sala |
+| Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`; a
-tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plano-webcodecs.md`.
+tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plano-webcodecs.md`; o
+Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`.

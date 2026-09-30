@@ -38,6 +38,22 @@ const REGRAS = Object.freeze({
   // Os ajustes sobem sozinhos, dois segundos depois da última mudança. Têm balde próprio para
   // que mexer muito na qualidade nunca impeça ninguém de trocar a senha.
   'conta-ajustes': { sessao: 30, longa: [300, 60 * MINUTO] },
+  // Avatar e imagens do Estúdio: cada envio é uma escrita de até 2 MB no banco.
+  'conta-imagem': { sessao: 20, longa: [120, 60 * MINUTO] },
+  // O Estúdio salva sozinho, meio segundo depois de cada mudança -- arrastar um controle de
+  // tamanho gera uma rajada, e o teto é o de uma pessoa mexendo, não o de um script.
+  'conta-estudio': { sessao: 60, longa: [900, 60 * MINUTO] },
+  // Achar alguém pelo código, no Estúdio. Gesto de mão, poucas vezes por sessão; o teto longo é
+  // o que impede de varrer códigos para colher apelidos.
+  'conta-busca': { sessao: 20, longa: [100, 60 * MINUTO] },
+  // Cada fonte do OBS é uma página com a sua conexão, e uma cena com seis delas abre seis de
+  // uma vez; o OBS as reabre a cada troca de cena com "atualizar ao ficar visível".
+  'estudio-conexao': { sessao: 60 },
+  // As imagens de perfil descem para cada pessoa da sala, uma vez por imagem (cache eterno).
+  // Atrás de um túnel todo mundo divide a mesma origem, então o teto é folgado.
+  'imagem': { sessao: 1200 },
+  'estudio-link': { sessao: 30, sala: 120 },
+  'estudio-permissao': { sessao: 12, sala: 120 },
   'soundboard-tocar': { sessao: 30, sala: 90, intervalo: 400 },
   'soundboard-upload': { sessao: 6, sala: 24 },
   'soundboard-bytes': { sessao: 12 * MiB, sala: 48 * MiB },

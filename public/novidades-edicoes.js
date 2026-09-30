@@ -21,6 +21,21 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 3,
+      data: '2026-09-29',
+      titulo: 'A sala no seu OBS',
+      resumo: 'A câmera, a tela e a voz de quem está na sala viram fontes do OBS por um link, os rostos da sala reagem a quem fala, e o seu perfil ganhou foto.',
+      aparecer: true,
+      itens: [
+        { icone: 'camera', titulo: 'Qualquer fonte da sala no OBS', texto: 'Copie o link da câmera, da tela, da voz ou do som da tela de alguém e cole como fonte Navegador no OBS. Sem capturar janela: a imagem chega direto do Nexo, na qualidade de quem transmite.', onde: 'Clique no nome da pessoa → Levar para o OBS' },
+        { icone: 'rosto', titulo: 'Rostos que reagem à voz', texto: 'Uma fonte com o rosto de cada pessoa da sala: quem fala pula, quem está quieto fica apagado. Escolha o efeito, o formato e o tamanho dos rostos e dos nomes, e dê a cada pessoa uma imagem parada e outra falando — só no seu OBS.', onde: 'Botão Estúdio, na barra de baixo (no computador)' },
+        { icone: 'link', titulo: 'Os links seguem você', texto: 'Monte a cena uma vez: a câmera da Ana funciona em qualquer chamada com a Ana, em qualquer sala. Colou um link no lugar errado? Desligue todos de uma vez.', onde: 'Estúdio → Desligar meus links' },
+        { icone: 'olho', titulo: 'Quem aparece fica sabendo', texto: 'Um selo OBS mostra na sala quem está levando o quê, e cada pessoa decide se pode ser levada. Desligar tira do ar na hora.', onde: 'Configurações → Estúdio (OBS)' },
+        { icone: 'escudo', titulo: 'Quem abriu a sala decide', texto: 'Um controle a mais na moderação desliga o OBS para os participantes, e o que eles tinham no ar sai na hora.', onde: 'Moderação → Controles da sala' },
+        { icone: 'foto', titulo: 'Foto de perfil', texto: 'Uma foto no lugar das iniciais — ou um GIF animado. Aparece na sala para todo mundo e é o seu rosto nos rostos do OBS.', onde: 'Meu perfil, ou a página da conta' }
+      ]
+    },
+    {
       id: 2,
       data: '2026-09-28',
       titulo: 'A tela pela placa de vídeo',

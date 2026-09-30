@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>Nexo no OBS</title>
+<link rel="icon" href="/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/reativo.css">
+<link rel="stylesheet" href="/obs.css">
+</head>
+<body>
+<!-- Uma fonte do OBS: a câmera, a tela ou a voz de alguém da sala, ou os rostos que reagem à
+     voz. O fundo é transparente, e no OBS nada além da imagem aparece (obs.js). -->
+<main id="palco">
+  <video id="video" autoplay playsinline muted hidden></video>
+  <div id="rostos" hidden></div>
+  <div id="aviso" class="aviso" role="status" hidden>
+    <img src="/mark.svg" alt="" width="28" height="28">
+    <p id="avisoTexto"></p>
+    <small id="avisoDica"></small>
+  </div>
+  <button id="ouvir" class="ouvir" type="button" hidden>Clique para ouvir</button>
+</main>
+<audio id="audio" autoplay></audio>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/vendor/livekit-client.js"></script>
+<script src="/perfil.js"></script>
+<script src="/reativo.js"></script>
+<script src="/obs.js"></script>
+</body>
+</html>

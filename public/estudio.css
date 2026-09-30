@@ -1,0 +1,156 @@
+/* O Estúdio dentro da sala (estudio.js e estudio-sala.js): o painel, a aba das configurações, os
+   links do cartão de perfil e os avisos de captura. Os controles são os das configurações --
+   .segmentado, .toggle-line, .config-volume --, e este arquivo cuida só de como o Estúdio os
+   arruma. Cor sempre pelos tokens; as exceções (o palco da prévia e o selo sobre o vídeo) dizem
+   por quê. */
+
+/* ---------- O botão da barra de baixo ----------
+   Nunca no celular: montar uma cena de OBS é coisa de computador, e a barra do celular já está
+   no limite. estudio-sala.js também não o mostra num aparelho de toque. */
+#estudioBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='12' rx='2'/%3E%3Cpath d='m16 10 6-3v10l-6-3'/%3E%3C/svg%3E"); }
+@media(max-width:760px) { #estudioBtn { display:none!important; } }
+
+/* ---------- O painel ---------- */
+/* A altura é a do conteúdo, até o teto: com duas pessoas na sala o painel não sobra vazio, e com
+   vinte a lista rola dentro dele. */
+.estudio-card { --pad-cartao:0px; width:min(100%,1160px); max-height:min(88vh,800px); max-height:min(88dvh,800px); display:flex; flex-direction:column; padding:0; overflow:hidden; }
+.estudio-topo { display:flex; align-items:center; justify-content:space-between; gap:10px 20px; padding:20px 64px 16px 26px; border-bottom:1px solid var(--line); }
+.estudio-titulo { min-width:0; }
+.estudio-titulo h2 { margin:0 0 2px; padding:0; }
+.estudio-titulo p { margin:0; color:var(--muted); font-size:var(--fs-sm); line-height:1.6; }
+.estudio-topo-acoes { flex:none; display:flex; align-items:center; gap:6px; }
+.estudio-estado { display:inline-flex; align-items:center; gap:7px; min-height:var(--ctl-p); padding:0 11px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 4%); color:var(--text-2); font-size:var(--fs-sm); white-space:nowrap; }
+.estudio-estado:empty { display:none; }
+.estudio-estado::before { content:''; width:7px; height:7px; flex:none; border-radius:50%; background:var(--apagado); }
+.estudio-estado.na-sala::before { background:var(--online); box-shadow:0 0 0 3px var(--online-suave); }
+.estudio-ajuda-btn { display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-p); padding:0 10px; font-size:var(--fs-sm); }
+.estudio-ajuda-btn[aria-expanded="true"] { background:var(--bg-3); color:var(--text); }
+.estudio-ajuda { margin:0; padding:12px 26px 12px 46px; display:grid; gap:4px; border-bottom:1px solid var(--line); background:var(--bg-1); color:var(--text-3); font-size:var(--fs-sm); line-height:1.6; }
+.estudio-ajuda[hidden] { display:none; }
+.estudio-ajuda strong { color:var(--text-2); }
+.estudio-ajuda code, .estudio-dica code { padding:1px 5px; border-radius:5px; background:rgb(var(--tinta) / 6%); font-size:var(--fs-meta); }
+.estudio-bloqueio { margin:0; padding:10px 26px; border-bottom:1px solid var(--line); background:var(--aviso-suave); color:var(--aviso-texto); font-size:var(--fs-sm); }
+.estudio-bloqueio[hidden] { display:none; }
+
+.estudio-corpo { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(360px,.9fr); grid-template-rows:minmax(0,1fr); }
+.estudio-coluna { min-width:0; min-height:0; display:flex; flex-direction:column; gap:12px; overflow-y:auto; overscroll-behavior:contain; padding:16px 24px 18px; }
+/* A coluna das pessoas tem o fundo da coluna de seções das configurações: são as duas metades
+   do painel, e o fundo diz isso sem precisar de mais uma borda. */
+.estudio-pessoas { border-left:1px solid var(--line); background:var(--bg-1); }
+.estudio-secao-cabeca { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:var(--ctl-p); }
+.estudio-secao-cabeca h3 { margin:0; font-size:var(--fs-lg); letter-spacing:-.02em; }
+.estudio-contagem { margin-left:3px; color:var(--faint); font-size:var(--fs-sm); font-weight:500; }
+.estudio-copiar { display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-p); padding:0 12px; font-size:var(--fs-sm); }
+.estudio-copiar.copiado, .estudio-link.copiado { background:var(--online-suave); color:var(--online-texto); }
+
+/* O palco da prévia imita a transmissão: xadrez de transparência sobre fundo escuro, igual nos
+   dois temas, porque é assim que a fonte aparece no OBS. Dentro dele, uma fonte de 1920 × 1080
+   reduzida (estudio.js ajusta a escala): o tamanho em pixels tem aqui a proporção do OBS. */
+.estudio-palco { position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border:1px solid var(--line-2); border-radius:var(--r-lg); background-color:#1b1c26; background-image:linear-gradient(45deg,#23242f 25%,transparent 25%),linear-gradient(-45deg,#23242f 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#23242f 75%),linear-gradient(-45deg,transparent 75%,#23242f 75%); background-size:22px 22px; background-position:0 0,0 11px,11px -11px,-11px 0; }
+#estudioPrevia { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; }
+#estudioPrevia .rosto { cursor:pointer; }
+
+/* Em faixas: a prévia e as escolhas lado a lado, os deslizantes em duas colunas, os interruptores
+   em duas colunas. Assim o painel inteiro cabe sem rolar mesmo num notebook de 720 linhas. */
+.estudio-ajustes { display:grid; gap:12px; }
+.estudio-rostos-topo { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:start; }
+.estudio-escolhas { display:grid; gap:10px; align-content:start; }
+.estudio-escolhas .config-rotulo { margin-bottom:6px; }
+.estudio-escolhas .segmentado span { padding:0 10px; }
+.estudio-alinhar span { padding:0 8px; }
+.estudio-par { display:flex; flex-wrap:wrap; gap:6px; }
+.estudio-faixas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px 18px; }
+.estudio-faixas .config-volume label { margin-bottom:2px; }
+.estudio-chaves { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 22px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
+.estudio-chaves .toggle-line, .estudio-com-som { color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; }
+.estudio-com-som { gap:10px; }
+
+/* ---------- As pessoas ---------- */
+.estudio-adicionar { display:flex; gap:8px; }
+.estudio-adicionar input { flex:1; min-width:0; min-height:var(--ctl-m); padding:0 12px; border:1px solid var(--line-3); border-radius:var(--r-md); background:var(--bg-0); color:var(--text); font-size:var(--fs-sm); transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.estudio-adicionar input::placeholder { color:var(--apagado); }
+.estudio-adicionar input:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.estudio-adicionar button { flex:none; min-height:var(--ctl-m); padding:0 14px; font-size:var(--fs-sm); }
+.estudio-aviso { margin:-6px 0 0; color:var(--muted); font-size:var(--fs-sm); }
+.estudio-aviso:empty { display:none; }
+.estudio-aviso.certo, .estudio-salvo.certo { color:var(--online-texto); }
+.estudio-aviso.problema, .estudio-salvo.problema { color:var(--danger-texto); }
+
+/* Uma pessoa numa linha: quem é, as duas imagens e as ações. Os links vão embaixo, alinhados ao
+   nome. O cabeçalho de colunas diz de uma vez o que são as duas imagens. */
+.estudio-lista-cabeca, .estudio-pessoa-linha { display:grid; grid-template-columns:minmax(0,1fr) 44px 44px 64px; align-items:center; gap:8px; }
+.estudio-lista-cabeca { margin-bottom:-8px; padding:0 11px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:700; letter-spacing:.06em; text-transform:uppercase; text-align:center; }
+.estudio-lista { margin:0; padding:0; list-style:none; display:grid; gap:6px; }
+.estudio-pessoa { display:grid; gap:8px; padding:10px; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--bg-2); transition:opacity var(--dur) var(--curva); }
+.estudio-pessoa.oculta .estudio-quem, .estudio-pessoa.oculta .estudio-imagem { opacity:.5; }
+.estudio-quem { display:flex; align-items:center; gap:10px; min-width:0; }
+.estudio-avatar { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:50%; color:#22202e; font-size:12px; font-weight:750; }
+.estudio-quem > div { min-width:0; }
+.estudio-quem strong { display:block; overflow:hidden; color:var(--text); font-size:var(--fs-md); font-weight:600; white-space:nowrap; text-overflow:ellipsis; }
+.estudio-quem small { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; color:var(--faint); font-size:var(--fs-meta); }
+.estudio-selo { padding:0 6px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 6%); color:var(--text-3); font-size:var(--fs-rotulo); font-weight:700; line-height:16px; letter-spacing:.04em; text-transform:uppercase; }
+.estudio-selo.na-sala { background:var(--online-suave); color:var(--online-texto); }
+.estudio-selo.recusa { background:var(--danger-suave); color:var(--danger-texto); }
+
+.estudio-imagem-lugar { position:relative; width:44px; height:44px; }
+.estudio-imagem { display:grid; place-items:center; width:100%; height:100%; padding:0; border:1px dashed var(--line-3); border-radius:var(--r-md); background-color:rgb(var(--tinta) / 2.5%); background-position:center; background-size:contain; background-repeat:no-repeat; color:var(--faint); }
+.estudio-imagem:hover:not(:disabled) { border-color:var(--accent); background-color:var(--accent-suave); color:var(--accent-texto); }
+.estudio-imagem.com-imagem { border-style:solid; border-color:var(--line-2); }
+.estudio-imagem.com-imagem .ico { display:none; }
+.estudio-imagem .ico { width:16px; height:16px; }
+.estudio-tirar { position:absolute; top:-6px; right:-6px; display:none; place-items:center; width:18px; height:18px; padding:0; border-radius:50%; background:var(--bg-4); color:var(--text); box-shadow:0 1px 3px #0006; }
+.estudio-tirar:hover:not(:disabled) { background:var(--danger); color:#fff; }
+.estudio-tirar svg { width:10px; height:10px; }
+.estudio-imagem-lugar:hover .estudio-tirar, .estudio-imagem-lugar:focus-within .estudio-tirar { display:grid; }
+.estudio-pessoa-acoes { display:flex; justify-content:flex-end; gap:2px; }
+.estudio-pessoa-acoes .icone-so[aria-pressed="true"] { background:var(--bg-3); color:var(--text); }
+
+.estudio-links { display:flex; flex-wrap:wrap; gap:5px; }
+.estudio-link { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:0 9px; border-radius:var(--r-pilula); background:var(--bg-3); color:var(--text-2); font-size:var(--fs-meta); font-weight:600; }
+.estudio-link:hover:not(:disabled) { background:var(--bg-4); color:var(--text); }
+.estudio-link .ico { width:14px; height:14px; }
+.estudio-link.no-ar::after { content:''; width:6px; height:6px; border-radius:50%; background:var(--online); }
+.estudio-vazio { margin:0; }
+
+.estudio-card .modal-actions { position:static; align-items:center; margin:0; padding:12px 24px; border-top:1px solid var(--line); background:var(--bg-2); }
+.estudio-salvo { margin-right:auto; color:var(--faint); font-size:var(--fs-sm); }
+
+@media(max-width:980px) {
+  .estudio-corpo { grid-template-columns:1fr; grid-template-rows:auto; overflow-y:auto; }
+  .estudio-coluna { overflow:visible; }
+  .estudio-pessoas { border-left:0; border-top:1px solid var(--line); }
+}
+@media(max-width:640px) {
+  .estudio-topo { flex-direction:column; align-items:flex-start; }
+  .estudio-rostos-topo, .estudio-faixas, .estudio-chaves { grid-template-columns:1fr; }
+}
+
+/* ---------- A aba das configurações ---------- */
+.estudio-capturas { margin:0 0 6px; padding:0; list-style:none; display:grid; gap:4px; }
+.estudio-capturas li { display:flex; align-items:center; gap:8px; padding:8px 11px; border-radius:var(--r-sm); background:var(--danger-suave); color:var(--text-2); font-size:var(--fs-sm); }
+.estudio-capturas li::before { content:''; width:7px; height:7px; flex:none; border-radius:50%; background:var(--danger); }
+.estudio-capturas:empty { display:none; }
+.estudio-nada { margin:0 0 6px; }
+.estudio-convite { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
+.estudio-convite > span { display:grid; gap:3px; min-width:0; }
+.estudio-convite strong { color:var(--text); font-size:var(--fs-md); font-weight:600; }
+.estudio-convite small { color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
+.estudio-convite > button, .estudio-convite > .botao-link { flex:none; min-height:var(--ctl-m); padding:0 16px; }
+
+/* ---------- O cartão de perfil ---------- */
+.perfil-obs { margin:4px 0 14px; padding:12px; border:1px solid var(--line-2); border-radius:var(--r-md); background:rgb(var(--tinta) / 2.5%); }
+.perfil-obs-topo { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.perfil-obs-topo strong { color:var(--text-2); font-size:var(--fs-md); }
+.perfil-obs-som { gap:10px; color:var(--muted); font-size:var(--fs-sm); cursor:pointer; }
+.perfil-obs-botoes { display:flex; flex-wrap:wrap; gap:6px; }
+.perfil-obs-botoes .estudio-link { min-height:30px; font-size:var(--fs-sm); }
+.perfil-obs-status { min-height:1.3em; margin:8px 0 0; color:var(--muted); font-size:var(--fs-sm); }
+
+/* ---------- Quem está no OBS ----------
+   O selo do quadradinho fica sobre o vídeo, e por isso tem cor fixa, como o "Tela" ao lado. */
+.obs-selo { position:absolute; left:6px; bottom:6px; z-index:2; padding:2px 6px; border-radius:5px; background:#e5484d; color:#fff; font-size:var(--fs-rotulo); font-weight:800; letter-spacing:.04em; cursor:help; box-shadow:0 1px 4px #0007; }
+.obs-na-sala { display:inline-flex; align-items:center; gap:6px; color:var(--danger-texto); font-weight:700; letter-spacing:.03em; }
+.obs-na-sala i { width:8px; height:8px; border-radius:50%; background:var(--danger); box-shadow:0 0 0 3px var(--danger-suave); }
+/* Na barra de cima estreita, o selo fica só com o ponto -- o texto continua no `title` e para o
+   leitor de tela, como os botões da barra que viram ícone (sala.css, "A barra de cima"). */
+@container topo (max-width:820px) { .obs-na-sala { font-size:0; gap:0; padding:8px 10px; } }

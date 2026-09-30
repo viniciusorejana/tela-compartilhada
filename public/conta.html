@@ -93,7 +93,22 @@
       <p id="contaStatus" class="conta-status" role="status"></p>
 
       <details class="conta-secao" id="secaoPerfil">
-        <summary>Perfil: apelido, cor e marca</summary>
+        <summary>Perfil: foto, apelido, cor e marca</summary>
+        <!-- A foto sobe sozinha ao ser escolhida, recortada no quadrado do meio e reduzida pela
+             página (imagem-envio.js); não depende do botão "Salvar o perfil". A prévia é o avatar
+             do topo do cartão. -->
+        <div class="conta-foto">
+          <div class="conta-foto-texto">
+            <strong>Foto</strong>
+            <small>No lugar das iniciais, na sala e nos rostos do OBS. PNG, JPEG, WebP ou GIF animado de até 512 KB.</small>
+          </div>
+          <div class="conta-foto-acoes">
+            <label class="botao-link secundario" for="fotoArquivo" tabindex="0">Escolher</label>
+            <input id="fotoArquivo" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            <button type="button" class="secondary" id="fotoTirar" hidden>Tirar</button>
+          </div>
+        </div>
+        <p class="conta-status" id="fotoStatus" role="status"></p>
         <form id="formPerfil" novalidate>
           <label for="perfilApelido">Apelido</label>
           <input id="perfilApelido" name="apelido" autocomplete="nickname" maxlength="40" required>
@@ -155,6 +170,7 @@
   </main>
   <script src="/perfil.js"></script>
   <script src="/recuperacao.js"></script>
+  <script src="/imagem-envio.js"></script>
   <script src="/conta.js"></script>
 </body>
 </html>

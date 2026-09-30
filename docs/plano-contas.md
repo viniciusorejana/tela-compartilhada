@@ -312,6 +312,11 @@ Gravação com atraso (~2 s depois da última mudança) e teto de tamanho no JSO
 marca de um conjunto pronto). Aceitar imagem é armazenamento, rota de entrega e — o item caro
 — moderação de imagem.
 
+> **Atualizado em 29/09/2026:** a foto de perfil chegou com o Estúdio, que precisava de um rosto
+> para cada pessoa. Armazenamento no banco (BLOB, com CASCADE), entrega com tipo fixo e CSP
+> `sandbox`, e a moderação no tamanho de hoje: o painel tira todas as imagens de uma conta de
+> uma vez. Ver `docs/estudio.md`.
+
 ---
 
 ## 6. O teto do plano é conferido no servidor

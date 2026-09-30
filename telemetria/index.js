@@ -14,7 +14,7 @@ const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
 const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
-function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, midia = null, aoFaixaDeTela = () => {}, tetoDePessoas = null }) {
+function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, midia = null, aoFaixaDeTela = () => {}, tetoDePessoas = null, aceitarCaptura = () => false }) {
   const auth = criarAutenticacao();
   const alertas = criarAlertas({ pasta: PASTA_PRIVADA });
   let regras = {};
@@ -248,6 +248,9 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
     let token; try { token = new URL(req.url, 'http://local').searchParams.get('access_token'); } catch (_) { return false; }
     const identidade = sfu.identidadeDoToken(token || String(req.headers.authorization || '').replace(/^Bearer /, ''));
     const sessao = identidade && sessoes.localizar(identidade.sala, identidade.identidade);
+    // A página do OBS não tem sessão de sala: quem responde por ela é o Estúdio, que só
+    // reconhece a identidade oculta que ele mesmo emitiu, para a sala em que ele a emitiu.
+    if (!sessao && identidade) return Boolean(aceitarCaptura(identidade));
     if (!sessao || sessao.bloqueadaAte > Date.now()) return false;
     // Um token já emitido continua valendo por minutos, e ser removido da sala não pode
     // esperar por isso. Esta é a terceira porta -- as outras duas são `/api/sala-config` e o

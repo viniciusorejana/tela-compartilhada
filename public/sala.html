@@ -10,6 +10,8 @@
 <script src="/tema.js"></script>
 <link rel="stylesheet" href="/sala.css">
 <link rel="stylesheet" href="/novidades.css">
+<link rel="stylesheet" href="/reativo.css">
+<link rel="stylesheet" href="/estudio.css">
 </head>
 <body>
 
@@ -66,6 +68,7 @@
       <button id="atualizarAppBtn" class="ghost atualizar-app" type="button" hidden aria-haspopup="true" aria-expanded="false" aria-controls="atualizarAppMenu"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Atualizar</span></button>
       <button id="connectionQualityBtn" class="connection-quality ghost" type="button" title="Qualidade da conexão" aria-label="Qualidade da conexão" data-quality="unknown"><i></i><span>Conexão</span><b hidden></b></button>
       <button id="moderarSalaBtn" class="ghost" type="button" hidden title="Moderação desta sala" aria-label="Moderação desta sala">Moderação <span id="joinRequestCount" hidden>0</span></button>
+      <button id="obsNaSala" class="ghost obs-na-sala" type="button" data-abrir-secao="estudio" hidden><i aria-hidden="true"></i>OBS</button>
       <button id="copyLinkBtn" class="secondary" type="button" title="Copiar o link desta sala">Convidar amigos</button>
       <button id="audienceToggle" class="ghost audience-toggle" type="button" aria-label="Ocultar plateia" aria-pressed="false" title="Ocultar plateia"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19M16 5.5a3 3 0 0 1 0 5.8M17 13a4.5 4.5 0 0 1 3.5 4.4V19"/></svg><span>Plateia</span></button>
       <button id="chatToggle" class="ghost" type="button" aria-label="Abrir chat" aria-controls="chatPanel">Chat<span id="chatBadge" class="badge hidden">0</span></button>
@@ -187,6 +190,7 @@
     <button id="screenBtn" class="control-btn secondary" type="button" aria-pressed="false" title="Compartilhar sua tela">Tela</button>
     <button id="updateScreenBtn" class="control-btn secondary" type="button" hidden title="Trocar o que está sendo compartilhado">Trocar</button>
     <button id="soundboardBtn" class="control-btn secondary" type="button" title="Mesa de sons da sala">Sons</button>
+    <button id="estudioBtn" class="control-btn secondary" type="button" hidden title="Estúdio: levar a sala para o OBS">Estúdio</button>
     <button id="devicesBtn" class="control-btn secondary" type="button" title="Escolher microfone, fone e câmera">Dispositivos</button>
     <button id="leaveBtn" class="control-btn danger" type="button" title="Sair da sala">Sair</button>
   </nav>
@@ -212,6 +216,7 @@
         <div class="config-fita" role="tablist" aria-orientation="vertical" aria-labelledby="devicesTitle">
           <span class="config-grupo" role="presentation">Você</span>
           <button type="button" class="aba" role="tab" id="abaPerfil" aria-controls="painelPerfil" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Perfil</button>
+          <button type="button" class="aba" role="tab" id="abaEstudio" aria-controls="painelEstudio" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>Estúdio (OBS)</button>
           <span class="config-grupo" role="presentation">Aplicativo</span>
           <button type="button" class="aba" role="tab" id="abaAparelhos" aria-controls="painelAparelhos" aria-selected="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3"/></svg>Voz e vídeo</button>
           <button type="button" class="aba" role="tab" id="abaQualidade" aria-controls="painelQualidade" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M7 12l3-3 3 3 4-4"/></svg>Qualidade</button>
@@ -239,6 +244,23 @@
         </div>
         <p class="config-dica" id="configPerfilDica"></p>
         <a class="botao-link secundario" id="configConta" href="/conta" target="_blank" rel="noopener">Senha e conta</a>
+      </div>
+
+      <!-- O Estúdio (estudio-sala.js): deixar ou não que levem você para o OBS, e quem está
+           levando o quê agora. Os rostos e os links de cada pessoa ficam no painel do Estúdio. -->
+      <div class="aba-painel" role="tabpanel" id="painelEstudio" aria-labelledby="abaEstudio" hidden>
+        <header class="config-cabeca"><h3>Estúdio (OBS)</h3><p>A sua câmera, tela e voz como fonte de navegador no OBS de quem está na sala.</p></header>
+        <div class="config-bloco">
+          <label class="toggle-line" for="estudioPermitir"><span><strong>Deixar que me levem para o OBS</strong><small>Quem tem conta e está na sala com você pode levar a sua câmera, tela, voz ou o seu rosto que reage à voz. Desligar tira do ar na hora o que já estiver lá.</small></span><input id="estudioPermitir" type="checkbox" role="switch" checked></label>
+        </div>
+        <span class="config-rotulo">No OBS agora</span>
+        <ul id="estudioCapturasLista" class="estudio-capturas"></ul>
+        <p class="config-dica estudio-nada" id="estudioNada">Ninguém está levando nada desta sala para o OBS.</p>
+        <div class="estudio-convite" id="estudioConvite">
+          <span><strong>Rostos que reagem e os links de cada pessoa</strong><small id="estudioConviteTexto">No painel do Estúdio, que também abre pelo botão Estúdio da barra de baixo.</small></span>
+          <button type="button" id="estudioAbrir">Abrir o Estúdio</button>
+          <a class="botao-link" id="estudioCriarConta" href="/conta" target="_blank" rel="noopener" hidden>Criar conta grátis</a>
+        </div>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAparelhos" aria-labelledby="abaAparelhos">
@@ -558,13 +580,13 @@
 
 <div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">O navegador não deixou copiar sozinho. O link já está selecionado: use Ctrl+C (ou segure e copie, no celular) e mande para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
 <div class="modal hidden" id="sugestaoPanel" role="dialog" aria-modal="true" aria-labelledby="sugestaoTitulo"><div class="modal-card"><h2 id="sugestaoTitulo">Sugestões e problemas</h2><p class="modal-sub">O que faltou, o que incomodou, o que seria bom ter. Chega direto em quem cuida do Nexo — e o que você escrever aqui é o que decide o que vem antes.</p><div class="relato"><label class="relato-titulo" for="sugestaoTexto">Conte com suas palavras</label><textarea id="sugestaoTexto" rows="5" maxlength="500" placeholder="Ex.: queria poder deixar a sala aberta e voltar depois com o mesmo link."></textarea><p class="relato-aviso">Vão junto <strong>a sala e o nome</strong> com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite, senhas nem o relatório técnico — para problemas de imagem e som, o <strong>Diagnóstico</strong> tem um campo próprio, que anexa as medições.</p><div id="sugestaoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendSugestaoBtn">Enviar</button><button class="secondary" type="button" data-close="sugestaoPanel">Fechar</button></div></div></div>
-<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><section class="perfil-obs" id="perfilObs" aria-labelledby="perfilObsTitulo" hidden><div class="perfil-obs-topo"><strong id="perfilObsTitulo">Levar para o OBS</strong><label class="toggle-line perfil-obs-som" for="perfilObsSom"><span>Com som</span><input type="checkbox" id="perfilObsSom" role="switch" checked></label></div><div class="perfil-obs-botoes" id="perfilObsBotoes"><button type="button" class="estudio-link" data-fonte-obs="camera">Câmera</button><button type="button" class="estudio-link" data-fonte-obs="tela">Tela</button><button type="button" class="estudio-link" data-fonte-obs="voz">Voz</button><button type="button" class="estudio-link" data-fonte-obs="somDaTela">Som da tela</button><button type="button" class="estudio-link" data-fonte-obs="reativo">Rosto que reage</button></div><p class="perfil-obs-status" id="perfilObsStatus" role="status"></p></section><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
 <!-- O perfil de quem tem conta, editado sem sair da chamada (perfil-sala.js). Muda na hora
      para a sala inteira: o servidor avisa todo mundo quando a conta salva. -->
 <div class="modal hidden" id="meuPerfilPanel" role="dialog" aria-modal="true" aria-labelledby="meuPerfilTitulo"><div class="modal-card meu-perfil-card">
   <h2 id="meuPerfilTitulo">Meu perfil</h2>
   <p class="modal-sub" id="meuPerfilSub">Muda na hora para todo mundo nesta sala, e vale nas próximas: o perfil segue a sua conta.</p>
-  <div class="meu-perfil-previa" aria-hidden="true"><span class="perfil-avatar" id="meuPerfilAvatar"></span><div><strong id="meuPerfilNome"></strong><small id="meuPerfilCodigo"></small></div></div>
+  <div class="meu-perfil-previa"><span class="perfil-avatar" id="meuPerfilAvatar" aria-hidden="true"></span><div aria-hidden="true"><strong id="meuPerfilNome"></strong><small id="meuPerfilCodigo"></small></div><div class="meu-perfil-foto" id="meuPerfilFoto" hidden><label class="botao-arquivo" for="meuPerfilFotoArquivo" tabindex="0">Trocar a foto</label><input id="meuPerfilFotoArquivo" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden><button type="button" id="meuPerfilFotoTirar" hidden>Tirar</button></div></div>
   <form id="meuPerfilForm" novalidate>
     <label class="campo-rotulo" for="meuPerfilApelido">Apelido</label>
     <input id="meuPerfilApelido" type="text" maxlength="40" autocomplete="nickname" required>
@@ -584,8 +606,83 @@
     <a class="botao-link secundario meu-perfil-mais" id="meuPerfilConta" href="/conta" target="_blank" rel="noopener">Senha e conta</a>
   </div>
 </div></div>
+<!-- O Estúdio (estudio.js): os rostos que reagem à voz e as fontes de cada pessoa para o OBS.
+     Só para quem tem conta -- é ela que responde pelas capturas e guarda as imagens. A prévia é o
+     mesmo desenho que vai para o OBS (reativo.js). -->
+<div class="modal hidden" id="estudioPanel" role="dialog" aria-modal="true" aria-labelledby="estudioTitulo">
+  <div class="modal-card estudio-card">
+    <header class="estudio-topo">
+      <div class="estudio-titulo">
+        <h2 id="estudioTitulo">Estúdio</h2>
+        <p>Quem está na sala como fonte <strong>Navegador</strong> no OBS. Os links seguem você de sala em sala.</p>
+      </div>
+      <div class="estudio-topo-acoes">
+        <span class="estudio-estado" id="estudioEstado" role="status"></span>
+        <button type="button" class="ghost estudio-ajuda-btn" id="estudioAjudaBtn" aria-expanded="false" aria-controls="estudioAjuda"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 17h.01"/></svg>Como usar no OBS</button>
+      </div>
+    </header>
+    <ol class="estudio-ajuda" id="estudioAjuda" hidden>
+      <li>No OBS: <strong>Fontes → + → Navegador</strong>, e cole o link em URL. 1920 × 1080 para câmera e tela; para os rostos, o tamanho da área deles.</li>
+      <li>Marque <strong>Controlar áudio pelo OBS</strong> para o som entrar no mixer, e não sair pelas caixas.</li>
+      <li>No fim do link: <code>?som=0</code> tira o som, <code>?ajuste=preencher</code> ocupa a fonte inteira, <code>?avisos=1</code> mostra no OBS o que a fonte espera.</li>
+      <li>Quem aparece fica sabendo pelo selo OBS da sala, e pode desligar isso para si nas configurações.</li>
+    </ol>
+    <p class="estudio-bloqueio" id="estudioBloqueio" hidden>Quem abriu a sala desligou o OBS nela. Você ainda monta tudo aqui, e os links voltam a valer quando o OBS for religado.</p>
+    <div class="estudio-corpo">
+      <section class="estudio-coluna" aria-labelledby="estudioRostosTitulo">
+        <div class="estudio-secao-cabeca">
+          <h3 id="estudioRostosTitulo">Rostos que reagem</h3>
+          <button type="button" class="estudio-copiar" id="estudioCopiarGrupo" data-rotulo="Copiar link da sala">Copiar link da sala</button>
+        </div>
+        <form class="estudio-ajustes" id="estudioEstilo" novalidate>
+          <div class="estudio-rostos-topo">
+          <div class="estudio-palco" id="estudioPalco" title="Clique num rosto para ele falar"><div id="estudioPrevia"></div></div>
+          <div class="estudio-escolhas">
+            <div><span class="config-rotulo" id="rotuloEfeito">Efeito ao falar</span><div class="segmentado" role="radiogroup" aria-labelledby="rotuloEfeito"><label><input type="radio" name="efeito" value="pulo"><span>Pulo</span></label><label><input type="radio" name="efeito" value="pulso"><span>Pulso</span></label><label><input type="radio" name="efeito" value="nenhum"><span>Só brilho</span></label></div></div>
+            <div><span class="config-rotulo" id="rotuloFormato">Formato</span><div class="segmentado" role="radiogroup" aria-labelledby="rotuloFormato"><label><input type="radio" name="formato" value="circulo"><span>Círculo</span></label><label><input type="radio" name="formato" value="arredondado"><span>Arredondado</span></label><label><input type="radio" name="formato" value="livre"><span title="Para PNG recortado, sem fundo">Livre</span></label></div></div>
+            <div><span class="config-rotulo" id="rotuloArranjo">Arranjo</span><div class="estudio-par"><div class="segmentado" role="radiogroup" aria-labelledby="rotuloArranjo"><label><input type="radio" name="direcao" value="linha"><span>Linha</span></label><label><input type="radio" name="direcao" value="coluna"><span>Coluna</span></label></div><div class="segmentado estudio-alinhar" role="radiogroup" aria-label="Alinhamento"><label title="No início"><input type="radio" name="alinhar" value="inicio" aria-label="No início"><span><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M8 8h11M8 16h7"/></svg></span></label><label title="No centro"><input type="radio" name="alinhar" value="centro" aria-label="No centro"><span><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M5 8h14M7.5 16h9"/></svg></span></label><label title="No fim"><input type="radio" name="alinhar" value="fim" aria-label="No fim"><span><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M5 8h11M9 16h7"/></svg></span></label></div></div></div>
+          </div>
+          </div>
+          <div class="estudio-faixas">
+            <div class="config-volume"><label for="estudioTamanho">Tamanho dos rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanho" name="tamanho" min="48" max="512" step="4"><output for="estudioTamanho"></output></div></div>
+            <div class="config-volume"><label for="estudioTamanhoDoNome">Tamanho dos nomes</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanhoDoNome" name="tamanhoDoNome" min="50" max="300" step="10"><output for="estudioTamanhoDoNome"></output></div></div>
+            <div class="config-volume"><label for="estudioEspaco">Espaço entre rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioEspaco" name="espaco" min="0" max="160" step="2"><output for="estudioEspaco"></output></div></div>
+            <div class="config-volume"><label for="estudioApagar">Apagar quem está quieto</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioApagar" name="apagar" min="0" max="100" step="5"><output for="estudioApagar"></output></div></div>
+            <div class="config-volume"><label for="estudioSensibilidade">Sensibilidade à voz</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioSensibilidade" name="sensibilidade" min="1" max="100" step="1"><output for="estudioSensibilidade"></output></div></div>
+          </div>
+          <div class="estudio-chaves">
+            <label class="toggle-line" for="estudioNomes"><span>Nomes embaixo</span><input id="estudioNomes" name="nomes" type="checkbox" role="switch"></label>
+            <label class="toggle-line" for="estudioAnel"><span>Anel verde em quem fala</span><input id="estudioAnel" name="anel" type="checkbox" role="switch"></label>
+            <label class="toggle-line" for="estudioSoQuemFala"><span>Só quem está falando</span><input id="estudioSoQuemFala" name="soQuemFala" type="checkbox" role="switch"></label>
+            <label class="toggle-line" for="estudioMudos"><span>Mostrar quem está mudo</span><input id="estudioMudos" name="mostrarMudos" type="checkbox" role="switch"></label>
+          </div>
+        </form>
+      </section>
+      <section class="estudio-coluna estudio-pessoas" aria-labelledby="estudioPessoasTitulo">
+        <div class="estudio-secao-cabeca">
+          <h3 id="estudioPessoasTitulo">Pessoas <span class="estudio-contagem" id="estudioContagem"></span></h3>
+          <label class="toggle-line estudio-com-som" for="estudioComSom"><span>Links com som</span><input id="estudioComSom" type="checkbox" role="switch" checked></label>
+        </div>
+        <form class="estudio-adicionar" id="estudioAdicionar" novalidate>
+          <input id="estudioAdicionarCampo" autocomplete="off" maxlength="40" placeholder="Código da conta ou nome de quem entra sem conta" aria-label="Adicionar alguém pelo código da conta ou pelo nome">
+          <button type="submit" class="secondary">Adicionar</button>
+        </form>
+        <p class="estudio-aviso" id="estudioAviso" role="status"></p>
+        <div class="estudio-lista-cabeca" aria-hidden="true"><span></span><span>Parado</span><span>Falando</span><span></span></div>
+        <ul class="estudio-lista" id="estudioLista"></ul>
+        <p class="config-dica estudio-vazio" id="estudioVazio" hidden>Ninguém para mostrar ainda. Quem estiver na sala aparece aqui, e dá para adicionar alguém pelo código da conta ou pelo nome.</p>
+        <input type="file" id="estudioArquivo" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+      </section>
+    </div>
+    <div class="modal-actions">
+      <button type="button" data-close="estudioPanel">Fechar</button>
+      <button type="button" class="danger" id="estudioRevogar" title="Desliga de uma vez todos os links que você já criou, inclusive os que estão no ar">Desligar meus links</button>
+      <span class="estudio-salvo" id="estudioSalvo" role="status"></span>
+    </div>
+  </div>
+</div>
 <div class="modal hidden" id="removidoPanel" role="dialog" aria-modal="true" aria-labelledby="removidoTitulo"><div class="modal-card"><h2 id="removidoTitulo">Você saiu desta sala</h2><p class="modal-sub" id="removidoMotivo"></p><div class="modal-actions"><button type="button" id="removidoVoltar" hidden>Usar a conta aqui</button><a class="botao-link" id="removidoConta" href="/conta" hidden>Entrar com a minha conta</a><a class="botao-link" id="removidoInicio" href="/">Voltar ao início</a></div></div></div>
-<div class="modal hidden" id="moderarPanel" role="dialog" aria-modal="true" aria-labelledby="moderarTitulo"><div class="modal-card"><h2 id="moderarTitulo">Moderar <span id="moderarNome"></span></h2><p class="modal-sub">Você modera esta sala agora, então estas ações são suas. Elas valem enquanto a sala existir: nada disso fica guardado depois que ela fecha, um minuto após a última pessoa sair.</p><div class="moderar-acoes" id="moderarAcoes"><button type="button" id="moderarRemover">Remover da sala</button><button type="button" id="moderarBanir">Remover e bloquear por 1 h</button><button type="button" id="moderarBanirTrancar">Bloquear e trancar a sala</button><button class="secondary" type="button" id="moderarTransferir">Passar a sala para esta pessoa</button></div><p class="modal-sub moderar-dica" id="moderarTransferirDica" hidden>Esta pessoa entrou sem conta, e a sala só passa para quem tem uma: sem conta, um F5 já a tornaria outra pessoa, e a sala ficaria sem dono.</p><p class="modal-sub" id="moderarRessalva">Quem tem conta é bloqueado pela conta: nem um F5 nem outro apelido o trazem de volta. Quem não tem é bloqueado pelo nome — e voltar com outro nome escapa. Para isso, bloqueie e tranque: quem chegar depois cai na fila de pedidos.</p><section class="room-security" id="roomSecurity"><strong>Controles da sala</strong><label class="toggle-line" for="roomLocked"><span>Trancar novas entradas<small>Quem já está dentro continua e pode reconectar.</small></span><input id="roomLocked" type="checkbox"></label><label class="toggle-line" for="allowScreen"><span>Participantes podem compartilhar tela</span><input id="allowScreen" type="checkbox" checked></label><label class="toggle-line" for="allowSoundboard"><span>Participantes podem usar a mesa de sons</span><input id="allowSoundboard" type="checkbox" checked></label><label class="toggle-line" for="allowMusic"><span>Participantes podem pedir músicas</span><input id="allowMusic" type="checkbox" checked></label><div id="joinRequests" class="join-requests"></div></section><div class="moderar-removidos"><strong>Bloqueados agora</strong><div id="moderarListaRemovidos"></div></div><div id="moderarStatus" class="relato-status" role="status"></div><div class="modal-actions"><button class="secondary" type="button" data-close="moderarPanel">Fechar</button></div></div></div>
+<div class="modal hidden" id="moderarPanel" role="dialog" aria-modal="true" aria-labelledby="moderarTitulo"><div class="modal-card"><h2 id="moderarTitulo">Moderar <span id="moderarNome"></span></h2><p class="modal-sub">Você modera esta sala agora, então estas ações são suas. Elas valem enquanto a sala existir: nada disso fica guardado depois que ela fecha, um minuto após a última pessoa sair.</p><div class="moderar-acoes" id="moderarAcoes"><button type="button" id="moderarRemover">Remover da sala</button><button type="button" id="moderarBanir">Remover e bloquear por 1 h</button><button type="button" id="moderarBanirTrancar">Bloquear e trancar a sala</button><button class="secondary" type="button" id="moderarTransferir">Passar a sala para esta pessoa</button></div><p class="modal-sub moderar-dica" id="moderarTransferirDica" hidden>Esta pessoa entrou sem conta, e a sala só passa para quem tem uma: sem conta, um F5 já a tornaria outra pessoa, e a sala ficaria sem dono.</p><p class="modal-sub" id="moderarRessalva">Quem tem conta é bloqueado pela conta: nem um F5 nem outro apelido o trazem de volta. Quem não tem é bloqueado pelo nome — e voltar com outro nome escapa. Para isso, bloqueie e tranque: quem chegar depois cai na fila de pedidos.</p><section class="room-security" id="roomSecurity"><strong>Controles da sala</strong><label class="toggle-line" for="roomLocked"><span>Trancar novas entradas<small>Quem já está dentro continua e pode reconectar.</small></span><input id="roomLocked" type="checkbox"></label><label class="toggle-line" for="allowScreen"><span>Participantes podem compartilhar tela</span><input id="allowScreen" type="checkbox" checked></label><label class="toggle-line" for="allowSoundboard"><span>Participantes podem usar a mesa de sons</span><input id="allowSoundboard" type="checkbox" checked></label><label class="toggle-line" for="allowMusic"><span>Participantes podem pedir músicas</span><input id="allowMusic" type="checkbox" checked></label><label class="toggle-line" for="allowObs"><span>Participantes podem levar a sala para o OBS<small>Desligado, o que eles têm no OBS sai do ar na hora.</small></span><input id="allowObs" type="checkbox" checked></label><div id="joinRequests" class="join-requests"></div></section><div class="moderar-removidos"><strong>Bloqueados agora</strong><div id="moderarListaRemovidos"></div></div><div id="moderarStatus" class="relato-status" role="status"></div><div class="modal-actions"><button class="secondary" type="button" data-close="moderarPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><div id="diagnosticsCards"></div><details class="avancado"><summary>Relatório técnico (para colar num chat)</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="relato"><label class="relato-titulo" for="relatoTexto">Continua errado? Conte o que aconteceu</label><textarea id="relatoTexto" rows="3" maxlength="500" placeholder="Ex.: a tela do Fulano ficou preta quando eu entrei pelo celular."></textarea><p class="relato-aviso">Vão junto <strong>o relatório técnico acima</strong>, a sala e o nome com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite nem senhas.</p><div id="relatoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendRelatoBtn">Enviar para o desenvolvedor</button><button class="secondary" type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="waitingPanel" role="dialog" aria-modal="true" aria-labelledby="waitingTitle"><div class="modal-card waiting-card"><span class="waiting-spinner" aria-hidden="true"></span><h2 id="waitingTitle">Aguardando entrada</h2><p class="modal-sub" id="waitingText">A sala está trancada. Quem abriu recebeu seu pedido.</p><div class="modal-actions"><a class="botao-link" id="waitingConta" href="/conta" hidden>Tenho conta: abrir a sala</a><button class="secondary" id="waitingCancel" type="button">Cancelar e voltar</button></div></div></div>
 <div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><strong>Meu status</strong><div class="presence-options"><button type="button" data-presence="">Disponível</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button></div></div>
@@ -603,6 +700,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/livekit-client.js"></script>
 <script src="/perfil.js"></script>
+<script src="/imagem-envio.js"></script>
 <script src="/preferencias.js"></script>
 <script src="/conta-cliente.js"></script>
 <script src="/media-utils.js"></script>
@@ -625,6 +723,9 @@
 <script src="/musica.js"></script>
 <script src="/soundboard.js"></script>
 <script src="/perfil-sala.js"></script>
+<script src="/reativo.js"></script>
+<script src="/estudio.js"></script>
+<script src="/estudio-sala.js"></script>
 <script src="/versao-app.js"></script>
 <script src="/toast.js"></script>
 <script src="/atualizacao-app.js"></script>

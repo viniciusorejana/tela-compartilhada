@@ -212,7 +212,7 @@
 
   // ---------- Abrir numa seção ----------
   function abrir(secao) {
-    const aba = { perfil: 'abaPerfil', aparelhos: 'abaAparelhos', qualidade: 'abaQualidade', sons: 'abaSons', aparencia: 'abaAparencia', atalhos: 'abaAtalhos' }[secao];
+    const aba = { perfil: 'abaPerfil', estudio: 'abaEstudio', aparelhos: 'abaAparelhos', qualidade: 'abaQualidade', sons: 'abaSons', aparencia: 'abaAparencia', atalhos: 'abaAtalhos' }[secao];
     if (painel.classList.contains('hidden')) devicesBtn.click();
     if (aba) abas.mostrarAba?.(aba);
   }

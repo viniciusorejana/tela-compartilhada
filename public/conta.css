@@ -53,6 +53,18 @@ button:disabled:hover { background:var(--accent-forte); }
 .botao-link.secundario { min-height:var(--ctl-m); background:rgb(var(--tinta) / 3.1%); border:1px solid var(--line-3); color:var(--text-2); margin:4px 0 8px; }
 .botao-link.secundario:hover { background:rgb(var(--tinta) / 7.1%); }
 .conta-avatar.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; font-size:26px; }
+.com-foto { background-size:cover; background-position:center; background-repeat:no-repeat; color:transparent; }
+/* A foto numa linha: o que ela é à esquerda, as ações à direita. A prévia é o avatar do topo. */
+.conta-foto { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 4px; padding:12px 14px; border:1px solid var(--line-2); border-radius:var(--r-md); background:rgb(var(--tinta) / 2%); }
+.conta-foto-texto { display:grid; gap:2px; min-width:0; }
+.conta-foto-texto strong { color:var(--text-2); font-size:var(--fs-md); }
+.conta-foto-texto small { margin:0; color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
+.conta-foto + .conta-status:empty { display:none; }
+/* As duas ações da foto são botões compactos lado a lado: as regras globais de `button` da
+   página inicial os deixariam da largura do cartão, e o rótulo do arquivo com outra altura. */
+.conta-foto-acoes { flex:none; display:flex; gap:8px; align-items:center; }
+.conta-foto-acoes > .botao-link.secundario, .conta-foto-acoes > button { flex:none; width:auto; min-height:var(--ctl-m); margin:0; padding:0 14px; font-size:var(--fs-sm); cursor:pointer; }
+.conta-foto-acoes > .botao-link.secundario:focus-visible { outline:2px solid var(--anel-cor); outline-offset:2px; }
 .conta-secao.perigo summary { color:var(--danger-texto); }
 button.perigo { background:var(--danger-forte); color:#fff; }
 button.perigo:hover { background:#d8475c; }

@@ -519,17 +519,23 @@ function base64url(valor) {
 // `podeReceber` existe para o bot de musica: ele so PUBLICA. Negar a assinatura no proprio
 // token e mais forte do que pedir ao cliente dele para nao assinar -- um defeito futuro no
 // bot nao consegue passar a baixar a camera e a voz da sala inteira.
-function criarToken(sala, identidade, nome, { podeReceber = true } = {}) {
+//
+// `podePublicar` e `oculto` existem para a pagina do OBS (estudio-ao-vivo.js), que e o oposto:
+// so RECEBE. Oculta, ela nao aparece na lista de ninguem nem conta como gente na sala -- quem
+// esta sendo capturado fica sabendo pelo aviso do Estudio, e nao por um quadradinho vazio.
+function criarToken(sala, identidade, nome, { podeReceber = true, podePublicar = true, oculto = false, dados = podeReceber } = {}) {
   const { apiKey, apiSecret } = lerOuCriarChaves();
   const agora = Math.floor(Date.now() / 1000);
   const cabecalho = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const video = { room: sala, roomJoin: true, canPublish: podePublicar, canSubscribe: podeReceber, canPublishData: dados };
+  if (oculto) video.hidden = true;
   const corpo = base64url(JSON.stringify({
     iss: apiKey,
     sub: identidade,
     name: nome,
     nbf: agora,
     exp: agora + VALIDADE_DO_TOKEN,
-    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: podeReceber, canPublishData: podeReceber }
+    video
   }));
   const assinatura = crypto.createHmac('sha256', apiSecret).update(`${cabecalho}.${corpo}`).digest('base64url');
   return `${cabecalho}.${corpo}.${assinatura}`;
@@ -604,6 +610,13 @@ async function consultar(metodo, corpo) {
   const video = metodo === 'ListRooms' ? { roomList: true } : { roomAdmin: true, room: corpo.room };
   return JSON.parse(await telemetriaLivekit.pedir({ porta: PORTA_LOCAL, caminho: `/twirp/livekit.RoomService/${metodo}`, corpo: JSON.stringify(corpo), autorizacao: `Bearer ${tokenDeServidor(video)}` }));
 }
+// Um segredo para outro uso, tirado do mesmo que assina os tokens -- como a senha das métricas
+// logo abaixo. É o que assina os links do Estúdio: sobrevive a reiniciar o servidor sem arquivo
+// novo nenhum, e trocar as chaves do servidor de mídia invalida os links junto, que é o certo.
+function segredoDerivado(rotulo) {
+  const { apiSecret } = lerOuCriarChaves();
+  return crypto.createHmac('sha256', apiSecret).update(`nexo|${rotulo}`).digest();
+}
 function metricas() {
   const { apiSecret } = lerOuCriarChaves();
   const senha = crypto.createHmac('sha256', apiSecret).update('metricas').digest('hex');
@@ -622,7 +635,7 @@ function identidadeDoToken(token) {
     return { sala: claims.video.room, identidade: claims.sub };
   } catch (_) { return null; }
 }
-module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken, LINHA_DE_PROBLEMA, ambienteDoSfu,
+module.exports = { iniciarSfu, encerrarSfu, criarToken, instalarProxy, estado, PORTA_LOCAL, consultar, metricas, identidadeDoToken, segredoDerivado, LINHA_DE_PROBLEMA, ambienteDoSfu,
   configurarAcesso: fn => { validarAcesso = fn; },
   validarWebhook: (corpo, autorizacao) => telemetriaLivekit.validarWebhook(corpo, autorizacao, lerOuCriarChaves()),
   diagnostico: () => ({ ...estado, pid: processo?.pid || null, uptime: processo ? Math.max(0, (Date.now() - horaDoUltimoInicio) / 1000) : 0, reinicios: reiniciosTotais, tentativasSeguidas }) };

@@ -22,6 +22,7 @@
     "test:aparencia": "node tests/aparencia-browser.cjs",
     "test:layout": "node tests/layout-browser.cjs",
     "test:novidades": "node tests/novidades-browser.cjs",
+    "test:estudio": "node tests/estudio-browser.cjs",
     "test:webcodecs": "node tests/webcodecs-browser.cjs",
     "test:webcodecs:placa": "node tests/webcodecs-placa.cjs",
     "banda": "node scripts/relatorio-de-banda.cjs",

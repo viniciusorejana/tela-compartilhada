@@ -362,6 +362,8 @@ class Contas extends HTMLElement {
         botao('Premium por estes dias', '', () => this.agir({ acao: 'premium', dias: Number(dias.value) })),
         botao('Premium sem prazo', 'secundario', () => this.agir({ acao: 'premium' })),
         conta.plano === 'premium' ? botao('Voltar ao grátis', 'secundario', () => this.agir({ acao: 'gratis' })) : null,
+        // A moderação de imagem: a foto e as imagens do Estúdio da conta, todas de uma vez.
+        botao('Tirar as imagens', 'secundario', () => { if (confirm(`Apagar a foto e as imagens do Estúdio de ${conta.apelido}? Não dá para desfazer.`)) this.agir({ acao: 'remover-imagens' }); }),
         suspensa ? botao('Reativar', 'secundario', () => this.agir({ acao: 'reativar' }))
           : botao('Suspender por estes dias', 'perigo', () => { if (confirm(`Suspender ${conta.apelido}? A conta sai de todos os aparelhos agora.`)) this.agir({ acao: 'suspender', dias: Number(dias.value) }); })));
   }

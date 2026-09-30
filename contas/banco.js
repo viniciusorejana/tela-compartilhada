@@ -121,9 +121,21 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     trocarRecuperacao: sql('UPDATE conta SET recuperacao = ? WHERE id = ?'),
     trocarApelido: sql('UPDATE conta SET apelido = ? WHERE id = ?'),
     apagarConta: sql('DELETE FROM conta WHERE id = ?'),
-    perfil: sql('SELECT cor, marca, ajustes FROM perfil WHERE conta_id = ?'),
+    perfil: sql('SELECT cor, marca, avatar, ajustes FROM perfil WHERE conta_id = ?'),
     salvarAparencia: sql('UPDATE perfil SET cor = ?, marca = ? WHERE conta_id = ?'),
     salvarAjustes: sql('UPDATE perfil SET ajustes = ? WHERE conta_id = ?'),
+    definirAvatar: sql('UPDATE perfil SET avatar = ? WHERE conta_id = ?'),
+    inserirImagem: sql('INSERT INTO imagem (id, conta_id, uso, tipo, tamanho, bytes, criada_em) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    imagemPorId: sql('SELECT id, conta_id, uso, tipo, tamanho, bytes, criada_em FROM imagem WHERE id = ?'),
+    // Sem os bytes: a lista serve para contar e para mostrar, e carregar megabytes para isso
+    // seria ler o banco inteiro a cada abertura do Estúdio.
+    imagensDaConta: sql('SELECT id, tipo, tamanho, criada_em FROM imagem WHERE conta_id = ? AND uso = ? ORDER BY criada_em'),
+    apagarImagem: sql('DELETE FROM imagem WHERE id = ? AND conta_id = ?'),
+    apagarImagensDaConta: sql('DELETE FROM imagem WHERE conta_id = ?'),
+    garantirEstudio: sql('INSERT INTO estudio (conta_id) VALUES (?) ON CONFLICT (conta_id) DO NOTHING'),
+    estudio: sql('SELECT geracao, config FROM estudio WHERE conta_id = ?'),
+    salvarEstudio: sql('UPDATE estudio SET config = ? WHERE conta_id = ?'),
+    revogarEstudio: sql('UPDATE estudio SET geracao = geracao + 1 WHERE conta_id = ?'),
     definirPlano: sql('UPDATE conta SET plano = ?, plano_ate = ? WHERE id = ?'),
     definirSuspensao: sql('UPDATE conta SET suspensa_ate = ? WHERE id = ?'),
     // O painel pagina pelo instante de criação, do mais novo para o mais antigo. O `id` no
@@ -189,7 +201,39 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     apagarConta: contaId => q.apagarConta.run(contaId).changes,
     perfil(contaId) {
       const linha = q.perfil.get(contaId);
-      return linha ? { cor: linha.cor ?? null, marca: linha.marca ?? null, ajustes: lerAjustes(linha.ajustes) } : null;
+      return linha ? { cor: linha.cor ?? null, marca: linha.marca ?? null, avatar: linha.avatar ?? null, ajustes: lerAjustes(linha.ajustes) } : null;
+    },
+    // Trocar o avatar é uma imagem nova e a antiga apagada, na mesma transação: nunca sobra uma
+    // imagem que ninguém mostra, nem um perfil apontando para uma que não existe mais.
+    trocarAvatar(contaId, imagem) {
+      return transacao(() => {
+        const anterior = q.perfil.get(contaId)?.avatar ?? null;
+        if (imagem) q.inserirImagem.run(imagem.id, contaId, 'avatar', imagem.tipo, imagem.bytes.length, imagem.bytes, imagem.agora);
+        q.definirAvatar.run(imagem ? imagem.id : null, contaId);
+        if (anterior) q.apagarImagem.run(anterior, contaId);
+        return anterior;
+      });
+    },
+    inserirImagem: ({ id, contaId, uso, tipo, bytes, agora }) => q.inserirImagem.run(id, contaId, uso, tipo, bytes.length, bytes, agora).changes,
+    imagem(id) {
+      const linha = q.imagemPorId.get(id);
+      return linha ? { id: linha.id, contaId: linha.conta_id, uso: linha.uso, tipo: linha.tipo, tamanho: linha.tamanho, bytes: linha.bytes, criadaEm: linha.criada_em } : null;
+    },
+    imagensDaConta: (contaId, uso) => q.imagensDaConta.all(contaId, uso).map(l => ({ id: l.id, tipo: l.tipo, tamanho: l.tamanho, criadaEm: l.criada_em })),
+    apagarImagem: (id, contaId) => q.apagarImagem.run(id, contaId).changes,
+    // O atalho do painel para uma imagem imprópria: todas as da conta, e o avatar volta à cor.
+    apagarImagensDaConta(contaId) {
+      return transacao(() => { q.definirAvatar.run(null, contaId); return q.apagarImagensDaConta.run(contaId).changes; });
+    },
+    estudio(contaId) {
+      const linha = q.estudio.get(contaId);
+      return linha ? { geracao: linha.geracao, config: lerAjustes(linha.config) } : { geracao: 0, config: {} };
+    },
+    salvarEstudio(contaId, config) {
+      transacao(() => { q.garantirEstudio.run(contaId); q.salvarEstudio.run(JSON.stringify(config), contaId); });
+    },
+    revogarEstudio(contaId) {
+      return transacao(() => { q.garantirEstudio.run(contaId); q.revogarEstudio.run(contaId); return q.estudio.get(contaId).geracao; });
     },
     salvarAparencia: (contaId, { cor, marca }) => q.salvarAparencia.run(cor ?? null, marca ?? null, contaId).changes,
     salvarAjustes: (contaId, ajustes) => q.salvarAjustes.run(JSON.stringify(ajustes), contaId).changes,

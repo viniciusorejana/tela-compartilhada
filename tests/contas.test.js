@@ -94,7 +94,7 @@ test('as PRAGMAs que o plano exige estão ligadas na conexão principal', t => {
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'sem isto o apagar da conta deixaria perfil e sessões para trás');
   assert.equal(db.prepare('PRAGMA wal_autocheckpoint').get().wal_autocheckpoint, 0);
-  assert.equal(banco.versao, 1);
+  assert.equal(banco.versao, 2, 'a migração 2 traz as imagens e o Estúdio');
 });
 
 test('cadastrar devolve a conta, uma sessão e o código de recuperação, que é guardado só como scrypt', async t => {

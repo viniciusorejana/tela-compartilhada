@@ -61,7 +61,10 @@
     // A edição mais nova das novidades que a pessoa já fechou (public/novidades.js). Segue a
     // conta para a apresentação não voltar em cada aparelho novo: quem leu no computador não
     // precisa ler de novo no celular.
-    novidades: inteiroEntre(0, 1000000)
+    novidades: inteiroEntre(0, 1000000),
+    // Se quem está na sala pode levar a câmera, a tela e a voz desta pessoa para o OBS
+    // (docs/estudio.md). É uma decisão sobre si mesma, e vale em todo aparelho.
+    estudio: grupo({ permitir: booleano })
   });
 
   // Teto do JSON guardado. Com a lista fechada ele nunca chega perto disto; o teto existe para
@@ -83,8 +86,10 @@
 
   // ---------- Aparência ----------
   //
-  // Cor e uma marca de um conjunto pronto. Avatar enviado por arquivo fica para depois: aceitar
-  // imagem é armazenamento, rota de entrega e -- o item caro -- moderação de imagem.
+  // Cor e uma marca de um conjunto pronto -- e, para quem tem conta, uma foto. A foto chegou com
+  // o Estúdio, que precisa de um rosto para cada pessoa: ela mora no banco da conta, é servida
+  // com tipo fixo e sem nada que rode (contas/imagens.js), e a moderação é a do painel, que tira
+  // todas as imagens de uma conta de uma vez. Sem foto, tudo continua como sempre foi.
   const CORES = Object.freeze({
     lilas: '#a996f2', menta: '#7fd1ae', ambar: '#e6b86a', coral: '#ee8f7e', ceu: '#7fb5ee',
     rosa: '#e994c4', limao: '#bcd66a', areia: '#cdb79a', turquesa: '#63c7c9', ameixa: '#b07ad6'
@@ -99,6 +104,10 @@
   const NOMES_DAS_MARCAS = Object.freeze({ brilho: 'Brilho', losango: 'Losango', estrela: 'Estrela', lua: 'Lua', raio: 'Raio', flor: 'Flor', cavalo: 'Cavalo', nota: 'Nota', coracao: 'Coração', sol: 'Sol', trevo: 'Trevo', circulo: 'Círculo' });
   const corValida = nome => (Object.prototype.hasOwnProperty.call(CORES, nome) ? nome : null);
   const marcaValida = nome => (Object.prototype.hasOwnProperty.call(MARCAS, nome) ? nome : null);
+  // O id vai para dentro de um `url(...)` no CSS de quem desenha: só hexadecimal passa, e nada
+  // escrito por alguém consegue fechar o parêntese.
+  const avatarValido = id => (typeof id === 'string' && /^[a-f0-9]{32}$/.test(id) ? id : null);
+  const enderecoDaImagem = id => (avatarValido(id) ? `/api/imagem/${id}` : null);
 
   // Como a pessoa aparece: a cor escolhida ou a sorteada pelo nome, e a marca ou as iniciais.
   // A cor sorteada é a mesma de sempre (sala.js a usava sozinha), para ninguém mudar de cor só
@@ -117,8 +126,23 @@
     return {
       cor: (perfil && CORES[perfil.cor]) || corDoNome(nome),
       texto: (perfil && MARCAS[perfil.marca]) || iniciais(nome),
-      marca: Boolean(perfil && MARCAS[perfil.marca])
+      marca: Boolean(perfil && MARCAS[perfil.marca]),
+      foto: enderecoDaImagem(perfil?.avatar)
     };
+  }
+
+  // Pinta um avatar: a foto, se houver; senão a cor com a marca ou as iniciais. A cor fica por
+  // baixo da foto e aparece enquanto ela carrega, sem o quadrado vazio. Um lugar só para toda
+  // página -- a sala, a conta e o Estúdio desenham a mesma pessoa do mesmo jeito.
+  function pintar(el, nome, perfil) {
+    const a = aparencia(nome || '?', perfil);
+    // O `background` em linha zera tamanho e posição -- e vence o CSS de qualquer página --, então
+    // a foto leva os dela junto: sem isto, ela aparecia no tamanho original, cortada num canto.
+    el.style.background = a.cor;
+    if (a.foto) Object.assign(el.style, { backgroundImage: `url("${a.foto}")`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' });
+    el.textContent = a.foto ? '' : a.texto;
+    el.classList.toggle('com-marca', a.marca && !a.foto);
+    el.classList.toggle('com-foto', Boolean(a.foto));
   }
 
   // As opções de cor e marca como rádios de verdade: dá para escolher pelo teclado, e o leitor
@@ -142,7 +166,7 @@
     for (const [nome, simbolo] of Object.entries(MARCAS)) marcas.append(opcao('marca', nome, NOMES_DAS_MARCAS[nome] || nome, el => { el.classList.add('simbolo'); el.textContent = simbolo; }));
   }
 
-  const api = { AJUSTES_SINCRONIZADOS, BYTES_MAXIMOS_DOS_AJUSTES, limparAjustes, CORES, MARCAS, NOMES_DAS_CORES, NOMES_DAS_MARCAS, corValida, marcaValida, corDoNome, iniciais, aparencia, montarEscolhas };
+  const api = { AJUSTES_SINCRONIZADOS, BYTES_MAXIMOS_DOS_AJUSTES, limparAjustes, CORES, MARCAS, NOMES_DAS_CORES, NOMES_DAS_MARCAS, corValida, marcaValida, avatarValido, enderecoDaImagem, corDoNome, iniciais, aparencia, pintar, montarEscolhas };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NexoPerfil = api;
 })(typeof window === 'undefined' ? globalThis : window);

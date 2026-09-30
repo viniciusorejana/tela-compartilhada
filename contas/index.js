@@ -16,6 +16,8 @@ const { criarAntiabuso, regrasDoAmbiente } = require('../telemetria/abuso');
 const { protegerPasta } = require('../telemetria/autenticacao');
 const perfilComum = require('../public/perfil');
 const planos = require('../public/planos');
+const imagens = require('./imagens');
+const estudioComum = require('../estudio');
 
 const MINUTO = 60000;
 const DIA = 24 * 60 * MINUTO;
@@ -145,6 +147,9 @@ function criarContas({
       // conferir o prazo.
       banco.apagarOutrasSessoes(conta.id, '');
     } else if (acao === 'reativar') banco.definirSuspensao(conta.id, null);
+    // A moderação de imagem, no tamanho que ela tem hoje: quem administra vê uma imagem
+    // imprópria e tira todas as da conta de uma vez -- o avatar volta à cor e à marca.
+    else if (acao === 'remover-imagens') banco.apagarImagensDaConta(conta.id);
     else return falha(400, 'Ação desconhecida.');
     return { ok: true, contaId: conta.id, conta: paraOPainel(banco.contaPorId(conta.id)) };
   }
@@ -300,8 +305,11 @@ function criarContas({
   // -- o que dá trabalho refazer em cada aparelho --, e a lista do que pode entrar neles é
   // FECHADA (public/perfil.js): o que não está nela é descartado aqui, venha de onde vier.
   function perfil(conta) {
-    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, ajustes: {} };
-    return { cor: perfilComum.corValida(guardado.cor), marca: perfilComum.marcaValida(guardado.marca), ajustes: perfilComum.limparAjustes(guardado.ajustes) };
+    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, avatar: null, ajustes: {} };
+    return {
+      cor: perfilComum.corValida(guardado.cor), marca: perfilComum.marcaValida(guardado.marca),
+      avatar: perfilComum.avatarValido(guardado.avatar), ajustes: perfilComum.limparAjustes(guardado.ajustes)
+    };
   }
 
   function salvarPerfil(conta, { apelido, cor, marca } = {}) {
@@ -334,6 +342,104 @@ function criarContas({
     return { ok: true, ajustes: limpos };
   }
 
+  // ---------- As imagens ----------
+  //
+  // O id é sorteado a cada envio e é ele que vai no endereço: a imagem nunca muda depois de
+  // guardada, então pode ficar em cache para sempre, e trocar o avatar é trocar o endereço.
+  const novoIdDeImagem = () => crypto.randomBytes(16).toString('hex');
+  const HORA = 60 * MINUTO;
+
+  function salvarAvatar(conta, { bytes, tipo } = {}) {
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    const conferida = imagens.conferirImagem(bytes, 'avatar', tipo);
+    if (conferida.erro) return falha(conferida.status || 400, conferida.erro);
+    banco.trocarAvatar(conta.id, { id: novoIdDeImagem(), tipo: conferida.tipo, bytes, agora: agora() });
+    const atualizada = banco.contaPorId(conta.id);
+    return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
+  }
+
+  function apagarAvatar(conta) {
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    banco.trocarAvatar(conta.id, null);
+    const atualizada = banco.contaPorId(conta.id);
+    return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
+  }
+
+  const imagem = id => (typeof id === 'string' && estudioComum.ID_DE_IMAGEM.test(id) ? banco.imagem(id) : null);
+
+  // ---------- O Estúdio ----------
+  //
+  // A configuração dos rostos que reagem à voz e a geração dos links (estudio.js). As imagens
+  // do Estúdio são enviadas uma a uma, antes de a configuração que as usa ser salva; as que
+  // ficaram de fora por mais de uma hora -- trocadas, ou enviadas e abandonadas -- somem no
+  // próximo salvamento. A hora de folga é para quem ainda está escolhendo.
+  function estudio(conta) {
+    const { geracao, config } = banco.estudio(conta.id);
+    return { geracao, config: estudioComum.limparConfig(config), imagens: banco.imagensDaConta(conta.id, 'estudio') };
+  }
+
+  const geracaoDoEstudio = contaId => banco.estudio(contaId).geracao;
+  const configDoEstudio = contaId => estudioComum.limparConfig(banco.estudio(contaId).config);
+
+  function esquecerImagensSoltas(conta, config) {
+    const usadas = estudioComum.imagensDaConfig(config);
+    for (const img of banco.imagensDaConta(conta.id, 'estudio')) {
+      if (!usadas.has(img.id) && agora() - img.criadaEm > HORA) banco.apagarImagem(img.id, conta.id);
+    }
+  }
+
+  function salvarEstudio(conta, bruto) {
+    if (!permitido(conta.id, 'conta-estudio')) return falha(429, 'Mudanças demais em pouco tempo. Aguarde um minuto.', null, 60);
+    const config = estudioComum.limparConfig(bruto);
+    // Só imagens desta conta, e do Estúdio: um id de outra pessoa colado aqui não vira a arte
+    // de ninguém, e o avatar não entra por este caminho.
+    const minhas = new Set(banco.imagensDaConta(conta.id, 'estudio').map(i => i.id));
+    for (const pessoa of Object.values(config.pessoas)) {
+      if (pessoa.parado && !minhas.has(pessoa.parado)) pessoa.parado = null;
+      if (pessoa.falando && !minhas.has(pessoa.falando)) pessoa.falando = null;
+    }
+    if (Buffer.byteLength(JSON.stringify(config)) > estudioComum.BYTES_MAXIMOS_DA_CONFIGURACAO) return falha(413, 'Configuração grande demais.');
+    banco.salvarEstudio(conta.id, config);
+    esquecerImagensSoltas(conta, config);
+    return { ok: true, config };
+  }
+
+  function adicionarImagemDoEstudio(conta, { bytes, tipo } = {}) {
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    const conferida = imagens.conferirImagem(bytes, 'estudio', tipo);
+    if (conferida.erro) return falha(conferida.status || 400, conferida.erro);
+    esquecerImagensSoltas(conta, configDoEstudio(conta.id));
+    const atuais = banco.imagensDaConta(conta.id, 'estudio');
+    const limite = imagens.LIMITES.estudio;
+    if (atuais.length >= limite.quantas) return falha(409, `O Estúdio guarda até ${limite.quantas} imagens. Apague alguma antes de enviar outra.`);
+    if (atuais.reduce((soma, img) => soma + img.tamanho, 0) + bytes.length > limite.total) return falha(413, `As imagens do Estúdio somam no máximo ${Math.round(limite.total / 1024 / 1024)} MB. Apague alguma antes de enviar outra.`);
+    const id = novoIdDeImagem();
+    banco.inserirImagem({ id, contaId: conta.id, uso: 'estudio', tipo: conferida.tipo, bytes, agora: agora() });
+    return { ok: true, imagem: { id, tipo: conferida.tipo, tamanho: bytes.length } };
+  }
+
+  // Apagar uma imagem tira ela de quem a usava: a configuração nunca fica apontando para nada.
+  function apagarImagemDoEstudio(conta, id) {
+    if (!permitido(conta.id, 'conta-estudio')) return falha(429, 'Mudanças demais em pouco tempo. Aguarde um minuto.', null, 60);
+    const achada = imagem(id);
+    if (!achada || achada.contaId !== conta.id || achada.uso !== 'estudio') return falha(404, 'Imagem não encontrada.');
+    const config = configDoEstudio(conta.id);
+    for (const pessoa of Object.values(config.pessoas)) {
+      if (pessoa.parado === id) pessoa.parado = null;
+      if (pessoa.falando === id) pessoa.falando = null;
+    }
+    banco.salvarEstudio(conta.id, estudioComum.limparConfig(config));
+    banco.apagarImagem(id, conta.id);
+    return { ok: true, config: configDoEstudio(conta.id) };
+  }
+
+  // Revogar pede a senha? Não: não destrói nada da pessoa, só desliga os links que ela deu. É o
+  // botão de quem acabou de colar um link no lugar errado, e ele precisa ser rápido.
+  function revogarEstudio(conta) {
+    if (!permitido(conta.id, 'conta-estudio')) return falha(429, 'Mudanças demais em pouco tempo. Aguarde um minuto.', null, 60);
+    return { ok: true, geracao: banco.revogarEstudio(conta.id) };
+  }
+
   // "Baixar meus dados": o direito de acesso e de portabilidade (LGPD, art. 18). Tudo o que o
   // Nexo guarda ligado à pessoa, num formato que outro programa lê. Os hashes de senha e de
   // recuperação ficam de fora -- não servem a ninguém fora daqui, e são a única coisa desta
@@ -353,6 +459,11 @@ function criarContas({
       sessoes: banco.sessoesDaConta(conta.id).map(s => ({
         aparelho: s.aparelho, criadaEm: new Date(s.criadaEm).toISOString(), usadaEm: new Date(s.ultimaEm).toISOString(), expiraEm: new Date(s.expiraEm).toISOString()
       })),
+      // As imagens vão como endereço, e não dentro do JSON: cada uma se baixa sozinha por ele.
+      imagens: ['avatar', 'estudio'].flatMap(uso => banco.imagensDaConta(conta.id, uso).map(img => ({
+        uso, tipo: img.tipo, bytes: img.tamanho, enviadaEm: new Date(img.criadaEm).toISOString(), endereco: `/api/imagem/${img.id}`
+      }))),
+      estudio: { configuracao: configDoEstudio(conta.id), geracaoDosLinks: geracaoDoEstudio(conta.id) },
       oQueNaoGuardamos: 'Conversas, sons, telas, voz, câmera e as salas em que você esteve não são guardados em lugar nenhum.'
     };
   }
@@ -369,6 +480,12 @@ function criarContas({
   return {
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, problemaNaRecuperacao, novaRecuperacao, apagar, publica,
     perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
+    salvarAvatar, apagarAvatar, imagem, estudio, geracaoDoEstudio, configDoEstudio, salvarEstudio,
+    adicionarImagemDoEstudio, apagarImagemDoEstudio, revogarEstudio,
+    contaPorCodigo: codigo => banco.contaPorCodigo(regras.normalizarCodigo(codigo)),
+    // O freio por conta, para quem precisa dele fora daqui (a busca de pessoa do Estúdio).
+    permitidoParaAConta: (contaId, tipo) => permitido(contaId, tipo),
+    contaPorId: id => banco.contaPorId(id),
     banco, senhas, freio, suspensa, csrfDe,
     copiarAgora: () => tarefas ? tarefas.copiarAgora() : Promise.reject(new Error('Manutenção desligada.')),
     manutencao: () => tarefas?.estado() || null,

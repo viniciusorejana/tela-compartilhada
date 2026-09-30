@@ -42,6 +42,7 @@ const { instalarRotasDeContas } = require('./contas/rotas');
 const { formatarCodigo } = require('./contas/regras');
 const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/origem');
 const { dimensaoDaFaixa } = require('./telemetria/livekit');
+const { criarEstudioAoVivo, PREFIXO_DA_IDENTIDADE: PREFIXO_DO_ESTUDIO } = require('./estudio-ao-vivo');
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
 const moderacao = criarModeracao();
@@ -118,21 +119,30 @@ const chaveDeWebCodecs = criarChaveDeWebCodecs({
 // As contas nascem antes da telemetria porque o painel precisa delas; os alertas das contas
 // vão para a telemetria, que só existe uma linha abaixo -- daí o `telemetria?.`.
 let telemetria = null;
+let estudio = null;
 const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) });
 telemetria = iniciarTelemetria({
   app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers,
   contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
   midia: { estado: chaveDeWebCodecs.estado, definir: chaveDeWebCodecs.definir },
-  aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto
+  aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto,
+  aceitarCaptura: identidade => Boolean(estudio?.aceita(identidade))
 });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta) });
+// O Estúdio: a câmera, a tela e a voz de quem está na sala levadas ao OBS por um link, e os
+// rostos que reagem à voz. Ver estudio.js e docs/estudio.md.
+estudio = criarEstudioAoVivo({
+  io, contas, sfu, membros: roomMembers, limitarOrigem: telemetria.limitarOrigem, enderecoDoSfu,
+  publicUrl: origemPublica(), formatarCodigo, salaPermite: estudioPermitidoNaSala,
+  emitirNaSala: (sala, evento, dados) => io.to(roomName(sala)).emit(evento, dados)
+});
+const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta), estudio });
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
 const pedidosDeEntradaPorSala = new Map();
 const aprovadosPorSala = new Map();
 const identidadesConhecidasPorSala = new Map();
-const configuracaoPadrao = () => ({ trancada: false, compartilharTela: true, soundboard: true, musica: true });
+const configuracaoPadrao = () => ({ trancada: false, compartilharTela: true, soundboard: true, musica: true, estudio: true });
 function configuracaoDaSala(sala) {
   if (!configuracaoPorSala.has(sala)) configuracaoPorSala.set(sala, configuracaoPadrao());
   return configuracaoPorSala.get(sala);
@@ -196,6 +206,17 @@ app.get('/sala', (req, res) => {
 
 app.get('/conta', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'conta.html'));
+});
+
+// A página que vai para dentro do OBS (o Estúdio em si é um painel da sala, estudio.js). O link
+// não é conferido aqui: a página apresenta-o ao socket `/estudio`, que responde com o estado -- e
+// um link inválido recebe a mesma página, que diz o que aconteceu em vez de um 404 seco.
+app.get('/obs/:link', (req, res, next) => {
+  if (!/^[A-Za-z0-9_-]{8,600}\.[A-Za-z0-9_-]{16,64}$/.test(req.params.link)) return next();
+  res.set('Cache-Control', 'no-store');
+  // O link carrega o acesso à câmera de alguém: ele não vai de carona para site nenhum.
+  res.set('Referrer-Policy', 'no-referrer');
+  res.sendFile(path.join(__dirname, 'public', 'obs.html'));
 });
 
 // Um código que nenhuma sala pode ter cai na página de "não encontrada", e não numa sala que
@@ -314,8 +335,18 @@ app.get('/api/sala-config', (req, res) => {
 // O que a sala vê de quem tem conta: cor, marca e o código permanente. O id da conta nunca
 // entra aqui -- ele não sai do servidor.
 function perfilNaSala(conta) {
-  const { cor, marca } = contas.perfil(conta);
-  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca };
+  const { cor, marca, avatar } = contas.perfil(conta);
+  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar };
+}
+
+// O endereço público configurado, para os convites e os links do OBS. Sem configuração, cada
+// página usa a própria origem.
+function origemPublica() {
+  try {
+    const configurado = new URL(process.env.PUBLIC_URL);
+    if (['https:', 'http:'].includes(configurado.protocol)) return configurado.origin;
+  } catch (_) { /* sem PUBLIC_URL */ }
+  return null;
 }
 
 // ---------- Uma conta, uma conexão ----------
@@ -368,6 +399,8 @@ function aplicarPerfilNasSalas(conta) {
       moderacao.renomear(roomCode, membro.identidade, nome);
       if (membro.identidade) sfu.consultar('UpdateParticipant', { room: roomCode, identity: membro.identidade, name: nome }).catch(() => {});
       io.to(roomName(roomCode)).emit('peer-perfil', { identidade: membro.identidade, name: nome, perfil });
+      // Os rostos no OBS também: a foto nova aparece na cena sem ninguém recarregar a fonte.
+      estudio.mudouSala(roomCode);
     }
   }
 }
@@ -392,15 +425,20 @@ app.delete('/api/sala-pedido', (req, res) => {
 // tratar essa pessoa como o bot: sem controle de microfone, com cara de robo na lista e
 // com os comandos de musica respondendo por ela. Um sufixo no nome resolve sem recusar a
 // entrada de ninguem.
+// A página do OBS tem a mesma questão: `nexo-estudio#...` é a identidade oculta dela, e o
+// servidor de mídia aceita essa identidade pela porta do Estúdio (telemetria/index.js).
 function nomeQueNaoSeFingeDeBot(nome) {
-  return nome.toLowerCase() === musica.PREFIXO_DA_IDENTIDADE.replace('#', '') ? `${nome} (pessoa)` : nome;
+  const reservados = [musica.PREFIXO_DA_IDENTIDADE, PREFIXO_DO_ESTUDIO].map(prefixo => prefixo.replace('#', ''));
+  return reservados.includes(nome.toLowerCase()) ? `${nome} (pessoa)` : nome;
 }
 
 // O cliente acrescenta "/rtc" sozinho, entao aqui vai so a origem -- a MESMA que serviu a
 // pagina. Assim a sinalizacao herda o HTTPS do tunel, sem porta nem certificado extra.
+// Serve também ao pedido cru do socket do Estúdio, que não passou pelo Express e não tem
+// `req.protocol`: ali o protocolo vem de a conexão ser ou não cifrada.
 function enderecoDoSfu(req) {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  const protocolo = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || req.protocol;
+  const protocolo = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || req.protocol || (req.socket?.encrypted ? 'https' : 'http');
   return `${protocolo === 'https' ? 'wss' : 'ws'}://${host}`;
 }
 
@@ -878,6 +916,10 @@ async function desligarTelaSeContinuar(sessao, sid) {
 function agirNaContaPeloPainel(codigo, pedido) {
   const r = contas.agirPeloPainel(codigo, pedido);
   if (!r.ok) return r;
+  // As imagens tiradas pelo painel somem das salas na hora, e uma conta suspensa derruba as
+  // capturas do OBS que ela criou.
+  if (pedido?.acao === 'remover-imagens') { const conta = contas.contaPorId(r.contaId); if (conta) aplicarPerfilNasSalas(conta); }
+  estudio.mudouConta(r.contaId);
   const nivel = contas.nivelDaConta(r.contaId);
   const suspensa = Boolean(r.conta.suspensaAte && r.conta.suspensaAte > Date.now());
   for (const membros of roomMembers.values()) {
@@ -905,6 +947,14 @@ function anunciarDono(roomCode) {
   if (atual === null) donoAnunciado.delete(roomCode);
   else donoAnunciado.set(roomCode, atual);
   io.to(roomName(roomCode)).emit('sala-dono', { identidade: atual });
+  // Com o OBS restrito na sala, só o dono leva a sala para lá: trocar de dono muda de quem é.
+  estudio.mudouSala(roomCode);
+}
+
+// O controle da sala sobre o OBS, com a mesma regra dos outros três: vale para os
+// participantes, e quem abriu a sala continua podendo.
+function estudioPermitidoNaSala(roomCode, identidade) {
+  return (configuracaoPorSala.get(roomCode) || configuracaoPadrao()).estudio !== false || identidade === moderacao.dono(roomCode);
 }
 
 // O socket de uma identidade, para poder tirá-la da sala. Uma identidade pode ter mais de um
@@ -1261,6 +1311,9 @@ io.on('connection', (socket) => {
     socket.to(roomName(roomCode)).emit('peer-left', { id: socket.id, identidade: socket.data.identidadeDeMidia || null });
     pararCapturaAudio(socket.id);
     socketRoomCodes.delete(socket.id);
+    // Quem saiu pode ser quem criou uma captura (ela para) ou quem aparece nela (ela espera).
+    estudio.mudouSala(roomCode);
+    if (quemSai?.contaId) estudio.mudouConta(quemSai.contaId);
   }
 
   socket.on('leave-room', callback => {
@@ -1333,7 +1386,10 @@ io.on('connection', (socket) => {
     // aqui; para a sala vai apenas o instante.
     const chaveDoRelogio = chaveDeTempo({ contaId: sessao.contaId, identidade: sessao.identidade, sorteio: socket.handshake.auth?.tempo });
     const desde = tempos.entrou(roomCode, chaveDoRelogio, socket.id);
-    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde });
+    // Se esta pessoa deixa ser levada para o OBS vem no aperto de mão, e não num aviso depois
+    // da entrada: entre um e outro, uma captura já poderia ter começado contra a vontade dela.
+    const permiteEstudio = socket.handshake.auth?.estudio !== false;
+    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde, permiteEstudio });
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     // A conta também: é ela que deixa quem tem conta voltar de um F5 numa sala trancada, já
     // com outra identidade, sem pedir aprovação para entrar na própria sala.
@@ -1368,7 +1424,10 @@ io.on('connection', (socket) => {
         // a página: a identidade mudou, e sem isto ela não conseguiria mais editá-las.
         historico: (historicoPorSala.get(roomCode) || []).map(m => ({ ...mensagemPublica(m), propria: Boolean(sessao.contaId && m.autorConta === sessao.contaId) })),
         musica: { disponivel: musica.disponivel(), estado: musica.instantaneo(roomCode), historico: historicoDeMusicaPorSala.get(roomCode) || [] },
-        soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM }
+        soundboard: { sons: soundboard.listar(roomCode), espaco: soundboard.espacoDaSala(roomCode), limiteDoSom: soundboard.BYTES_MAXIMOS_DO_SOM },
+        // O que já está sendo levado para o OBS nesta sala: quem chega vê na hora, e não só na
+        // próxima mudança.
+        estudio: estudio.capturasDaSala(roomCode)
       });
     }
     // A identidade da midia vai junto, e pelo mesmo motivo que ela vai no "peer-left":
@@ -1380,6 +1439,43 @@ io.on('connection', (socket) => {
     // Depois do "peer-joined": o primeiro a entrar numa sala vazia é o dono, e o aviso tem
     // de chegar a ele também -- daí `io.to` dentro de anunciarDono, e não `socket.to`.
     anunciarDono(roomCode);
+    // Quem chegou pode ser o diretor de páginas do OBS que o esperavam, ou a pessoa que elas
+    // mostram.
+    estudio.mudouSala(roomCode);
+  });
+
+  // ---------- O Estúdio ----------
+  //
+  // Deixar ou não que levem a própria câmera, tela e voz para o OBS. Desligar derruba na hora
+  // as capturas que já existiam (estudio-ao-vivo.js).
+  socket.on('estudio-permissao', dados => {
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomCode && roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return;
+    const permite = dados?.permitir !== false;
+    if (membro.permiteEstudio === permite) return;
+    membro.permiteEstudio = permite;
+    estudio.mudouSala(roomCode);
+  });
+
+  // Os links de uma pessoa da sala, para o cartão de perfil copiar na hora do clique. Criar um
+  // link pede conta: é a conta que responde pela captura, e é por ela que a captura segue quem
+  // a criou de sala em sala.
+  socket.on('estudio-links', (dados, callback) => {
+    const responder = r => { if (typeof callback === 'function') callback(r); };
+    const roomCode = roomCodeForSocket(socket);
+    const membro = roomCode && roomMembers.get(roomCode)?.get(socket.id);
+    if (!membro) return responder({ ok: false, error: 'Entre na sala antes.' });
+    if (!membro.contaId) return responder({ ok: false, motivo: 'sem-conta', error: 'Levar alguém para o OBS exige uma conta grátis.' });
+    const conta = contas.contaPorId(membro.contaId);
+    if (!conta) return responder({ ok: false, error: 'Conta não encontrada.' });
+    if (!estudioPermitidoNaSala(roomCode, membro.identidade)) return responder({ ok: false, motivo: 'sala', error: 'Quem abriu a sala desligou o OBS nela.' });
+    const identidade = String(dados?.alvo || '').slice(0, 160);
+    const alvo = dados?.alvo === 'self' ? membro : membroPorIdentidade(roomCode, identidade);
+    if (!alvo) return responder({ ok: false, error: 'Essa pessoa não está mais na sala.' });
+    const chave = estudio.chaveDoMembro(alvo);
+    if (!chave) return responder({ ok: false, error: 'Não foi possível identificar essa pessoa.' });
+    responder({ ok: true, permite: alvo.permiteEstudio !== false, links: estudio.linksDaPessoa(conta, chave, alvo.name), grupo: estudio.criarLink(conta, { tipo: 'reativo' }).caminho, publicUrl: origemPublica() });
   });
 
   // ---------- Moderação ----------
@@ -1477,10 +1573,13 @@ io.on('connection', (socket) => {
     const identidade = socket.data.identidadeDeMidia || null;
     if (!roomCode || !moderacao.pode(roomCode, identidade, 'expulsar')) return responder({ ok: false, error: 'Só quem abriu a sala pode alterar estes controles.' });
     const atual = configuracaoDaSala(roomCode);
-    for (const chave of ['trancada', 'compartilharTela', 'soundboard', 'musica']) {
+    const estudioAntes = atual.estudio;
+    for (const chave of ['trancada', 'compartilharTela', 'soundboard', 'musica', 'estudio']) {
       if (Object.prototype.hasOwnProperty.call(mudancas || {}, chave)) atual[chave] = Boolean(mudancas[chave]);
     }
     io.to(roomName(roomCode)).emit('sala-configuracao', atual);
+    // Desligar o OBS na sala derruba na hora o que os participantes tinham no ar.
+    if (atual.estudio !== estudioAntes) estudio.mudouSala(roomCode);
     responder({ ok: true, configuracao: atual });
   });
 
@@ -2012,7 +2111,7 @@ function aoSubir() {
 let encerrandoServidor = false;
 function encerrarServidor() {
   if (encerrandoServidor) return;
-  encerrandoServidor = true; sfu.encerrarSfu(); salas.encerrar();
+  encerrandoServidor = true; estudio.encerrar(); sfu.encerrarSfu(); salas.encerrar();
   Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo(), contas.encerrar()]).finally(() => process.exit(0));
 }
 for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sinal, encerrarServidor);

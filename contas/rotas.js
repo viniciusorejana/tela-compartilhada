@@ -29,10 +29,39 @@ const iguais = (a, b) => {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 };
 
-// `aoMudarPerfil(conta)` é chamado depois de salvar apelido, cor ou marca: server.js leva a
-// mudança às salas em que essa conta está agora, sem ninguém precisar sair e voltar.
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, novidadesAutomaticas = true, aoMudarPerfil = () => {} }) {
+// `aoMudarPerfil(conta)` é chamado depois de salvar apelido, cor, marca ou foto: server.js leva
+// a mudança às salas em que essa conta está agora, sem ninguém precisar sair e voltar.
+//
+// `estudio` é a parte ao vivo do Estúdio (estudio-ao-vivo.js): quem está na sala do diretor,
+// os links assinados e o aviso de que a configuração mudou. Sem ela, as rotas do Estúdio não
+// existem -- os testes de conta sobem sem sala nenhuma.
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, novidadesAutomaticas = true, aoMudarPerfil = () => {}, estudio = null }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
+  const imagemCrua = limite => express.raw({ type: () => true, limit: limite });
+
+  // ---------- As imagens ----------
+  //
+  // Fora de /api/conta de propósito: a imagem é pedida por quem NÃO tem a conta -- cada pessoa
+  // da sala, e a página do OBS, que roda num navegador sem cookie nenhum. O endereço é o id
+  // sorteado de 128 bits; quem o tem pode ver a imagem, e é para isso que ele foi entregue.
+  //
+  // O que sai daqui nunca roda: tipo fixo lido do banco (que só guardou o que os bytes
+  // provaram ser), `nosniff`, e uma CSP que bloqueia tudo -- até quem abrir o endereço direto
+  // numa aba recebe uma imagem, e só.
+  app.get('/api/imagem/:id', (req, res) => {
+    if (!limitarOrigem(req, 'imagem')) return res.status(429).set('Retry-After', '60').end();
+    const imagem = contas.imagem(String(req.params.id || ''));
+    if (!imagem) return res.status(404).end();
+    res.set({
+      'Content-Type': imagem.tipo, 'Content-Length': String(imagem.tamanho),
+      // O id muda a cada envio e a imagem nunca muda depois de guardada.
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'Cross-Origin-Resource-Policy': 'same-origin'
+    });
+    res.end(Buffer.from(imagem.bytes));
+  });
 
   app.use('/api/conta', (req, res, next) => {
     // Resposta de conta nunca fica em cache de ninguém: ela diz quem está logado.
@@ -102,6 +131,77 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     if (!r.ok) return recusar(res, r);
     res.json({ ajustes: r.ajustes });
   });
+
+  // A foto de perfil. A sessão é conferida ANTES de ler o corpo: sem conta, o meio megabyte
+  // nem chega a ser recebido.
+  const avisarPerfil = conta => { try { aoMudarPerfil(conta); } catch (erro) { console.error('Perfil nas salas:', erro?.message || erro); } };
+  app.put('/api/conta/avatar', autenticada, imagemCrua('512kb'), (req, res) => {
+    const r = contas.salvarAvatar(req.contaNexo.conta, { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(r.conta);
+    res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
+  });
+  app.delete('/api/conta/avatar', autenticada, (req, res) => {
+    const r = contas.apagarAvatar(req.contaNexo.conta);
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(r.conta);
+    res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
+  });
+
+  // ---------- O Estúdio ----------
+  if (estudio) {
+    const jsonDoEstudio = express.json({ limit: 32 * 1024, strict: true });
+    // Tudo o que o painel do Estúdio precisa numa ida só: a configuração, as imagens, e quem
+    // está na sala em que a pessoa está agora -- é dali que saem os links de cada fonte.
+    const retrato = conta => ({ ...contas.estudio(conta), ...estudio.retrato(conta) });
+
+    app.get('/api/conta/estudio', autenticada, (req, res) => res.json(retrato(req.contaNexo.conta)));
+
+    app.put('/api/conta/estudio', jsonDoEstudio, autenticada, (req, res) => {
+      const r = contas.salvarEstudio(req.contaNexo.conta, req.body?.config);
+      if (!r.ok) return recusar(res, r);
+      estudio.mudouConta(req.contaNexo.conta.id);
+      res.json({ config: r.config });
+    });
+
+    app.post('/api/conta/estudio/imagens', autenticada, imagemCrua('2mb'), (req, res) => {
+      const r = contas.adicionarImagemDoEstudio(req.contaNexo.conta, { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
+      if (!r.ok) return recusar(res, r);
+      res.status(201).json({ imagem: r.imagem });
+    });
+
+    app.delete('/api/conta/estudio/imagens/:id', autenticada, (req, res) => {
+      const r = contas.apagarImagemDoEstudio(req.contaNexo.conta, String(req.params.id || ''));
+      if (!r.ok) return recusar(res, r);
+      estudio.mudouConta(req.contaNexo.conta.id);
+      res.json({ config: r.config });
+    });
+
+    // Um link novo para uma pessoa (pela chave: código de conta ou nome) e uma fonte, ou para os
+    // rostos que reagem. Criar não pede nada da pessoa: quem decide se aparece é ela, na hora
+    // em que a captura acontece (estudio-ao-vivo.js).
+    app.post('/api/conta/estudio/link', json, autenticada, (req, res) => {
+      const r = estudio.criarLink(req.contaNexo.conta, req.body || {});
+      if (!r.ok) return recusar(res, r);
+      res.json({ caminho: r.caminho });
+    });
+
+    // Achar alguém para dar uma imagem: pelo código de conta, ou pelo nome de quem entra sem.
+    // Com freio por conta: sem ele, a rota viraria um jeito de varrer códigos e colher apelidos.
+    app.post('/api/conta/estudio/pessoa', json, autenticada, (req, res) => {
+      if (!contas.permitidoParaAConta(req.contaNexo.conta.id, 'conta-busca')) return res.status(429).set('Retry-After', '60').json({ error: 'Buscas demais em pouco tempo. Aguarde um minuto.' });
+      const r = estudio.acharPessoa(req.body || {});
+      if (!r.ok) return recusar(res, r);
+      res.json({ pessoa: r.pessoa });
+    });
+
+    app.post('/api/conta/estudio/revogar', autenticada, (req, res) => {
+      const r = contas.revogarEstudio(req.contaNexo.conta);
+      if (!r.ok) return recusar(res, r);
+      estudio.mudouConta(req.contaNexo.conta.id);
+      res.json({ geracao: r.geracao });
+    });
+  }
 
   app.get('/api/conta/dados', autenticada, (req, res) => {
     const dia = new Date().toISOString().slice(0, 10);

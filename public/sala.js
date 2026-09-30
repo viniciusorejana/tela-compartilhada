@@ -122,7 +122,7 @@ let myName = '';
 // segunda decide se as ações aparecem para mim. Ver moderacao.js.
 let donoDaSala = null;
 let podeModerar = false;
-let configuracaoDaSala = { trancada: false, compartilharTela: true, soundboard: true, musica: true };
+let configuracaoDaSala = { trancada: false, compartilharTela: true, soundboard: true, musica: true, estudio: true };
 let ensurdecido = false;
 let micAntesDeEnsurdecer = true;
 let pushToTalkAtivo = false;
@@ -303,12 +303,10 @@ let meuPerfil = null;
 function perfilDe(id) {
   return id === 'self' ? meuPerfil : perfisPorIdentidade.get(id) || null;
 }
-// Pinta um avatar com a cor e a marca da pessoa, ou com a cor do nome e as iniciais.
+// Pinta um avatar com a foto da pessoa, ou com a cor e a marca, ou com a cor do nome e as
+// iniciais (perfil.js).
 function pintarAvatar(el, nome, perfil) {
-  const aparencia = NexoPerfil.aparencia(nome || '?', perfil);
-  el.textContent = aparencia.texto;
-  el.style.background = aparencia.cor;
-  el.classList.toggle('com-marca', aparencia.marca);
+  NexoPerfil.pintar(el, nome, perfil);
 }
 
 // ---------- Entrada / nome ----------
@@ -556,8 +554,9 @@ async function iniciarConexao() {
   }
 
   // `tempo` é o sorteio que faz o relógio desta pessoa sobreviver a um F5 quando ela não tem
-  // conta (tempo-sala.js e, no servidor, tempos.js).
-  socket = io({ autoConnect: false, auth: responder => responder({ credencial: credencialSessao, tempo: window.NexoTempo?.chave() }) });
+  // conta (tempo-sala.js e, no servidor, tempos.js). `estudio` é se ela deixa ser levada para o
+  // OBS: vai no aperto de mão para valer desde a entrada (estudio-sala.js).
+  socket = io({ autoConnect: false, auth: responder => responder({ credencial: credencialSessao, tempo: window.NexoTempo?.chave(), estudio: window.NexoEstudioSala?.permite() !== false }) });
   socket.on('limite-atingido', aviso => { status.textContent = aviso.error || 'Aguarde antes de tentar novamente.'; });
   let renovandoSessao = false;
   socket.on('connect_error', async erro => {
@@ -628,6 +627,7 @@ async function iniciarConexao() {
       if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
       window.NexoTempo?.aoEntrar(response.tempos, response.peers);
       window.NexoEspectadores?.aoEntrar(response.espectadores);
+      window.NexoEstudioSala?.aoEntrar(response.estudio);
       // O toque de entrada é o "você está na sala" -- só na primeira entrada, e não a cada volta
       // do socket depois de uma oscilação.
       if (!voltando) window.NexoSons?.tocar('entrada');
@@ -851,6 +851,7 @@ async function iniciarConexao() {
   socket.on('chat-atualizada', atualizarMensagemDoChat);
   socket.on('chat-removida', ({ id }) => removerMensagemDoChat(id));
   socket.on('espectadores', placar => window.NexoEspectadores?.atualizar(placar));
+  socket.on('estudio-capturas', ({ lista } = {}) => window.NexoEstudioSala?.atualizar(lista));
 
   socket.on('disconnect', () => {
     window.NexoEspectadores?.aoCair();
@@ -5156,7 +5157,7 @@ document.addEventListener('click', evento => {
 // ---------- Acesso e permissões da sala ----------
 const controlesDaConfiguracao = {
   roomLocked: 'trancada', allowScreen: 'compartilharTela',
-  allowSoundboard: 'soundboard', allowMusic: 'musica'
+  allowSoundboard: 'soundboard', allowMusic: 'musica', allowObs: 'estudio'
 };
 
 function aplicarConfiguracaoDaSala(nova) {
@@ -5193,6 +5194,8 @@ function aplicarConfiguracaoDaSala(nova) {
   if (musicaInput) { musicaInput.disabled = !musicaPermitida; musicaInput.placeholder = musicaPermitida ? 'Nome ou link da música…' : 'Novos pedidos foram restringidos'; }
   // Os dois botões de pedir (o fim da fila e o "a seguir") seguem o campo: musica.js decide.
   window.NexoMusica?.atualizarBotoes?.();
+  // O OBS: o botão do Estúdio e os links do cartão de perfil (estudio-sala.js).
+  window.NexoEstudioSala?.aoMudarSala?.();
 }
 
 Object.entries(controlesDaConfiguracao).forEach(([id, chave]) => {

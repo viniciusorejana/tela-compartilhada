@@ -513,6 +513,14 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .meu-perfil-previa > div { min-width:0; }
 .meu-perfil-previa strong { display:block; font-size:var(--fs-lg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meu-perfil-previa small { display:block; margin-top:2px; color:var(--muted); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.03em; }
+/* A foto sobe ao ser escolhida, e as ações dela moram no cartão da prévia, que é onde ela
+   aparece. O rótulo do arquivo tem a cara do botão ao lado: duas alturas diferentes pareciam duas
+   coisas. */
+.meu-perfil-foto { flex:none; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin-left:auto; }
+.meu-perfil-foto[hidden] { display:none; }
+.meu-perfil-foto > .botao-arquivo, .meu-perfil-foto > button { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 12px; border-radius:var(--r-md); background:var(--bg-3); color:var(--text); font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
+.meu-perfil-foto > .botao-arquivo:hover, .meu-perfil-foto > button:hover:not(:disabled) { background:var(--bg-4); }
+.meu-perfil-foto > .botao-arquivo:focus-visible { outline:2px solid var(--anel-cor); outline-offset:2px; }
 .campo-rotulo { display:block; margin:0 0 7px; font-size:var(--fs-sm); font-weight:600; color:var(--text-2); }
 .campo-dica { display:block; margin-top:6px; color:var(--faint); font-size:var(--fs-meta); line-height:1.5; }
 .meu-perfil-mais { margin-right:auto; }
@@ -1428,6 +1436,10 @@ html.menos-movimento *,html.menos-movimento *::before,html.menos-movimento *::af
 .mencao-opcao small { flex:none; margin-left:auto; font-size:var(--fs-meta); color:var(--faint); }
 .mencao-no-texto { padding:0 3px; border-radius:4px; background:var(--accent-suave-hi); color:var(--accent-texto); font-weight:600; }
 .mencao-no-texto.eu { background:color-mix(in srgb, var(--aviso) 18%, transparent); color:var(--aviso-texto); }
+
+/* ---------- A foto de perfil ----------
+   Todo avatar é pintado por perfil.js: a cor fica por baixo e aparece enquanto a foto carrega. */
+.com-foto { background-size:cover; background-position:center; background-repeat:no-repeat; color:transparent; }
 
 /* ---------- A barra de cima, pelo espaço que ELA tem ----------
    As regras antigas desta barra olhavam a largura da janela. Só que a barra divide a janela

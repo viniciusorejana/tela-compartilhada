@@ -27,18 +27,56 @@
   }
 
   // A prévia do topo acompanha cada escolha antes de salvar: é ali que se vê como vai ficar.
+  // A foto não passa pelo "Salvar": sobe ao ser escolhida, como na página da conta, e o servidor
+  // leva a nova à sala inteira pelo mesmo `peer-perfil` do apelido.
+  const fotoAtual = () => (meuPerfil ? meuPerfil.avatar : window.NexoConta?.atual()?.perfil?.avatar) || null;
+
   function previa() {
     const atual = naTela();
     const nome = atual.apelido || salvo.apelido;
-    pintarAvatar($('meuPerfilAvatar'), nome, { cor: atual.cor, marca: atual.marca });
+    pintarAvatar($('meuPerfilAvatar'), nome, { cor: atual.cor, marca: atual.marca, avatar: fotoAtual() });
     $('meuPerfilNome').textContent = nome;
+    $('meuPerfilFotoTirar').hidden = !fotoAtual();
     salvar.disabled = !atual.apelido || !mudou(atual);
   }
+
+  async function trocarFoto(pedido) {
+    const r = await pedido;
+    if (!r.ok) { dizer(r.dados?.error || 'Não foi possível trocar a foto.', 'problema'); return; }
+    window.NexoConta?.atualizar({ conta: r.dados.conta, perfil: r.dados.perfil });
+    if (meuPerfil) meuPerfil = { ...meuPerfil, avatar: r.dados.perfil.avatar || null };
+    previa();
+    dizer(r.dados.perfil.avatar ? 'Foto trocada. A sala já vê a nova.' : 'Sem foto: a sala volta a mostrar a cor e a marca.', 'certo');
+  }
+
+  $('meuPerfilFotoArquivo').addEventListener('change', async evento => {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!arquivo) return;
+    dizer('Preparando a foto…');
+    let blob;
+    try { blob = await NexoImagem.prepararAvatar(arquivo); }
+    catch (erro) { dizer(erro.message || 'Não foi possível abrir esta imagem.', 'problema'); return; }
+    dizer('Enviando…');
+    await trocarFoto(NexoImagem.enviar('/api/conta/avatar', blob, { csrf: window.NexoConta?.atual().csrf || '' }));
+  });
+  $('meuPerfilFotoTirar').addEventListener('click', () => {
+    dizer('Tirando…');
+    trocarFoto(fetch('/api/conta/avatar', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Nexo-CSRF': window.NexoConta?.atual().csrf || '' } })
+      .then(async resposta => ({ ok: resposta.ok, dados: await resposta.json().catch(() => ({})) }))
+      .catch(() => ({ ok: false, dados: { error: 'Sem conexão com o servidor. Tente de novo.' } })));
+  });
+  document.querySelector('label[for="meuPerfilFotoArquivo"]').addEventListener('keydown', evento => {
+    if (evento.key !== 'Enter' && evento.key !== ' ') return;
+    evento.preventDefault();
+    $('meuPerfilFotoArquivo').click();
+  });
 
   function abrir() {
     const { conta, perfil } = window.NexoConta?.atual() || {};
     const comConta = Boolean(conta);
     formulario.hidden = !comConta;
+    $('meuPerfilFoto').hidden = !comConta;
     $('meuPerfilSub').hidden = !comConta;
     $('meuPerfilSemConta').hidden = comConta;
     salvar.hidden = !comConta;

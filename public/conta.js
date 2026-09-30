@@ -217,13 +217,10 @@
   };
 
   // ---------- Com conta ----------
-  let perfil = { cor: null, marca: null };
+  let perfil = { cor: null, marca: null, avatar: null };
 
   function pintarAvatar(el, nome, dados) {
-    const aparencia = NexoPerfil.aparencia(nome, dados);
-    el.textContent = aparencia.texto;
-    el.style.background = aparencia.cor;
-    el.classList.toggle('com-marca', aparencia.marca);
+    NexoPerfil.pintar(el, nome, dados);
   }
 
   // As opções vêm do mesmo conjunto que o servidor aceita, montadas por perfil.js -- o mesmo
@@ -235,8 +232,49 @@
   const escolhido = grupo => $('formPerfil').querySelector(`input[name="${grupo}"]:checked`)?.value || null;
   // O avatar do topo acompanha a escolha antes de salvar: é ali que se vê como vai ficar.
   function previa() {
-    pintarAvatar($('contaAvatar'), $('perfilApelido').value.trim() || conta.apelido, { cor: escolhido('cor'), marca: escolhido('marca') });
+    pintarAvatar($('contaAvatar'), $('perfilApelido').value.trim() || conta.apelido, { cor: escolhido('cor'), marca: escolhido('marca'), avatar: perfil.avatar });
   }
+
+  // ---------- A foto ----------
+  // Sobe ao ser escolhida: a foto não é um campo do formulário do perfil, e esperar o "Salvar"
+  // para uma escolha que já está na tela deixaria a pessoa achando que salvou.
+  function pintarFoto() {
+    $('fotoTirar').hidden = !perfil.avatar;
+  }
+  function dizerDaFoto(texto, problema = false) {
+    $('fotoStatus').textContent = texto;
+    $('fotoStatus').classList.toggle('problema', problema);
+  }
+  function aplicarFoto(r) {
+    if (!r.ok) { dizerDaFoto(r.dados.error || 'Não foi possível trocar a foto.', true); return; }
+    conta = r.dados.conta;
+    perfil = r.dados.perfil;
+    pintarConta();
+  }
+  $('fotoArquivo').addEventListener('change', async evento => {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!arquivo) return;
+    dizerDaFoto('Preparando a foto…');
+    let blob;
+    try { blob = await NexoImagem.prepararAvatar(arquivo); }
+    catch (erro) { dizerDaFoto(erro.message || 'Não foi possível abrir esta imagem.', true); return; }
+    dizerDaFoto('Enviando…');
+    aplicarFoto(await NexoImagem.enviar('/api/conta/avatar', blob, { csrf }));
+    if ($('fotoStatus').classList.contains('problema')) return;
+    dizerDaFoto('Foto trocada. Quem está numa sala com você já vê a nova.');
+  });
+  // O rótulo faz as vezes de botão; pelo teclado, Enter e espaço abrem a escolha também.
+  document.querySelector('label[for="fotoArquivo"]').addEventListener('keydown', evento => {
+    if (evento.key !== 'Enter' && evento.key !== ' ') return;
+    evento.preventDefault();
+    $('fotoArquivo').click();
+  });
+  $('fotoTirar').addEventListener('click', async () => {
+    dizerDaFoto('Tirando…');
+    aplicarFoto(await api('/api/conta/avatar', { metodo: 'DELETE' }));
+    if (!$('fotoStatus').classList.contains('problema')) dizerDaFoto('Sem foto: a sala volta a mostrar a cor e a marca.');
+  });
   function preencherPerfil() {
     $('perfilApelido').value = conta.apelido;
     for (const grupo of ['cor', 'marca']) {
@@ -257,6 +295,7 @@
     $('contaCodigo').textContent = conta.codigo;
     $('contaPlano').textContent = descreverPlano(conta);
     pintarAvatar($('contaAvatar'), conta.apelido, perfil);
+    pintarFoto();
     preencherPerfil();
     $('voltarParaSala').hidden = !voltar;
     if (voltar) $('voltarParaSala').href = voltar;
