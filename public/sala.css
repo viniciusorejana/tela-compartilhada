@@ -179,6 +179,8 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 @container (max-width:560px) { .stage-volume { width:auto; } .stage-volume .volume-slider,.stage-volume .volume-valor:not(.alterado) { display:none; } }
 .stage.ocioso .stage-label,.stage.ocioso .stage-controls { opacity:0; transform:translateY(6px); pointer-events:none; }
 .stage.ocioso.controles-teclado .stage-controls:focus-within { opacity:1; transform:none; pointer-events:auto; }
+/* Quem está digitando o volume do palco não mexe o mouse, e o campo não pode sumir no meio. */
+.stage.ocioso .stage-controls:has(.valor-digitado) { opacity:1; transform:none; pointer-events:auto; }
 .stage.ocioso:fullscreen,.stage.ocioso:-webkit-full-screen { cursor:none; }
 .aviso-eco { grid-row:2; }
 .participants-section { grid-row:3; min-width:0; }
@@ -250,14 +252,74 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .volume-row:has(.volume-slider:disabled) { opacity:.4; }
 /* O volume escolhido, sempre à vista e sem pedir atenção: apagado em 100%, aceso quando
    mudou, âmbar quando passa de 100% -- e aí a régua fica âmbar também, porque som reforçado
-   é o que pode distorcer. Clicar volta a 100%. */
-.volume-valor { flex:none; min-width:38px; padding:2px 4px; border-radius:var(--r-xs); background:transparent; color:var(--faint); font-size:var(--fs-meta); font-weight:600; font-variant-numeric:tabular-nums; text-align:center; line-height:1.3; }
+   é o que pode distorcer. Clicar deixa digitar o volume (valor-digitado.js). */
+.volume-valor { flex:none; min-width:38px; padding:2px 4px; border-radius:var(--r-xs); background:transparent; color:var(--faint); font-size:var(--fs-meta); font-weight:600; font-variant-numeric:tabular-nums; text-align:center; line-height:1.3; cursor:text; }
+.volume-valor:hover:not(:disabled) { background:rgb(var(--tinta) / 7%); color:var(--text-2); }
 .volume-valor:disabled { opacity:.8; cursor:default; }
 .volume-valor.alterado { color:var(--accent-texto); background:var(--accent-suave); }
 .volume-valor.alterado:hover:not(:disabled) { background:var(--accent-suave-hi); color:var(--text); }
 .volume-valor.reforcado { color:var(--aviso); background:var(--aviso-suave); }
 .volume-valor.reforcado:hover:not(:disabled) { background:color-mix(in srgb, var(--aviso) 20%, transparent); color:var(--aviso-texto); }
 .volume-row:has(.volume-valor.reforcado) .volume-slider { accent-color:var(--aviso); }
+/* ---------- O volume no toque (volume-folha.js) ----------
+   A régua fina sai do quadradinho, do card da grade e do palco; o número vira uma pílula do
+   tamanho do dedo, com o desenho dos controles de nível, e abre a folha de volume. O mudo fica ao
+   lado, para silenciar num toque só. */
+.volume-toque .volume-row:has(.volume-valor) { gap:6px; min-height:34px; }
+.volume-toque .volume-row:has(.volume-valor) .volume-slider { display:none; }
+.volume-toque .volume-valor { flex:1 1 auto; display:inline-flex; align-items:center; justify-content:center; gap:5px; min-width:0; min-height:32px; padding:0 10px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 6%); color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; }
+.volume-toque .volume-valor::before { content:''; flex:none; width:14px; height:14px; background:currentColor; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'/%3E%3C/svg%3E") center/contain no-repeat; -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'/%3E%3C/svg%3E") center/contain no-repeat; }
+.volume-toque .volume-valor.alterado { background:var(--accent-suave); color:var(--accent-texto); }
+.volume-toque .volume-valor.reforcado { background:var(--aviso-suave); color:var(--aviso-texto); }
+.volume-toque .volume-valor:disabled { opacity:.45; }
+.volume-toque .volume-row:has(.volume-valor) .mute-peer-btn { flex:none; min-width:32px; min-height:32px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 6%); }
+/* O palco estreito esconde o número em 100% para caber (a regra @container, lá em cima); no
+   toque ele é o controle, e fica. */
+.volume-toque .stage-volume { width:auto; }
+.volume-toque .stage-volume .volume-valor { display:inline-flex; flex:none; }
+
+/* ---------- A folha de volume ----------
+   Centrada no computador; no celular, presa embaixo, da largura da tela, onde o polegar alcança. */
+.volume-card { width:min(100%,420px); }
+.volume-quem { display:flex; align-items:center; gap:12px; margin:0 0 16px; padding-right:40px; }
+.volume-quem .perfil-avatar { width:44px; height:44px; font-size:16px; }
+.volume-quem > div { min-width:0; }
+.volume-card .volume-quem h2 { margin:0; padding:0; overflow:hidden; font-size:var(--fs-xl); white-space:nowrap; text-overflow:ellipsis; }
+.volume-quem .modal-sub { margin:2px 0 0; }
+.volume-fontes { display:flex; width:100%; margin:0 0 18px; }
+.volume-fontes[hidden] { display:none; }
+.volume-fontes label { flex:1; }
+.volume-fontes span { justify-content:center; width:100%; }
+.volume-grande { display:flex; align-items:center; gap:12px; }
+.volume-card .volume-mudo { flex:none; width:44px; height:44px; padding:0; border-radius:50%; background:var(--bg-3); color:var(--text-2); }
+.volume-card .volume-mudo:hover:not(:disabled) { background:var(--bg-4); }
+.volume-card .volume-mudo::before { width:19px; height:19px; }
+.volume-numero { flex:none; min-width:60px; color:var(--text); font-size:var(--fs-xl); font-weight:700; font-variant-numeric:tabular-nums; text-align:right; }
+#volumePanel.reforcado .volume-numero { color:var(--aviso-texto); }
+#volumePanel.mudo .volume-numero { color:var(--apagado); text-decoration:line-through; }
+/* A régua grande: trilho grosso e preenchido até o volume, polegar de 28 px. O polegar é branco
+   nos dois temas, como o dos interruptores, com sombra para se separar de qualquer fundo. */
+.volume-regua { --cheio:50%; --cor-da-regua:var(--accent); flex:1; min-width:0; height:36px; margin:0; background:transparent; -webkit-appearance:none; appearance:none; cursor:pointer; touch-action:pan-y; }
+#volumePanel.reforcado .volume-regua { --cor-da-regua:var(--aviso); }
+.volume-regua:disabled { cursor:not-allowed; opacity:.45; }
+.volume-regua::-webkit-slider-runnable-track { height:8px; border-radius:var(--r-pilula); background:linear-gradient(to right, var(--cor-da-regua) var(--cheio), var(--bg-4) var(--cheio)); }
+.volume-regua::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:28px; height:28px; margin-top:-10px; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0008, 0 0 0 5px color-mix(in srgb, var(--cor-da-regua) 22%, transparent); }
+.volume-regua::-moz-range-track { height:8px; border-radius:var(--r-pilula); background:var(--bg-4); }
+.volume-regua::-moz-range-progress { height:8px; border-radius:var(--r-pilula); background:var(--cor-da-regua); }
+.volume-regua::-moz-range-thumb { width:28px; height:28px; border:0; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0008, 0 0 0 5px color-mix(in srgb, var(--cor-da-regua) 22%, transparent); }
+.volume-regua:focus-visible { outline:none; }
+.volume-regua:focus-visible::-webkit-slider-thumb { box-shadow:0 1px 4px #0008, 0 0 0 5px var(--anel-cor); }
+.volume-regua:focus-visible::-moz-range-thumb { box-shadow:0 1px 4px #0008, 0 0 0 5px var(--anel-cor); }
+.volume-atalhos { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; margin-top:18px; }
+.volume-atalhos button { min-height:var(--ctl-m); padding:0 4px; background:var(--bg-3); color:var(--text-2); font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
+.volume-atalhos button:hover:not(:disabled) { background:var(--bg-4); color:var(--text); }
+.volume-atalhos button[aria-pressed="true"] { background:var(--accent-forte); color:#fff; }
+.volume-dica { margin-top:14px; }
+@keyframes nexo-folha-subir { from { transform:translateY(100%); } to { transform:none; } }
+@media(max-width:760px) {
+  #volumePanel { place-items:end stretch; padding:0; }
+  #volumePanel .volume-card { width:100%; max-width:none; border-radius:var(--r-xl) var(--r-xl) 0 0; border-bottom:0; padding-bottom:calc(var(--pad-cartao) + env(safe-area-inset-bottom)); animation:nexo-folha-subir var(--dur-lenta) var(--curva); }
+}
 .peer-audio,.screen-audio { display:none; }
 .status-line { grid-row:4; color:var(--faint); font-size:10px; line-height:1.5; margin:-4px 0 11px; min-height:15px; }
 .control-bar { grid-area:barra; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--line); background:var(--bg-0); padding:12px 16px; }
@@ -377,7 +439,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 
 .musica-volume { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:10px 15px 0; }
 .musica-volume label { grid-column:1 / 3; font-size:var(--fs-meta); font-weight:600; color:var(--muted); }
-.musica-volume span { font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
+.musica-volume [data-valor-de] { font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
 
 /* ---------- A fila ----------
    Antes: uma lista recolhida, texto de 9 px e um ✕ por linha -- e nenhum jeito de mudar a
@@ -476,7 +538,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    volume baixado meses atrás e esquecido. */
 .lembrados small { margin-bottom:9px; }
 .lembrados button { font-size:11px; padding:7px 11px; }
-.sons-volume span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
+.sons-volume [data-valor-de] { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
 .badge { display:inline-grid; place-items:center; min-width:16px; height:16px; border-radius:8px; font-size:var(--fs-rotulo); font-weight:700; background:#db7994; color:#251821; margin-left:4px; }
 #chatToggle { display:none; }
 .app.sem-chat #chatToggle { display:inline-flex; align-items:center; }
@@ -517,6 +579,9 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    aparece. O rótulo do arquivo tem a cara do botão ao lado: duas alturas diferentes pareciam duas
    coisas. */
 .meu-perfil-foto { flex:none; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin-left:auto; }
+/* Estreito, as ações da foto descem para uma linha própria, sem espremer o nome. */
+.meu-perfil-previa:has(.meu-perfil-foto:not([hidden])) { flex-wrap:wrap; }
+.meu-perfil-previa > div:not(.meu-perfil-foto) { flex:1 1 120px; }
 .meu-perfil-foto[hidden] { display:none; }
 .meu-perfil-foto > .botao-arquivo, .meu-perfil-foto > button { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 12px; border-radius:var(--r-md); background:var(--bg-3); color:var(--text); font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
 .meu-perfil-foto > .botao-arquivo:hover, .meu-perfil-foto > button:hover:not(:disabled) { background:var(--bg-4); }

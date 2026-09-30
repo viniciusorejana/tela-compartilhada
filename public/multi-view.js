@@ -34,6 +34,9 @@
     // Escuro mesmo no tema claro, como o palco: é vídeo, e o controle por cima dele precisa
     // do fundo escuro para ser lido (tema.css).
     root.className = 'multi-card contexto-escuro';
+    // De quem é o card: é por aqui que a pílula de volume do toque sabe qual folha abrir.
+    root.dataset.id = item.id;
+    root.dataset.source = item.source;
     // A grade e a mesma coisa que os quadradinhos de baixo, so que grande: quem ajusta o
     // volume de uma tela ali tem de encontrar o mesmo ajuste aqui, e nao um card onde o som
     // simplesmente nao se controla.

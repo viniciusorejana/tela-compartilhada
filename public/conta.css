@@ -55,8 +55,8 @@ button:disabled:hover { background:var(--accent-forte); }
 .conta-avatar.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; font-size:26px; }
 .com-foto { background-size:cover; background-position:center; background-repeat:no-repeat; color:transparent; }
 /* A foto numa linha: o que ela é à esquerda, as ações à direita. A prévia é o avatar do topo. */
-.conta-foto { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 4px; padding:12px 14px; border:1px solid var(--line-2); border-radius:var(--r-md); background:rgb(var(--tinta) / 2%); }
-.conta-foto-texto { display:grid; gap:2px; min-width:0; }
+.conta-foto { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 14px; margin:0 0 4px; padding:12px 14px; border:1px solid var(--line-2); border-radius:var(--r-md); background:rgb(var(--tinta) / 2%); }
+.conta-foto-texto { flex:1 1 200px; display:grid; gap:2px; min-width:0; }
 .conta-foto-texto strong { color:var(--text-2); font-size:var(--fs-md); }
 .conta-foto-texto small { margin:0; color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
 .conta-foto + .conta-status:empty { display:none; }

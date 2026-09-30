@@ -43,7 +43,7 @@ const estadoDaVoz = (pagina, id) => pagina.evaluate(id => {
 
   assert.equal(await linha.locator('.volume-slider').getAttribute('max'), '200');
   assert.equal(await valor.textContent(), '100%', 'o número está sempre à vista');
-  assert.equal(await valor.isDisabled(), true, 'em 100% não há o que desfazer');
+  assert.equal(await valor.isDisabled(), false, 'o número se clica para digitar, mesmo em 100%');
 
   // ---------- 150%: pelo ganho, com o elemento mudo, e o som chegando ----------
   await linha.locator('.volume-slider').fill('150');
@@ -70,17 +70,37 @@ const estadoDaVoz = (pagina, id) => pagina.evaluate(id => {
   assert.match(await valor.getAttribute('class'), /reforcado/, 'acima de 100% o número fica âmbar');
   console.log(`PASS: 150% sai pelo ganho, com o elemento mudo e sinal de verdade (RMS ${sinal.rms.toFixed(3)})`);
 
-  // ---------- Voltar a 100%: grudando, e pelo clique no número ----------
+  // ---------- 100% gruda no arrasto; o número se digita (valor-digitado.js) ----------
   await linha.locator('.volume-slider').fill('97');
   assert.equal(await linha.locator('.volume-slider').inputValue(), '100', 'perto do meio, gruda em 100');
   assert.deepEqual(await estadoDaVoz(bia, idDaAna), { volume: 1, reforco: false, mudo: false, volumeDoElemento: 1 }, 'em 100% o elemento toca sozinho, sem ganho');
+  const campo = linha.locator('input.valor-digitado');
   await linha.locator('.volume-slider').fill('180');
   await valor.click();
-  assert.equal(await valor.textContent(), '100%', 'clicar no número volta a 100%');
-  assert.equal((await estadoDaVoz(bia, idDaAna)).reforco, false);
-  await linha.locator('.volume-slider').fill('60');
+  assert.equal(await campo.inputValue(), '180', 'o campo abre com o volume de agora');
+  assert.equal(await campo.evaluate(el => document.activeElement === el && el.selectionStart === 0 && el.selectionEnd === el.value.length), true, 'e já selecionado, para escrever por cima');
+  await campo.fill('97');
+  await campo.press('Enter');
+  assert.equal(await campo.count(), 0, 'o Enter aplica e o número volta');
+  assert.equal(await linha.locator('.volume-slider').inputValue(), '97', 'o que se escreve não gruda em 100');
+  assert.equal(await valor.textContent(), '97%');
+  assert.deepEqual(await estadoDaVoz(bia, idDaAna), { volume: 0.97, reforco: false, mudo: false, volumeDoElemento: 0.97 });
+  await valor.click();
+  await campo.fill('150');
+  await campo.press('Escape');
+  assert.equal(await campo.count(), 0);
+  assert.equal(await valor.textContent(), '97%', 'Esc desiste');
+  await valor.click();
+  await campo.fill('350%');
+  await campo.press('Enter');
+  assert.equal(await valor.textContent(), '200%', 'acima do máximo, fica no máximo');
+  assert.equal((await estadoDaVoz(bia, idDaAna)).reforco, true, 'e passa pelo ganho, como a régua');
+  await valor.click();
+  await campo.fill('60');
+  await bia.locator('.participants-heading strong').click();
+  assert.equal(await campo.count(), 0, 'sair do campo também aplica');
   assert.deepEqual(await estadoDaVoz(bia, idDaAna), { volume: 0.6, reforco: false, mudo: false, volumeDoElemento: 0.6 }, 'abaixo de 100%, como sempre foi');
-  console.log('PASS: 100% gruda, e o clique no número desfaz o ajuste');
+  console.log('PASS: 100% gruda no arrasto, e o número se digita: Enter e sair aplicam, Esc desiste, o máximo segura');
 
   // ---------- Lembrado, e calado pelo ensurdecer ----------
   await linha.locator('.volume-slider').fill('130');
@@ -97,6 +117,47 @@ const estadoDaVoz = (pagina, id) => pagina.evaluate(id => {
   await bia.locator('#deafenBtn').click();
   assert.equal((await estadoDaVoz(bia, idDepois)).reforco, true, 'e ao voltar a ouvir, o reforço volta');
   console.log('PASS: 130% é lembrado ao voltar, e ensurdecer cala o reforço');
+
+  // ---------- No celular: a pílula e a folha de volume ----------
+  // A régua fina não cabe no dedo: no toque ela sai do quadradinho, e o número vira a porta de
+  // uma folha com a régua grande (volume-folha.js). O volume é o mesmo, pelas mesmas funções.
+  const celular = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const carla = await entrar(celular, 'Carla');
+  await vozChegou(carla);
+  const idNoCelular = await carla.evaluate(() => [...peers.values()].find(p => p.name === 'Ana').id);
+  const linhaNoCelular = carla.locator(`.participant[data-id="${idNoCelular}"] .volume-row`);
+  assert.equal(await linhaNoCelular.locator('.volume-slider').isVisible(), false, 'no toque, a régua fina sai do quadradinho');
+  const pilula = linhaNoCelular.locator('.volume-valor');
+  assert.equal(await pilula.isDisabled(), false, 'a pílula abre a folha mesmo em 100%');
+  const alturaDaPilula = await pilula.evaluate(el => el.getBoundingClientRect().height);
+  assert.ok(alturaDaPilula >= 32, `a pílula tem o tamanho do dedo (${alturaDaPilula}px)`);
+  await pilula.tap();
+  await carla.locator('#volumePanel').waitFor({ state: 'visible' });
+  assert.equal(await carla.locator('#volumeTitulo').textContent(), 'Ana');
+  // A folha sobe de baixo: mede depois de a animação de entrada terminar.
+  await carla.locator('#volumePanel .volume-card').evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
+  const folha = await carla.locator('#volumePanel .volume-card').boundingBox();
+  assert.ok(Math.abs(folha.y + folha.height - 844) <= 1 && folha.width >= 389, `no celular, a folha fica presa embaixo e da largura da tela (${JSON.stringify(folha)})`);
+  await carla.locator('#volumeAtalhos button[data-nivel="150"]').tap();
+  assert.deepEqual(await estadoDaVoz(carla, idNoCelular), { volume: 1.5, reforco: true, mudo: true, volumeDoElemento: 1 }, 'o atalho de 150% reforça como a régua fina');
+  assert.equal(await carla.locator('#volumeValor').textContent(), '150%');
+  assert.equal(await pilula.textContent(), '150%', 'a pílula acompanha a folha');
+  await carla.locator('#volumeRegua').fill('70');
+  assert.equal((await estadoDaVoz(carla, idNoCelular)).volume, 0.7, 'a régua grande mexe no mesmo volume');
+  // O número grande da folha também se digita, com o teclado de números do celular.
+  await carla.locator('#volumeValor').tap();
+  const campoDaFolha = carla.locator('#volumePanel input.valor-digitado');
+  assert.equal(await campoDaFolha.getAttribute('inputmode'), 'numeric');
+  await campoDaFolha.fill('97');
+  await campoDaFolha.press('Enter');
+  assert.equal((await estadoDaVoz(carla, idNoCelular)).volume, 0.97, 'o número digitado na folha vale, sem grudar em 100');
+  assert.equal(await pilula.textContent(), '97%', 'e a pílula acompanha');
+  await carla.locator('#volumeMudo').tap();
+  assert.equal((await estadoDaVoz(carla, idNoCelular)).mudo, true, 'o silenciar da folha cala a pessoa');
+  await carla.locator('#volumeMudo').tap();
+  await carla.locator('#volumePanel [data-close="volumePanel"]').tap();
+  await carla.locator('#volumePanel').waitFor({ state: 'hidden' });
+  console.log('PASS: no celular, a pílula abre a folha, e a régua grande, os atalhos e o silenciar mexem no mesmo volume');
 
   assert.deepEqual(erros, []);
   console.log('Volume até 200%: tudo certo.');

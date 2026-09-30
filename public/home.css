@@ -129,3 +129,17 @@ footer b { color:var(--aviso-texto); margin-left:8px; }
 @media(min-height:950px) { .hero { padding-top:105px; padding-bottom:100px; } }
 @media(max-width:1050px) { .hero { gap:45px; } .hero-sticker { display:none; } .entry-card { padding:25px; } .features { gap:24px; } }
 @media(max-width:760px) { .home-nav { height:82px; padding:0 24px; } .brand small,.nav-note { display:none; } .hero { grid-template-columns:1fr; gap:44px; padding:32px 0 35px; } main { padding:0 25px; max-width:510px; } h1 { font-size:56px; } .hero-copy>p { font-size:13px; } .hero-note { margin-top:20px; } .entry-spark { right:-8px; top:-27px; font-size:30px; } .features { grid-template-columns:1fr; gap:26px; } .features p { max-width:none; font-size:12px; } .features h3 { font-size:14px; } .entry-card { padding:27px; } input { font-size:16px; } footer { flex-direction:column; padding:22px 25px; max-width:510px; } }
+/* Nada rola para o lado. A órbita tracejada atrás do cartão de entrada é decoração, e girada ela
+   passa da borda da tela entre 768 e 1300 px: a página ganhava 60 px de rolagem lateral. `clip`
+   corta o que sai sem criar uma área de rolagem, e sem desligar o `sticky` de nada. */
+body { overflow-x:clip; }
+/* Celular estreito: o traço depois de NEXO e o texto de Novidades saem (o nome continua para o
+   leitor de tela), e o nome da conta encolhe com reticências, antes que a barra passe da tela. */
+@media(max-width:420px) {
+  .home-nav { padding:0 16px; }
+  .brand { gap:10px; }
+  .brand strong span { display:none; }
+  .nav-acoes { gap:6px; min-width:0; }
+  .nav-novidades { gap:0; padding:0 10px; font-size:0; }
+  .nav-link { max-width:132px; padding:0 11px; }
+}

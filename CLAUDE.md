@@ -29,7 +29,8 @@ npm run test:painel   # painel de telemetria
 npm run test:soundboard
 npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
-npm run test:volume   # volume por pessoa até 200% (com servidor de mídia)
+npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
+npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
 npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
 npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
@@ -88,6 +89,8 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Tela pela placa, transportada pelo RTP (o Automático) | `public/tela-placa-rtp.js` + o Worker `tela-placa-rtp-trabalhador.js`; escolhida em `aplicarPublicacao` (`sala.js`) |
 | Tela por WebCodecs pela faixa de dados (o "Forçar") | `public/tela-webcodecs.js` + `tela-{quadro,decisoes,codificador,decodificador}.js`; ligado em `room-transport.js`; chave do servidor em `chave-webcodecs.js` |
 | Estúdio: links para o OBS e rostos que reagem à voz | regra em `estudio.js`, no ar em `estudio-ao-vivo.js` (namespace `/estudio`); `public/obs.js` (a fonte do OBS), `reativo.js` (os rostos), `estudio.js` + `estudio.css` (o painel do Estúdio, na sala, só com conta), `estudio-sala.js` (permissão, cartão de perfil, selo OBS, botão da barra); o controle do dono é `estudio` na configuração da sala |
+| Volume por pessoa no toque (a pílula e a folha com a régua grande) | `public/volume-folha.js`; o volume em si continua em `sala.js` ("Volume, em um lugar so") |
+| Digitar o valor de qualquer régua (clicar no número ao lado) | `public/valor-digitado.js`, na sala e na inicial; o número é `.volume-valor`, `<output for>` ou `[data-valor-de]`, e a régua tem passo 1 para o valor digitado valer exato |
 | Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js` |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em

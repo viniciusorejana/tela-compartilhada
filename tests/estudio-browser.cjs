@@ -152,7 +152,28 @@ async function enviarFoto(pagina) {
   await bia.waitForFunction(() => document.getElementById('estudioPrevia').style.getPropertyValue('--nome-escala') === '2');
   assert.equal(await bia.locator('#estudioTamanhoDoNome ~ output').textContent(), '200%');
   await deslizar(100);
+  // O número de cada régua se digita (valor-digitado.js), e o valor exato vale -- as réguas têm
+  // passo 1 por isso. O Enter é só "aplicar": enviado, o formulário recarregaria a sala.
+  await bia.evaluate(() => { window.semRecarregar = true; });
+  const saidaDoTamanho = bia.locator('#estudioTamanho ~ output');
+  await saidaDoTamanho.click();
+  const campoDoEstudio = bia.locator('#estudioEstilo input.valor-digitado');
+  await campoDoEstudio.fill('137');
+  await bia.locator('.estudio-faixas').screenshot({ path: path.join(saida, 'estudio-digitando.png') });
+  await campoDoEstudio.press('Enter');
+  assert.equal(await bia.locator('#estudioTamanho').inputValue(), '137');
+  assert.equal(await saidaDoTamanho.textContent(), '137 px');
+  assert.equal(await bia.evaluate(() => document.getElementById('estudioPrevia').style.getPropertyValue('--tamanho')), '137px', 'a prévia muda na hora');
+  assert.equal(await bia.evaluate(() => window.semRecarregar), true, 'o Enter não enviou o formulário');
   await bia.waitForFunction(() => document.getElementById('estudioSalvo').classList.contains('certo'), null, { timeout: 5000 });
+  const salvo = await bia.evaluate(() => fetch('/api/conta/estudio', { credentials: 'same-origin' }).then(r => r.json()).then(r => r.config.estilo.tamanho));
+  assert.equal(salvo, 137, 'e o valor digitado é o que fica salvo');
+  // Esc desiste do número e deixa o painel aberto.
+  await saidaDoTamanho.click();
+  await campoDoEstudio.fill('300');
+  await campoDoEstudio.press('Escape');
+  assert.equal(await bia.locator('#estudioPanel').isVisible(), true, 'o Esc do campo não fecha o Estúdio');
+  assert.equal(await bia.locator('#estudioTamanho').inputValue(), '137');
   await bia.screenshot({ path: path.join(saida, 'estudio.png') });
 
   // ---------- Quem abriu a sala desliga o OBS nela ----------

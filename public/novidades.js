@@ -474,8 +474,8 @@
             <span class="nx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
           </div>
           <div class="nx-volume">
-            <input type="range" id="nxDemoVolume" min="0" max="200" step="5" value="100" aria-label="Volume do Léo, só para você">
-            <output for="nxDemoVolume" id="nxDemoVolumeValor">100%</output>
+            <input type="range" id="nxDemoVolume" min="0" max="200" step="1" value="100" aria-label="Volume do Léo, só para você">
+            <output for="nxDemoVolume" id="nxDemoVolumeValor" tabindex="0">100%</output>
           </div>
           <span class="nx-rotulo">Ouça os avisos da sala</span>
           <div class="nx-avisos">

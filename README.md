@@ -1454,8 +1454,9 @@ recupera uma conta colando o `.txt` do código inteiro.
 pessoas (tocar a seguir, teclado, arrastar, mover para uma posição, tirar, esvaziar), edita o
 perfil de dentro da sala e confere o aviso de atualização de um aplicativo antigo.
 `npm run test:volume` (porta `:3227`, com o servidor de mídia) põe uma pessoa em 150% e mede o
-sinal que sai do ganho, confere que 100% gruda, que o clique no número desfaz o ajuste, que o
-volume é lembrado ao recarregar e que ensurdecer cala o reforço.
+sinal que sai do ganho, confere que 100% gruda no arrasto, que o número se digita (Enter e sair
+aplicam, Esc desiste, o que passa do máximo fica no máximo, e o digitado não gruda), que o
+volume é lembrado ao recarregar, que ensurdecer cala o reforço e, no celular, a folha de volume.
 `npm run test:planos` (porta `:3223`, com o servidor de mídia) confere o cadeado do seletor, a
 tela sem conta subindo em 720p e ficando, e a tela acima do plano sendo avisada e desligada — só
 ela.

@@ -115,14 +115,50 @@
 .estudio-card .modal-actions { position:static; align-items:center; margin:0; padding:12px 24px; border-top:1px solid var(--line); background:var(--bg-2); }
 .estudio-salvo { margin-right:auto; color:var(--faint); font-size:var(--fs-sm); }
 
+/* ---------- Em qualquer tamanho ----------
+   Numa coluna só, o corpo deixa de ser grid e rola como uma página: num grid de altura presa, as
+   colunas com `min-height:0` encolhiam abaixo do conteúdo em vez de empurrar para baixo, e as
+   pessoas subiam por cima dos ajustes (o defeito do vídeo de 30/09). Daí para baixo, cada degrau
+   só aperta o que já não cabe; o painel nunca rola para o lado. */
 @media(max-width:980px) {
-  .estudio-corpo { grid-template-columns:1fr; grid-template-rows:auto; overflow-y:auto; }
-  .estudio-coluna { overflow:visible; }
+  .estudio-corpo { display:block; overflow-y:auto; overscroll-behavior:contain; }
+  .estudio-coluna { min-height:auto; overflow:visible; }
   .estudio-pessoas { border-left:0; border-top:1px solid var(--line); }
 }
+@media(max-width:760px) {
+  /* A regra geral empilha as ações de todo painel no celular. Aqui o rodapé tem duas ações curtas
+     e fica numa linha até faltar espaço de verdade: empilhadas, elas comiam cem pixels da lista. */
+  .estudio-card .modal-actions { flex-direction:row-reverse; padding:10px 16px; }
+  .estudio-card .modal-actions > button { width:auto; min-height:var(--ctl-m); }
+}
 @media(max-width:640px) {
-  .estudio-topo { flex-direction:column; align-items:flex-start; }
-  .estudio-rostos-topo, .estudio-faixas, .estudio-chaves { grid-template-columns:1fr; }
+  /* Empilhado, só o título divide a linha com o X do canto; as ações embaixo usam a largura toda. */
+  .estudio-topo { flex-direction:column; align-items:flex-start; padding:16px 16px 12px; }
+  .estudio-titulo { padding-right:36px; }
+  .estudio-topo-acoes { flex-wrap:wrap; width:100%; }
+  .estudio-ajuda { padding:10px 16px 10px 34px; }
+  .estudio-bloqueio { padding:10px 16px; }
+  .estudio-coluna { padding:14px 16px 16px; }
+  .estudio-rostos-topo, .estudio-chaves { grid-template-columns:1fr; }
+  .estudio-faixas { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .estudio-secao-cabeca { flex-wrap:wrap; }
+}
+@media(max-width:420px) {
+  .estudio-ajuda-extra { display:none; }
+  .estudio-faixas { grid-template-columns:1fr; }
+  .estudio-escolhas .segmentado span { padding:0 8px; }
+  .estudio-lista-cabeca, .estudio-pessoa-linha { grid-template-columns:minmax(0,1fr) 38px 38px auto; gap:6px; }
+  .estudio-imagem-lugar { width:38px; height:38px; }
+  .estudio-adicionar { flex-wrap:wrap; }
+  .estudio-adicionar input { flex-basis:100%; }
+  .estudio-adicionar button { flex:1; }
+  .estudio-card .modal-actions > button { flex:1 1 auto; }
+}
+/* Janela baixa (notebook com a barra de tarefas grande, celular deitado): a frase do topo sai, e
+   sobra altura para o que se ajusta. */
+@media(max-height:560px) {
+  .estudio-titulo p { display:none; }
+  .estudio-topo { padding-top:12px; padding-bottom:10px; }
 }
 
 /* ---------- A aba das configurações ---------- */
@@ -131,8 +167,8 @@
 .estudio-capturas li::before { content:''; width:7px; height:7px; flex:none; border-radius:50%; background:var(--danger); }
 .estudio-capturas:empty { display:none; }
 .estudio-nada { margin:0 0 6px; }
-.estudio-convite { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
-.estudio-convite > span { display:grid; gap:3px; min-width:0; }
+.estudio-convite { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 14px; margin-top:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
+.estudio-convite > span { flex:1 1 220px; display:grid; gap:3px; min-width:0; }
 .estudio-convite strong { color:var(--text); font-size:var(--fs-md); font-weight:600; }
 .estudio-convite small { color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
 .estudio-convite > button, .estudio-convite > .botao-link { flex:none; min-height:var(--ctl-m); padding:0 16px; }

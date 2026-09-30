@@ -93,7 +93,7 @@
         <div class="volume-row stage-volume" id="stageVolume" hidden>
           <button class="mute-peer-btn" id="stageMute" type="button" aria-pressed="false"></button>
           <input type="range" class="volume-slider" id="stageSlider" min="0" max="200" value="100" step="1" data-alvo="tela">
-          <button class="volume-valor" type="button" title="Voltar a 100%">100%</button>
+          <button class="volume-valor" type="button" title="Clique para digitar o volume">100%</button>
         </div>
         <button id="stageStopBtn" type="button" hidden title="Parar de assistir esta tela" aria-label="Parar de assistir esta tela">Parar</button>
         <button id="multiViewBtn" type="button" title="Ver telas e câmeras em grade" aria-label="Ver telas e câmeras em grade" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
@@ -154,8 +154,8 @@
 
       <div class="musica-volume" id="musicaVolume" hidden>
         <label for="musicaVolumeSlider">Volume do bot na sala</label>
-        <input type="range" class="volume-slider" id="musicaVolumeSlider" min="0" max="150" step="5" value="15">
-        <span id="musicaVolumeValor">15%</span>
+        <input type="range" class="volume-slider" id="musicaVolumeSlider" min="0" max="150" step="1" value="15">
+        <span id="musicaVolumeValor" data-valor-de="musicaVolumeSlider" tabindex="0">15%</span>
       </div>
 
       <!-- A fila: cada faixa vai pelo id, não pela posição (ver musica.js no servidor). -->
@@ -315,7 +315,7 @@
           <label class="toggle-line" for="sonsLigados"><span><strong>Avisos sonoros</strong><small>Desligados, a sala fica só com as vozes, as telas e a música.</small></span><input id="sonsLigados" type="checkbox" role="switch" checked></label>
           <div class="config-volume">
             <label for="sonsAvisoVolume">Volume dos avisos</label>
-            <div class="volume-row"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/></svg><input type="range" class="volume-slider" id="sonsAvisoVolume" min="0" max="100" step="5" value="60"><output id="sonsAvisoValor" for="sonsAvisoVolume">60%</output></div>
+            <div class="volume-row"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/></svg><input type="range" class="volume-slider" id="sonsAvisoVolume" min="0" max="100" step="1" value="60"><output id="sonsAvisoValor" for="sonsAvisoVolume" tabindex="0">60%</output></div>
           </div>
         </div>
         <span class="config-rotulo">Na sala</span>
@@ -567,7 +567,7 @@
       <div class="volume-row">
         <button class="mute-peer-btn" id="sonsMudo" type="button" aria-pressed="false"></button>
         <input type="range" class="volume-slider" id="sonsVolume" min="0" max="100" step="1" value="70">
-        <span id="sonsVolumeValor">70%</span>
+        <span id="sonsVolumeValor" data-valor-de="sonsVolume" data-unidade="%" tabindex="0">70%</span>
       </div>
       <small>Cada pessoa regula o quanto ouve. Não muda nada para os outros.</small>
     </div>
@@ -581,6 +581,22 @@
 <div class="modal hidden" id="invitePanel" role="dialog" aria-modal="true" aria-labelledby="inviteTitle"><div class="modal-card"><h2 id="inviteTitle">Convidar para a sala</h2><p class="modal-sub">O navegador não deixou copiar sozinho. O link já está selecionado: use Ctrl+C (ou segure e copie, no celular) e mande para quem vem com você.</p><input type="text" readonly id="inviteLink" aria-label="Link da sala"><div class="modal-actions"><button type="button" data-close="invitePanel">Pronto</button></div></div></div>
 <div class="modal hidden" id="sugestaoPanel" role="dialog" aria-modal="true" aria-labelledby="sugestaoTitulo"><div class="modal-card"><h2 id="sugestaoTitulo">Sugestões e problemas</h2><p class="modal-sub">O que faltou, o que incomodou, o que seria bom ter. Chega direto em quem cuida do Nexo — e o que você escrever aqui é o que decide o que vem antes.</p><div class="relato"><label class="relato-titulo" for="sugestaoTexto">Conte com suas palavras</label><textarea id="sugestaoTexto" rows="5" maxlength="500" placeholder="Ex.: queria poder deixar a sala aberta e voltar depois com o mesmo link."></textarea><p class="relato-aviso">Vão junto <strong>a sala e o nome</strong> com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite, senhas nem o relatório técnico — para problemas de imagem e som, o <strong>Diagnóstico</strong> tem um campo próprio, que anexa as medições.</p><div id="sugestaoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendSugestaoBtn">Enviar</button><button class="secondary" type="button" data-close="sugestaoPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-topo"><span class="perfil-avatar" id="perfilAvatar" aria-hidden="true"></span><div><h2 id="perfilNome"></h2><p class="modal-sub" id="perfilCodigo"></p></div></div><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><section class="perfil-obs" id="perfilObs" aria-labelledby="perfilObsTitulo" hidden><div class="perfil-obs-topo"><strong id="perfilObsTitulo">Levar para o OBS</strong><label class="toggle-line perfil-obs-som" for="perfilObsSom"><span>Com som</span><input type="checkbox" id="perfilObsSom" role="switch" checked></label></div><div class="perfil-obs-botoes" id="perfilObsBotoes"><button type="button" class="estudio-link" data-fonte-obs="camera">Câmera</button><button type="button" class="estudio-link" data-fonte-obs="tela">Tela</button><button type="button" class="estudio-link" data-fonte-obs="voz">Voz</button><button type="button" class="estudio-link" data-fonte-obs="somDaTela">Som da tela</button><button type="button" class="estudio-link" data-fonte-obs="reativo">Rosto que reage</button></div><p class="perfil-obs-status" id="perfilObsStatus" role="status"></p></section><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div>
+<!-- A folha de volume (volume-folha.js): no toque, o controle de cada pessoa é uma pílula que
+     abre esta folha, com um deslizante do tamanho do dedo. Mexe no mesmo volume de sempre. -->
+<div class="modal hidden" id="volumePanel" role="dialog" aria-modal="true" aria-labelledby="volumeTitulo">
+  <div class="modal-card volume-card">
+    <div class="volume-quem"><span class="perfil-avatar" id="volumeAvatar" aria-hidden="true"></span><div><h2 id="volumeTitulo"></h2><p class="modal-sub" id="volumeSub"></p></div></div>
+    <div class="segmentado volume-fontes" id="volumeFontes" role="radiogroup" aria-label="O que ajustar"><label><input type="radio" name="volumeFonte" value="voz"><span>Voz</span></label><label><input type="radio" name="volumeFonte" value="tela"><span>Som da tela</span></label></div>
+    <div class="volume-grande">
+      <button class="mute-peer-btn volume-mudo" id="volumeMudo" type="button" aria-pressed="false"></button>
+      <input type="range" class="volume-regua" id="volumeRegua" min="0" max="200" step="1" value="100" aria-describedby="volumeValor">
+      <output class="volume-numero" id="volumeValor" for="volumeRegua" tabindex="0">100%</output>
+    </div>
+    <div class="volume-atalhos" id="volumeAtalhos" role="group" aria-label="Volumes prontos"><button type="button" data-nivel="50">50%</button><button type="button" data-nivel="75">75%</button><button type="button" data-nivel="100">100%</button><button type="button" data-nivel="150">150%</button><button type="button" data-nivel="200">200%</button></div>
+    <p class="config-dica volume-dica">Só você ouve a diferença, e o Nexo lembra na próxima vez. Acima de 100%, o som é reforçado.</p>
+    <div class="modal-actions"><button type="button" data-close="volumePanel">Pronto</button></div>
+  </div>
+</div>
 <!-- O perfil de quem tem conta, editado sem sair da chamada (perfil-sala.js). Muda na hora
      para a sala inteira: o servidor avisa todo mundo quando a conta salva. -->
 <div class="modal hidden" id="meuPerfilPanel" role="dialog" aria-modal="true" aria-labelledby="meuPerfilTitulo"><div class="modal-card meu-perfil-card">
@@ -618,7 +634,7 @@
       </div>
       <div class="estudio-topo-acoes">
         <span class="estudio-estado" id="estudioEstado" role="status"></span>
-        <button type="button" class="ghost estudio-ajuda-btn" id="estudioAjudaBtn" aria-expanded="false" aria-controls="estudioAjuda"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 17h.01"/></svg>Como usar no OBS</button>
+        <button type="button" class="ghost estudio-ajuda-btn" id="estudioAjudaBtn" aria-expanded="false" aria-controls="estudioAjuda"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 17h.01"/></svg>Como usar<span class="estudio-ajuda-extra">&nbsp;no OBS</span></button>
       </div>
     </header>
     <ol class="estudio-ajuda" id="estudioAjuda" hidden>
@@ -644,11 +660,11 @@
           </div>
           </div>
           <div class="estudio-faixas">
-            <div class="config-volume"><label for="estudioTamanho">Tamanho dos rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanho" name="tamanho" min="48" max="512" step="4"><output for="estudioTamanho"></output></div></div>
-            <div class="config-volume"><label for="estudioTamanhoDoNome">Tamanho dos nomes</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanhoDoNome" name="tamanhoDoNome" min="50" max="300" step="10"><output for="estudioTamanhoDoNome"></output></div></div>
-            <div class="config-volume"><label for="estudioEspaco">Espaço entre rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioEspaco" name="espaco" min="0" max="160" step="2"><output for="estudioEspaco"></output></div></div>
-            <div class="config-volume"><label for="estudioApagar">Apagar quem está quieto</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioApagar" name="apagar" min="0" max="100" step="5"><output for="estudioApagar"></output></div></div>
-            <div class="config-volume"><label for="estudioSensibilidade">Sensibilidade à voz</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioSensibilidade" name="sensibilidade" min="1" max="100" step="1"><output for="estudioSensibilidade"></output></div></div>
+            <div class="config-volume"><label for="estudioTamanho">Tamanho dos rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanho" name="tamanho" min="48" max="512" step="1"><output for="estudioTamanho" tabindex="0"></output></div></div>
+            <div class="config-volume"><label for="estudioTamanhoDoNome">Tamanho dos nomes</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioTamanhoDoNome" name="tamanhoDoNome" min="50" max="300" step="1"><output for="estudioTamanhoDoNome" tabindex="0"></output></div></div>
+            <div class="config-volume"><label for="estudioEspaco">Espaço entre rostos</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioEspaco" name="espaco" min="0" max="160" step="1"><output for="estudioEspaco" tabindex="0"></output></div></div>
+            <div class="config-volume"><label for="estudioApagar">Apagar quem está quieto</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioApagar" name="apagar" min="0" max="100" step="1"><output for="estudioApagar" tabindex="0"></output></div></div>
+            <div class="config-volume"><label for="estudioSensibilidade">Sensibilidade à voz</label><div class="volume-row"><input type="range" class="volume-slider" id="estudioSensibilidade" name="sensibilidade" min="1" max="100" step="1"><output for="estudioSensibilidade" tabindex="0"></output></div></div>
           </div>
           <div class="estudio-chaves">
             <label class="toggle-line" for="estudioNomes"><span>Nomes embaixo</span><input id="estudioNomes" name="nomes" type="checkbox" role="switch"></label>
@@ -717,6 +733,8 @@
 <script src="/sons.js"></script>
 <script src="/tempo-sala.js"></script>
 <script src="/espectadores.js"></script>
+<script src="/volume-folha.js"></script>
+<script src="/valor-digitado.js"></script>
 <script src="/mencoes.js"></script>
 <script src="/configuracoes.js"></script>
 <script src="/multi-view.js"></script>

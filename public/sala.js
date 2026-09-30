@@ -5126,10 +5126,10 @@ copyLinkBtn.onclick = async () => {
 // O número ao lado do controle é o volume escolhido, sempre à vista e discreto: apagado em
 // 100%, aceso quando mudou, âmbar quando passa de 100%. Antes ele só existia no `title`, que
 // ninguém descobre -- e "por que eu ouço o Fulano mais alto que os outros?" ficava sem resposta.
-// Clicar nele volta a 100%.
+// Clicar nele deixa digitar o volume (valor-digitado.js).
 const LINHA_DE_VOLUME = alvo => `
   <input type="range" class="volume-slider" min="0" max="${VOLUME_MAXIMO * 100}" value="100" step="1" data-alvo="${alvo}">
-  <button class="volume-valor" type="button" title="Voltar a 100%">100%</button>
+  <button class="volume-valor" type="button" title="Clique para digitar o volume">100%</button>
   <button class="mute-peer-btn" type="button" aria-pressed="false"></button>
 `;
 
@@ -5138,21 +5138,33 @@ const LINHA_DE_VOLUME = alvo => `
 //
 // 100% "gruda": numa régua que vai a 200%, acertar o meio exato com o dedo é sorte, e voltar
 // ao normal é a coisa mais comum que se faz com ela. Na fase de captura, para o valor já
-// chegar grudado a quem ouve o controle.
+// chegar grudado a quem ouve o controle. O que foi digitado não gruda: quem escreve 97 quer 97.
 document.addEventListener('input', evento => {
   const controle = evento.target;
-  if (!controle.matches?.('.volume-slider[data-alvo]')) return;
+  if (!controle.matches?.('.volume-slider[data-alvo]') || evento.detail?.digitado) return;
   const valor = Number(controle.value);
   if (valor !== 100 && Math.abs(valor - 100) <= 4) controle.value = '100';
 }, true);
+// No toque a régua não aparece, e o número é a porta da folha de volume (volume-folha.js). No
+// mouse, clicar no número é digitar o volume, e isso é com valor-digitado.js.
 document.addEventListener('click', evento => {
+  if (!window.NexoVolume?.toque()) return;
   const botao = evento.target.closest?.('.volume-valor');
   const controle = botao?.parentElement?.querySelector('.volume-slider');
   if (!controle || controle.disabled) return;
   evento.stopPropagation();
-  controle.value = '100';
-  controle.dispatchEvent(new Event('input', { bubbles: true }));
+  const alvo = alvoDoControleDeVolume(botao);
+  if (alvo) NexoVolume.abrir(alvo.id, alvo.fonte);
 });
+
+// De quem é um controle de volume: o do palco segue o destaque; os outros moram num quadradinho
+// ou num card da grade, que dizem de quem são em `data-id`.
+function alvoDoControleDeVolume(elemento) {
+  const fonte = elemento.parentElement?.querySelector('.volume-slider')?.dataset.alvo === 'tela' ? 'tela' : 'voz';
+  if (elemento.closest('#stageVolume')) return pinned && pinned.id !== 'self' ? { id: pinned.id, fonte } : null;
+  const id = elemento.closest('[data-id]')?.dataset.id;
+  return id && id !== 'self' ? { id, fonte } : null;
+}
 
 // ---------- Acesso e permissões da sala ----------
 const controlesDaConfiguracao = {
@@ -5870,6 +5882,7 @@ function sincronizarControlesDeAudio(id) {
   if (pessoa?.volumeSlider) pintarControleDeVolume(pessoa.volumeSlider, pessoa.muteBtn, audioDaVoz(id));
   window.RoomMulti?.sincronizarAudio(id);
   if (pinned?.id === id) sincronizarVolumeDoPalco();
+  window.NexoVolume?.sincronizar(id);
 }
 
 // ---------- Volume de quem está no palco ----------
@@ -5918,9 +5931,12 @@ function pintarControleDeVolume(slider, muteBtn, estado) {
     valor.textContent = `${porcento}%`;
     valor.classList.toggle('alterado', porcento !== 100);
     valor.classList.toggle('reforcado', porcento > 100);
-    valor.disabled = !estado.disponivel || porcento === 100;
-    valor.title = porcento === 100 ? 'Volume normal' : 'Voltar a 100%';
-    valor.setAttribute('aria-label', porcento === 100 ? `Volume ${ehTela ? 'do' : 'da'} ${coisa}: 100%` : `Volume em ${porcento}%. Voltar a 100%`);
+    // No toque o número é a porta da folha de volume (volume-folha.js); no mouse, clicar nele é
+    // digitar o volume (valor-digitado.js).
+    const toque = document.documentElement.classList.contains('volume-toque');
+    valor.disabled = !estado.disponivel;
+    valor.title = `Volume ${ehTela ? 'do' : 'da'} ${coisa}: ${porcento}%. ${toque ? 'Toque para ajustar' : 'Clique para digitar'}`;
+    valor.setAttribute('aria-label', valor.title);
   }
   muteBtn.title = !estado.disponivel ? `Sem ${coisa}` : estado.mudo ? `Ouvir ${comArtigo}` : `Silenciar ${comArtigo}`;
   muteBtn.setAttribute('aria-label', muteBtn.title);
