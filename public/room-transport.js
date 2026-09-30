@@ -725,8 +725,10 @@
       const ativa = fonte => [...par.publicacoes.values()].some(p => fonteDaPublicacao(p) === fonte && !p.isMuted);
       par.state = {
         // Presença vem pela sinalização da sala e dura até a pessoa trocá-la. Recalcular
-        // câmera/microfone a cada publicação não pode apagar esse estado independente.
+        // câmera/microfone a cada publicação não pode apagar esse estado independente -- nem o
+        // ensurdecer, que viaja junto com ela.
         presenca: antes.presenca || '',
+        ensurdecido: Boolean(antes.ensurdecido),
         camera: ativa('camera'),
         screen: ativa('screen'),
         screenAudio: ativa('screenAudio'),

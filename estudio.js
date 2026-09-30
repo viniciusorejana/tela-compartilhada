@@ -147,6 +147,10 @@ const FORMA_DO_ESTILO = {
 
 const imagemValida = valor => (typeof valor === 'string' && ID_DE_IMAGEM.test(valor) ? valor : null);
 
+// Uma imagem por estado da pessoa. Mudo e ensurdecido cobrem as outras quando têm imagem: quem
+// não pode falar não "fala", e a arte escolhida para isso diz melhor que o rosto apagado.
+const ESTADOS_DO_ROSTO = Object.freeze(['parado', 'falando', 'mudo', 'ensurdecido']);
+
 function limparConfig(bruto) {
   const origem = bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? bruto : {};
   const estiloBruto = origem.estilo && typeof origem.estilo === 'object' ? origem.estilo : {};
@@ -158,13 +162,10 @@ function limparConfig(bruto) {
     if (Object.keys(pessoas).length >= PESSOAS_MAXIMAS_NA_CONFIGURACAO) break;
     const chave = chaveValida(chaveBruta);
     if (!chave || !dados || typeof dados !== 'object') continue;
-    const pessoa = {
-      rotulo: String(dados.rotulo || '').replace(/\s+/g, ' ').trim().slice(0, 40),
-      parado: imagemValida(dados.parado), falando: imagemValida(dados.falando),
-      oculto: dados.oculto === true
-    };
+    const pessoa = { rotulo: String(dados.rotulo || '').replace(/\s+/g, ' ').trim().slice(0, 40), oculto: dados.oculto === true };
+    for (const estado of ESTADOS_DO_ROSTO) pessoa[estado] = imagemValida(dados[estado]);
     // Uma pessoa sem imagem, sem ocultar e sem rótulo não diz nada: não ocupa lugar.
-    if (pessoa.parado || pessoa.falando || pessoa.oculto || pessoa.rotulo) pessoas[chave] = pessoa;
+    if (ESTADOS_DO_ROSTO.some(estado => pessoa[estado]) || pessoa.oculto || pessoa.rotulo) pessoas[chave] = pessoa;
   }
   return { estilo, pessoas };
 }
@@ -172,14 +173,11 @@ function limparConfig(bruto) {
 // As imagens que a configuração usa: é por esta lista que as enviadas e abandonadas são apagadas.
 function imagensDaConfig(config) {
   const ids = new Set();
-  for (const pessoa of Object.values(config?.pessoas || {})) {
-    if (pessoa.parado) ids.add(pessoa.parado);
-    if (pessoa.falando) ids.add(pessoa.falando);
-  }
+  for (const pessoa of Object.values(config?.pessoas || {})) for (const estado of ESTADOS_DO_ROSTO) if (pessoa[estado]) ids.add(pessoa[estado]);
   return ids;
 }
 
 module.exports = {
-  FONTES, TIPOS, ESTILO_PADRAO, PESSOAS_MAXIMAS_NA_CONFIGURACAO, BYTES_MAXIMOS_DA_CONFIGURACAO, ID_DE_IMAGEM,
+  FONTES, TIPOS, ESTILO_PADRAO, ESTADOS_DO_ROSTO, PESSOAS_MAXIMAS_NA_CONFIGURACAO, BYTES_MAXIMOS_DA_CONFIGURACAO, ID_DE_IMAGEM,
   normalizarNome, normalizarCodigo, chaveDaPessoa, chaveValida, criarAssinador, limparConfig, imagensDaConfig
 };

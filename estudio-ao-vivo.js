@@ -59,7 +59,10 @@ function criarEstudioAoVivo({ io, contas, sfu, membros, limitarOrigem = () => tr
       vistas.set(membro.identidade, {
         identidade: membro.identidade, nome: membro.name, chave: chaveDoMembro(membro), contaId: membro.contaId || null,
         perfil: membro.perfil ? { cor: membro.perfil.cor || null, marca: membro.perfil.marca || null, avatar: membro.perfil.avatar || null, codigo: membro.perfil.codigo || null } : null,
-        estado: { camera: Boolean(membro.state?.camera), tela: Boolean(membro.state?.screen), somDaTela: Boolean(membro.state?.screenAudio), mudo: membro.state?.micMuted !== false },
+        // Do estado, o servidor só sabe o que a pessoa anuncia: se está ensurdecida (server.js,
+        // "ensurdecer"), que o OBS usa para trocar o rosto. Câmera, tela e microfone são da mídia:
+        // a página do OBS e o painel do Estúdio (que roda na sala) os leem de lá, ao vivo.
+        estado: { ensurdecido: Boolean(membro.state?.ensurdecido) },
         permite: membro.permiteEstudio !== false
       });
     }

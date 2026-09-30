@@ -766,7 +766,12 @@ function comandarAgente(token, comando) {
   return true;
 }
 
-const estadoPadrao = () => ({ camera: false, screen: false, screenAudio: false, micMuted: true });
+// O que o servidor sabe do estado de cada pessoa é só o que ela anuncia pela sinalização: o
+// status de presença e se está ensurdecida ("sinal-presenca"). Câmera, tela e microfone são as
+// publicações da mídia (room-transport.js), e quem precisa delas as lê de lá -- a sala e o
+// painel do Estúdio, que roda na sala. Houve aqui um "media-state" que a página deixou de mandar
+// quando a mídia passou a ser o LiveKit; guardado, ele dizia "câmera desligada" para sempre.
+const estadoPadrao = () => ({ presenca: '', ensurdecido: false });
 
 function roomCodeForSocket(socket) {
   return socketRoomCodes.get(socket.id) || null;
@@ -1602,6 +1607,11 @@ io.on('connection', (socket) => {
     responder({ ok: true });
   });
 
+  // A presença viaja inteira -- o status escolhido e se a pessoa está ensurdecida --, e nunca
+  // um campo solto: quem recebe troca as duas coisas de uma vez e não precisa adivinhar o resto.
+  const anunciarPresenca = (roomCode, membro) => io.to(roomName(roomCode)).emit('presenca-atualizada', {
+    identidade: membro.identidade, presenca: membro.state.presenca || '', ensurdecido: Boolean(membro.state.ensurdecido)
+  });
   socket.on('sinal-presenca', dados => {
     const roomCode = roomCodeForSocket(socket);
     const membro = roomMembers.get(roomCode)?.get(socket.id);
@@ -1611,7 +1621,7 @@ io.on('connection', (socket) => {
       const presenca = String(dados.presenca || '');
       if (!presencas.has(presenca)) return;
       membro.state.presenca = presenca;
-      io.to(roomName(roomCode)).emit('presenca-atualizada', { identidade: membro.identidade, presenca });
+      anunciarPresenca(roomCode, membro);
     }
     const reacao = String(dados?.reacao || '');
     if (['👍', '❤️', '😂', '👏', '🎉'].includes(reacao)) {
@@ -1619,21 +1629,17 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('media-state', (state) => {
+  // Ensurdecer continua sendo local (sala.js): o que chega aqui é só o aviso, para a sala saber
+  // por que alguém não responde, e para o Estúdio trocar o rosto dessa pessoa no OBS. Um evento
+  // à parte da presença, com freio próprio (telemetria/abuso.js).
+  socket.on('ensurdecer', dados => {
     const roomCode = roomCodeForSocket(socket);
-    if (!roomCode) return;
-    const membros = roomMembers.get(roomCode);
-    const membro = membros && membros.get(socket.id);
-    if (!membro) return;
-    const dono = membro.identidade === moderacao.dono(roomCode);
-    membro.state = {
-      ...membro.state,
-      camera: Boolean(state?.camera),
-      screen: Boolean(state?.screen) && (configuracaoDaSala(roomCode).compartilharTela || dono),
-      screenAudio: Boolean(state?.screenAudio) && (configuracaoDaSala(roomCode).compartilharTela || dono),
-      micMuted: Boolean(state?.micMuted)
-    };
-    socket.to(roomName(roomCode)).emit('media-state', { id: socket.id, ...membro.state });
+    const membro = roomMembers.get(roomCode)?.get(socket.id);
+    if (!roomCode || !membro || typeof dados?.ensurdecido !== 'boolean') return;
+    if (Boolean(membro.state.ensurdecido) === dados.ensurdecido) return;
+    membro.state.ensurdecido = dados.ensurdecido;
+    anunciarPresenca(roomCode, membro);
+    estudio.mudouSala(roomCode);
   });
 
   // As telas que esta página está recebendo agora -- a lista inteira, nunca um "liguei" solto

@@ -77,6 +77,29 @@ async function enviarFoto(pagina) {
   const linkDaCamera = await ana.evaluate(() => navigator.clipboard.readText());
   assert.match(linkDaCamera, /\/obs\/[\w-]+\.[\w-]+$/, 'o clique copia o link da câmera');
   await ana.screenshot({ path: path.join(saida, 'cartao-com-links.png') });
+
+  // ---------- A foto grande ----------
+  // O avatar do cartão abre o visor; fechar volta ao cartão. A foto de teste tem 400 px de lado
+  // útil, e sobe assim: até 512, sem ampliar o que é menor.
+  assert.equal(await ana.locator('#perfilAvatar').getAttribute('role'), 'button', 'com foto, o avatar do cartão se abre');
+  await ana.locator('#perfilAvatar').click();
+  await ana.locator('#fotoPanel').waitFor({ state: 'visible' });
+  assert.match(await ana.locator('#fotoGrande').getAttribute('src'), new RegExp(foto.avatar));
+  await ana.waitForFunction(() => document.getElementById('fotoGrande').naturalWidth > 0, null, { timeout: 10000 });
+  assert.equal(await ana.locator('#fotoGrande').evaluate(el => el.naturalWidth), 400, 'a foto sobe no tamanho dela até 512 px');
+  assert.equal(await ana.locator('#fotoNome').textContent(), 'Bia');
+  const larguraDaFoto = await ana.locator('#fotoGrande').evaluate(el => el.getBoundingClientRect().width);
+  assert.ok(larguraDaFoto >= 400, `a foto aparece grande (${larguraDaFoto}px)`);
+  await ana.screenshot({ path: path.join(saida, 'foto-grande.png') });
+  await ana.keyboard.press('Escape');
+  await ana.locator('#fotoPanel').waitFor({ state: 'hidden' });
+  assert.equal(await ana.locator('#perfilPanel').isVisible(), true, 'o Esc fecha a foto e volta ao cartão');
+  await ana.locator('#perfilPanel [data-close="perfilPanel"]').click();
+  // Sem foto não há o que ampliar.
+  await ana.evaluate(() => abrirPerfil('self'));
+  assert.equal(await ana.locator('#perfilAvatar').getAttribute('role'), null, 'sem foto, o avatar é só um desenho');
+  await ana.locator('#perfilAvatar').click();
+  assert.equal(await ana.locator('#fotoPanel').isVisible(), false);
   await ana.locator('#perfilPanel [data-close="perfilPanel"]').click();
 
   // ---------- A página do OBS recebe a imagem ----------
@@ -117,6 +140,58 @@ async function enviarFoto(pagina) {
   });
   await obsRostos.waitForFunction(() => document.getElementById('rostos').dataset.efeito === 'pulso' && document.getElementById('rostos').style.getPropertyValue('--tamanho') === '220px', null, { timeout: 10000 });
 
+  // ---------- Ensurdecida: na sala e no OBS ----------
+  // A Ana dá à Bia uma imagem de ensurdecida, e a Bia ensurdece. A sala vê o fone cortado no lugar
+  // do microfone (quadradinho e lista), e o rosto da Bia no OBS troca pela imagem escolhida.
+  const chaveDaBia = retrato.sala.pessoas.find(p => p.nome === 'Bia').chave;
+  const imagemDeSurda = await ana.evaluate(async chave => {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#3a6df0'; ctx.fillRect(0, 0, 64, 64);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const enviada = await NexoImagem.enviar('/api/conta/estudio/imagens', blob, { metodo: 'POST', csrf: NexoConta.atual().csrf });
+    const atual = await fetch('/api/conta/estudio', { credentials: 'same-origin' }).then(r => r.json());
+    const pessoas = { ...atual.config.pessoas, [chave]: { rotulo: 'Bia', parado: null, falando: null, mudo: null, ensurdecido: enviada.dados.imagem.id, oculto: false } };
+    await fetch('/api/conta/estudio', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Nexo-CSRF': NexoConta.atual().csrf }, body: JSON.stringify({ config: { ...atual.config, pessoas } }) });
+    return enviada.dados.imagem.id;
+  }, chaveDaBia);
+  await obsRostos.waitForFunction(id => document.querySelector(`#rostos .rosto-ensurdecido[src*="${id}"]`), imagemDeSurda, { timeout: 10000 });
+  assert.equal(await rostoDaBia.getAttribute('data-imagem'), null, 'a imagem de ensurdecida só aparece quando ela ensurdece');
+  // Com a câmera no palco, o quadradinho dela sai da plateia: sem câmera, ele volta, e é nele que
+  // o fone cortado aparece.
+  await bia.locator('#cameraBtn').click();
+  await ana.waitForFunction(id => { const el = document.querySelector(`.participant[data-id="${id}"]`); return el && !el.hidden && !peers.get(id).state.camera; }, idDaBia, { timeout: 15000 });
+  await bia.locator('#deafenBtn').click();
+  const iconeDaBia = ana.locator(`.participant[data-id="${idDaBia}"] .mic-icon`);
+  await ana.waitForFunction(id => document.querySelector(`.participant[data-id="${id}"] .mic-icon`)?.classList.contains('ensurdecido'), idDaBia, { timeout: 10000 });
+  assert.equal(await iconeDaBia.getAttribute('title'), 'Ensurdecido: não está ouvindo a sala');
+  await ana.waitForFunction(id => document.querySelector(`.member[data-member-id="${id}"] .member-mudo.ensurdecido`), idDaBia, { timeout: 5000 });
+  assert.equal(await bia.locator('.participant[data-id="self"] .mic-icon').evaluate(el => el.classList.contains('ensurdecido')), true, 'o próprio quadradinho também mostra');
+  await obsRostos.waitForFunction(() => [...document.querySelectorAll('#rostos .rosto')].some(r => r.textContent.includes('Bia') && r.dataset.imagem === 'ensurdecido' && r.classList.contains('ensurdecido')), null, { timeout: 10000 });
+  await obsRostos.waitForTimeout(250);   // a troca de imagem é uma transição curta de opacidade
+  const opacidade = await rostoDaBia.evaluate(el => ({ surda: getComputedStyle(el.querySelector('.rosto-ensurdecido')).opacity, foto: getComputedStyle(el.querySelector('.rosto-gerado')).opacity }));
+  assert.deepEqual(opacidade, { surda: '1', foto: '0' }, 'a imagem de ensurdecida cobre a foto');
+  await ana.locator('.participants').screenshot({ path: path.join(saida, 'plateia-ensurdecida.png') });
+  await obsRostos.screenshot({ path: path.join(saida, 'rostos-ensurdecida.png') });
+  // Quem chega depois já vê: o estado vem na entrada, e não só no próximo aviso.
+  const carla = await entrar(await navegador.newContext({ viewport: { width: 1280, height: 800 } }), 'Carla');
+  await carla.waitForFunction(() => [...peers.values()].some(p => p.name === 'Bia' && p.state.ensurdecido), null, { timeout: 20000 });
+  await carla.waitForFunction(() => [...document.querySelectorAll('.participant')].some(el => el.textContent.includes('Bia') && el.querySelector('.mic-icon.ensurdecido')), null, { timeout: 10000 });
+  // Sai pelo botão, e não fechando a aba: quem só some fica esperando a volta por um tempo, e o
+  // Estúdio, adiante, conta as pessoas da sala.
+  // Sem esperar a promessa: ela termina levando a página para a inicial. A aba fica lá (fechá-la
+  // no meio dessa navegação deixava o `close` do Playwright esperando para sempre).
+  await carla.evaluate(() => { sairDaSala(); });
+  await ana.waitForFunction(() => ![...peers.values()].some(p => p.name === 'Carla'), null, { timeout: 15000 });
+  await carla.waitForURL(url => url.pathname === '/', { timeout: 15000 });
+  // Ela volta a ouvir: tudo volta, e o microfone reabre como estava.
+  await bia.locator('#deafenBtn').click();
+  await ana.waitForFunction(id => !document.querySelector(`.participant[data-id="${id}"] .mic-icon`).classList.contains('ensurdecido'), idDaBia, { timeout: 10000 });
+  await obsRostos.waitForFunction(() => [...document.querySelectorAll('#rostos .rosto')].some(r => r.textContent.includes('Bia') && !r.dataset.imagem && !r.classList.contains('ensurdecido')), null, { timeout: 10000 });
+  await ana.waitForFunction(() => [...peers.values()].some(p => p.name === 'Bia' && !p.state.micMuted), null, { timeout: 10000 });
+  await bia.locator('#cameraBtn').click();
+  await obsCamera.waitForFunction(() => { const v = document.getElementById('video'); return !v.hidden && v.videoWidth > 0; }, null, { timeout: 30000 });
+
   // ---------- A Bia desliga ----------
   await bia.locator('.config-engrenagem').click();
   await bia.locator('#abaEstudio').click();
@@ -143,6 +218,22 @@ async function enviarFoto(pagina) {
   await bia.locator('#estudioBtn').click();
   await bia.locator('#estudioPanel').waitFor({ state: 'visible' });
   await bia.waitForFunction(() => document.querySelectorAll('#estudioPrevia .rosto').length === 2 && document.querySelectorAll('#estudioLista .estudio-pessoa').length === 2, null, { timeout: 10000 });
+  // O ponto "no ar" de cada link vem da sala, ao vivo: a câmera e a voz da Bia estão saindo, e a
+  // Ana não ligou nada. Fechar o microfone apaga o ponto da voz em um segundo, sem recarregar.
+  const noAr = () => bia.evaluate(() => {
+    const itens = [...document.querySelectorAll('#estudioLista .estudio-pessoa[data-identidade]')];
+    const fontes = el => [...el.querySelectorAll('.estudio-link.no-ar')].map(c => c.dataset.fonte).sort().join(',');
+    return { minha: fontes(itens.find(el => el.dataset.identidade === myId)), daAna: fontes(itens.find(el => el.dataset.identidade !== myId)) };
+  });
+  await bia.waitForFunction(() => document.querySelectorAll('#estudioLista .estudio-link.no-ar').length > 0, null, { timeout: 5000 });
+  assert.deepEqual(await noAr(), { minha: 'camera,voz', daAna: '' });
+  assert.match(await bia.locator(`.estudio-pessoa[data-identidade] .estudio-link.no-ar[data-fonte="camera"]`).getAttribute('title'), /no ar agora$/);
+  // Pelo atalho: com o painel aberto, a sala por trás fica inerte ao mouse.
+  await bia.keyboard.press('Control+Shift+M');
+  await bia.waitForFunction(() => !document.querySelector('#estudioLista .estudio-link.no-ar[data-fonte="voz"]'), null, { timeout: 5000 });
+  assert.deepEqual(await noAr(), { minha: 'camera', daAna: '' }, 'microfone fechado, a voz sai do ar');
+  await bia.keyboard.press('Control+Shift+M');
+  await bia.waitForFunction(() => document.querySelector('#estudioLista .estudio-link.no-ar[data-fonte="voz"]'), null, { timeout: 5000 });
   await bia.locator('#estudioAdicionarCampo').fill('Carla');
   await bia.locator('#estudioAdicionar button[type="submit"]').click();
   await bia.locator('.estudio-pessoa[data-chave="n:carla"]').waitFor({ state: 'visible' });
@@ -197,7 +288,7 @@ async function enviarFoto(pagina) {
   await obsCamera.waitForFunction(() => NexoObs.estado?.tipo === 'aguardando' && NexoObs.estado.motivo === 'diretor', null, { timeout: 20000 });
 
   assert.deepEqual(erros, [], 'nenhum erro de página');
-  console.log('PASS: Estúdio -- foto, link da câmera, página do OBS, aviso na sala, rostos, painel, permissão e o controle da sala');
+  console.log('PASS: Estúdio -- foto e foto grande, link da câmera, página do OBS, aviso na sala, rostos, ensurdecida na sala e no OBS, painel (com o "no ar" ao vivo), permissão e o controle da sala');
 })().catch(erro => {
   console.error(erro);
   console.error(instancia?.erros?.().slice(-2000));

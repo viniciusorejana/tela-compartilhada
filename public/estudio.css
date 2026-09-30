@@ -76,10 +76,16 @@
 .estudio-aviso.certo, .estudio-salvo.certo { color:var(--online-texto); }
 .estudio-aviso.problema, .estudio-salvo.problema { color:var(--danger-texto); }
 
-/* Uma pessoa numa linha: quem é, as duas imagens e as ações. Os links vão embaixo, alinhados ao
-   nome. O cabeçalho de colunas diz de uma vez o que são as duas imagens. */
-.estudio-lista-cabeca, .estudio-pessoa-linha { display:grid; grid-template-columns:minmax(0,1fr) 44px 44px 64px; align-items:center; gap:8px; }
-.estudio-lista-cabeca { margin-bottom:-8px; padding:0 11px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:700; letter-spacing:.06em; text-transform:uppercase; text-align:center; }
+/* Uma pessoa numa linha: quem é, as quatro imagens (parado, falando, mudo, ensurdecido) e as
+   ações. Os links vão embaixo, alinhados ao nome. O cabeçalho diz de uma vez o que é cada coluna,
+   com o desenho de cada estado -- o mesmo que o lugar vazio mostra. */
+.estudio-pessoas { container:estudio-pessoas / inline-size; }
+.estudio-lista-cabeca, .estudio-pessoa-linha { display:grid; grid-template-columns:minmax(0,1fr) auto 64px; grid-template-areas:"quem imagens acoes"; align-items:center; gap:10px; }
+.estudio-quem { grid-area:quem; }
+.estudio-imagens { grid-area:imagens; display:grid; grid-template-columns:repeat(4,38px); gap:6px; }
+.estudio-pessoa-acoes { grid-area:acoes; }
+.estudio-lista-cabeca { margin-bottom:-8px; padding:0 11px; color:var(--faint); }
+.estudio-lista-cabeca .estudio-imagens span { display:grid; place-items:center; cursor:help; }
 .estudio-lista { margin:0; padding:0; list-style:none; display:grid; gap:6px; }
 .estudio-pessoa { display:grid; gap:8px; padding:10px; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--bg-2); transition:opacity var(--dur) var(--curva); }
 .estudio-pessoa.oculta .estudio-quem, .estudio-pessoa.oculta .estudio-imagem { opacity:.5; }
@@ -92,17 +98,31 @@
 .estudio-selo.na-sala { background:var(--online-suave); color:var(--online-texto); }
 .estudio-selo.recusa { background:var(--danger-suave); color:var(--danger-texto); }
 
-.estudio-imagem-lugar { position:relative; width:44px; height:44px; }
-.estudio-imagem { display:grid; place-items:center; width:100%; height:100%; padding:0; border:1px dashed var(--line-3); border-radius:var(--r-md); background-color:rgb(var(--tinta) / 2.5%); background-position:center; background-size:contain; background-repeat:no-repeat; color:var(--faint); }
+.estudio-imagem-lugar { display:grid; justify-items:center; gap:4px; min-width:0; }
+.estudio-imagem-caixa { position:relative; width:38px; height:38px; }
+.estudio-imagem { display:grid; place-items:center; width:100%; height:100%; padding:0; border:1px dashed var(--line-3); border-radius:var(--r-md); background-color:rgb(var(--tinta) / 2.5%); background-position:center; background-size:contain; background-repeat:no-repeat; color:var(--apagado); }
 .estudio-imagem:hover:not(:disabled) { border-color:var(--accent); background-color:var(--accent-suave); color:var(--accent-texto); }
 .estudio-imagem.com-imagem { border-style:solid; border-color:var(--line-2); }
 .estudio-imagem.com-imagem .ico { display:none; }
 .estudio-imagem .ico { width:16px; height:16px; }
+/* A legenda de cada imagem só aparece na lista estreita (abaixo), no lugar do cabeçalho. */
+.estudio-imagem-legenda { display:none; max-width:100%; overflow:hidden; color:var(--faint); font-size:var(--fs-rotulo); font-weight:600; white-space:nowrap; text-overflow:ellipsis; }
 .estudio-tirar { position:absolute; top:-6px; right:-6px; display:none; place-items:center; width:18px; height:18px; padding:0; border-radius:50%; background:var(--bg-4); color:var(--text); box-shadow:0 1px 3px #0006; }
 .estudio-tirar:hover:not(:disabled) { background:var(--danger); color:#fff; }
 .estudio-tirar svg { width:10px; height:10px; }
-.estudio-imagem-lugar:hover .estudio-tirar, .estudio-imagem-lugar:focus-within .estudio-tirar { display:grid; }
+.estudio-imagem-caixa:hover .estudio-tirar, .estudio-imagem-caixa:focus-within .estudio-tirar { display:grid; }
+/* No toque não há "passar por cima": o X de tirar fica sempre à vista. */
+@media(hover:none) { .estudio-tirar { display:grid; } }
 .estudio-pessoa-acoes { display:flex; justify-content:flex-end; gap:2px; }
+/* Lista estreita (celular, ou a coluna das pessoas apertada numa janela média): quem é e as ações
+   numa linha; as quatro imagens embaixo, com o nome de cada uma, e o cabeçalho sai. */
+@container estudio-pessoas (max-width:420px) {
+  .estudio-lista-cabeca { display:none; }
+  .estudio-pessoa-linha { grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"quem acoes" "imagens imagens"; row-gap:10px; }
+  .estudio-pessoa-linha .estudio-imagens { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .estudio-imagem-caixa { width:44px; height:44px; }
+  .estudio-imagem-legenda { display:block; }
+}
 .estudio-pessoa-acoes .icone-so[aria-pressed="true"] { background:var(--bg-3); color:var(--text); }
 
 .estudio-links { display:flex; flex-wrap:wrap; gap:5px; }
@@ -147,8 +167,6 @@
   .estudio-ajuda-extra { display:none; }
   .estudio-faixas { grid-template-columns:1fr; }
   .estudio-escolhas .segmentado span { padding:0 8px; }
-  .estudio-lista-cabeca, .estudio-pessoa-linha { grid-template-columns:minmax(0,1fr) 38px 38px auto; gap:6px; }
-  .estudio-imagem-lugar { width:38px; height:38px; }
   .estudio-adicionar { flex-wrap:wrap; }
   .estudio-adicionar input { flex-basis:100%; }
   .estudio-adicionar button { flex:1; }
@@ -185,6 +203,9 @@
 /* ---------- Quem está no OBS ----------
    O selo do quadradinho fica sobre o vídeo, e por isso tem cor fixa, como o "Tela" ao lado. */
 .obs-selo { position:absolute; left:6px; bottom:6px; z-index:2; padding:2px 6px; border-radius:5px; background:#e5484d; color:#fff; font-size:var(--fs-rotulo); font-weight:800; letter-spacing:.04em; cursor:help; box-shadow:0 1px 4px #0007; }
+/* No quadradinho de pessoa, o canto de baixo é do microfone (mudo, ou o fone cortado de quem
+   ensurdeceu): o selo fica ao lado dele, e não por cima. */
+.participant[data-source="camera"] .obs-selo { left:25px; bottom:4px; }
 .obs-na-sala { display:inline-flex; align-items:center; gap:6px; color:var(--danger-texto); font-weight:700; letter-spacing:.03em; }
 .obs-na-sala i { width:8px; height:8px; border-radius:50%; background:var(--danger); box-shadow:0 0 0 3px var(--danger-suave); }
 /* Na barra de cima estreita, o selo fica só com o ponto -- o texto continua no `title` e para o

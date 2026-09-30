@@ -31,11 +31,20 @@
     fechar: '<path d="M18 6 6 18M6 6l12 12"/>',
     olho: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     olhoFechado: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.9 9.9 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
-    lixo: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+    lixo: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    // Os quatro estados de um rosto. Mudo e ensurdecido são os desenhos da sala (a lista e o
+    // quadradinho): quem conhece o ícone lá reconhece aqui.
+    parado: '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9.5 15.5h5"/>',
+    falando: '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 14h6a3 3 0 0 1-6 0Z"/>',
+    mudo: '<path d="M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18"/>',
+    ensurdecido: '<path d="M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18"/>'
   };
   const icone = (nome, classe = 'ico') => `<svg class="${classe}" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ''}</svg>`;
   const FONTES = [['camera', 'Câmera'], ['tela', 'Tela'], ['voz', 'Voz'], ['somDaTela', 'Som da tela'], ['reativo', 'Rosto']];
-  const ESTADOS = [['parado', 'parado'], ['falando', 'falando']];
+  // O nome de cada estado é o que o leitor de tela diz, o `title` mostra e a legenda embaixo da
+  // imagem escreve quando a lista fica estreita.
+  const ESTADOS = [['parado', 'Parado'], ['falando', 'Falando'], ['mudo', 'Mudo'], ['ensurdecido', 'Ensurdecido']];
+  const SEM_IMAGENS = Object.fromEntries(ESTADOS.map(([estado]) => [estado, null]));
 
   let retrato = null;
   let config = null;
@@ -118,14 +127,36 @@
 
   function redesenharPrevia() {
     const lista = pessoas().filter(p => !config.pessoas[p.chave]?.oculto && p.permite !== false)
-      .map(p => ({ identidade: p.chave, chave: p.chave, nome: p.nome, perfil: p.perfil }));
+      .map(p => ({ identidade: p.chave, chave: p.chave, nome: p.nome, perfil: p.perfil, naSala: p.identidade }));
     previa.definir({ config, pessoas: lista.length ? lista : EXEMPLOS });
+    pintarEstadosDaPrevia(lista);
+  }
+
+  // Mudo e ensurdecido na prévia são os de verdade, lidos da sala (sala.js): para ver a imagem de
+  // "mudo" de alguém, basta essa pessoa -- ou você -- fechar o microfone. O servidor não sabe do
+  // microfone de ninguém; a sala, sim.
+  function estadoNaSala(identidade) {
+    if (!identidade) return null;
+    if (typeof myId !== 'undefined' && identidade === myId && typeof meuEstado === 'function') return meuEstado();
+    return typeof peers !== 'undefined' ? peers.get(identidade)?.state || null : null;
+  }
+  let listaDaPrevia = [];
+  function pintarEstadosDaPrevia(lista = listaDaPrevia) {
+    listaDaPrevia = lista;
+    for (const pessoa of lista) {
+      const estado = estadoNaSala(pessoa.naSala);
+      previa.definirMudo(pessoa.identidade, Boolean(estado?.micMuted));
+      previa.definirEnsurdecido(pessoa.identidade, Boolean(estado?.ensurdecido));
+    }
   }
 
   // Quem fala na prévia é sorteado; um clique num rosto o faz falar (ou calar) até o próximo.
+  // Quem está mudo não fala, nem na prévia.
   let sorteio = null;
   function sortearFalas() {
-    for (const id of previa.ids()) if (!manuais.has(id)) previa.definirFalando(id, Math.random() < 0.3);
+    pintarEstadosDaPrevia();
+    const mudos = new Set(listaDaPrevia.filter(p => estadoNaSala(p.naSala)?.micMuted).map(p => p.identidade));
+    for (const id of previa.ids()) if (!manuais.has(id)) previa.definirFalando(id, !mudos.has(id) && Math.random() < 0.3);
   }
   $('estudioPrevia').addEventListener('click', evento => {
     const id = evento.target.closest('.rosto')?.dataset.id;
@@ -206,7 +237,7 @@
   }
 
   function entradaDe(pessoa) {
-    if (!config.pessoas[pessoa.chave]) config.pessoas[pessoa.chave] = { rotulo: pessoa.nome || '', parado: null, falando: null, oculto: false };
+    if (!config.pessoas[pessoa.chave]) config.pessoas[pessoa.chave] = { rotulo: pessoa.nome || '', ...SEM_IMAGENS, oculto: false };
     return config.pessoas[pessoa.chave];
   }
 
@@ -241,23 +272,34 @@
     return quem;
   }
 
-  function lugarDaImagem(pessoa, estado, rotulo) {
+  // Vazio, o lugar mostra o desenho do estado, o mesmo do cabeçalho: dá para saber o que vai ali
+  // sem ler nada. A legenda embaixo só aparece com a lista estreita, quando o cabeçalho sai.
+  function lugarDaImagem(pessoa, estado, titulo) {
     const lugar = elemento('span', 'estudio-imagem-lugar');
+    lugar.dataset.estado = estado;
     const id = config.pessoas[pessoa.chave]?.[estado];
-    const escolher = botao('estudio-imagem', icone('mais'), `${id ? 'Trocar' : 'Escolher'} a imagem de ${pessoa.nome} ${rotulo}`);
+    const escolher = botao('estudio-imagem', icone(estado), `${id ? 'Trocar' : 'Escolher'} a imagem “${titulo}” de ${pessoa.nome}`);
     if (id && /^[a-f0-9]{32}$/.test(id)) {
       escolher.classList.add('com-imagem');
       escolher.style.backgroundImage = `url("/api/imagem/${id}")`;
     }
-    escolher.addEventListener('click', () => escolherArquivo(pessoa, estado));
-    lugar.append(escolher);
+    escolher.addEventListener('click', () => escolherArquivo(pessoa, estado, titulo));
+    const caixa = elemento('span', 'estudio-imagem-caixa');
+    caixa.append(escolher);
     if (id) {
-      const tirar = botao('estudio-tirar', icone('fechar'), `Tirar a imagem de ${pessoa.nome} ${rotulo}`);
+      const tirar = botao('estudio-tirar', icone('fechar'), `Tirar a imagem “${titulo}” de ${pessoa.nome}`);
       tirar.addEventListener('click', () => tirarImagem(pessoa, id));
-      lugar.append(tirar);
+      caixa.append(tirar);
     }
+    const legenda = elemento('span', 'estudio-imagem-legenda', titulo);
+    legenda.setAttribute('aria-hidden', 'true');
+    lugar.append(caixa, legenda);
     return lugar;
   }
+
+  // O cabeçalho das imagens, com os mesmos desenhos dos lugares vazios.
+  document.querySelector('.estudio-lista-cabeca .estudio-imagens').innerHTML = ESTADOS
+    .map(([estado, titulo]) => `<span title="${titulo}">${icone(estado, 'ico ico-p')}</span>`).join('');
 
   function linhaDaPessoa(pessoa) {
     const item = elemento('li', 'estudio-pessoa');
@@ -266,7 +308,9 @@
     item.classList.toggle('oculta', oculta);
 
     const linha = elemento('div', 'estudio-pessoa-linha');
-    linha.append(quemE(pessoa), ...ESTADOS.map(([estado, rotulo]) => lugarDaImagem(pessoa, estado, rotulo)));
+    const imagens = elemento('div', 'estudio-imagens');
+    imagens.append(...ESTADOS.map(([estado, titulo]) => lugarDaImagem(pessoa, estado, titulo)));
+    linha.append(quemE(pessoa), imagens);
     const acoes = elemento('div', 'estudio-pessoa-acoes');
     const esconder = botao('ghost icone-so', icone(oculta ? 'olhoFechado' : 'olho', 'ico ico-p'), oculta ? `Mostrar ${pessoa.nome} nos rostos do OBS` : `Esconder ${pessoa.nome} dos rostos do OBS`);
     esconder.setAttribute('aria-pressed', String(oculta));
@@ -282,16 +326,36 @@
 
     const links = retrato?.links?.pessoas?.[pessoa.chave];
     if (links) {
+      if (pessoa.naSala && pessoa.identidade) item.dataset.identidade = pessoa.identidade;
       const fila = elemento('div', 'estudio-links');
       for (const [fonte, rotulo] of FONTES) {
-        const noAr = pessoa.estado && (fonte === 'voz' ? !pessoa.estado.mudo : fonte === 'reativo' ? false : pessoa.estado[fonte]);
-        const chip = botao(`estudio-link${noAr ? ' no-ar' : ''}`, `${icone(fonte)}${rotulo}`, `Copiar o link ${fonte === 'reativo' ? 'do rosto que reage' : `da fonte ${rotulo.toLowerCase()}`} de ${pessoa.nome}${noAr ? ' — no ar agora' : ''}`);
+        const texto = `Copiar o link ${fonte === 'reativo' ? 'do rosto que reage' : `da fonte ${rotulo.toLowerCase()}`} de ${pessoa.nome}`;
+        const chip = botao('estudio-link', `${icone(fonte)}${rotulo}`, texto);
+        Object.assign(chip.dataset, { fonte, texto });
         chip.addEventListener('click', () => copiar(chip, endereco(links[fonte], fonte)));
         fila.append(chip);
       }
       item.append(fila);
     }
     return item;
+  }
+
+  // O ponto "no ar" de cada link: a câmera, a tela, a voz e o som da tela que estão saindo agora.
+  // Quem sabe disso é a sala, pela mídia (sala.js) -- o servidor não sabe do microfone de ninguém.
+  // Por isso é lido aqui, a cada volta da prévia, e só troca a classe e o título: redesenhar a
+  // lista tiraria o foco de quem está no meio de uma escolha.
+  const NO_AR = { camera: e => e.camera, tela: e => e.screen, voz: e => !e.micMuted, somDaTela: e => e.screenAudio };
+  function pintarNoAr() {
+    for (const item of $('estudioLista').querySelectorAll('.estudio-pessoa')) {
+      const estado = estadoNaSala(item.dataset.identidade);
+      for (const chip of item.querySelectorAll('.estudio-link[data-fonte]')) {
+        const noAr = Boolean(estado && NO_AR[chip.dataset.fonte]?.(estado));
+        if (chip.classList.contains('no-ar') === noAr && chip.title) continue;
+        chip.classList.toggle('no-ar', noAr);
+        chip.title = `${chip.dataset.texto}${noAr ? ' — no ar agora' : ''}`;
+        chip.setAttribute('aria-label', chip.title);
+      }
+    }
   }
 
   // Só redesenha quando algo mudou: a lista chega de novo a cada oito segundos, e refazê-la à toa
@@ -306,12 +370,13 @@
     $('estudioVazio').hidden = lista.length > 0;
     document.querySelector('.estudio-lista-cabeca').hidden = !lista.length;
     $('estudioContagem').textContent = lista.length ? String(lista.length) : '';
+    pintarNoAr();
   }
 
   // ---------- As imagens ----------
   let alvoDoArquivo = null;
-  function escolherArquivo(pessoa, estado) {
-    alvoDoArquivo = { pessoa, estado };
+  function escolherArquivo(pessoa, estado, titulo) {
+    alvoDoArquivo = { pessoa, estado, titulo };
     $('estudioArquivo').click();
   }
   $('estudioArquivo').addEventListener('change', async evento => {
@@ -329,7 +394,7 @@
     const r = await NexoImagem.enviar('/api/conta/estudio/imagens', blob, { metodo: 'POST', csrf: csrf() });
     if (!r.ok) { dizer(aviso, r.dados.error || 'Não foi possível enviar a imagem.', 'problema'); return; }
     entradaDe(alvo.pessoa)[alvo.estado] = r.dados.imagem.id;
-    if (await salvar()) dizer(aviso, `Imagem de ${alvo.pessoa.nome} ${alvo.estado} guardada.`, 'certo');
+    if (await salvar()) dizer(aviso, `Imagem “${alvo.titulo}” de ${alvo.pessoa.nome} guardada.`, 'certo');
     pintarTudo();
   });
 
@@ -344,7 +409,8 @@
   async function esquecerPessoa(pessoa) {
     const entrada = config.pessoas[pessoa.chave];
     if (!entrada) return;
-    for (const id of [entrada.parado, entrada.falando]) if (id) await api(`/api/conta/estudio/imagens/${id}`, { metodo: 'DELETE' });
+    // A mesma imagem pode servir a dois estados: apagada uma vez só.
+    for (const id of new Set(ESTADOS.map(([estado]) => entrada[estado]).filter(Boolean))) await api(`/api/conta/estudio/imagens/${id}`, { metodo: 'DELETE' });
     delete config.pessoas[pessoa.chave];
     await salvar();
     pintarTudo();
@@ -364,7 +430,7 @@
     if (!r.ok) { dizer(aviso, r.dados.error || 'Não foi possível adicionar.', 'problema'); return; }
     const { chave, rotulo, perfil } = r.dados.pessoa;
     if (perfil) perfisAdicionados.set(chave, { ...perfil, apelido: rotulo });
-    if (!config.pessoas[chave]) config.pessoas[chave] = { rotulo, parado: null, falando: null, oculto: false };
+    if (!config.pessoas[chave]) config.pessoas[chave] = { rotulo, ...SEM_IMAGENS, oculto: false };
     campo.value = '';
     dizer(aviso, perfil ? `${rotulo} entrou na lista, pela conta.` : `“${rotulo}” entrou na lista: vale para quem entrar sem conta com esse nome.`, 'certo');
     await salvar();
@@ -437,7 +503,7 @@
     atualizacao = sorteio = null;
     if (!aberto) return;
     atualizacao = setInterval(() => { if (!document.hidden) recarregar({ soAoVivo: true }); }, MS_ENTRE_ATUALIZACOES);
-    sorteio = setInterval(sortearFalas, 900);
+    sorteio = setInterval(() => { sortearFalas(); pintarNoAr(); }, 900);
   }).observe(painel, { attributes: true, attributeFilter: ['class'] });
 
   window.NexoEstudio = { abrir, icone, copiar, copiarTexto };

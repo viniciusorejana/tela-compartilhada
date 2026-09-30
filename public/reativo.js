@@ -8,7 +8,9 @@
  * sorteia. Aqui só se desenha.
  *
  * As imagens vêm da configuração de quem usa o Estúdio (a imagem "parado" e a "falando" de cada
- * pessoa); sem elas, a foto do perfil; sem foto, a cor e as iniciais, como na sala.
+ * pessoa); sem elas, a foto do perfil; sem foto, a cor e as iniciais, como na sala. Mudo e
+ * ensurdecido têm imagem própria se quem monta a cena quiser: ela cobre as outras enquanto o
+ * estado dura. Sem ela, o rosto de sempre, apagado.
  */
 (function (root) {
   const endereco = id => (typeof id === 'string' && /^[a-f0-9]{32}$/.test(id) ? `/api/imagem/${id}` : null);
@@ -16,9 +18,10 @@
   function criar(raiz) {
     raiz.classList.add('reativo');
     let config = { estilo: {}, pessoas: {} };
-    const rostos = new Map();   // identidade -> { el, corpo, parado, falando, gerado, assinatura }
+    const rostos = new Map();   // identidade -> { el, corpo, nome, imagens, pessoa, assinatura }
     const falando = new Set();
     const mudos = new Set();
+    const ensurdecidos = new Set();
 
     function aplicarEstilo() {
       const e = config.estilo || {};
@@ -36,13 +39,28 @@
       raiz.classList.toggle('com-anel', e.anel !== false);
     }
 
-    // As duas imagens da pessoa. "Falando" sem imagem própria repete a de "parado": o efeito
-    // (pulo, pulso, brilho) é o que diz que ela está falando.
+    // As imagens da pessoa. "Falando" sem imagem própria repete a de "parado": o efeito (pulo,
+    // pulso, brilho) é o que diz que ela está falando. Mudo e ensurdecido não repetem nada: sem
+    // imagem, vale o rosto de sempre.
     function imagensDe(pessoa) {
       const escolhidas = config.pessoas?.[pessoa.chave] || {};
       const parado = endereco(escolhidas.parado);
       const falandoImg = endereco(escolhidas.falando);
-      return { parado: parado || falandoImg, falando: falandoImg || parado };
+      return { parado: parado || falandoImg, falando: falandoImg || parado, mudo: endereco(escolhidas.mudo), ensurdecido: endereco(escolhidas.ensurdecido) };
+    }
+
+    // Qual imagem de estado cobre o rosto agora. Ensurdecida sem imagem própria usa a de muda --
+    // quem ensurdece no Nexo fecha o microfone junto --, e muda sem imagem fica com o rosto
+    // apagado de sempre.
+    function pintarEstado(id) {
+      const rosto = rostos.get(id);
+      if (!rosto) return;
+      const imagens = rosto.imagens || {};
+      const surdo = ensurdecidos.has(id);
+      const qual = surdo && imagens.ensurdecido ? 'ensurdecido' : (surdo || mudos.has(id)) && imagens.mudo ? 'mudo' : '';
+      if (qual) rosto.el.dataset.imagem = qual; else delete rosto.el.dataset.imagem;
+      rosto.el.classList.toggle('mudo', mudos.has(id) || surdo);
+      rosto.el.classList.toggle('ensurdecido', surdo);
     }
 
     function montar(pessoa) {
@@ -66,24 +84,30 @@
       rosto.el.title = pessoa.nome || '';
       if (rosto.assinatura === assinatura) return;
       rosto.assinatura = assinatura;
+      rosto.imagens = imagens;
       rosto.corpo.replaceChildren();
+      const imagem = (estado, src) => {
+        const img = document.createElement('img');
+        img.className = `rosto-img rosto-${estado}`;
+        img.alt = '';
+        img.decoding = 'async';
+        img.src = src;
+        rosto.corpo.append(img);
+      };
       if (imagens.parado) {
-        for (const [estado, src] of Object.entries(imagens)) {
-          const img = document.createElement('img');
-          img.className = `rosto-img rosto-${estado}`;
-          img.alt = '';
-          img.decoding = 'async';
-          img.src = src;
-          rosto.corpo.append(img);
-        }
-        rosto.el.classList.add('com-imagem');
+        imagem('parado', imagens.parado);
+        imagem('falando', imagens.falando);
       } else {
         const gerado = document.createElement('span');
         gerado.className = 'rosto-gerado';
         root.NexoPerfil?.pintar(gerado, pessoa.nome, pessoa.perfil);
         rosto.corpo.append(gerado);
-        rosto.el.classList.remove('com-imagem');
       }
+      rosto.el.classList.toggle('com-imagem', Boolean(imagens.parado));
+      // Por cima de tudo, e só quando existem: a camada fica carregada e a troca é de opacidade.
+      if (imagens.mudo) imagem('mudo', imagens.mudo);
+      if (imagens.ensurdecido) imagem('ensurdecido', imagens.ensurdecido);
+      pintarEstado(pessoa.identidade);
     }
 
     function definir({ config: novaConfig, pessoas }) {
@@ -106,6 +130,7 @@
         rostos.delete(id);
         falando.delete(id);
         mudos.delete(id);
+        ensurdecidos.delete(id);
       }
     }
 
@@ -121,14 +146,19 @@
     }
 
     function definirMudo(id, mudo) {
-      const rosto = rostos.get(id);
-      if (!rosto) return;
+      if (!rostos.has(id)) return;
       if (mudo) mudos.add(id); else mudos.delete(id);
-      rosto.el.classList.toggle('mudo', Boolean(mudo));
+      pintarEstado(id);
+    }
+
+    function definirEnsurdecido(id, surdo) {
+      if (!rostos.has(id)) return;
+      if (surdo) ensurdecidos.add(id); else ensurdecidos.delete(id);
+      pintarEstado(id);
     }
 
     aplicarEstilo();
-    return { definir, definirFalando, definirMudo, ids: () => [...rostos.keys()], get config() { return config; } };
+    return { definir, definirFalando, definirMudo, definirEnsurdecido, ids: () => [...rostos.keys()], get config() { return config; } };
   }
 
   // De nível de áudio (0 a 1, a raiz da média dos quadrados) a "está falando". A sensibilidade

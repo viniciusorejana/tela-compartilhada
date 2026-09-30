@@ -395,8 +395,7 @@ function criarContas({
     // de ninguém, e o avatar não entra por este caminho.
     const minhas = new Set(banco.imagensDaConta(conta.id, 'estudio').map(i => i.id));
     for (const pessoa of Object.values(config.pessoas)) {
-      if (pessoa.parado && !minhas.has(pessoa.parado)) pessoa.parado = null;
-      if (pessoa.falando && !minhas.has(pessoa.falando)) pessoa.falando = null;
+      for (const estado of estudioComum.ESTADOS_DO_ROSTO) if (pessoa[estado] && !minhas.has(pessoa[estado])) pessoa[estado] = null;
     }
     if (Buffer.byteLength(JSON.stringify(config)) > estudioComum.BYTES_MAXIMOS_DA_CONFIGURACAO) return falha(413, 'Configuração grande demais.');
     banco.salvarEstudio(conta.id, config);
@@ -425,8 +424,7 @@ function criarContas({
     if (!achada || achada.contaId !== conta.id || achada.uso !== 'estudio') return falha(404, 'Imagem não encontrada.');
     const config = configDoEstudio(conta.id);
     for (const pessoa of Object.values(config.pessoas)) {
-      if (pessoa.parado === id) pessoa.parado = null;
-      if (pessoa.falando === id) pessoa.falando = null;
+      for (const estado of estudioComum.ESTADOS_DO_ROSTO) if (pessoa[estado] === id) pessoa[estado] = null;
     }
     banco.salvarEstudio(conta.id, estudioComum.limparConfig(config));
     banco.apagarImagem(id, conta.id);

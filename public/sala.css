@@ -74,6 +74,7 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
 /* Selo próprio, ao lado do LIVE: os dois estados são independentes e cabem juntos. */
 .member-mudo { flex:none; position:relative; width:13px; height:13px; color:var(--danger-texto); }
 .member-mudo::before { content:''; position:absolute; inset:0; background:currentColor; mask:var(--mic-off) center/contain no-repeat; -webkit-mask:var(--mic-off) center/contain no-repeat; --mic-off:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18'/%3E%3C/svg%3E"); }
+.member-mudo.ensurdecido::before { --mic-off:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18'/%3E%3C/svg%3E"); }
 .member-state:empty { display:none; }
 .connection-box { display:flex; flex:none; align-items:center; gap:8px; padding:12px 15px; border-top:1px solid var(--line); background:var(--bg-0); }
 .connection-dot { height:7px; width:7px; background:var(--faint); border-radius:50%; }
@@ -569,6 +570,24 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .perfil-topo h2 { margin:0; word-break:break-word; }
 .perfil-topo .modal-sub { margin:4px 0 0; font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
 .perfil-avatar { flex:none; display:grid; place-items:center; width:54px; height:54px; border-radius:50%; color:#15121f; font-size:21px; font-weight:700; transition:background-color var(--dur) var(--curva); }
+/* No cartão de perfil, a foto é maior e se abre: o cursor de lupa e um anel ao passar o mouse
+   dizem isso sem mais um botão. */
+.perfil-topo .perfil-avatar.ampliavel { width:64px; height:64px; cursor:zoom-in; transition:box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.perfil-topo .perfil-avatar.ampliavel:hover { box-shadow:0 0 0 3px var(--bg-2),0 0 0 5px var(--accent-hi); }
+.perfil-topo .perfil-avatar.ampliavel:active { transform:scale(.96); }
+.perfil-topo .perfil-avatar.ampliavel:focus-visible { outline:none; box-shadow:var(--anel-foco); }
+/* ---------- A foto grande ----------
+   O cartão é do tamanho da foto: quadrada, o maior possível até 440 px, e nunca mais alta que a
+   janela (celular deitado). A foto aparece inteira, sem o recorte redondo do avatar. */
+.modal-card.foto-card { --pad-cartao:10px; width:min(100%,440px,calc(88vh - 64px)); width:min(100%,440px,calc(88dvh - 64px)); overflow:hidden; }
+.foto-grande { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:var(--r-lg); background:var(--bg-1); }
+.foto-legenda { display:grid; gap:2px; min-width:0; padding:10px 6px 4px; }
+.foto-legenda strong { overflow:hidden; color:var(--text); font-size:var(--fs-lg); font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
+.foto-legenda small { color:var(--faint); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
+.foto-legenda small:empty { display:none; }
+/* O X fica sobre a foto: com fundo escuro próprio, legível sobre qualquer imagem. */
+.foto-card .modal-fechar { top:18px; right:18px; border-radius:50%; background:#0d0d16b3; color:#fff; }
+.foto-card .modal-fechar:hover:not(:disabled) { background:#0d0d16e6; color:#fff; }
 /* O editor de perfil de dentro da sala. A prévia no topo muda a cada escolha, antes de salvar. */
 .meu-perfil-card { width:min(100%,520px); }
 .meu-perfil-previa { display:flex; align-items:center; gap:14px; padding:14px; margin:0 0 18px; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
@@ -874,6 +893,9 @@ button[aria-busy="true"] { cursor:progress; }
 .mic-icon.muted,.mute-peer-btn[aria-pressed="true"] { color:var(--danger-texto); }
 .mute-peer-btn { position:relative; }
 .mic-icon.muted::after,.mute-peer-btn[aria-pressed="true"]::after { content:''; position:absolute; width:21px; height:2px; background:currentColor; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-45deg); box-shadow:0 1px var(--bg-2); }
+/* Ensurdecido: o fone cortado do botão Ouvir, no lugar do microfone. O corte já vem no desenho. */
+.mic-icon.ensurdecido { --audio-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18'/%3E%3C/svg%3E"); }
+.mic-icon.ensurdecido::after { content:none; }
 .mute-peer-btn { display:inline-flex; align-items:center; justify-content:center; }
 .app.teatro,.app.teatro.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-areas:"topo" "palco" "barra"; }
 .app.teatro .room-sidebar,.app.teatro .chat,.app.teatro #sidebarToggle { display:none!important; }

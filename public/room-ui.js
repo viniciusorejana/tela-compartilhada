@@ -117,7 +117,7 @@
     $('sessionClock').textContent = joined && desde ? `Você está há ${NexoTempo.relogio(Date.now() - desde)}` : 'Sua sessão começa aqui';
     $('selfName').textContent = myName || 'Seu perfil';
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
-    $('selfState').textContent = !joined ? 'Pronto para entrar' : micMuted ? 'Microfone desligado' : 'Microfone ligado';
+    $('selfState').textContent = !joined ? 'Pronto para entrar' : ensurdecido ? 'Ensurdecido' : micMuted ? 'Microfone desligado' : 'Microfone ligado';
     for (const id of ['memberTotal', 'sidebarCount', 'tileCount']) $(id).textContent = total;
     const live = [...peers.values()].filter(p => p.state.screen).length + Number(Boolean(screenStream));
     $('sessionBadge').textContent = live ? `${live} ${live === 1 ? 'TELA AO VIVO' : 'TELAS AO VIVO'}` : 'SALA DE VOZ';
@@ -167,12 +167,15 @@
         // Um selo não come o outro: quem transmite TAMBÉM pode estar mudo, e era justamente
         // essa combinação que a lista escondia — o "LIVE" ocupava o lugar do microfone e a
         // pergunta "por que ela não responde?" ficava sem resposta aqui.
-        if (person.state.micMuted && !person.semConexao) {
+        // Ensurdecido ocupa o mesmo lugar, com o fone cortado: quem ensurdece fecha o microfone
+        // junto, e dois selos diriam a mesma coisa duas vezes.
+        if ((person.state.micMuted || person.state.ensurdecido) && !person.semConexao) {
+          const surdo = Boolean(person.state.ensurdecido);
           const mudo = document.createElement('span');
-          mudo.className = 'member-mudo';
-          mudo.title = 'Microfone desligado';
+          mudo.className = surdo ? 'member-mudo ensurdecido' : 'member-mudo';
+          mudo.title = surdo ? 'Ensurdecido: não está ouvindo a sala' : 'Microfone desligado';
           mudo.setAttribute('role', 'img');
-          mudo.setAttribute('aria-label', 'Microfone desligado');
+          mudo.setAttribute('aria-label', mudo.title);
           row.append(mudo);
         }
         return row;

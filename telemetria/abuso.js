@@ -86,7 +86,9 @@ const REGRAS = Object.freeze({
   'eco': { sessao: 26, sala: 400 },
   'join-room': { sessao: 6, sala: 120, longa: [20, 10 * MINUTO] },
   'leave-room': { sessao: Infinity },
-  'media-state': { sessao: 30, sala: 600 },
+  // Ensurdecer tem freio próprio, e não o da presença: lá as reações gastam a rajada, e um aviso
+  // de ensurdecer descartado deixaria a sala vendo a pessoa ouvindo quando ela não ouve.
+  'ensurdecer': { sessao: 30, sala: 600 },
   // A lista de telas que a página está vendo. Muda a cada Assistir e Parar, e o transporte a
   // manda de novo sozinho quando uma queda retoma uma tela; ninguém clica trinta vezes por
   // minuto, mas uma sala de vinte pessoas trocando de tela junto chega perto do coletivo.

@@ -10,7 +10,10 @@
  */
 (function (root) {
   const TIPOS_ACEITOS = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-  const LADO_DO_AVATAR = 256;
+  // 512 px: o cartão de perfil abre a foto grande (até 440 px na tela), e em 256 ela ficava
+  // macia. Em WebP, uma foto de 512 fica bem abaixo do teto; o PNG, que é o que sobra a um
+  // navegador sem WebP, pode não caber -- e aí ela desce para 256, como era antes.
+  const LADOS_DO_AVATAR = [512, 256];
   const BYTES_DO_AVATAR = 512 * 1024;
   const BYTES_DO_ESTUDIO = 2 * 1024 * 1024;
   const LADO_MAXIMO_DO_ESTUDIO = 1024;
@@ -39,7 +42,8 @@
     catch (_) { throw new ProblemaDeImagem('Não foi possível abrir esta imagem.'); }
   }
 
-  // O avatar: o quadrado do meio da imagem, em 256 px.
+  // O avatar: o quadrado do meio da imagem, em 512 px (ou no tamanho dela, se for menor --
+  // ampliar aqui só gastaria bytes sem ganhar nitidez).
   async function prepararAvatar(arquivo) {
     conferirTipo(arquivo);
     if (arquivo.type === 'image/gif') {
@@ -48,14 +52,20 @@
     }
     const imagem = await decodificar(arquivo);
     const lado = Math.min(imagem.width, imagem.height);
-    const canvas = Object.assign(document.createElement('canvas'), { width: LADO_DO_AVATAR, height: LADO_DO_AVATAR });
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(imagem, (imagem.width - lado) / 2, (imagem.height - lado) / 2, lado, lado, 0, 0, LADO_DO_AVATAR, LADO_DO_AVATAR);
-    imagem.close?.();
-    const blob = await exportar(canvas);
-    if (!blob || blob.size > BYTES_DO_AVATAR) throw new ProblemaDeImagem('Não foi possível reduzir esta imagem.');
-    return blob;
+    try {
+      for (const alvo of LADOS_DO_AVATAR) {
+        const saida = Math.min(alvo, lado);
+        const canvas = Object.assign(document.createElement('canvas'), { width: saida, height: saida });
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(imagem, (imagem.width - lado) / 2, (imagem.height - lado) / 2, lado, lado, 0, 0, saida, saida);
+        const blob = await exportar(canvas);
+        if (blob && blob.size <= BYTES_DO_AVATAR) return blob;
+      }
+    } finally {
+      imagem.close?.();
+    }
+    throw new ProblemaDeImagem('Não foi possível reduzir esta imagem.');
   }
 
   // As do Estúdio vão como estão quando cabem: é a arte de quem transmite. Uma imagem parada

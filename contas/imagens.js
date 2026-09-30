@@ -12,7 +12,8 @@
 const MiB = 1024 * 1024;
 
 const LIMITES = Object.freeze({
-  // O avatar chega redimensionado a 256 px pela página; um GIF animado vem como está.
+  // O avatar chega redimensionado a 512 px pela página (256 se não couber); um GIF animado vem
+  // como está.
   avatar: { bytes: 512 * 1024 },
   // As do Estúdio vêm como estão: são a arte de quem transmite, muitas vezes GIF animado ou PNG
   // com fundo transparente, e recomprimir estragaria as duas coisas.

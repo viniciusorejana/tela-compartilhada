@@ -7,8 +7,8 @@ Escrito em 29/09/2026, junto com a implementação. São duas funcionalidades co
    sem capturar janela nenhuma.
 2. **Rostos que reagem à voz.** Uma fonte com o rosto de cada pessoa da sala: quem fala pula,
    quem está quieto fica apagado, como no Reactive Images. Há um link para a sala inteira e um
-   por pessoa, e cada pessoa pode ter uma imagem "parado" e outra "falando", escolhidas por quem
-   usa o Estúdio e vistas só no OBS dele.
+   por pessoa, e cada pessoa pode ter até quatro imagens — "parado", "falando", "mudo" e
+   "ensurdecido" —, escolhidas por quem usa o Estúdio e vistas só no OBS dele.
 
 Junto veio a **foto de perfil**, que o `docs/plano-contas.md` tinha deixado para depois: os
 rostos precisavam de um rosto.
@@ -147,6 +147,24 @@ quem usa o Estúdio,
 mora na conta dele (`estudio.config`, forma fechada em `estudio.js`) e chega na hora às fontes que
 já estão no OBS: mexer no tamanho no Estúdio muda a cena sem recarregar nada.
 
+### Mudo e ensurdecido
+
+Cada pessoa pode ter uma imagem para quando está **muda** e outra para quando está
+**ensurdecida**. Com imagem, ela cobre as outras enquanto o estado dura (apagada como quem está
+quieto, mas com as cores dela); sem imagem, vale o rosto de sempre, apagado e cinza. Ensurdecida
+sem imagem própria usa a de muda: quem ensurdece no Nexo fecha o microfone junto.
+
+Os dois estados chegam por caminhos diferentes:
+
+- **Mudo** vem da mídia: a página do OBS vê a faixa do microfone mudar, na hora.
+- **Ensurdecido** não passa pela mídia — ensurdecer só corta o som de quem ensurdece. A pessoa o
+  anuncia à sala (evento `ensurdecer`, com freio próprio), a sala mostra o fone cortado no quadradinho
+  e na lista, e o servidor reavalia as páginas do OBS daquela sala, que recebem o estado novo de
+  cada pessoa.
+
+Na prévia do Estúdio, mudo e ensurdecido são os de verdade, lidos da sala: para ver a imagem de
+"mudo" de alguém, basta essa pessoa — ou você — fechar o microfone.
+
 ---
 
 ## As imagens
@@ -158,7 +176,11 @@ junto sem ninguém lembrar delas.
 | | avatar | Estúdio |
 |---|---|---|
 | tamanho | 512 KB | 2 MB cada, 40 por conta, 16 MB no total |
-| preparo | recortado no quadrado do meio e reduzido a 256 px pela página | como está (a arte de quem transmite: GIF animado, PNG recortado) |
+| preparo | recortado no quadrado do meio e reduzido a 512 px pela página (256 se não couber) | como está (a arte de quem transmite: GIF animado, PNG recortado) |
+
+A foto de perfil também se vê grande: no cartão de perfil da sala, o avatar de quem tem foto se
+abre num visor de até 440 px. É por isso que ela sobe em 512 px — em 256, ampliada, ficava macia.
+As fotos enviadas antes continuam em 256 até a pessoa trocar.
 
 - **O tipo vem dos bytes** (PNG, JPEG, GIF, WebP), nunca do nome nem do cabeçalho. SVG fica de
   fora: é um documento, não uma imagem.
@@ -192,8 +214,11 @@ junto sem ninguém lembrar delas.
   chave, a configuração fechada, o tipo das imagens pelos bytes, a foto pelo HTTP, o Estúdio
   (imagens de outra conta recusadas, revogação), e o namespace `/estudio` seguindo o diretor,
   esperando a pessoa e respeitando quem não deixa.
-- `npm run test:estudio`: com servidor de mídia. A foto enviada pela página, o link copiado do
+- `npm run test:estudio`: com servidor de mídia. A foto enviada pela página (e aberta grande no
+  cartão de perfil), o link copiado do
   cartão de perfil, a página do OBS recebendo a câmera e a voz, o selo na sala, os rostos falando
-  com o apito do microfone falso, a configuração chegando ao vivo, a permissão desligada e
+  com o apito do microfone falso, a configuração chegando ao vivo, a imagem de ensurdecida trocando
+  o rosto no OBS (e o fone cortado na plateia, também para quem chega depois), o ponto "no ar" dos
+  links acendendo e apagando com o microfone, a permissão desligada e
   religada, o painel aberto pelo botão da barra (com o tamanho dos nomes chegando à prévia), o
   dono da sala desligando e religando o OBS para os participantes, e o diretor saindo.

@@ -149,9 +149,16 @@
       const participante = sala.remoteParticipants.get(id);
       rostos.definirMudo(id, !participante || micMudo(participante));
     }
+    pintarEnsurdecidos();
     // Quem saiu da lista dos rostos para de ser medido, mesmo que a faixa ainda não tenha caído.
     for (const id of medidor.ids()) if (!idsDosRostos.has(id)) medidor.soltar(id);
     atualizarImagem();
+  }
+
+  // O mudo vem da mídia, ao vivo; o ensurdecido não passa pela mídia -- é a pessoa que o anuncia
+  // à sala, e o servidor manda o estado novo a esta página (estudio-ao-vivo.js).
+  function pintarEnsurdecidos() {
+    if (estado?.reativo) for (const pessoa of estado.pessoas) rostos.definirEnsurdecido(pessoa.identidade, Boolean(pessoa.estado?.ensurdecido));
   }
 
   // A imagem aparece só com a faixa descendo e ligada: câmera desligada é fonte transparente,
@@ -247,7 +254,7 @@
     else if (!novo.midia) avisar('Conectando…', 'O servidor de mídia está voltando.');
     else avisar('');
     $('rostos').hidden = !novo.reativo;
-    if (novo.reativo) rostos.definir({ config: novo.config, pessoas: novo.pessoas });
+    if (novo.reativo) { rostos.definir({ config: novo.config, pessoas: novo.pessoas }); pintarEnsurdecidos(); }
     else if (antes?.reativo) rostos.definir({ pessoas: [] });
     // A pessoa trocou de identidade (um F5 dela): a imagem antiga não serve mais.
     if (antes?.alvo?.identidade && antes.alvo.identidade !== novo.alvo?.identidade) { $('video').srcObject = null; $('audio').srcObject = null; }

@@ -131,6 +131,9 @@ let presencaLocal = '';
 let economiaDeDadosAtiva = false;
 let aguardandoEntrada = false;
 const presencasPorIdentidade = new Map();
+// Quem está ensurdecido, pela identidade. Como a presença, chega pela sinalização e pode chegar
+// antes da mídia da pessoa: o quadradinho que nasce depois lê daqui.
+const ensurdecidosPorIdentidade = new Set();
 // Fui retirado desta sala. Existe para uma coisa só: impedir que os avisos de conexão -- que
 // chegam logo depois, porque a conexão cai de fato -- apaguem o motivo real da tela.
 let fuiRemovido = false;
@@ -494,6 +497,7 @@ async function iniciarConexao() {
       proximaOrdem: () => ++sequenciaDeCompartilhamento,
       aoEntrar: (par, info) => {
         par.state.presenca = presencasPorIdentidade.get(par.id) || '';
+        par.state.ensurdecido = ensurdecidosPorIdentidade.has(par.id);
         criarTile(par.id, par.name, par.state);
         atualizarContador();
         avaliarDestaque();
@@ -620,11 +624,11 @@ async function iniciarConexao() {
       for (const participante of response.peers || []) {
         if (!participante.identidade) continue;
         if (participante.perfil) perfisPorIdentidade.set(participante.identidade, participante.perfil);
-        presencasPorIdentidade.set(participante.identidade, participante.state?.presenca || '');
-        const par = peers.get(participante.identidade);
-        if (par) { par.state.presenca = participante.state?.presenca || ''; atualizarTile(par.id); }
+        guardarPresenca(participante.identidade, participante.state?.presenca, participante.state?.ensurdecido);
       }
+      // Numa volta depois de uma queda, o servidor começa do zero: o que era meu vai de novo.
       if (presencaLocal) socket.emit('sinal-presenca', { presenca: presencaLocal });
+      if (ensurdecido) socket.emit('ensurdecer', { ensurdecido });
       window.NexoTempo?.aoEntrar(response.tempos, response.peers);
       window.NexoEspectadores?.aoEntrar(response.espectadores);
       window.NexoEstudioSala?.aoEntrar(response.estudio);
@@ -799,11 +803,10 @@ async function iniciarConexao() {
   socket.on('pedido-entrada', adicionarPedidoDeEntrada);
   socket.on('pedido-entrada-resolvido', ({ identidade }) => removerPedidoDeEntrada(identidade));
   socket.on('pedido-entrada-cancelado', ({ identidade }) => removerPedidoDeEntrada(identidade));
-  socket.on('presenca-atualizada', ({ identidade, presenca }) => {
-    presencasPorIdentidade.set(identidade, presenca || '');
+  socket.on('presenca-atualizada', ({ identidade, presenca, ensurdecido: surdo }) => {
+    // O meu ensurdecer é o que esta página decide; o eco do servidor não o desfaz.
+    guardarPresenca(identidade, presenca, identidade === myId ? ensurdecido : surdo);
     if (identidade === myId) presencaLocal = presenca || '';
-    const par = identidade === myId ? peers.get('self') : peers.get(identidade);
-    if (par) { par.state ||= {}; par.state.presenca = presenca || ''; atualizarTile(par.id); }
     atualizarPresencaNaInterface(identidade, presenca || '');
   });
   socket.on('reacao-sala', mostrarReacaoDaSala);
@@ -877,7 +880,7 @@ async function iniciarConexao() {
 }
 
 function meuEstado() {
-  return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted, presenca: presencaLocal };
+  return { camera: Boolean(cameraStream), screen: Boolean(screenStream), screenAudio: Boolean(screenStream?.getAudioTracks().length), micMuted, presenca: presencaLocal, ensurdecido };
 }
 
 // O estado das proprias fontes so importa para a interface local: para os outros, quem
@@ -2431,6 +2434,11 @@ function alternarEnsurdecimento() {
   // cliques seguidos pareceriam dois botões.
   window.NexoSons?.tocar(ensurdecido ? 'surdo' : 'ouvir');
   aplicarEnsurdecimento();
+  // A sala fica sabendo (o fone cortado no meu quadradinho e na lista), e o Estúdio de quem me
+  // leva para o OBS troca o meu rosto. O som continua sendo cortado só aqui.
+  if (socket?.connected) socket.emit('ensurdecer', { ensurdecido });
+  atualizarTile('self');
+  document.dispatchEvent(new Event('room-update'));
   // O rótulo é o nome fixo da coisa, como em "Microfone" e "Câmera"; quem conta o estado é o
   // ícone, que aparece cortado, e o fundo de atenção que o microfone fechado já usa.
   deafenBtn.setAttribute('aria-pressed', String(ensurdecido));
@@ -2487,6 +2495,21 @@ document.addEventListener('keyup', evento => {
 
 const presenceBtn = document.getElementById('presenceBtn');
 const presenceMenu = document.getElementById('presenceMenu');
+// A presença e o ensurdecer de alguém, venham da entrada na sala ou de um aviso. O quadradinho
+// que ainda não nasceu lê dos mapas quando nascer (aoEntrar).
+function guardarPresenca(identidade, presenca, surdo) {
+  if (!identidade) return;
+  presencasPorIdentidade.set(identidade, presenca || '');
+  if (surdo) ensurdecidosPorIdentidade.add(identidade); else ensurdecidosPorIdentidade.delete(identidade);
+  const par = identidade === myId ? null : peers.get(identidade);
+  if (par) {
+    par.state ||= {};
+    par.state.presenca = presenca || '';
+    par.state.ensurdecido = Boolean(surdo);
+  }
+  atualizarTile(identidade === myId ? 'self' : identidade);
+  document.dispatchEvent(new Event('room-update'));
+}
 function atualizarPresencaNaInterface(identidade, presenca) {
   const id = identidade === myId ? 'self' : identidade;
   if (id) atualizarTile(id);
@@ -5577,7 +5600,25 @@ function abrirPerfil(id) {
   perfilAberto = id;
   const nome = ehEu ? myName : par.name;
   const perfil = perfilDe(id);
-  pintarAvatar(document.getElementById('perfilAvatar'), nome, perfil);
+  const avatar = document.getElementById('perfilAvatar');
+  pintarAvatar(avatar, nome, perfil);
+  // Com foto, o avatar do cartão abre a foto grande. Sem foto não há o que ampliar: a cor e as
+  // iniciais são as mesmas em qualquer tamanho, e o avatar continua sendo só um desenho.
+  const foto = NexoPerfil.enderecoDaImagem(perfil?.avatar);
+  avatar.classList.toggle('ampliavel', Boolean(foto));
+  if (foto) {
+    Object.assign(avatar, { tabIndex: 0, title: 'Ver a foto maior' });
+    avatar.setAttribute('role', 'button');
+    avatar.setAttribute('aria-label', `Ver a foto de ${nome} maior`);
+    avatar.removeAttribute('aria-hidden');
+  } else {
+    avatar.removeAttribute('tabindex');
+    avatar.removeAttribute('role');
+    avatar.removeAttribute('aria-label');
+    avatar.removeAttribute('title');
+    avatar.setAttribute('aria-hidden', 'true');
+  }
+  fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '' } : null;
   document.getElementById('perfilNome').textContent = `${nome}${ehEu ? ' (você)' : ''}`;
   document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
   document.getElementById('perfilDica').textContent = perfil?.conta
@@ -5598,6 +5639,25 @@ function abrirPerfil(id) {
   document.getElementById('perfilModerar').hidden = ehEu || !podeModerar || id === donoDaSala;
   document.getElementById('perfilPanel').classList.remove('hidden');
 }
+// A foto grande, por cima do cartão. A imagem é a mesma do avatar: o navegador já a tem, e ela
+// aparece na hora. Fotos enviadas desde esta versão têm 512 px (imagem-envio.js), nítidas até o
+// tamanho do visor; as antigas, de 256, ficam um pouco mais macias ampliadas.
+let fotoDoPerfil = null;
+function abrirFoto() {
+  if (!fotoDoPerfil) return;
+  const imagem = document.getElementById('fotoGrande');
+  imagem.src = fotoDoPerfil.foto;
+  imagem.alt = `Foto de ${fotoDoPerfil.nome}`;
+  document.getElementById('fotoNome').textContent = fotoDoPerfil.nome;
+  document.getElementById('fotoCodigo').textContent = fotoDoPerfil.codigo;
+  document.getElementById('fotoPanel').classList.remove('hidden');
+}
+document.getElementById('perfilAvatar').addEventListener('click', abrirFoto);
+document.getElementById('perfilAvatar').addEventListener('keydown', evento => {
+  if (!fotoDoPerfil || !['Enter', ' '].includes(evento.key)) return;
+  evento.preventDefault();
+  abrirFoto();
+});
 document.getElementById('perfilModerar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
   if (perfilAberto && perfilAberto !== 'self') abrirModeracao(perfilAberto);
@@ -6133,7 +6193,13 @@ function atualizarTile(id) {
   refs.avatar.classList.toggle('hidden', temCamera);
   // O selo "Tela" some do quadradinho da pessoa: agora a tela tem o proprio quadradinho.
   refs.screenBadge.classList.add('hidden');
-  refs.micIcon.classList.toggle('muted', Boolean(estado.micMuted));
+  // Ensurdecido, o microfone do canto vira o fone cortado -- o mesmo desenho do botão Ouvir. É o
+  // mesmo lugar e o mesmo tamanho do microfone mudo: diz por que a pessoa não responde sem pôr
+  // nada novo sobre a imagem.
+  const surdo = Boolean(estado.ensurdecido);
+  refs.micIcon.classList.toggle('muted', surdo || Boolean(estado.micMuted));
+  refs.micIcon.classList.toggle('ensurdecido', surdo);
+  refs.micIcon.title = surdo ? 'Ensurdecido: não está ouvindo a sala' : estado.micMuted ? 'Microfone desligado' : '';
   const simbolosDePresenca = { hand: '✋', brb: '☕', gaming: '🎮', quiet: '🔇' };
   const nomesDePresenca = { hand: 'Quer falar', brb: 'Volto já', gaming: 'Em jogo', quiet: 'Sem falar' };
   if (refs.presenceBadge) {

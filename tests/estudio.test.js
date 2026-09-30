@@ -53,11 +53,14 @@ test('a chave da pessoa: o código para quem tem conta, o nome normalizado para 
 
 test('a configuração é fechada: o que não está na forma some, e os números ficam na faixa', () => {
   const img = 'a'.repeat(32);
+  const mudo = 'b'.repeat(32);
+  const surdo = 'c'.repeat(32);
   const limpa = estudio.limparConfig({
     estilo: { efeito: 'explodir', tamanho: 9000, espaco: 12, nomes: 'sim', sensibilidade: 50, invasor: true },
     pessoas: {
       'c:K7M2PQ4X': { parado: img, falando: 'nao-e-id', oculto: true, extra: 1 },
       'n:bia': { rotulo: 'Bia' },
+      'n:caio': { mudo: mudo, ensurdecido: surdo, mudoDeNovo: img },
       'n:vazia': {},
       'lixo': { parado: img }
     },
@@ -68,9 +71,14 @@ test('a configuração é fechada: o que não está na forma some, e os números
   assert.equal(limpa.estilo.espaco, 12);
   assert.equal(limpa.estilo.nomes, true);
   assert.equal('invasor' in limpa.estilo, false);
-  assert.deepEqual(limpa.pessoas, { 'c:K7M2PQ4X': { rotulo: '', parado: img, falando: null, oculto: true }, 'n:bia': { rotulo: 'Bia', parado: null, falando: null, oculto: false } });
+  const sem = { parado: null, falando: null, mudo: null, ensurdecido: null };
+  assert.deepEqual(limpa.pessoas, {
+    'c:K7M2PQ4X': { ...sem, rotulo: '', parado: img, oculto: true },
+    'n:bia': { ...sem, rotulo: 'Bia', oculto: false },
+    'n:caio': { ...sem, rotulo: '', mudo, ensurdecido: surdo, oculto: false }
+  }, 'mudo e ensurdecido sozinhos já bastam para a pessoa ficar na lista');
   assert.equal('outraCoisa' in limpa, false);
-  assert.deepEqual([...estudio.imagensDaConfig(limpa)], [img]);
+  assert.deepEqual([...estudio.imagensDaConfig(limpa)].sort(), [img, mudo, surdo].sort());
   const muitas = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`n:p${i}`, { rotulo: `P${i}` }]));
   assert.equal(Object.keys(estudio.limparConfig({ pessoas: muitas }).pessoas).length, estudio.PESSOAS_MAXIMAS_NA_CONFIGURACAO);
 });
@@ -189,12 +197,14 @@ test('o Estúdio guarda a configuração, só aceita imagens da própria conta e
 
   const salvo = await ana.pedir('/api/conta/estudio', { metodo: 'PUT', corpo: { config: {
     estilo: { efeito: 'pulso', tamanho: 200 },
-    pessoas: { [`c:${bia.conta.codigo.replace('-', '')}`]: { parado: minha, falando: imagemDaBia } }
+    pessoas: { [`c:${bia.conta.codigo.replace('-', '')}`]: { parado: minha, falando: imagemDaBia, mudo: minha, ensurdecido: imagemDaBia } }
   } } });
   assert.equal(salvo.status, 200, JSON.stringify(salvo.dados));
   const pessoa = salvo.dados.config.pessoas[`c:${bia.conta.codigo.replace('-', '')}`];
   assert.equal(pessoa.parado, minha);
+  assert.equal(pessoa.mudo, minha, 'a mesma imagem pode servir a dois estados');
   assert.equal(pessoa.falando, null, 'a imagem de outra conta não entra na configuração de ninguém');
+  assert.equal(pessoa.ensurdecido, null, 'nem no estado de ensurdecida');
 
   const retrato = (await ana.pedir('/api/conta/estudio')).dados;
   assert.equal(retrato.config.estilo.efeito, 'pulso');

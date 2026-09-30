@@ -51,9 +51,13 @@
   object-fit: cover;
   transition: opacity .08s linear;
 }
-.rosto-falando { opacity: 0; }
+.rosto-falando, .rosto-mudo, .rosto-ensurdecido { opacity: 0; }
 .rosto.falando .rosto-falando { opacity: 1; }
 .rosto.falando.com-imagem .rosto-parado { opacity: 0; }
+/* Muda ou ensurdecida, com imagem própria para isso: ela cobre o resto (reativo.js decide qual). */
+.rosto[data-imagem] :is(.rosto-parado, .rosto-falando, .rosto-gerado) { opacity: 0; }
+.rosto[data-imagem="mudo"] .rosto-mudo,
+.rosto[data-imagem="ensurdecido"] .rosto-ensurdecido { opacity: 1; }
 
 .rosto-gerado {
   display: grid;
@@ -95,6 +99,9 @@
 .reativo.com-nomes .rosto-nome { display: block; }
 
 .rosto.mudo .rosto-corpo { filter: brightness(var(--apagado)) grayscale(.7); }
+/* A arte de mudo ou de ensurdecido é a escolha de quem monta a cena: fica apagada como quem está
+   quieto, mas com as cores dela. */
+.rosto.mudo[data-imagem] .rosto-corpo { filter: brightness(var(--apagado)); }
 .reativo.sem-mudos .rosto.mudo { display: none; }
 .reativo.so-quem-fala .rosto:not(.falando) { opacity: 0; }
 

@@ -25,7 +25,7 @@ const porta = 3233;
 const origem = `http://localhost:${porta}`;
 const LARGURAS = [320, 360, 390, 430, 480, 540, 600, 640, 700, 761, 800, 860, 920, 1000, 1101, 1180, 1251, 1320, 1440, 1600, 1920, 2560];
 const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'musica',
-  'estudio', 'estudio:ajuda', 'cartao', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca'];
+  'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca'];
 // Os painéis não mudam a cada 20 px: uma amostra das larguras basta, com os extremos.
 const LARGURAS_DE_PAINEL = [320, 360, 600, 760, 900, 1000, 1300, 1600, 2560];
 // O Estúdio também em janela baixa: é o painel mais alto da sala.
@@ -110,6 +110,15 @@ async function prepararEstado(pagina, estado) {
       document.getElementById('estudioBloqueio').hidden = !ajuda;
     }
     if (e === 'cartao') abrirPerfil('self');
+    // A foto grande por cima do cartão, com um nome longo. A imagem é um quadrado desenhado aqui:
+    // o que se confere é o visor, e não a foto.
+    if (e === 'foto') {
+      abrirPerfil('self');
+      const canvas = Object.assign(document.createElement('canvas'), { width: 512, height: 512 });
+      canvas.getContext('2d').fillRect(0, 0, 512, 512);
+      fotoDoPerfil = { foto: canvas.toDataURL(), nome: 'Maria Eduarda dos Santos Albuquerque', codigo: 'K7M2-PQ4X' };
+      abrirFoto();
+    }
     if (e === 'meuperfil') NexoPerfilSala.abrir();
     if (e === 'moderacao') document.getElementById('moderarPanel').classList.remove('hidden');
     if (e === 'diagnostico') document.querySelector('[data-action="diagnostics"]').click();
