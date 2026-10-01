@@ -47,6 +47,13 @@ entrega à página quadros de um conjunto pequeno de buffers: código que guarda
 captura se prova com a câmera falsa do Chrome ou com uma aba capturada de verdade (ver o fim de
 `tests/webcodecs-placa.cjs`).
 
+## Interface: o padrão está em `docs/interface.md`
+
+Antes de criar ou mudar uma tela, leia `docs/interface.md`: os tokens, as peças prontas (botões,
+campos, painéis, menus, avisos, selos, avatares, ícones), a responsividade, a acessibilidade, os
+sons, como o Nexo escreve, e a lista do que conferir antes de entregar. Mudou o padrão, muda o
+documento junto.
+
 ## Cor no CSS: sempre pelos tokens
 
 O Nexo tem tema claro, temas prontos e cores exatas escolhidas pela pessoa. Tudo isso só
