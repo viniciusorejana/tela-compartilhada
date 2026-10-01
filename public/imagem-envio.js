@@ -14,7 +14,7 @@
   // macia. Em WebP, uma foto de 512 fica bem abaixo do teto; o PNG, que é o que sobra a um
   // navegador sem WebP, pode não caber -- e aí ela desce para 256, como era antes.
   const LADOS_DO_AVATAR = [512, 256];
-  const BYTES_DO_AVATAR = 512 * 1024;
+  const BYTES_DO_AVATAR = 2 * 1024 * 1024;
   const BYTES_DO_ESTUDIO = 2 * 1024 * 1024;
   const LADO_MAXIMO_DO_ESTUDIO = 1024;
 
@@ -48,7 +48,7 @@
     conferirTipo(arquivo);
     if (arquivo.type === 'image/gif') {
       if (arquivo.size <= BYTES_DO_AVATAR) return arquivo;
-      throw new ProblemaDeImagem('GIF animado como foto pode ter até 512 KB. Este tem mais.');
+      throw new ProblemaDeImagem('GIF animado como foto pode ter até 2 MB. Este tem mais.');
     }
     const imagem = await decodificar(arquivo);
     const lado = Math.min(imagem.width, imagem.height);
