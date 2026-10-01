@@ -160,6 +160,42 @@ amplificados e montados no ritmo (caixa em 0, caixa um tom abaixo com o tom em 0
 ffmpeg -i caixa.mp3 -i caixa2.mp3 -i tom.mp3 -i prato.mp3 -filter_complex "[0]aformat=sample_rates=44100:channel_layouts=mono,volume=34dB,atrim=0:0.3,afade=t=out:st=0.18:d=0.12[ba];[1]aformat=sample_rates=44100:channel_layouts=mono,volume=34dB,asetrate=39250,aresample=44100,atrim=0:0.3,afade=t=out:st=0.18:d=0.12,adelay=190[dum];[2]aformat=sample_rates=44100:channel_layouts=mono,volume=24dB,atrim=0:0.4,afade=t=out:st=0.25:d=0.15,adelay=190[corpo];[3]aformat=sample_rates=44100:channel_layouts=mono,volume=-4dB,adelay=440[tss];[ba][dum][corpo][tss]amix=inputs=4:normalize=0:duration=longest,highpass=f=70,alimiter=limit=0.89" -ac 1 -b:a 96k piada.mp3
 ```
 
+### O Reels de humor
+
+Um anúncio de aplicativo no estilo dos Reels, com piada e meme, sem gravação de ninguém: `ReelsComVoz`
+(narrador simulado) e `ReelsSemVoz` (só trilha, efeitos e o texto na tela), 1080×1920, ~67 s. Saem em
+`video/saida` (não vão para o site) e são pedidos pelo grupo:
+
+```powershell
+npm run video:renderizar -- Reels        # os dois; ReelsComVoz ou ReelsSemVoz para um só
+```
+
+O roteiro é uma fila de 13 cenas, uma por fala, cada uma com uma piada e um recurso do Nexo: o Léo que
+"já tá entrando" (o gancho), a chegada do Nexo no drop, tela com som, assistir só quem quer, volume por
+pessoa, a mesa de sons e a piada do pato, o bot de música ("Evidências"), a placa de vídeo, o tema claro,
+onde funciona, o grátis e o código de recuperação, a enquete "qual amigo é você?" (para comentários) e a
+chamada final ("marca o Léo"), que volta ao gancho. O código fica em `video/src/reels`:
+
+| arquivo | o que tem |
+|---|---|
+| `linha.js` | a linha do tempo: cada cena dura o que a fala dura; o carimbo do NEXO cai no drop |
+| `cenas-a.jsx`, `cenas-b.jsx` | as 13 cenas e os efeitos de cada uma |
+| `pecas.jsx` | legenda que estoura por palavra, adesivo, etiqueta, confete, câmera que dá soco na batida |
+| `Reels.jsx` | as duas versões: trilha com *ducking* sob a voz, falas e efeitos no nível de cima |
+| `falas.json` | duração e trechos de cada fala (gerado por `scripts/reels-audio.cjs`) |
+
+**Trocar uma fala** (texto, voz): ponha o `vNN.mp3` novo em `video/public/audio/reels/origem`, rode
+`node scripts/reels-audio.cjs` (apara, acelera 6%, iguala o volume e remede) e renderize: a linha se
+refaz sozinha. As falas foram geradas com `eleven_v4` e a voz premade **Liam**, porque as vozes
+brasileiras da biblioteca exigem o plano Creator; com ele, vale regerar com uma voz nativa. Nada disso
+foi ouvido — **ouça antes de publicar**, principalmente o sotaque e o ritmo das piadas.
+
+A trilha (`trilha-a`, Music v2, 78 s, 120 BPM, fase 0) tem o drop exato em 8,00 s; a `trilha-b` (60 s, drop
+em 7,3 s fora do compasso) ficou de reserva. Efeitos novos: `arranhao` (disco arranhando, "47 minutos
+depois"), `buzina` (só no flash do tema claro) e `plateia` (risada, depois das piadas). Os avisos da sala
+e o `impacto` ganham cópias mais altas em `public/audio/reels/sfx` (a sala os quer discretos; um anúncio, não).
+Gasto de créditos: ~3.000 (≈ US$ 0,30), todas as gerações no fluxo "Nexo · Reels de humor" do ElevenLabs.
+
 ## Testes
 
 - `npm test` — a decisão (quando abre, em que aba, o maior "lido") e a lista de edições.

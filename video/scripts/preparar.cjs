@@ -21,3 +21,9 @@ if (faltam.length) {
   process.exit(1);
 }
 console.log(`Sons da sala copiados: ${SONS.length}.`);
+
+// O Reels de humor tem áudio próprio (falas, trilha e efeitos, gerados no ElevenLabs e tratados por
+// scripts/reels-audio.cjs). Só ele precisa disso: os outros vídeos renderizam sem.
+if (!fs.existsSync(path.join(__dirname, '..', 'public', 'audio', 'reels', 'fala', 'v01.mp3'))) {
+  console.warn('Aviso: faltam as falas do Reels de humor em video/public/audio/reels (ver docs/novidades.md); os outros vídeos não são afetados.');
+}

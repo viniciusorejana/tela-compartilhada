@@ -317,16 +317,16 @@ export const TEMAS = ['nexo', 'meia-noite', 'floresta', 'sakura'].map(id => {
   return { id, nome: tema.nome, cores: NexoTema.derivar(NexoTema.resolver({ tema: id })) };
 });
 
-export function MiniSala({ trocas = [], largura = 900 }) {
+export function MiniSala({ trocas = [], largura = 900, temas = TEMAS }) {
   const q = useCurrentFrame();
   const e = largura / 900;
   // Qual tema vale agora e o anterior, para a cor deslizar entre os dois.
   let atual = 0;
   trocas.forEach((quando, i) => { if (q >= quando) atual = i + 1; });
-  atual = Math.min(atual, TEMAS.length - 1);
+  atual = Math.min(atual, temas.length - 1);
   const anterior = Math.max(0, atual - 1);
   const t = atual === 0 ? 1 : entre(q, [trocas[atual - 1], trocas[atual - 1] + 10]);
-  const c = nome => interpolateColors(t, [0, 1], [TEMAS[anterior].cores[nome], TEMAS[atual].cores[nome]]);
+  const c = nome => interpolateColors(t, [0, 1], [temas[anterior].cores[nome], temas[atual].cores[nome]]);
   const bloco = (w, h, cor, extra = {}) => <div style={{ width: w, height: h, borderRadius: 8 * e, background: cor, ...extra }} />;
   return (
     <div style={{ width: largura }}>
@@ -344,7 +344,7 @@ export function MiniSala({ trocas = [], largura = 900 }) {
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 18 * e, marginTop: 26 * e }}>
-        {TEMAS.map((tema, i) => (
+        {temas.map((tema, i) => (
           <div key={tema.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 * e, fontFamily: FONTE, fontSize: 22 * e, fontWeight: 600, color: i === atual ? COR.texto : COR.faint }}>
             <span style={{ width: 62 * e, height: 62 * e, borderRadius: '50%', background: `linear-gradient(135deg, ${tema.cores['--bg']} 0 52%, ${tema.cores['--accent']} 52% 100%)`, boxShadow: i === atual ? `0 0 0 ${4 * e}px ${COR.bg}, 0 0 0 ${8 * e}px ${tema.cores['--accent']}` : `0 0 0 1.5px ${COR.linha2}`, transform: `scale(${i === atual ? 1.08 : 1})` }} />
             {tema.nome}
