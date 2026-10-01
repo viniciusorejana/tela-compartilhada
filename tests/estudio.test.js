@@ -81,6 +81,28 @@ test('a configuração é fechada: o que não está na forma some, e os números
   assert.deepEqual([...estudio.imagensDaConfig(limpa)].sort(), [img, mudo, surdo].sort());
   const muitas = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`n:p${i}`, { rotulo: `P${i}` }]));
   assert.equal(Object.keys(estudio.limparConfig({ pessoas: muitas }).pessoas).length, estudio.PESSOAS_MAXIMAS_NA_CONFIGURACAO);
+  // A escolha de origem: só as três, e só quando foi feita.
+  const escolhas = estudio.limparConfig({ pessoas: { 'n:ana': { usar: 'nenhuma' }, 'n:bia': { usar: 'qualquer' }, 'n:caio': { usar: 'pessoa', rotulo: 'Caio' } } }).pessoas;
+  assert.equal(escolhas['n:ana'].usar, 'nenhuma', 'escolher "nenhuma" basta para a pessoa ficar na lista');
+  assert.equal('n:bia' in escolhas, false, 'uma escolha que não existe não diz nada');
+  assert.equal(escolhas['n:caio'].usar, 'pessoa');
+});
+
+test('o rosto que a pessoa escolhe, e de onde vêm as imagens de cada uma', () => {
+  const img = n => String(n).repeat(32).slice(0, 32);
+  assert.equal(estudio.limparRosto(null), null);
+  assert.equal(estudio.limparRosto({ parado: 'nao-e-id', outro: img(1) }), null, 'sem imagem válida, sem rosto');
+  assert.deepEqual(estudio.limparRosto({ parado: img(1), mudo: img(2), extra: img(3) }), { parado: img(1), mudo: img(2) });
+
+  const rosto = { parado: img(1) };
+  const origem = estudio.origemDasImagens;
+  assert.equal(origem({}, null), 'nenhuma', 'sem nada, a foto');
+  assert.equal(origem({}, rosto), 'pessoa', 'quem nunca mexeu na pessoa vê o rosto que ela escolheu');
+  assert.equal(origem({ parado: img(4) }, rosto), 'minhas', 'quem já tinha anexado imagens continua com as dele');
+  assert.equal(origem({ parado: img(4), usar: 'pessoa' }, rosto), 'pessoa', 'a escolha guardada vence');
+  assert.equal(origem({ usar: 'nenhuma' }, rosto), 'nenhuma');
+  assert.equal(origem({ usar: 'pessoa' }, null), 'nenhuma', '"da pessoa" sem rosto próprio é a foto');
+  assert.equal(origem({ usar: 'pessoa', mudo: img(5) }, null), 'minhas', '...ou as minhas, se houver');
 });
 
 // ---------- As imagens ----------
@@ -101,8 +123,10 @@ test('o tipo da imagem vem dos bytes; SVG e desencontros ficam de fora', () => {
   assert.equal(conferirImagem(comMb(3), 'avatar', 'image/png').tipo, 'image/png', 'a foto aceita um GIF animado de alguns MB');
   assert.equal(conferirImagem(comMb(6), 'avatar', 'image/png').status, 413, 'acima de 6 MB, não');
   assert.match(conferirImagem(comMb(6), 'avatar', 'image/png').erro, /passa de 6 MB/);
-  assert.equal(conferirImagem(comMb(1), 'estudio', 'image/png').tipo, 'image/png');
-  assert.equal(conferirImagem(comMb(3), 'estudio', 'image/png').status, 413, 'cada imagem do Estúdio continua em 2 MB');
+  assert.equal(conferirImagem(comMb(11), 'estudio', 'image/png').tipo, 'image/png', 'o Estúdio aceita um GIF longo');
+  assert.equal(conferirImagem(comMb(12), 'estudio', 'image/png').status, 413, 'acima de 12 MB, não');
+  assert.equal(conferirImagem(comMb(11), 'rosto', 'image/png').tipo, 'image/png', 'o rosto tem o teto do Estúdio');
+  assert.equal(conferirImagem(comMb(12), 'rosto', 'image/png').status, 413);
 });
 
 // ---------- Pelo servidor ----------
@@ -250,6 +274,56 @@ test('o Estúdio guarda a configuração, só aceita imagens da própria conta e
   const falsa = await paginaDoObs(servidor.origem, `${link.split('.')[0]}.AAAAAAAAAAAAAAAAAAAAAA`);
   assert.equal(falsa.aceita, false);
   falsa.fechar();
+});
+
+test('o rosto: uma imagem por estado, trocada no lugar, no perfil que a sala vê', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = await cadastrar(servidor.origem, 'ana', 'Ana');
+  const parado = await ana.pedir('/api/conta/rosto/parado', { metodo: 'PUT', cru: GIF, tipo: 'image/gif' });
+  assert.equal(parado.status, 200, JSON.stringify(parado.dados));
+  const id = parado.dados.perfil.rosto.parado;
+  assert.match(id, /^[a-f0-9]{32}$/);
+  assert.equal((await fetch(`${servidor.origem}/api/imagem/${id}`)).status, 200);
+  const trocado = await ana.pedir('/api/conta/rosto/parado', { metodo: 'PUT', cru: PNG, tipo: 'image/png' });
+  assert.notEqual(trocado.dados.perfil.rosto.parado, id);
+  assert.equal((await fetch(`${servidor.origem}/api/imagem/${id}`)).status, 404, 'trocar apaga a anterior daquele estado');
+  const mudo = await ana.pedir('/api/conta/rosto/mudo', { metodo: 'PUT', cru: PNG, tipo: 'image/png' });
+  assert.deepEqual(Object.keys(mudo.dados.perfil.rosto).sort(), ['mudo', 'parado']);
+  assert.equal((await ana.pedir('/api/conta/rosto/cantando', { metodo: 'PUT', cru: PNG, tipo: 'image/png' })).status, 404, 'só os quatro estados');
+  const tirado = await ana.pedir('/api/conta/rosto/mudo', { metodo: 'DELETE' });
+  assert.deepEqual(Object.keys(tirado.dados.perfil.rosto), ['parado']);
+  assert.equal((await fetch(`${servidor.origem}/api/imagem/${mudo.dados.perfil.rosto.mudo}`)).status, 404);
+  assert.equal((await ana.pedir('/api/conta/eu')).dados.perfil.rosto.parado, trocado.dados.perfil.rosto.parado, 'o rosto é perfil');
+});
+
+test('o rosto que a Bia escolhe chega ao Estúdio da Ana e à fonte dos rostos, na hora', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = await cadastrar(servidor.origem, 'ana', 'Ana');
+  const bia = await cadastrar(servidor.origem, 'bia', 'Bia');
+  const sala = 'squad-rosto';
+  const entrar = async (pessoa, nome) => {
+    const cred = await servidor.credencial(nome, sala, '', pessoa.cookie());
+    const socket = await conectarSocket(servidor.origem, cred.credencialSessao);
+    t.after(socket.fechar);
+    await socket.pedir('join-room', sala, nome, 'x');
+  };
+  await entrar(ana, 'Ana');
+  await entrar(bia, 'Bia');
+  const grupo = (await ana.pedir('/api/conta/estudio')).dados.links.grupo;
+  const obs = await paginaDoObs(servidor.origem, grupo.slice('/obs/'.length));
+  t.after(obs.fechar);
+  await obs.esperar(e => e.tipo === 'ok' && e.pessoas.length === 2);
+
+  const id = (await bia.pedir('/api/conta/rosto/parado', { metodo: 'PUT', cru: GIF, tipo: 'image/gif' })).dados.perfil.rosto.parado;
+  await obs.esperar(e => e.tipo === 'ok' && e.pessoas.some(p => p.nome === 'Bia' && p.perfil?.rosto?.parado === id));
+  const daBia = (await ana.pedir('/api/conta/estudio')).dados.sala.pessoas.find(p => p.nome === 'Bia');
+  assert.equal(daBia.perfil.rosto.parado, id, 'o painel do Estúdio da Ana vê o rosto que a Bia escolheu');
+
+  // A escolha da Ana para a Bia fica guardada na configuração dela, e chega à fonte.
+  const salvo = await ana.pedir('/api/conta/estudio', { metodo: 'PUT', corpo: { config: { pessoas: { [daBia.chave]: { usar: 'nenhuma' } } } } });
+  assert.equal(salvo.dados.config.pessoas[daBia.chave].usar, 'nenhuma');
+  await obs.esperar(e => e.tipo === 'ok' && e.config?.pessoas?.[daBia.chave]?.usar === 'nenhuma');
+  assert.equal((await ana.pedir('/api/conta/estudio')).dados.config.pessoas[daBia.chave].usar, 'nenhuma', 'e continua lá na próxima abertura');
 });
 
 test('a página do OBS segue o diretor até a sala, espera a pessoa e respeita quem não deixa', async t => {

@@ -165,6 +165,27 @@ Os dois estados chegam por caminhos diferentes:
 Na prévia do Estúdio, mudo e ensurdecido são os de verdade, lidos da sala: para ver a imagem de
 "mudo" de alguém, basta essa pessoa — ou você — fechar o microfone.
 
+### O rosto que a própria pessoa escolhe
+
+Quem tem conta pode escolher o próprio **rosto**: as quatro imagens (parado, falando, mudo,
+ensurdecido) com que quer aparecer nos rostos que reagem, no OBS de quem a levar. Elas moram no
+perfil da conta (`perfil.rosto`, migração 3), são públicas como a foto e vão à sala junto com o
+perfil. Escolhe-se em Configurações → Estúdio (OBS), ou na própria linha, no painel do Estúdio.
+
+Quem monta a cena decide, por pessoa, de onde vêm as imagens dela, e a escolha fica guardada na
+configuração dele (`usar`):
+
+| escolha | o que aparece no OBS |
+|---|---|
+| **Da pessoa** | o rosto que ela escolheu (só aparece para quem tem um) |
+| **Minhas** | as imagens que quem monta a cena anexou para ela, e que só valem no OBS dele |
+| **Nenhuma** | nenhuma imagem: a foto do perfil, ou a cor e as iniciais |
+
+Sem escolha guardada, vale o que existir: as minhas, senão as da pessoa, senão nenhuma
+(`origemDasImagens`, em `estudio.js` e em `reativo.js`). É o que faz o rosto que alguém escolheu
+aparecer sozinho no Estúdio de quem nunca mexeu nela, sem passar por cima de quem já tinha
+anexado imagens próprias para ela.
+
 ---
 
 ## As imagens
@@ -173,10 +194,10 @@ Moram no banco (tabela `imagem`, BLOB), e não em arquivos: são da conta, e "ap
 as leva pelo mesmo CASCADE que já levava perfil e sessões. A cópia diária do banco as leva
 junto sem ninguém lembrar delas.
 
-| | avatar | Estúdio |
-|---|---|---|
-| tamanho | 6 MB | 2 MB cada, 40 por conta, 16 MB no total |
-| preparo | recortado no quadrado do meio e reduzido a 512 px pela página (256 se não couber) | como está (a arte de quem transmite: GIF animado, PNG recortado) |
+| | avatar | rosto | Estúdio |
+|---|---|---|---|
+| tamanho | 6 MB | 12 MB cada, uma por estado (4 no máximo) | 12 MB cada, 40 por conta, 64 MB no total |
+| preparo | recortado no quadrado do meio e reduzido a 512 px pela página (256 se não couber) | como as do Estúdio | como está (a arte de quem transmite: GIF animado, PNG recortado); parada acima do teto, reduzida a 1024 px |
 
 A foto de perfil também se vê grande: no cartão de perfil da sala, o avatar de quem tem foto se
 abre num visor de até 440 px. É por isso que ela sobe em 512 px — em 256, ampliada, ficava macia.
@@ -187,8 +208,8 @@ As fotos enviadas antes continuam em 256 até a pessoa trocar.
 - **A entrega não deixa nada rodar:** tipo fixo, `nosniff`, `Content-Security-Policy:
   default-src 'none'; sandbox`. O id é sorteado a cada envio, então a imagem fica em cache para
   sempre e trocar a foto é trocar o endereço.
-- **A moderação é a do painel:** "Tirar as imagens" apaga a foto e as imagens do Estúdio de uma
-  conta de uma vez. É o tamanho que a moderação de imagem tem hoje.
+- **A moderação é a do painel:** "Tirar as imagens" apaga a foto, o rosto e as imagens do Estúdio
+  de uma conta de uma vez. É o tamanho que a moderação de imagem tem hoje.
 - Imagens do Estúdio que ficaram de fora da configuração por mais de uma hora somem no próximo
   salvamento.
 

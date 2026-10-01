@@ -17,8 +17,12 @@ const LIMITES = Object.freeze({
   // baixa (uma vez só: o endereço muda a cada troca, e fica em cache para sempre).
   avatar: { bytes: 6 * MiB },
   // As do Estúdio vêm como estão: são a arte de quem transmite, muitas vezes GIF animado ou PNG
-  // com fundo transparente, e recomprimir estragaria as duas coisas.
-  estudio: { bytes: 2 * MiB, quantas: 40, total: 16 * MiB }
+  // com fundo transparente, e recomprimir estragaria as duas coisas. O total da conta acompanha o
+  // teto de cada uma: com 12 MB por imagem, um teto de 16 caberia uma imagem só.
+  estudio: { bytes: 12 * MiB, quantas: 40, total: 64 * MiB },
+  // O rosto que a própria pessoa escolhe para os Estúdios dos outros: uma imagem por estado
+  // (quatro no máximo, pela forma -- contas/banco.js troca a anterior), com o teto das do Estúdio.
+  rosto: { bytes: 12 * MiB }
 });
 
 function tipoDosBytes(bytes) {

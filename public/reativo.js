@@ -14,6 +14,17 @@
  */
 (function (root) {
   const endereco = id => (typeof id === 'string' && /^[a-f0-9]{32}$/.test(id) ? `/api/imagem/${id}` : null);
+  const ESTADOS = ['parado', 'falando', 'mudo', 'ensurdecido'];
+
+  // De onde vêm as imagens de uma pessoa (estudio.js, `origemDasImagens`): 'pessoa', 'minhas' ou
+  // 'nenhuma'. Também usada pelo painel do Estúdio, para marcar a escolha que está valendo.
+  function origemDasImagens(escolhidas, rosto) {
+    const temRosto = Boolean(rosto && ESTADOS.some(estado => endereco(rosto[estado])));
+    const escolha = escolhidas?.usar;
+    if (['pessoa', 'minhas', 'nenhuma'].includes(escolha) && (escolha !== 'pessoa' || temRosto)) return escolha;
+    if (ESTADOS.some(estado => endereco(escolhidas?.[estado]))) return 'minhas';
+    return temRosto ? 'pessoa' : 'nenhuma';
+  }
 
   function criar(raiz) {
     raiz.classList.add('reativo');
@@ -39,14 +50,20 @@
       raiz.classList.toggle('com-anel', e.anel !== false);
     }
 
-    // As imagens da pessoa. "Falando" sem imagem própria repete a de "parado": o efeito (pulo,
-    // pulso, brilho) é o que diz que ela está falando. Mudo e ensurdecido não repetem nada: sem
-    // imagem, vale o rosto de sempre.
+    // As imagens da pessoa. De onde elas vêm é a escolha de quem monta a cena: as que a própria
+    // pessoa escolheu para o rosto dela (perfil.rosto), as que ele anexou para ela, ou nenhuma --
+    // e sem escolha, o que existir, nessa ordem: as dele, as dela, nenhuma. A mesma regra de
+    // `origemDasImagens`, em estudio.js; aqui ela roda no OBS e na prévia.
+    //
+    // "Falando" sem imagem própria repete a de "parado": o efeito (pulo, pulso, brilho) é o que
+    // diz que ela está falando. Mudo e ensurdecido não repetem nada: sem imagem, vale o rosto de
+    // sempre.
     function imagensDe(pessoa) {
       const escolhidas = config.pessoas?.[pessoa.chave] || {};
-      const parado = endereco(escolhidas.parado);
-      const falandoImg = endereco(escolhidas.falando);
-      return { parado: parado || falandoImg, falando: falandoImg || parado, mudo: endereco(escolhidas.mudo), ensurdecido: endereco(escolhidas.ensurdecido) };
+      const fonte = { pessoa: pessoa.perfil?.rosto || {}, minhas: escolhidas, nenhuma: {} }[origemDasImagens(escolhidas, pessoa.perfil?.rosto)];
+      const parado = endereco(fonte.parado);
+      const falandoImg = endereco(fonte.falando);
+      return { parado: parado || falandoImg, falando: falandoImg || parado, mudo: endereco(fonte.mudo), ensurdecido: endereco(fonte.ensurdecido) };
     }
 
     // Qual imagem de estado cobre o rosto agora. Ensurdecida sem imagem própria usa a de muda --
@@ -168,5 +185,5 @@
     return -70 + (100 - Math.min(100, Math.max(1, sensibilidade))) * 0.5;
   }
 
-  root.NexoReativo = { criar, limiarEmDb };
+  root.NexoReativo = { criar, limiarEmDb, origemDasImagens, ESTADOS };
 })(window);

@@ -116,13 +116,13 @@ test('com conta, a sala usa o apelido da conta; a identidade de mídia continua 
   assert.match(config.dados.identidade, /^Ana#[a-f0-9]{16}$/);
   const a = await conectarSocket(servidor.origem, config.dados.credencialSessao); t.after(a.fechar);
   const entradaDela = await a.pedir('join-room', 'squad-teste', 'forjado', 'forjado');
-  assert.deepEqual(entradaDela.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null });
+  assert.deepEqual(entradaDela.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null });
 
   const bia = await servidor.credencial('Bia');
   const b = await conectarSocket(servidor.origem, bia.credencialSessao); t.after(b.fechar);
   const entrada = await b.pedir('join-room', 'squad-teste', 'Bia', bia.identidade);
   const anaNaLista = entrada.peers.find(p => p.name === 'Ana');
-  assert.deepEqual(anaNaLista.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null });
+  assert.deepEqual(anaNaLista.perfil, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null });
   const texto = JSON.stringify(entrada);
   assert.equal(texto.includes('ana.silva'), false, 'o nome de usuário não é mostrado à sala');
   assert.equal(texto.includes('contaId'), false, 'a conta fica no servidor');

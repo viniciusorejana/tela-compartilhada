@@ -58,7 +58,7 @@ function criarEstudioAoVivo({ io, contas, sfu, membros, limitarOrigem = () => tr
       if (!membro.identidade || vistas.has(membro.identidade)) continue;
       vistas.set(membro.identidade, {
         identidade: membro.identidade, nome: membro.name, chave: chaveDoMembro(membro), contaId: membro.contaId || null,
-        perfil: membro.perfil ? { cor: membro.perfil.cor || null, marca: membro.perfil.marca || null, avatar: membro.perfil.avatar || null, codigo: membro.perfil.codigo || null } : null,
+        perfil: membro.perfil ? { cor: membro.perfil.cor || null, marca: membro.perfil.marca || null, avatar: membro.perfil.avatar || null, codigo: membro.perfil.codigo || null, rosto: membro.perfil.rosto || null } : null,
         // Do estado, o servidor só sabe o que a pessoa anuncia: se está ensurdecida (server.js,
         // "ensurdecer"), que o OBS usa para trocar o rosto. Câmera, tela e microfone são da mídia:
         // a página do OBS e o painel do Estúdio (que roda na sala) os leem de lá, ao vivo.
@@ -103,7 +103,7 @@ function criarEstudioAoVivo({ io, contas, sfu, membros, limitarOrigem = () => tr
       const conta = contas.contaPorCodigo(codigo);
       if (!conta || contas.suspensa(conta)) return { ok: false, status: 404, error: 'Nenhuma conta com esse código.' };
       const perfil = contas.perfil(conta);
-      return { ok: true, pessoa: { chave: `c:${conta.codigo}`, rotulo: conta.apelido, perfil: { cor: perfil.cor, marca: perfil.marca, avatar: perfil.avatar, codigo: formatarCodigo(conta.codigo) } } };
+      return { ok: true, pessoa: { chave: `c:${conta.codigo}`, rotulo: conta.apelido, perfil: { cor: perfil.cor, marca: perfil.marca, avatar: perfil.avatar, rosto: perfil.rosto, codigo: formatarCodigo(conta.codigo) } } };
     }
     const limpo = String(nome || '').replace(/\s+/g, ' ').trim().slice(0, 40);
     const chave = chaveDaPessoa({ nome: limpo });

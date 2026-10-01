@@ -253,6 +253,12 @@
         <div class="config-bloco">
           <label class="toggle-line" for="estudioPermitir"><span><strong>Deixar que me levem para o OBS</strong><small>Quem tem conta e está na sala com você pode levar a sua câmera, tela, voz ou o seu rosto que reage à voz. Desligar tira do ar na hora o que já estiver lá.</small></span><input id="estudioPermitir" type="checkbox" role="switch" checked></label>
         </div>
+        <!-- O meu rosto nos Estúdios dos outros (estudio.js, pintarMeuRosto): só com conta. -->
+        <div class="config-bloco estudio-meu-rosto" id="estudioMeuRosto" hidden>
+          <span class="estudio-meu-rosto-texto"><strong>Meu rosto no OBS</strong><small>As imagens com que você aparece nos rostos que reagem à voz, no OBS de quem levar você. Cada pessoa escolhe se usa estas; sem elas, vale a sua foto.</small></span>
+          <div class="estudio-imagens" id="estudioMeuRostoImagens"></div>
+          <p class="estudio-aviso" id="estudioMeuRostoAviso" role="status"></p>
+        </div>
         <span class="config-rotulo">No OBS agora</span>
         <ul id="estudioCapturasLista" class="estudio-capturas"></ul>
         <p class="config-dica estudio-nada" id="estudioNada">Ninguém está levando nada desta sala para o OBS.</p>

@@ -151,6 +151,31 @@ const imagemValida = valor => (typeof valor === 'string' && ID_DE_IMAGEM.test(va
 // não pode falar não "fala", e a arte escolhida para isso diz melhor que o rosto apagado.
 const ESTADOS_DO_ROSTO = Object.freeze(['parado', 'falando', 'mudo', 'ensurdecido']);
 
+// De onde vêm as imagens de uma pessoa no Estúdio de quem monta a cena:
+//   - `pessoa`: as que a própria pessoa escolheu para o rosto dela (o rosto do perfil, abaixo);
+//   - `minhas`: as que quem monta a cena anexou para ela, e que só valem no OBS dele;
+//   - `nenhuma`: nenhuma imagem -- a foto do perfil, ou a cor e as iniciais.
+// Sem escolha guardada, vale o que existir: as minhas, senão as da pessoa, senão nenhuma. É o que
+// faz o rosto que alguém escolheu aparecer sozinho no Estúdio de quem nunca mexeu nela.
+const ORIGENS_DAS_IMAGENS = Object.freeze(['pessoa', 'minhas', 'nenhuma']);
+
+// O rosto que cada pessoa escolhe para si (perfil.rosto). Só ids de imagem, só os quatro estados;
+// sem nenhuma imagem é `null`, e a pessoa não tem rosto próprio.
+function limparRosto(bruto) {
+  const origem = bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? bruto : {};
+  const rosto = {};
+  for (const estado of ESTADOS_DO_ROSTO) if (imagemValida(origem[estado])) rosto[estado] = origem[estado];
+  return Object.keys(rosto).length ? rosto : null;
+}
+
+// Qual origem vale para uma pessoa, com o que se sabe dela: a escolha guardada, ou o automático.
+function origemDasImagens(escolhidas, rostoDaPessoa) {
+  const escolha = escolhidas?.usar;
+  if (ORIGENS_DAS_IMAGENS.includes(escolha) && (escolha !== 'pessoa' || rostoDaPessoa)) return escolha;
+  if (ESTADOS_DO_ROSTO.some(estado => escolhidas?.[estado])) return 'minhas';
+  return rostoDaPessoa ? 'pessoa' : 'nenhuma';
+}
+
 function limparConfig(bruto) {
   const origem = bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? bruto : {};
   const estiloBruto = origem.estilo && typeof origem.estilo === 'object' ? origem.estilo : {};
@@ -164,8 +189,10 @@ function limparConfig(bruto) {
     if (!chave || !dados || typeof dados !== 'object') continue;
     const pessoa = { rotulo: String(dados.rotulo || '').replace(/\s+/g, ' ').trim().slice(0, 40), oculto: dados.oculto === true };
     for (const estado of ESTADOS_DO_ROSTO) pessoa[estado] = imagemValida(dados[estado]);
-    // Uma pessoa sem imagem, sem ocultar e sem rótulo não diz nada: não ocupa lugar.
-    if (ESTADOS_DO_ROSTO.some(estado => pessoa[estado]) || pessoa.oculto || pessoa.rotulo) pessoas[chave] = pessoa;
+    // A escolha de origem só vai quando foi feita: sem ela, vale o automático (origemDasImagens).
+    if (ORIGENS_DAS_IMAGENS.includes(dados.usar)) pessoa.usar = dados.usar;
+    // Uma pessoa sem imagem, sem escolha, sem ocultar e sem rótulo não diz nada: não ocupa lugar.
+    if (ESTADOS_DO_ROSTO.some(estado => pessoa[estado]) || pessoa.usar || pessoa.oculto || pessoa.rotulo) pessoas[chave] = pessoa;
   }
   return { estilo, pessoas };
 }
@@ -178,6 +205,6 @@ function imagensDaConfig(config) {
 }
 
 module.exports = {
-  FONTES, TIPOS, ESTILO_PADRAO, ESTADOS_DO_ROSTO, PESSOAS_MAXIMAS_NA_CONFIGURACAO, BYTES_MAXIMOS_DA_CONFIGURACAO, ID_DE_IMAGEM,
-  normalizarNome, normalizarCodigo, chaveDaPessoa, chaveValida, criarAssinador, limparConfig, imagensDaConfig
+  FONTES, TIPOS, ESTILO_PADRAO, ESTADOS_DO_ROSTO, ORIGENS_DAS_IMAGENS, PESSOAS_MAXIMAS_NA_CONFIGURACAO, BYTES_MAXIMOS_DA_CONFIGURACAO, ID_DE_IMAGEM,
+  normalizarNome, normalizarCodigo, chaveDaPessoa, chaveValida, criarAssinador, limparConfig, imagensDaConfig, limparRosto, origemDasImagens
 };

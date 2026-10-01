@@ -272,23 +272,89 @@
     return quem;
   }
 
+  // ---------- De onde vêm as imagens de cada pessoa ----------
+  //
+  // Quem tem conta pode escolher o próprio rosto -- as quatro imagens com que aparece no Estúdio
+  // dos outros (perfil.rosto). Para cada pessoa, quem monta a cena escolhe a origem, e a escolha
+  // fica guardada na configuração dele (`usar`): as da pessoa, as minhas, ou nenhuma (a foto).
+  // Sem escolha, vale o que existir (NexoReativo.origemDasImagens, a mesma regra do OBS).
+  //
+  // O que cada linha deixa fazer com os quatro lugares:
+  //   - `minhas`: as que eu anexei para a pessoa -- escolher e tirar mexem na minha configuração;
+  //   - `rosto`: na minha própria linha, o meu rosto -- escolher e tirar mexem no meu perfil, que
+  //     todo Estúdio vê;
+  //   - `leitura`: o rosto que a pessoa escolheu -- dá para ver e usar, não para mudar;
+  //   - `desligado`: "nenhuma" escolhida: vale a foto, e os lugares ficam apagados.
+  const ORIGENS = [['pessoa', 'Da pessoa'], ['minhas', 'Minhas'], ['nenhuma', 'Nenhuma']];
+  const imagemValida = id => typeof id === 'string' && /^[a-f0-9]{32}$/.test(id);
+
+  function situacaoDe(pessoa) {
+    const escolhidas = config.pessoas[pessoa.chave] || {};
+    const rosto = pessoa.perfil?.rosto || null;
+    const temRosto = Boolean(rosto && ESTADOS.some(([estado]) => imagemValida(rosto[estado])));
+    const origem = NexoReativo.origemDasImagens(escolhidas, rosto);
+    const explicita = Boolean(escolhidas.usar);
+    const modo = origem === 'minhas' ? 'minhas'
+      : origem === 'pessoa' ? (pessoa.eu ? 'rosto' : 'leitura')
+        : explicita ? 'desligado' : (pessoa.eu ? 'rosto' : 'minhas');
+    const imagens = modo === 'minhas' ? escolhidas : modo === 'desligado' ? {} : (rosto || {});
+    const temMinhas = ESTADOS.some(([estado]) => imagemValida(escolhidas[estado]));
+    return { origem, modo, imagens, temRosto, mostrarEscolha: temRosto || temMinhas || explicita };
+  }
+
+  // A escolha da origem, só para quem tem algo a escolher: rosto próprio, imagens minhas, ou uma
+  // escolha já feita. Os outros continuam como sempre foram -- os lugares vazios, prontos para
+  // anexar.
+  function escolhaDeOrigem(pessoa, situacao) {
+    const linha = elemento('div', 'estudio-origem');
+    linha.append(elemento('span', 'estudio-origem-rotulo', 'Imagens'));
+    const grupo = elemento('div', 'segmentado estudio-origem-opcoes');
+    grupo.setAttribute('role', 'radiogroup');
+    grupo.setAttribute('aria-label', `De onde vêm as imagens de ${pessoa.nome}`);
+    const explicacao = {
+      pessoa: pessoa.eu ? 'As imagens do seu rosto, que todo Estúdio vê' : `As imagens que ${pessoa.nome} escolheu para o próprio rosto`,
+      minhas: 'As imagens que você anexar aqui, só no seu OBS',
+      nenhuma: 'Sem imagens: a foto do perfil, ou a cor e as iniciais'
+    };
+    for (const [origem, rotulo] of ORIGENS) {
+      if (origem === 'pessoa' && !situacao.temRosto) continue;
+      const opcao = elemento('label');
+      opcao.title = explicacao[origem];
+      const radio = elemento('input');
+      Object.assign(radio, { type: 'radio', name: `estudio-origem-${pessoa.chave}`, value: origem, checked: situacao.origem === origem });
+      radio.addEventListener('change', () => { entradaDe(pessoa).usar = origem; pintarTudo(); salvarDepois(); });
+      opcao.append(radio, elemento('span', '', origem === 'pessoa' && pessoa.eu ? 'Meu rosto' : rotulo));
+      grupo.append(opcao);
+    }
+    linha.append(grupo);
+    return linha;
+  }
+
   // Vazio, o lugar mostra o desenho do estado, o mesmo do cabeçalho: dá para saber o que vai ali
-  // sem ler nada. A legenda embaixo só aparece com a lista estreita, quando o cabeçalho sai.
-  function lugarDaImagem(pessoa, estado, titulo) {
+  // sem ler nada. A legenda embaixo só aparece com a lista estreita, quando o cabeçalho sai -- e
+  // sempre no "meu rosto" das configurações.
+  function lugarDaImagem(pessoa, estado, titulo, situacao, aviso = $('estudioAviso')) {
     const lugar = elemento('span', 'estudio-imagem-lugar');
     lugar.dataset.estado = estado;
-    const id = config.pessoas[pessoa.chave]?.[estado];
-    const escolher = botao('estudio-imagem', icone(estado), `${id ? 'Trocar' : 'Escolher'} a imagem “${titulo}” de ${pessoa.nome}`);
-    if (id && /^[a-f0-9]{32}$/.test(id)) {
+    const id = situacao.imagens[estado];
+    const tem = imagemValida(id);
+    const editavel = situacao.modo === 'minhas' || situacao.modo === 'rosto';
+    const deQuem = situacao.modo === 'rosto' ? 'do seu rosto' : `de ${pessoa.nome}`;
+    const rotulo = editavel ? `${tem ? 'Trocar' : 'Escolher'} a imagem “${titulo}” ${deQuem}`
+      : situacao.modo === 'leitura' ? (tem ? `Imagem “${titulo}” que ${pessoa.nome} escolheu` : `${pessoa.nome} não escolheu imagem “${titulo}”`)
+        : 'Sem imagens: escolha “Minhas” para anexar';
+    const escolher = botao('estudio-imagem', icone(estado), rotulo);
+    escolher.disabled = !editavel;
+    if (tem) {
       escolher.classList.add('com-imagem');
       escolher.style.backgroundImage = `url("/api/imagem/${id}")`;
     }
-    escolher.addEventListener('click', () => escolherArquivo(pessoa, estado, titulo));
+    if (editavel) escolher.addEventListener('click', () => escolherArquivo({ pessoa, estado, titulo, destino: situacao.modo, aviso }));
     const caixa = elemento('span', 'estudio-imagem-caixa');
     caixa.append(escolher);
-    if (id) {
-      const tirar = botao('estudio-tirar', icone('fechar'), `Tirar a imagem “${titulo}” de ${pessoa.nome}`);
-      tirar.addEventListener('click', () => tirarImagem(pessoa, id));
+    if (editavel && tem) {
+      const tirar = botao('estudio-tirar', icone('fechar'), `Tirar a imagem “${titulo}” ${deQuem}`);
+      tirar.addEventListener('click', () => (situacao.modo === 'rosto' ? tirarDoMeuRosto(estado, aviso) : tirarImagem(pessoa, id)));
       caixa.append(tirar);
     }
     const legenda = elemento('span', 'estudio-imagem-legenda', titulo);
@@ -308,8 +374,10 @@
     item.classList.toggle('oculta', oculta);
 
     const linha = elemento('div', 'estudio-pessoa-linha');
+    const situacao = situacaoDe(pessoa);
     const imagens = elemento('div', 'estudio-imagens');
-    imagens.append(...ESTADOS.map(([estado, titulo]) => lugarDaImagem(pessoa, estado, titulo)));
+    imagens.dataset.modo = situacao.modo;
+    imagens.append(...ESTADOS.map(([estado, titulo]) => lugarDaImagem(pessoa, estado, titulo, situacao)));
     linha.append(quemE(pessoa), imagens);
     const acoes = elemento('div', 'estudio-pessoa-acoes');
     const esconder = botao('ghost icone-so', icone(oculta ? 'olhoFechado' : 'olho', 'ico ico-p'), oculta ? `Mostrar ${pessoa.nome} nos rostos do OBS` : `Esconder ${pessoa.nome} dos rostos do OBS`);
@@ -323,6 +391,7 @@
     }
     linha.append(acoes);
     item.append(linha);
+    if (situacao.mostrarEscolha) item.append(escolhaDeOrigem(pessoa, situacao));
 
     const links = retrato?.links?.pessoas?.[pessoa.chave];
     if (links) {
@@ -374,9 +443,11 @@
   }
 
   // ---------- As imagens ----------
+  // `destino` diz para onde a imagem vai: `minhas` é a configuração deste Estúdio (só o meu OBS
+  // vê); `rosto` é o meu perfil, que todo Estúdio em que eu estiver vê.
   let alvoDoArquivo = null;
-  function escolherArquivo(pessoa, estado, titulo) {
-    alvoDoArquivo = { pessoa, estado, titulo };
+  function escolherArquivo(alvo) {
+    alvoDoArquivo = alvo;
     $('estudioArquivo').click();
   }
   $('estudioArquivo').addEventListener('change', async evento => {
@@ -385,18 +456,57 @@
     const alvo = alvoDoArquivo;
     alvoDoArquivo = null;
     if (!arquivo || !alvo) return;
-    const aviso = $('estudioAviso');
+    const aviso = alvo.aviso;
     dizer(aviso, 'Preparando a imagem…');
     let blob;
     try { blob = await NexoImagem.prepararDoEstudio(arquivo); }
     catch (erro) { dizer(aviso, erro.message || 'Não foi possível abrir esta imagem.', 'problema'); return; }
     dizer(aviso, 'Enviando…');
+    if (alvo.destino === 'rosto') {
+      const r = await NexoImagem.enviar(`/api/conta/rosto/${alvo.estado}`, blob, { metodo: 'PUT', csrf: csrf() });
+      if (!r.ok) { dizer(aviso, r.dados.error || 'Não foi possível enviar a imagem.', 'problema'); return; }
+      await mudouMeuRosto(r.dados.perfil);
+      dizer(aviso, `Imagem “${alvo.titulo}” do seu rosto guardada. Quem levar você para o OBS já pode usá-la.`, 'certo');
+      return;
+    }
     const r = await NexoImagem.enviar('/api/conta/estudio/imagens', blob, { metodo: 'POST', csrf: csrf() });
     if (!r.ok) { dizer(aviso, r.dados.error || 'Não foi possível enviar a imagem.', 'problema'); return; }
     entradaDe(alvo.pessoa)[alvo.estado] = r.dados.imagem.id;
     if (await salvar()) dizer(aviso, `Imagem “${alvo.titulo}” de ${alvo.pessoa.nome} guardada.`, 'certo');
     pintarTudo();
   });
+
+  // ---------- O meu rosto ----------
+  //
+  // As minhas quatro imagens, para o Estúdio dos outros (e o meu). Moram no perfil da conta; a
+  // resposta do servidor traz o perfil novo, e a sala e as fontes do OBS ficam sabendo por lá.
+  async function mudouMeuRosto(perfil) {
+    if (perfil) window.NexoConta?.atualizar({ perfil });
+    pintarMeuRosto();
+    if (!painel.classList.contains('hidden')) await recarregar({ soAoVivo: true });
+  }
+
+  async function tirarDoMeuRosto(estado, aviso) {
+    const r = await api(`/api/conta/rosto/${estado}`, { metodo: 'DELETE' });
+    if (!r.ok) { dizer(aviso, r.dados.error || 'Não foi possível tirar a imagem.', 'problema'); return; }
+    dizer(aviso, '');
+    await mudouMeuRosto(r.dados.perfil);
+  }
+
+  // O mesmo rosto nas configurações (aba Estúdio): é onde vai quem nunca abre o painel do
+  // Estúdio, mas quer aparecer do seu jeito no OBS de quem transmite.
+  function pintarMeuRosto() {
+    const bloco = $('estudioMeuRosto');
+    if (!bloco) return;
+    const atual = window.NexoConta?.atual();
+    bloco.hidden = !atual?.conta;
+    if (bloco.hidden) return;
+    const eu = { chave: 'eu', nome: atual.conta.apelido, eu: true };
+    const situacao = { modo: 'rosto', imagens: atual.perfil?.rosto || {} };
+    $('estudioMeuRostoImagens').replaceChildren(...ESTADOS.map(([estado, titulo]) => lugarDaImagem(eu, estado, titulo, situacao, $('estudioMeuRostoAviso'))));
+  }
+  window.NexoConta?.pronto.then(pintarMeuRosto).catch(() => {});
+  pintarMeuRosto();
 
   async function tirarImagem(pessoa, id) {
     const r = await api(`/api/conta/estudio/imagens/${id}`, { metodo: 'DELETE' });
@@ -506,5 +616,5 @@
     sorteio = setInterval(() => { sortearFalas(); pintarNoAr(); }, 900);
   }).observe(painel, { attributes: true, attributeFilter: ['class'] });
 
-  window.NexoEstudio = { abrir, icone, copiar, copiarTexto };
+  window.NexoEstudio = { abrir, icone, copiar, copiarTexto, pintarMeuRosto };
 })();

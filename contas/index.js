@@ -305,10 +305,11 @@ function criarContas({
   // -- o que dá trabalho refazer em cada aparelho --, e a lista do que pode entrar neles é
   // FECHADA (public/perfil.js): o que não está nela é descartado aqui, venha de onde vier.
   function perfil(conta) {
-    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, avatar: null, ajustes: {} };
+    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, avatar: null, rosto: {}, ajustes: {} };
     return {
       cor: perfilComum.corValida(guardado.cor), marca: perfilComum.marcaValida(guardado.marca),
-      avatar: perfilComum.avatarValido(guardado.avatar), ajustes: perfilComum.limparAjustes(guardado.ajustes)
+      avatar: perfilComum.avatarValido(guardado.avatar), rosto: estudioComum.limparRosto(guardado.rosto),
+      ajustes: perfilComum.limparAjustes(guardado.ajustes)
     };
   }
 
@@ -361,6 +362,26 @@ function criarContas({
   function apagarAvatar(conta) {
     if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
     banco.trocarAvatar(conta.id, null);
+    const atualizada = banco.contaPorId(conta.id);
+    return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
+  }
+
+  // O rosto da pessoa no Estúdio dos outros (estudio.js, "pessoa"): uma imagem por estado, que
+  // troca a anterior daquele estado. É do perfil, como a foto, e vai à sala junto com ele.
+  function salvarRosto(conta, estado, { bytes, tipo } = {}) {
+    if (!estudioComum.ESTADOS_DO_ROSTO.includes(estado)) return falha(404, 'Estado desconhecido.');
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    const conferida = imagens.conferirImagem(bytes, 'rosto', tipo);
+    if (conferida.erro) return falha(conferida.status || 400, conferida.erro);
+    banco.trocarRosto(conta.id, estado, { id: novoIdDeImagem(), tipo: conferida.tipo, bytes, agora: agora() });
+    const atualizada = banco.contaPorId(conta.id);
+    return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
+  }
+
+  function apagarRosto(conta, estado) {
+    if (!estudioComum.ESTADOS_DO_ROSTO.includes(estado)) return falha(404, 'Estado desconhecido.');
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    banco.trocarRosto(conta.id, estado, null);
     const atualizada = banco.contaPorId(conta.id);
     return { ok: true, conta: atualizada, perfil: perfil(atualizada) };
   }
@@ -458,7 +479,7 @@ function criarContas({
         aparelho: s.aparelho, criadaEm: new Date(s.criadaEm).toISOString(), usadaEm: new Date(s.ultimaEm).toISOString(), expiraEm: new Date(s.expiraEm).toISOString()
       })),
       // As imagens vão como endereço, e não dentro do JSON: cada uma se baixa sozinha por ele.
-      imagens: ['avatar', 'estudio'].flatMap(uso => banco.imagensDaConta(conta.id, uso).map(img => ({
+      imagens: ['avatar', 'rosto', 'estudio'].flatMap(uso => banco.imagensDaConta(conta.id, uso).map(img => ({
         uso, tipo: img.tipo, bytes: img.tamanho, enviadaEm: new Date(img.criadaEm).toISOString(), endereco: `/api/imagem/${img.id}`
       }))),
       estudio: { configuracao: configDoEstudio(conta.id), geracaoDosLinks: geracaoDoEstudio(conta.id) },
@@ -478,7 +499,7 @@ function criarContas({
   return {
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, problemaNaRecuperacao, novaRecuperacao, apagar, publica,
     perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
-    salvarAvatar, apagarAvatar, imagem, estudio, geracaoDoEstudio, configDoEstudio, salvarEstudio,
+    salvarAvatar, apagarAvatar, salvarRosto, apagarRosto, imagem, estudio, geracaoDoEstudio, configDoEstudio, salvarEstudio,
     adicionarImagemDoEstudio, apagarImagemDoEstudio, revogarEstudio,
     contaPorCodigo: codigo => banco.contaPorCodigo(regras.normalizarCodigo(codigo)),
     // O freio por conta, para quem precisa dele fora daqui (a busca de pessoa do Estúdio).

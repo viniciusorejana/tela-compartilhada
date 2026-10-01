@@ -98,7 +98,7 @@
 .estudio-selo.na-sala { background:var(--online-suave); color:var(--online-texto); }
 .estudio-selo.recusa { background:var(--danger-suave); color:var(--danger-texto); }
 
-.estudio-imagem-lugar { display:grid; justify-items:center; gap:4px; min-width:0; }
+.estudio-imagem-lugar { display:grid; grid-template-columns:minmax(0,1fr); justify-items:center; gap:4px; min-width:0; }
 .estudio-imagem-caixa { position:relative; width:38px; height:38px; }
 .estudio-imagem { display:grid; place-items:center; width:100%; height:100%; padding:0; border:1px dashed var(--line-3); border-radius:var(--r-md); background-color:rgb(var(--tinta) / 2.5%); background-position:center; background-size:contain; background-repeat:no-repeat; color:var(--apagado); }
 .estudio-imagem:hover:not(:disabled) { border-color:var(--accent); background-color:var(--accent-suave); color:var(--accent-texto); }
@@ -114,6 +114,26 @@
 /* No toque não há "passar por cima": o X de tirar fica sempre à vista. */
 @media(hover:none) { .estudio-tirar { display:grid; } }
 .estudio-pessoa-acoes { display:flex; justify-content:flex-end; gap:2px; }
+/* O rosto que a pessoa escolheu (só para ver) e o "nenhuma" (apagado). O botão desabilitado da
+   sala fica a meia-luz; aqui a imagem da pessoa aparece inteira, porque é ela que vai para o OBS. */
+.estudio-imagem:disabled { opacity:1; cursor:default; }
+.estudio-imagens[data-modo="leitura"] .estudio-imagem:not(.com-imagem) { border-style:dotted; }
+.estudio-imagens[data-modo="desligado"] .estudio-imagem { opacity:.4; }
+/* De onde vêm as imagens: um segmentado pequeno, embaixo da linha, só para quem tem o que
+   escolher (estudio.js, escolhaDeOrigem). */
+.estudio-origem { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.estudio-origem-rotulo { color:var(--faint); font-size:var(--fs-meta); font-weight:600; }
+.estudio-origem-opcoes { padding:3px; gap:2px; }
+.estudio-origem-opcoes span { min-height:26px; padding:0 10px; font-size:var(--fs-meta); }
+/* O meu rosto, nas configurações: os quatro lugares com o nome embaixo, um pouco maiores. */
+.estudio-meu-rosto-texto { display:grid; gap:3px; }
+.estudio-meu-rosto-texto strong { color:var(--text); font-size:var(--fs-md); font-weight:600; }
+.estudio-meu-rosto-texto small { color:var(--muted); font-size:var(--fs-meta); line-height:1.5; }
+.estudio-meu-rosto .estudio-imagens { grid-area:auto; grid-template-columns:repeat(4,minmax(0,1fr)); max-width:360px; }
+/* No celular estreito cada lugar fica menor que 52 px: a imagem encolhe com ele, quadrada. */
+.estudio-meu-rosto .estudio-imagem-caixa { width:min(52px,100%); height:auto; aspect-ratio:1; }
+.estudio-meu-rosto .estudio-imagem-legenda { display:block; }
+.estudio-meu-rosto .estudio-aviso { margin:-4px 0 0; }
 /* Lista estreita (celular, ou a coluna das pessoas apertada numa janela média): quem é e as ações
    numa linha; as quatro imagens embaixo, com o nome de cada uma, e o cabeçalho sai. */
 @container estudio-pessoas (max-width:420px) {

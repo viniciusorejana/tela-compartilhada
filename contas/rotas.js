@@ -148,6 +148,21 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
   });
 
+  // O rosto da pessoa nos Estúdios dos outros: uma imagem por estado (parado, falando, mudo,
+  // ensurdecido). É perfil, como a foto: a sala e as fontes do OBS ficam sabendo na hora.
+  app.put('/api/conta/rosto/:estado', autenticada, imagemCrua('12mb'), (req, res) => {
+    const r = contas.salvarRosto(req.contaNexo.conta, String(req.params.estado || ''), { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(r.conta);
+    res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
+  });
+  app.delete('/api/conta/rosto/:estado', autenticada, (req, res) => {
+    const r = contas.apagarRosto(req.contaNexo.conta, String(req.params.estado || ''));
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(r.conta);
+    res.json({ conta: contas.publica(r.conta), perfil: r.perfil });
+  });
+
   // ---------- O Estúdio ----------
   if (estudio) {
     const jsonDoEstudio = express.json({ limit: 32 * 1024, strict: true });
@@ -164,7 +179,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
       res.json({ config: r.config });
     });
 
-    app.post('/api/conta/estudio/imagens', autenticada, imagemCrua('2mb'), (req, res) => {
+    app.post('/api/conta/estudio/imagens', autenticada, imagemCrua('12mb'), (req, res) => {
       const r = contas.adicionarImagemDoEstudio(req.contaNexo.conta, { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
       if (!r.ok) return recusar(res, r);
       res.status(201).json({ imagem: r.imagem });

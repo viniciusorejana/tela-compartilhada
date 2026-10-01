@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { criarContas, VALIDADE_DA_SESSAO, TOQUE_MINIMO, FilaCheia } = require('../contas');
-const { abrirBanco, abrirConexao, migrar } = require('../contas/banco');
+const { abrirBanco, abrirConexao, migrar, lerMigracoes } = require('../contas/banco');
 const { criarSenhas, lerGuardada } = require('../contas/senha');
 const regras = require('../contas/regras');
 const { ALFABETO } = require('../telemetria/relatos');
@@ -94,7 +94,33 @@ test('as PRAGMAs que o plano exige estão ligadas na conexão principal', t => {
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'sem isto o apagar da conta deixaria perfil e sessões para trás');
   assert.equal(db.prepare('PRAGMA wal_autocheckpoint').get().wal_autocheckpoint, 0);
-  assert.equal(banco.versao, 2, 'a migração 2 traz as imagens e o Estúdio');
+  assert.equal(banco.versao, 3, 'a migração 3 traz o rosto de cada pessoa no Estúdio');
+});
+
+// A migração 3 refaz a tabela das imagens (o CHECK do uso não muda no lugar): um banco que já
+// tinha foto e imagens do Estúdio chega à versão 3 com tudo, e aceita o uso novo.
+test('a migração 3 refaz a tabela das imagens sem perder nenhuma', t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'nexo-migracao-3-'));
+  const db = abrirConexao(path.join(pasta, 'nexo.db'), { principal: true });
+  // O banco fecha antes de a pasta sair: aberto, o Windows recusa apagar o arquivo.
+  t.after(() => { if (db.isOpen) db.close(); fs.rmSync(pasta, { recursive: true, force: true }); });
+  const todas = lerMigracoes();
+  assert.equal(migrar(db, todas.filter(m => m.versao <= 2)), 2);
+  db.prepare("INSERT INTO conta (id, codigo, usuario, apelido, senha, recuperacao, criada_em, vista_em) VALUES ('c1', 'K7M2PQ4X', 'ana', 'Ana', 's', 'r', 1, 1)").run();
+  db.prepare("INSERT INTO perfil (conta_id, avatar) VALUES ('c1', 'a1')").run();
+  const inserir = db.prepare('INSERT INTO imagem (id, conta_id, uso, tipo, tamanho, bytes, criada_em) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  inserir.run('a1', 'c1', 'avatar', 'image/png', 3, Buffer.from([1, 2, 3]), 1);
+  inserir.run('e1', 'c1', 'estudio', 'image/gif', 2, Buffer.from([4, 5]), 2);
+  assert.throws(() => inserir.run('r0', 'c1', 'rosto', 'image/png', 1, Buffer.from([6]), 3), /CHECK/, 'na versão 2 o rosto ainda não existe');
+
+  assert.equal(migrar(db, todas), 3);
+  assert.deepEqual(db.prepare('SELECT id, uso, tamanho FROM imagem ORDER BY id').all().map(l => ({ ...l })), [
+    { id: 'a1', uso: 'avatar', tamanho: 3 }, { id: 'e1', uso: 'estudio', tamanho: 2 }
+  ]);
+  inserir.run('r1', 'c1', 'rosto', 'image/png', 1, Buffer.from([6]), 3);
+  assert.equal(db.prepare("SELECT rosto FROM perfil WHERE conta_id = 'c1'").get().rosto, '{}', 'o perfil começa sem rosto próprio');
+  db.prepare("DELETE FROM conta WHERE id = 'c1'").run();
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM imagem').get().n, 0, 'o CASCADE continua levando as imagens com a conta');
 });
 
 test('cadastrar devolve a conta, uma sessão e o código de recuperação, que é guardado só como scrypt', async t => {

@@ -191,10 +191,21 @@
         tempo.title = duracao == null ? '' : `Na sala há ${NexoTempo.extenso(duracao)}`;
       }
     });
+    // O quadradinho de quem não tem câmera nem tela não destaca nada: abre o perfil (sala.js). O
+    // nome embaixo abre o perfil sempre.
     document.querySelectorAll('.avatar-wrap').forEach(element => {
+      const tile = element.closest('.participant');
+      const nome = tile?.querySelector('.participant-name');
+      if (!nome) return;
+      const id = tile.dataset.id;
+      const estado = tile.dataset.source === 'camera' ? (id === 'self' ? meuEstado() : peers.get(id)?.state) : null;
+      const perfil = tile.dataset.source === 'camera' && !estado?.camera && !estado?.screen;
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
-      element.setAttribute('aria-label', `Destacar ${element.parentElement.querySelector('.participant-name').textContent}`);
+      element.setAttribute('aria-label', `${perfil ? 'Ver o perfil de' : 'Destacar'} ${nome.textContent}`);
+      nome.tabIndex = 0;
+      nome.setAttribute('role', 'button');
+      nome.title = 'Ver o perfil';
     });
     // Os controles de volume são rotulados pelo pintarControleDeVolume: ele sabe de quem é
     // o som, e alcança também os que vivem na grade, fora de qualquer .participant.

@@ -121,10 +121,11 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     trocarRecuperacao: sql('UPDATE conta SET recuperacao = ? WHERE id = ?'),
     trocarApelido: sql('UPDATE conta SET apelido = ? WHERE id = ?'),
     apagarConta: sql('DELETE FROM conta WHERE id = ?'),
-    perfil: sql('SELECT cor, marca, avatar, ajustes FROM perfil WHERE conta_id = ?'),
+    perfil: sql('SELECT cor, marca, avatar, rosto, ajustes FROM perfil WHERE conta_id = ?'),
     salvarAparencia: sql('UPDATE perfil SET cor = ?, marca = ? WHERE conta_id = ?'),
     salvarAjustes: sql('UPDATE perfil SET ajustes = ? WHERE conta_id = ?'),
     definirAvatar: sql('UPDATE perfil SET avatar = ? WHERE conta_id = ?'),
+    definirRosto: sql('UPDATE perfil SET rosto = ? WHERE conta_id = ?'),
     inserirImagem: sql('INSERT INTO imagem (id, conta_id, uso, tipo, tamanho, bytes, criada_em) VALUES (?, ?, ?, ?, ?, ?, ?)'),
     imagemPorId: sql('SELECT id, conta_id, uso, tipo, tamanho, bytes, criada_em FROM imagem WHERE id = ?'),
     // Sem os bytes: a lista serve para contar e para mostrar, e carregar megabytes para isso
@@ -201,7 +202,20 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     apagarConta: contaId => q.apagarConta.run(contaId).changes,
     perfil(contaId) {
       const linha = q.perfil.get(contaId);
-      return linha ? { cor: linha.cor ?? null, marca: linha.marca ?? null, avatar: linha.avatar ?? null, ajustes: lerAjustes(linha.ajustes) } : null;
+      return linha ? { cor: linha.cor ?? null, marca: linha.marca ?? null, avatar: linha.avatar ?? null, rosto: lerAjustes(linha.rosto), ajustes: lerAjustes(linha.ajustes) } : null;
+    },
+    // Uma imagem do rosto, por estado (parado, falando, mudo, ensurdecido), como o avatar: a nova
+    // entra e a anterior daquele estado sai na mesma transação. `imagem` nulo tira a do estado.
+    trocarRosto(contaId, estado, imagem) {
+      return transacao(() => {
+        const rosto = lerAjustes(q.perfil.get(contaId)?.rosto);
+        const anterior = typeof rosto[estado] === 'string' ? rosto[estado] : null;
+        if (imagem) { q.inserirImagem.run(imagem.id, contaId, 'rosto', imagem.tipo, imagem.bytes.length, imagem.bytes, imagem.agora); rosto[estado] = imagem.id; }
+        else delete rosto[estado];
+        q.definirRosto.run(JSON.stringify(rosto), contaId);
+        if (anterior) q.apagarImagem.run(anterior, contaId);
+        return rosto;
+      });
     },
     // Trocar o avatar é uma imagem nova e a antiga apagada, na mesma transação: nunca sobra uma
     // imagem que ninguém mostra, nem um perfil apontando para uma que não existe mais.
@@ -221,9 +235,10 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     },
     imagensDaConta: (contaId, uso) => q.imagensDaConta.all(contaId, uso).map(l => ({ id: l.id, tipo: l.tipo, tamanho: l.tamanho, criadaEm: l.criada_em })),
     apagarImagem: (id, contaId) => q.apagarImagem.run(id, contaId).changes,
-    // O atalho do painel para uma imagem imprópria: todas as da conta, e o avatar volta à cor.
+    // O atalho do painel para uma imagem imprópria: todas as da conta, e o avatar volta à cor --
+    // e o rosto do Estúdio fica sem imagem própria.
     apagarImagensDaConta(contaId) {
-      return transacao(() => { q.definirAvatar.run(null, contaId); return q.apagarImagensDaConta.run(contaId).changes; });
+      return transacao(() => { q.definirAvatar.run(null, contaId); q.definirRosto.run('{}', contaId); return q.apagarImagensDaConta.run(contaId).changes; });
     },
     estudio(contaId) {
       const linha = q.estudio.get(contaId);

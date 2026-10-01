@@ -5531,6 +5531,9 @@ function criarTileBase(id, name, state, isSelf) {
     // Escolha manual: a partir daqui o destaque nao muda sozinho, ate esta fonte acabar.
     if (estado?.camera) pin(id, 'camera', true);
     else if (estado?.screen) pin(id, 'screen', true);
+    // Sem câmera nem tela, não há o que pôr no palco: clicar na pessoa abre o perfil dela, como
+    // na lista ao lado. Antes este clique não fazia nada.
+    else abrirPerfil(id);
   });
 
   if (!isSelf) {
@@ -5592,14 +5595,19 @@ function atualizarRotulosDosQuadradinhos() {
 //
 // Clicar em alguém na lista mostra quem é: o código, para quem tem conta, ou que a pessoa
 // entrou sem conta. É o lugar onde o código aparece sempre -- quando alguém procura.
+//
+// `reserva` ({ nome, perfil }) é para quem já não está na sala -- o autor de uma mensagem antiga
+// do chat: o cartão abre com o que a mensagem sabe dele, diz que ele saiu e não oferece o que só
+// vale para quem está aqui (moderar, levar para o OBS, o tempo na sala).
 let perfilAberto = null;
-function abrirPerfil(id) {
+function abrirPerfil(id, reserva = null) {
   const ehEu = id === 'self';
   const par = ehEu ? null : peers.get(id);
-  if (!ehEu && !par) return;
-  perfilAberto = id;
-  const nome = ehEu ? myName : par.name;
-  const perfil = perfilDe(id);
+  if (!ehEu && !par && !reserva) return;
+  const presente = ehEu || Boolean(par);
+  perfilAberto = presente ? id : null;
+  const nome = ehEu ? myName : par ? par.name : reserva.nome;
+  const perfil = perfilDe(id) || reserva?.perfil || null;
   const avatar = document.getElementById('perfilAvatar');
   pintarAvatar(avatar, nome, perfil);
   // Com foto, o avatar do cartão abre a foto grande. Sem foto não há o que ampliar: a cor e as
@@ -5621,13 +5629,13 @@ function abrirPerfil(id) {
   fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '' } : null;
   document.getElementById('perfilNome').textContent = `${nome}${ehEu ? ' (você)' : ''}`;
   document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
-  document.getElementById('perfilDica').textContent = perfil?.conta
+  document.getElementById('perfilDica').textContent = `${presente ? '' : 'Não está mais na sala. '}${perfil?.conta
     ? 'O código é permanente e não muda com o apelido: é ele que distingue esta pessoa de outras com o mesmo nome.'
     : ehEu ? 'Você entrou sem conta: o nome vale só nesta entrada. Com uma conta grátis, você tem um código, abre salas e transmite a 60 quadros.'
-      : 'Entrou como convidada: o nome foi escolhido na entrada, e qualquer pessoa pode usar o mesmo.';
+      : 'Entrou como convidada: o nome foi escolhido na entrada, e qualquer pessoa pode usar o mesmo.'}`;
   // Há quanto tempo a pessoa está aqui: é a pergunta que traz alguém ao cartão depois de uma
   // tarde de conversa, e a resposta já sobrevive ao F5 (tempo-sala.js).
-  const desde = window.NexoTempo?.desdeDe(id);
+  const desde = presente ? window.NexoTempo?.desdeDe(id) : null;
   const tempo = document.getElementById('perfilTempo');
   tempo.hidden = !Number.isFinite(desde);
   if (Number.isFinite(desde)) tempo.textContent = `Na sala há ${NexoTempo.extenso(Date.now() - desde)} · desde as ${NexoTempo.hora(desde)}`;
@@ -5636,7 +5644,7 @@ function abrirPerfil(id) {
   criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
   // O próprio cartão leva ao editor: é ali que a pessoa se vê e pensa em mudar.
   document.getElementById('perfilEditar').hidden = !(ehEu && perfil?.conta);
-  document.getElementById('perfilModerar').hidden = ehEu || !podeModerar || id === donoDaSala;
+  document.getElementById('perfilModerar').hidden = ehEu || !presente || !podeModerar || id === donoDaSala;
   document.getElementById('perfilPanel').classList.remove('hidden');
 }
 // A foto grande, por cima do cartão. A imagem é a mesma do avatar: o navegador já a tem, e ela
@@ -5657,6 +5665,18 @@ document.getElementById('perfilAvatar').addEventListener('keydown', evento => {
   if (!fotoDoPerfil || !['Enter', ' '].includes(evento.key)) return;
   evento.preventDefault();
   abrirFoto();
+});
+// O nome embaixo de cada quadradinho -- de pessoa ou de tela -- abre o perfil de quem ele é, como
+// a lista ao lado. Fica fora do retângulo do vídeo, então não briga com o clique que destaca no
+// palco. Um ouvinte só, no contêiner: os quadradinhos nascem e morrem com as pessoas.
+participantsEl.addEventListener('click', evento => {
+  const id = evento.target.closest('.participant-name')?.closest('.participant')?.dataset.id;
+  if (id) abrirPerfil(id);
+});
+participantsEl.addEventListener('keydown', evento => {
+  if (!['Enter', ' '].includes(evento.key) || !evento.target.matches('.participant-name')) return;
+  evento.preventDefault();
+  evento.target.click();
 });
 document.getElementById('perfilModerar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
@@ -6933,6 +6953,12 @@ function mostrarMensagem(msg) {
   autor.className = 'msg-autor';
   autor.textContent = msg.autor || 'Alguém';
   autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfilDoAutor).cor;
+  // O nome e o avatar de quem escreveu abrem o perfil (abrirPerfilDoAutor). O nome é o que se
+  // alcança pelo teclado; o avatar é o atalho do mouse, e fica de fora da ordem do Tab para não
+  // dobrar as paradas de cada mensagem.
+  autor.tabIndex = 0;
+  autor.setAttribute('role', 'button');
+  autor.title = 'Ver o perfil';
   const hora = document.createElement('span');
   hora.className = 'msg-hora';
   hora.textContent = horaCurta(msg.em || Date.now());
@@ -7351,7 +7377,25 @@ chatMsgMenu.addEventListener('click', evento => {
 document.addEventListener('click', evento => { if (!evento.target.closest('#chatMsgMenu,[data-chat-action]')) fecharMenuDaMensagem(); });
 document.addEventListener('keydown', evento => { if (evento.key === 'Escape' && !chatMsgMenu.classList.contains('hidden')) { evento.stopPropagation(); fecharMenuDaMensagem(); } }, true);
 
+// De quem é uma mensagem, para o cartão de perfil. Quem voltou de um F5 tem identidade nova, e a
+// mensagem guarda a antiga: com conta, o código acha a pessoa na sala de agora. Quem saiu de vez
+// abre o cartão com o que a mensagem sabe (abrirPerfil, `reserva`).
+function abrirPerfilDoAutor(msg) {
+  if (ehMinha(msg)) { abrirPerfil('self'); return; }
+  const perfil = perfisPorIdentidade.get(msg.autorId) || null;
+  let id = peers.has(msg.autorId) ? msg.autorId : null;
+  if (!id && perfil?.codigo) id = [...peers.keys()].find(outro => perfisPorIdentidade.get(outro)?.codigo === perfil.codigo) || null;
+  abrirPerfil(id || msg.autorId, { nome: msg.autor || 'Alguém', perfil });
+}
+chatMsgs.addEventListener('keydown', evento => {
+  if (!['Enter', ' '].includes(evento.key) || !evento.target.matches('.msg-autor')) return;
+  evento.preventDefault();
+  evento.target.click();
+});
 chatMsgs.addEventListener('click', (e) => {
+  const doAutor = e.target.closest('.msg-avatar, .msg-autor');
+  const daMensagem = doAutor && mensagensDoChat.get(doAutor.closest('[data-message-id]')?.dataset.messageId);
+  if (daMensagem) { abrirPerfilDoAutor(daMensagem); return; }
   const img = e.target.closest('.msg-img');
   if (img && img.src) abrirImagem(img.src);
   const botao = e.target.closest('[data-chat-action]');

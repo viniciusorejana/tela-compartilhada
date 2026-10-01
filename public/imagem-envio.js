@@ -15,7 +15,9 @@
   // navegador sem WebP, pode não caber -- e aí ela desce para 256, como era antes.
   const LADOS_DO_AVATAR = [512, 256];
   const BYTES_DO_AVATAR = 6 * 1024 * 1024;
-  const BYTES_DO_ESTUDIO = 2 * 1024 * 1024;
+  // As do Estúdio (e as do próprio rosto, que vão para o Estúdio dos outros): 12 MB, para caber
+  // um GIF animado longo, que não tem como ser reduzido aqui sem perder a animação.
+  const BYTES_DO_ESTUDIO = 12 * 1024 * 1024;
   const LADO_MAXIMO_DO_ESTUDIO = 1024;
 
   class ProblemaDeImagem extends Error {}
@@ -74,7 +76,7 @@
   async function prepararDoEstudio(arquivo) {
     conferirTipo(arquivo);
     if (arquivo.size <= BYTES_DO_ESTUDIO) return arquivo;
-    if (arquivo.type === 'image/gif') throw new ProblemaDeImagem('Um GIF pode ter até 2 MB. Este tem mais.');
+    if (arquivo.type === 'image/gif') throw new ProblemaDeImagem('Um GIF pode ter até 12 MB. Este tem mais.');
     const imagem = await decodificar(arquivo);
     const escala = Math.min(1, LADO_MAXIMO_DO_ESTUDIO / Math.max(imagem.width, imagem.height));
     const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(imagem.width * escala), height: Math.round(imagem.height * escala) });

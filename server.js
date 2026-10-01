@@ -335,8 +335,10 @@ app.get('/api/sala-config', (req, res) => {
 // O que a sala vê de quem tem conta: cor, marca e o código permanente. O id da conta nunca
 // entra aqui -- ele não sai do servidor.
 function perfilNaSala(conta) {
-  const { cor, marca, avatar } = contas.perfil(conta);
-  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar };
+  const { cor, marca, avatar, rosto } = contas.perfil(conta);
+  // O rosto do Estúdio vai junto, como a foto: é público por escolha da pessoa, e é daqui que o
+  // painel do Estúdio de quem está na sala e as fontes do OBS o leem.
+  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar, rosto };
 }
 
 // O endereço público configurado, para os convites e os links do OBS. Sem configuração, cada

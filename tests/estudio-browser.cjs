@@ -64,6 +64,33 @@ async function enviarFoto(pagina) {
   assert.match(foto.tipo, /^image\/(webp|png)$/, 'recortada e reduzida pela página');
   await ana.waitForFunction(id => [...document.querySelectorAll('.member-avatar')].some(el => el.style.backgroundImage.includes(id)), foto.avatar, { timeout: 10000 });
 
+  // ---------- O perfil pela plateia e pelo chat ----------
+  // O nome embaixo do quadradinho abre o perfil; o quadradinho de quem não tem câmera nem tela
+  // também (não há o que pôr no palco). No chat, o autor da mensagem.
+  const idDaBiaNaSala = await ana.evaluate(() => [...peers.values()].find(p => p.name === 'Bia').id);
+  const perfilAbertoDe = async nome => {
+    await ana.locator('#perfilPanel').waitFor({ state: 'visible' });
+    assert.equal(await ana.locator('#perfilNome').textContent(), nome);
+    await ana.locator('#perfilPanel [data-close="perfilPanel"]').click();
+    await ana.locator('#perfilPanel').waitFor({ state: 'hidden' });
+  };
+  await ana.locator(`.participant[data-id="${idDaBiaNaSala}"] .participant-name`).click();
+  await perfilAbertoDe('Bia');
+  await ana.locator(`.participant[data-id="${idDaBiaNaSala}"] .avatar-wrap`).click();
+  await perfilAbertoDe('Bia');
+  await bia.locator('#chatInput').fill('oi, Ana');
+  await bia.locator('#chatSend').click();
+  const autorNoChat = ana.locator('#chatMsgs .msg', { hasText: 'oi, Ana' }).locator('.msg-autor');
+  await autorNoChat.waitFor({ state: 'visible', timeout: 10000 });
+  await autorNoChat.click();
+  await perfilAbertoDe('Bia');
+  // Quem já saiu abre o cartão com o que a mensagem sabe, sem o que só vale na sala.
+  await ana.evaluate(() => abrirPerfilDoAutor({ id: 'antiga', autorId: 'ze#0000', autor: 'Zé' }));
+  assert.match(await ana.locator('#perfilDica').textContent(), /^Não está mais na sala\./);
+  assert.equal(await ana.locator('#perfilObs').isVisible(), false, 'sem levar para o OBS quem não está aqui');
+  assert.equal(await ana.locator('#perfilModerar').isVisible(), false);
+  await perfilAbertoDe('Zé');
+
   // ---------- A câmera da Bia, pelo cartão de perfil ----------
   await bia.locator('#cameraBtn').click();
   await bia.locator('#micBtn').click();
@@ -267,6 +294,37 @@ async function enviarFoto(pagina) {
   assert.equal(await bia.locator('#estudioTamanho').inputValue(), '137');
   await bia.screenshot({ path: path.join(saida, 'estudio.png') });
 
+  // ---------- O rosto que a Bia escolhe para si ----------
+  // Na linha dela, os lugares são o rosto do perfil dela, que todo Estúdio vê.
+  const PNG_PEQUENO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const minhaLinha = bia.locator('.estudio-pessoa', { has: bia.locator('.estudio-selo', { hasText: 'você' }) });
+  const [seletor] = await Promise.all([bia.waitForEvent('filechooser'), minhaLinha.locator('[data-estado="parado"] .estudio-imagem').click()]);
+  await seletor.setFiles({ name: 'rosto.png', mimeType: 'image/png', buffer: PNG_PEQUENO });
+  await bia.waitForFunction(() => NexoConta.atual().perfil?.rosto?.parado, null, { timeout: 10000 });
+  const paradoDaBia = await bia.evaluate(() => NexoConta.atual().perfil.rosto.parado);
+  assert.match(await bia.locator('#estudioAviso').textContent(), /do seu rosto guardada/);
+  await bia.waitForFunction(id => [...document.querySelectorAll('#estudioLista .estudio-pessoa')]
+    .find(el => [...el.querySelectorAll('.estudio-selo')].some(selo => selo.textContent === 'você'))
+    ?.querySelector(`[data-estado="parado"] .estudio-imagem[style*="${id}"]`), paradoDaBia, { timeout: 10000 });
+  assert.equal(await bia.locator(`#estudioMeuRostoImagens [data-estado="parado"] .estudio-imagem[style*="${paradoDaBia}"]`).count(), 1, 'as configurações mostram o mesmo rosto');
+
+  // A Ana, no Estúdio dela, vê o rosto da Bia e escolhe: o OBS acompanha. Ela já tinha anexado
+  // uma imagem de ensurdecida para a Bia, então até escolher valem as dela ("Minhas").
+  await ana.evaluate(() => NexoEstudio.abrir());
+  const linhaDaBia = ana.locator(`.estudio-pessoa[data-chave="${chaveDaBia}"]`);
+  await linhaDaBia.locator('.estudio-origem').waitFor({ state: 'visible', timeout: 10000 });
+  assert.equal(await linhaDaBia.locator('.estudio-origem input:checked').getAttribute('value'), 'minhas');
+  await linhaDaBia.locator('.estudio-origem label', { hasText: 'Da pessoa' }).click();
+  await obsRostos.waitForFunction(id => [...document.querySelectorAll('#rostos .rosto')].some(r => r.textContent.includes('Bia') && r.querySelector(`.rosto-parado[src*="${id}"]`)), paradoDaBia, { timeout: 10000 });
+  assert.equal(await linhaDaBia.locator('[data-estado="parado"] .estudio-imagem').isDisabled(), true, 'o rosto da Bia se vê e se usa, não se muda');
+  await ana.locator('.estudio-pessoas').screenshot({ path: path.join(saida, 'estudio-rosto-da-pessoa.png') });
+  await linhaDaBia.locator('.estudio-origem label', { hasText: 'Nenhuma' }).click();
+  await obsRostos.waitForFunction(() => [...document.querySelectorAll('#rostos .rosto')].some(r => r.textContent.includes('Bia') && !r.querySelector('.rosto-img') && r.querySelector('.rosto-gerado')), null, { timeout: 10000 });
+  await ana.waitForFunction(() => document.getElementById('estudioSalvo').classList.contains('certo'), null, { timeout: 5000 });
+  assert.equal(await ana.evaluate(chave => fetch('/api/conta/estudio', { credentials: 'same-origin' }).then(r => r.json()).then(r => r.config.pessoas[chave].usar), chaveDaBia), 'nenhuma', 'a escolha fica guardada na conta da Ana');
+  await ana.keyboard.press('Escape');
+  await ana.locator('#estudioPanel').waitFor({ state: 'hidden' });
+
   // ---------- Quem abriu a sala desliga o OBS nela ----------
   // A Bia cria os rostos da sala; a Ana, que abriu a sala, desliga o OBS para os participantes.
   const doGrupo = await bia.evaluate(() => fetch('/api/conta/estudio', { credentials: 'same-origin' }).then(r => r.json()).then(r => r.links.grupo));
@@ -288,7 +346,7 @@ async function enviarFoto(pagina) {
   await obsCamera.waitForFunction(() => NexoObs.estado?.tipo === 'aguardando' && NexoObs.estado.motivo === 'diretor', null, { timeout: 20000 });
 
   assert.deepEqual(erros, [], 'nenhum erro de página');
-  console.log('PASS: Estúdio -- foto e foto grande, link da câmera, página do OBS, aviso na sala, rostos, ensurdecida na sala e no OBS, painel (com o "no ar" ao vivo), permissão e o controle da sala');
+  console.log('PASS: Estúdio -- perfil pela plateia e pelo chat, rosto próprio e a escolha de origem, foto e foto grande, link da câmera, página do OBS, aviso na sala, rostos, ensurdecida na sala e no OBS, painel (com o "no ar" ao vivo), permissão e o controle da sala');
 })().catch(erro => {
   console.error(erro);
   console.error(instancia?.erros?.().slice(-2000));
