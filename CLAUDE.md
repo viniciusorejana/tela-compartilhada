@@ -32,7 +32,7 @@ npm run test:fila     # fila de música, perfil na sala, aviso de atualização
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
 npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
-npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra
+npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra, reações com menos movimento
 npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
 npm run test:estudio       # Estúdio: perfil pela plateia e pelo chat, foto grande, link do OBS, selo, rostos (e o rosto de cada um), ensurdecida, permissão
 npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel

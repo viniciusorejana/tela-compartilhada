@@ -110,7 +110,43 @@ const cor = (pagina, nome) => pagina.evaluate(n => getComputedStyle(document.doc
   await pagina.locator('button.config-engrenagem').click();
   assert.equal(await pagina.locator('#abaSons').getAttribute('aria-selected'), 'true', 'as configurações abrem onde a pessoa estava');
 
-  console.log('PASS: tema claro e escuro, temas prontos, cores exatas do premium e o que a sala lembra');
+  // ---------- Menos movimento: a reação aparece e vai embora ----------
+  // Sem movimento, a reação não voa: aparece discreta, fica à vista o bastante para se ver quem
+  // reagiu e com o quê, e sai sozinha. Ela sai no fim da própria animação -- quando uma regra
+  // tirava a animação, ela ficava na tela para sempre; quando a encurtava para 1 ms, ninguém a via.
+  const reagirEAcompanhar = p => p.evaluate(async () => {
+    const caixa = document.getElementById('roomReactions');
+    socket.emit('sinal-presenca', { reacao: '👍' });
+    const inicio = performance.now();
+    let apareceu = false, visivel = 0, antes = inicio;
+    while (performance.now() - inicio < 6000) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const agora = performance.now();
+      const el = caixa.querySelector('.room-reaction');
+      if (el) apareceu = true;
+      if (el && Number(getComputedStyle(el).opacity) > 0.5) visivel += agora - antes;
+      antes = agora;
+      if (apareceu && !el) return { apareceu, visivel: Math.round(visivel), saiu: Math.round(agora - inicio) };
+    }
+    return { apareceu, visivel: Math.round(visivel), saiu: null };
+  });
+  // Sai pelo fim da animação (até ~2,7 s), e não pelo prazo de segurança de 6 s de sala.js: é
+  // isso que prova que a animação discreta está mesmo rodando.
+  const conferirReacao = (r, caso) => {
+    assert.ok(r.apareceu, `${caso}: a reação aparece`);
+    assert.ok(r.saiu !== null && r.saiu < 3500, `${caso}: e sai da tela sozinha, no fim da animação (${JSON.stringify(r)})`);
+    assert.ok(r.visivel >= 700, `${caso}: e fica à vista o bastante para ser vista (${r.visivel} ms)`);
+  };
+  conferirReacao(await reagirEAcompanhar(pagina), 'com movimento');
+  await pagina.evaluate(() => document.documentElement.classList.add('menos-movimento'));
+  conferirReacao(await reagirEAcompanhar(pagina), 'com "Menos animação" na Aparência');
+  await pagina.evaluate(() => document.documentElement.classList.remove('menos-movimento'));
+  const calma = await (await navegador.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' })).newPage();
+  calma.on('pageerror', erro => { throw erro; });
+  await entrar(calma);
+  conferirReacao(await reagirEAcompanhar(calma), 'com "reduzir movimento" do sistema');
+
+  console.log('PASS: tema claro e escuro, temas prontos, cores exatas do premium, o que a sala lembra e as reações com menos movimento');
 })().catch(erro => {
   console.error(erro);
   process.exitCode = 1;

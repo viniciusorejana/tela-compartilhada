@@ -885,7 +885,6 @@ button[aria-busy="true"] { cursor:progress; }
 @media(max-height:800px) { .stage-art { height:106px; transform:scale(.7); margin-top:-13px; margin-bottom:3px; } .stage-empty h3 { font-size:22px; } .stage-empty p { margin-bottom:14px; } }
 @media(max-height:690px) { .stage-art { display:none; } .stage-empty h3 { font-size:20px; } .stage-empty p { font-size:10px; margin-bottom:14px; } .palco-area { padding-top:12px; } }
 @media(max-height:480px) { .participants-section { display:none; } .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
-@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
 @container(max-height:360px) { .stage-art { display:none; } .stage-empty h3 { font-size:21px; } .stage-empty p { margin-bottom:14px; } }
 @container(max-height:240px) { .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
 @media(max-width:760px) { .mute-peer-btn { min-width:32px; min-height:32px; } #chatSend,#attachImageBtn { min-width:36px; min-height:42px; } }
@@ -1189,12 +1188,18 @@ button[aria-busy="true"] { cursor:progress; }
 @keyframes reacao-estoura { 0% { scale:.35; } 100% { scale:var(--reaction-escala,1); } }
 @keyframes reacao-legenda { 0% { opacity:0; } 18% { opacity:1; } 72% { opacity:1; } 100% { opacity:0; } }
 /* Quem pediu menos movimento continua vendo QUEM reagiu e COM O QUÊ -- some só o voo. A
-   animação precisa existir mesmo aqui: é o `animationend` dela que remove o elemento. */
+   animação precisa existir mesmo aqui: é o `animationend` dela que remove o elemento.
+
+   Os dois "menos movimento" -- o do sistema (tema.css) e o "Menos animação" da Aparência --
+   encurtam TODA animação para 1 ms, com `!important`. A discreta precisa vencê-los, ou a reação
+   pisca por 1 ms e ninguém a vê: daí o `!important` aqui, que ganha pela especificidade maior. */
 @keyframes reacao-discreta { 0% { opacity:0; transform:translate(-50%,0) scale(.9); } 12%,68% { opacity:1; transform:translate(-50%,-14px) scale(1); } 100% { opacity:0; transform:translate(-50%,-22px) scale(1); } }
 @media(prefers-reduced-motion:reduce) {
-  .room-reaction { animation:reacao-discreta 1.9s ease-out forwards; }
-  .room-reaction-emoji,.room-reaction-nome { animation:none; }
+  .room-reaction { animation:reacao-discreta 1.9s ease-out forwards!important; }
+  .room-reaction-emoji,.room-reaction-nome { animation:none!important; }
 }
+html.menos-movimento .room-reaction { animation:reacao-discreta 1.9s ease-out forwards!important; }
+html.menos-movimento :is(.room-reaction-emoji,.room-reaction-nome) { animation:none!important; }
 /* Na sala o canto de baixo é do chat e da barra de controles; o aviso do download desce do
    topo, abaixo da barra de cima, como o de pedido de entrada. */
 .nexo-toasts { top:76px; bottom:auto; right:18px; }

@@ -2576,6 +2576,10 @@ function mostrarReacaoDaSala({ identidade, nome, reacao }) {
   // `animationend` dispensa o cronômetro paralelo que precisava ser mantido em sincronia com
   // a duração do CSS -- e que ficava para trás assim que a duração passou a ser sorteada.
   aviso.addEventListener('animationend', evento => { if (evento.target === aviso) aviso.remove(); });
+  // Mas sem animação o `animationend` não chega, e a reação ficava na tela para sempre -- foi o
+  // que uma regra antiga de "menos movimento" fez. Este prazo não precisa acompanhar a duração:
+  // é bem maior que a mais longa (2,7 s), e só age quando o fim da animação não veio.
+  setTimeout(() => aviso.remove(), 6000);
 }
 // O menu nasce ancorado no botão, e não numa distância fixa da quina. Com a barra lateral
 // recolhida -- ou aberta como gaveta, no celular -- o botão muda de lugar, e um `left` fixo

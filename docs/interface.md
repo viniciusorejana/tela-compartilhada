@@ -187,8 +187,13 @@ o mouse; avatar da lista e do chat cresce 6% com mola.
 **Menos movimento** vale em dois níveis: o do sistema (`prefers-reduced-motion`, em
 `tema.css`) e o "Menos animação" das configurações (`html.menos-movimento`). Os dois
 **encurtam** animações para 1 ms em vez de removê-las — código que espera `animationend` (as
-reações, os avisos) continua funcionando. A troca de tema desliza as cores por 280 ms, só
-durante a troca (`html.trocando-tema`).
+reações, os avisos) continua funcionando. Nunca escreva `animation:none!important` global: uma
+regra assim em `sala.css` deixava as reações da sala presas na tela. Animação que **precisa**
+continuar visível com menos movimento (a reação discreta, que diz quem reagiu) vence o 1 ms com
+`!important` e especificidade maior, nos dois níveis. E quem remove um elemento no
+`animationend` põe também um prazo de segurança (`toast.js`, `mostrarReacaoDaSala`). A prova é
+`npm run test:aparencia`. A troca de tema desliza as cores por 280 ms, só durante a troca
+(`html.trocando-tema`).
 
 ### 2.9 Camadas (z-index)
 
@@ -612,6 +617,3 @@ Diferenças que existem hoje e que este documento não esconde:
   sublinhada (página da conta).
 - **Pesos de rótulo em caixa alta** variam entre 600, 650 e 750.
 - **Aspas**: curvas (“…”) nas mensagens do Estúdio e retas no resto.
-- **Menos movimento duplicado**: `sala.css` tem uma regra antiga que **remove** as animações
-  (`animation:none!important`) por cima da de `tema.css`, que as encurta. Com a do sistema
-  ligada, as reações da sala, que só saem no fim da animação, ficariam na tela.
