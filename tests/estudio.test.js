@@ -97,8 +97,12 @@ test('o tipo da imagem vem dos bytes; SVG e desencontros ficam de fora', () => {
   assert.match(conferirImagem(Buffer.from('<html><script></script></html>'), 'avatar', 'image/png').erro, /PNG, JPEG, GIF e WebP/);
   assert.match(conferirImagem(PNG, 'avatar', 'image/gif').erro, /não é do tipo/);
   assert.equal(conferirImagem(PNG, 'avatar', 'application/octet-stream').tipo, 'image/png');
-  assert.equal(conferirImagem(Buffer.concat([PNG, Buffer.alloc(600 * 1024)]), 'avatar', 'image/png').status, 413);
-  assert.equal(conferirImagem(Buffer.concat([PNG, Buffer.alloc(600 * 1024)]), 'estudio', 'image/png').tipo, 'image/png', 'o Estúdio aceita arte maior');
+  const comMb = mb => Buffer.concat([PNG, Buffer.alloc(mb * 1024 * 1024)]);
+  assert.equal(conferirImagem(comMb(3), 'avatar', 'image/png').tipo, 'image/png', 'a foto aceita um GIF animado de alguns MB');
+  assert.equal(conferirImagem(comMb(6), 'avatar', 'image/png').status, 413, 'acima de 6 MB, não');
+  assert.match(conferirImagem(comMb(6), 'avatar', 'image/png').erro, /passa de 6 MB/);
+  assert.equal(conferirImagem(comMb(1), 'estudio', 'image/png').tipo, 'image/png');
+  assert.equal(conferirImagem(comMb(3), 'estudio', 'image/png').status, 413, 'cada imagem do Estúdio continua em 2 MB');
 });
 
 // ---------- Pelo servidor ----------
@@ -180,6 +184,15 @@ test('a foto de perfil: só imagem de verdade, servida sem nada que rode, e a an
   assert.equal((await fetch(`${servidor.origem}/api/imagem/${id}`)).status, 404, 'trocar a foto apaga a antiga');
   assert.equal((await ana.pedir('/api/conta/avatar', { metodo: 'DELETE' })).dados.perfil.avatar, null);
   assert.equal((await fetch(`${servidor.origem}/api/imagem/${segunda.dados.perfil.avatar}`)).status, 404);
+
+  // O GIF animado vem como está, e é ele que usa o teto de 6 MB: um de 3 MB entra inteiro; acima
+  // do teto, nem a rota aceita.
+  const gifGrande = Buffer.concat([GIF, Buffer.alloc(3 * 1024 * 1024)]);
+  const grande = await ana.pedir('/api/conta/avatar', { metodo: 'PUT', cru: gifGrande, tipo: 'image/gif' });
+  assert.equal(grande.status, 200, JSON.stringify(grande.dados));
+  assert.equal(Buffer.from(await (await fetch(`${servidor.origem}/api/imagem/${grande.dados.perfil.avatar}`)).arrayBuffer()).length, gifGrande.length);
+  const demais = await ana.pedir('/api/conta/avatar', { metodo: 'PUT', cru: Buffer.concat([GIF, Buffer.alloc(7 * 1024 * 1024)]), tipo: 'image/gif' });
+  assert.equal(demais.status, 413);
 
   // Sem sessão nem CSRF, nada sobe.
   const semConta = await fetch(`${servidor.origem}/api/conta/avatar`, { method: 'PUT', headers: { 'Content-Type': 'image/png', Origin: servidor.origem }, body: PNG });

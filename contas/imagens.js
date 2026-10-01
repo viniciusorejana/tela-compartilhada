@@ -12,9 +12,10 @@
 const MiB = 1024 * 1024;
 
 const LIMITES = Object.freeze({
-  // O avatar chega redimensionado a 512 px pela página (256 se não couber); um GIF animado vem
-  // como está.
-  avatar: { bytes: 512 * 1024 },
+  // O avatar chega redimensionado a 512 px pela página (256 se não couber), e assim fica em
+  // dezenas de KB. Quem usa o teto é o GIF animado, que vem como está -- e que cada pessoa da sala
+  // baixa (uma vez só: o endereço muda a cada troca, e fica em cache para sempre).
+  avatar: { bytes: 6 * MiB },
   // As do Estúdio vêm como estão: são a arte de quem transmite, muitas vezes GIF animado ou PNG
   // com fundo transparente, e recomprimir estragaria as duas coisas.
   estudio: { bytes: 2 * MiB, quantas: 40, total: 16 * MiB }
@@ -37,7 +38,7 @@ function conferirImagem(bytes, uso, tipoDeclarado = '') {
   const limite = LIMITES[uso];
   if (!limite) return { erro: 'Uso de imagem desconhecido.' };
   if (!bytes || !bytes.length) return { erro: 'A imagem chegou vazia.' };
-  if (bytes.length > limite.bytes) return { erro: `A imagem passa de ${Math.round(limite.bytes / 1024)} KB.`, status: 413 };
+  if (bytes.length > limite.bytes) return { erro: `A imagem passa de ${limite.bytes >= MiB ? `${Math.round(limite.bytes / MiB)} MB` : `${Math.round(limite.bytes / 1024)} KB`}.`, status: 413 };
   const tipo = tipoDosBytes(bytes);
   if (!tipo) return { erro: 'Aceitamos PNG, JPEG, GIF e WebP.' };
   const declarado = String(tipoDeclarado || '').split(';')[0].trim().toLowerCase();

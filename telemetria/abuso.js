@@ -38,7 +38,8 @@ const REGRAS = Object.freeze({
   // Os ajustes sobem sozinhos, dois segundos depois da última mudança. Têm balde próprio para
   // que mexer muito na qualidade nunca impeça ninguém de trocar a senha.
   'conta-ajustes': { sessao: 30, longa: [300, 60 * MINUTO] },
-  // Avatar e imagens do Estúdio: cada envio é uma escrita de até 2 MB no banco.
+  // Avatar e imagens do Estúdio: cada envio é uma escrita no banco de até 6 MB (a foto, quando é
+  // um GIF animado) ou 2 MB (uma imagem do Estúdio).
   'conta-imagem': { sessao: 20, longa: [120, 60 * MINUTO] },
   // O Estúdio salva sozinho, meio segundo depois de cada mudança -- arrastar um controle de
   // tamanho gera uma rajada, e o teto é o de uma pessoa mexendo, não o de um script.

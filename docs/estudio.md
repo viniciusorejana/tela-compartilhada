@@ -175,7 +175,7 @@ junto sem ninguém lembrar delas.
 
 | | avatar | Estúdio |
 |---|---|---|
-| tamanho | 512 KB | 2 MB cada, 40 por conta, 16 MB no total |
+| tamanho | 6 MB | 2 MB cada, 40 por conta, 16 MB no total |
 | preparo | recortado no quadrado do meio e reduzido a 512 px pela página (256 se não couber) | como está (a arte de quem transmite: GIF animado, PNG recortado) |
 
 A foto de perfil também se vê grande: no cartão de perfil da sala, o avatar de quem tem foto se

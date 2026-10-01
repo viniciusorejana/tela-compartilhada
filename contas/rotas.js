@@ -135,7 +135,7 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
   // A foto de perfil. A sessão é conferida ANTES de ler o corpo: sem conta, o meio megabyte
   // nem chega a ser recebido.
   const avisarPerfil = conta => { try { aoMudarPerfil(conta); } catch (erro) { console.error('Perfil nas salas:', erro?.message || erro); } };
-  app.put('/api/conta/avatar', autenticada, imagemCrua('512kb'), (req, res) => {
+  app.put('/api/conta/avatar', autenticada, imagemCrua('6mb'), (req, res) => {
     const r = contas.salvarAvatar(req.contaNexo.conta, { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
     if (!r.ok) return recusar(res, r);
     avisarPerfil(r.conta);
