@@ -126,7 +126,9 @@
     const desde = window.NexoTempo?.desdeDe('self') ?? startedAt;
     $('sessionClock').textContent = joined && desde ? `Você está há ${NexoTempo.relogio(Date.now() - desde)}` : 'Sua sessão começa aqui';
     $('selfName').textContent = myName || 'Seu perfil';
+    // A borda (pintarAvatar) e o estilo do nome do cartão, para a pessoa se ver como a sala a vê.
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
+    window.NexoCartao?.estilizarNome($('selfName'), vitrineDe('self'));
     // Duas formas da mesma frase: a inteira onde ela cabe (a gaveta do celular) e a curta na lateral
     // do computador, onde "Microfone desligado" quebrava em duas linhas em qualquer largura
     // (sala.css, `container: eu`). A inteira fica no `title`.
@@ -163,6 +165,7 @@
         name.className = 'member-name';
         // `rotuloDe` acrescenta um trecho do código só quando outro nome na sala é igual.
         name.textContent = rotuloDe(person.id) + (person.id === 'self' ? ' (você)' : '');
+        window.NexoCartao?.estilizarNome(name, vitrineDe(person.id));
         row.tabIndex = 0;
         row.setAttribute('role', 'button');
         row.setAttribute('aria-label', `Ver o perfil de ${person.name}`);

@@ -136,10 +136,18 @@
       if (atual) window.NexoConta.atualizar({ perfil: { ...atual, social } });
     }
 
+    // O cartão como os outros o veem, guardado na página (conta-cliente.js): a conversa direta e o
+    // "eu" do início se mostram com ele, e passam a mostrar o novo assim que o editor salva.
+    function guardarCartao(d) {
+      if (!d?.vitrine || !window.NexoConta?.atual()?.conta) return;
+      window.NexoConta.atualizar({ cartao: { vitrine: d.vitrine, frase: d.frase || null, conquistas: d.conquistas || [], desde: d.desde || null } });
+    }
+
     async function carregar() {
       const r = await fetch('/api/conta/vitrine', { credentials: 'same-origin' }).then(resposta => resposta.json()).catch(() => null);
       if (!r?.guardada) return null;
       dados = r;
+      guardarCartao(r);
       aoMudar({ dados });
       return r;
     }
@@ -362,6 +370,7 @@
     function depoisDaImagem(r, campo, enviou) {
       if (!r.ok) { dizer('retorno', r.dados.error || 'Não foi possível trocar a imagem.', 'erro'); return; }
       dados = { ...dados, ...r.dados };
+      guardarCartao(dados);
       guardada.imagens = r.dados.guardada.imagens;
       if (enviou) rascunho[campo] = 'imagem';
       else if (rascunho[campo] === 'imagem') rascunho[campo] = 'tema';
@@ -408,6 +417,7 @@
         .then(async resposta => ({ ok: resposta.ok, dados: await resposta.json().catch(() => ({})) })).catch(() => ({ ok: false, dados: { error: 'Sem conexão com o servidor. Tente de novo.' } }));
       if (!r.ok) { dizer('retorno', r.dados.error || 'Não foi possível salvar.', 'erro'); q('salvar').disabled = false; return; }
       dados = r.dados;
+      guardarCartao(dados);
       guardada = copia(r.dados.guardada);
       rascunho = copia(guardada);
       // O que não valeu (premium ou conquista que falta) é dito, e não escondido.

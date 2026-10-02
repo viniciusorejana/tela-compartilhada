@@ -123,6 +123,7 @@
         const nome = document.createElement('span');
         nome.className = 'tempo-nome';
         nome.textContent = pessoa.voce ? `${pessoa.nome} (você)` : pessoa.nome;
+        if (typeof vitrineDe === 'function') window.NexoCartao?.estilizarNome(nome, vitrineDe(pessoa.id));
         const barra = document.createElement('span');
         barra.className = 'tempo-barra';
         barra.setAttribute('aria-hidden', 'true');

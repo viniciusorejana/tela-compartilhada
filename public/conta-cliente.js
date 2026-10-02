@@ -14,7 +14,7 @@
     .catch(() => ({ conta: null }))
     .then(dados => {
       estado = {
-        conta: dados.conta || null, perfil: dados.perfil || null, csrf: dados.csrf || '',
+        conta: dados.conta || null, perfil: dados.perfil || null, cartao: dados.cartao || null, csrf: dados.csrf || '',
         planosLigados: dados.planosLigados !== false, abrirSemConta: dados.abrirSemConta === true,
         novidadesAutomaticas: dados.novidadesAutomaticas !== false
       };

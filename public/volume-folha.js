@@ -44,6 +44,7 @@
     if (!par) { painel.classList.add('hidden'); return; }
     pintarAvatar($('volumeAvatar'), par.name, perfilDe(alvo.id));
     $('volumeTitulo').textContent = par.name;
+    window.NexoCartao?.estilizarNome($('volumeTitulo'), vitrineDe(alvo.id));
     // Voz e som da tela são dois volumes. A escolha só aparece quando a tela tem som.
     const temTela = telaTemSom(alvo.id);
     if (!temTela && alvo.fonte === 'tela') alvo.fonte = 'voz';

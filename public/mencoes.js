@@ -107,6 +107,7 @@
       const nome = document.createElement('span');
       nome.className = 'mencao-nome';
       nome.textContent = pessoa.nome;
+      if (typeof vitrineDe === 'function') window.NexoCartao?.estilizarNome(nome, vitrineDe(pessoa.id));
       opcao.append(avatar, nome);
       // O trecho do código só aparece quando há duas pessoas com o mesmo nome.
       const rotulo = typeof rotuloDe === 'function' ? rotuloDe(pessoa.id) : pessoa.nome;

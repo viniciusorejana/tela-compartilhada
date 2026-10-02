@@ -42,7 +42,11 @@ button:disabled:hover { background:var(--accent-forte); }
 .conta-identidade { display:flex; gap:16px; align-items:center; margin-bottom:12px; }
 .conta-identidade h1 { margin:0; }
 .conta-identidade .conta-sub { margin:4px 0 0; }
-.conta-avatar { flex:none; display:grid; place-items:center; width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--sobre-cor); font-size:22px; font-weight:700; }
+.conta-avatar { --borda-anel:3px; flex:none; display:grid; place-items:center; width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--sobre-cor); font-size:22px; font-weight:700; }
+/* Com cartão, o topo veste o cartão da pessoa (conta.js, vestirIdentidade): o fundo dela atrás, a
+   moldura em volta, escuro nos dois temas como o cartão. A folga é para o anel da borda e a
+   moldura não encostarem no texto. */
+.conta-identidade.nx-vestido { padding:16px 18px; border-radius:var(--r-lg); color:var(--text); }
 .conta-card code { font-family:ui-monospace,Consolas,monospace; color:var(--accent-texto); }
 .conta-secao { border-top:1px solid rgb(var(--tinta) / 6.3%); padding:14px 0 4px; }
 .conta-secao summary { cursor:pointer; font-weight:600; font-size:var(--fs-md); color:var(--text-2); padding:6px 0; border-radius:var(--r-sm); transition:color var(--dur) var(--curva); }

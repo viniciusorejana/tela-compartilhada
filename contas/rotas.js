@@ -116,8 +116,11 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
     // transição (NEXO_ANONIMO_ABRE_SALA) ainda não pede.
     // `planosLigados` diz à sala se ela deve mostrar os cadeados antes mesmo de entrar.
     // `novidadesAutomaticas` diz se a apresentação pode abrir sozinha (NEXO_NOVIDADES).
+    // `cartao` é o cartão como os OUTROS o veem (a vitrine efetiva): o `perfil` traz a guardada,
+    // com o que o plano ainda não libera, e a página que mostra a pessoa a si mesma -- a conversa,
+    // a conta -- mostra o mesmo que os outros veem.
     if (!achada) return res.json({ conta: null, abrirSemConta, planosLigados, novidadesAutomaticas });
-    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), csrf: achada.csrf, abrirSemConta, planosLigados, novidadesAutomaticas });
+    res.json({ conta: contas.publica(achada.conta), perfil: contas.perfil(achada.conta), cartao: contas.cartaoPublico(achada.conta), csrf: achada.csrf, abrirSemConta, planosLigados, novidadesAutomaticas });
   });
 
   app.put('/api/conta/perfil', json, autenticada, (req, res) => {

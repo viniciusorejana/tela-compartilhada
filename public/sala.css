@@ -1736,6 +1736,26 @@ h1#roomTitle { min-width:3ch; }
 .perfil-card .nx-av-img.ampliavel:hover { transform:scale(1.03); }
 .perfil-card .nx-av-img.ampliavel:focus-visible { outline:2px solid var(--anel-cor); outline-offset:3px; }
 .perfil-social { margin:0 0 14px; padding:12px; border-radius:var(--r-md); background:var(--accent-suave); }
+
+/* ---------- A personalização de cada pessoa, onde ela aparece (cartao.js) ----------
+   A borda do avatar (pintarAvatar), o estilo do nome, e no quadradinho da plateia e na foto
+   grande também a moldura e o fundo do cartão. O anel segue o formato de cada avatar: os da
+   sala têm cantos arredondados, e não são círculos. */
+.member-avatar,.self-avatar { --borda-raio:11px; }
+.avatar-fallback { --borda-raio:13px; --borda-anel:2.5px; }
+.msg-avatar { --borda-raio:10px; }
+.densidade-compacta .msg-avatar { --borda-raio:8px; }
+.tempo-avatar { --borda-raio:8px; }
+.config-perfil-corpo .perfil-avatar { --borda-anel:3px; }
+/* Na pilha de rostos de quem assiste, um rosto entra por baixo do outro: anéis ali virariam
+   um emaranhado. A borda fica para a lista aberta. */
+.espectadores-rostos .nx-com-borda::before { display:none; }
+.modal-card.foto-card.nx-moldurado { --moldura:3px; }
+/* No chat, a borda e o nome aparecem parados, e animam quando o mouse passa pela mensagem: são
+   centenas de mensagens, e cada borda que gira é uma pintura por quadro na sala -- que é onde a
+   tela compartilhada precisa do computador. */
+#chatMsgs .nx-com-borda::before,#chatMsgs .nx-nome-estilo { animation-play-state:paused; }
+#chatMsgs .msg:hover .nx-com-borda::before,#chatMsgs .msg:hover .nx-nome-estilo { animation-play-state:running; }
 .perfil-social-linha { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; }
 .perfil-social-texto { flex:1 1 180px; min-width:0; color:var(--text-2); font-size:var(--fs-sm); line-height:1.5; }
 

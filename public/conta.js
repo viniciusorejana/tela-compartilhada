@@ -218,9 +218,25 @@
 
   // ---------- Com conta ----------
   let perfil = { cor: null, marca: null, avatar: null };
+  // O cartão como os outros o veem (`/api/conta/eu`): a borda, o estilo do nome, a moldura e o
+  // fundo aparecem também aqui, no topo da conta.
+  let cartao = null;
 
   function pintarAvatar(el, nome, dados) {
     NexoPerfil.pintar(el, nome, dados);
+    window.NexoCartao?.decorarAvatar(el, cartao?.vitrine || null);
+  }
+
+  // O topo da conta veste o cartão da pessoa: o fundo atrás, a moldura em volta, o nome no estilo
+  // dela. Com fundo próprio, ele fica escuro também no tema claro, como o cartão.
+  function vestirIdentidade() {
+    const vitrine = cartao?.vitrine || null;
+    const identidade = document.querySelector('.conta-identidade');
+    if (!window.NexoCartao || !identidade) return;
+    NexoCartao.vestirFundo(identidade, vitrine);
+    NexoCartao.moldurar(identidade, vitrine);
+    NexoCartao.estilizarNome($('contaApelido'), vitrine);
+    identidade.classList.toggle('contexto-escuro', Boolean(vitrine));
   }
 
   // As opções vêm do mesmo conjunto que o servidor aceita, montadas por perfil.js -- o mesmo
@@ -295,6 +311,7 @@
     $('contaCodigo').textContent = conta.codigo;
     $('contaPlano').textContent = descreverPlano(conta);
     pintarAvatar($('contaAvatar'), conta.apelido, perfil);
+    vestirIdentidade();
     pintarFoto();
     preencherPerfil();
     $('voltarParaSala').hidden = !voltar;
@@ -374,7 +391,7 @@
     const c = r.ok ? r.dados.conta : null;
     const premium = c?.plano === 'premium' && (!c.planoAte || c.planoAte > Date.now());
     if (window.NexoTema) { NexoTema.definirPermissao(r.dados?.planosLigados === false || premium); NexoTema.aplicar(); }
-    if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; pintarConta(); mostrar('comConta'); return; }
+    if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; cartao = r.dados.cartao || null; pintarConta(); mostrar('comConta'); return; }
     mostrar('semConta');
   })();
 })();

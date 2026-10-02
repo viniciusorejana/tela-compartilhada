@@ -67,19 +67,29 @@
 .nx-av::before { inset:calc(var(--anel) * -2.1); z-index:0; padding:calc(var(--anel) * 1.05); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
 .nx-av[data-borda="nenhuma"]::before,.nx-av:not([data-borda])::before { display:none; }
 .nx-av::after { display:none; }
-.nx-av[data-borda="tema"]::before { background:linear-gradient(135deg,var(--v1),var(--v2)); }
-.nx-av[data-borda="brilho"]::before { background:conic-gradient(from var(--nx-giro),var(--v1),color-mix(in srgb,var(--v1) 40%,#fff),var(--v2),var(--v1)); animation:nx-girar-borda 4s linear infinite; }
-.nx-av[data-borda="pulso"]::before { background:var(--v1); animation:nx-pulso-borda 2.4s ease-in-out infinite; }
+/* A mesma borda num avatar que já existe fora do cartão (cartao.js, `decorarAvatar`): a lista da
+   sala, o quadradinho, o chat, a conversa. O anel fica a um `--anel` de distância, com o fundo do
+   lugar aparecendo no meio, e segue o formato do avatar (`--borda-raio`: os da sala têm cantos
+   arredondados, e não são círculos; `--borda-anel`, a espessura). Os dois vêm de cada lugar, sem
+   padrão declarado aqui -- este arquivo carrega depois e venceria o do lugar. Só o `::before`: o
+   `::after` desses avatares já é o ponto de "na sala", e a órbita e as estrelas, que moram nele,
+   ficam para o cartão. */
+.nx-com-borda { position:relative; }
+.nx-com-borda::before { content:''; position:absolute; pointer-events:none; inset:calc(var(--borda-anel,2px) * -2); padding:var(--borda-anel,2px); border-radius:calc(var(--borda-raio,50%) + var(--borda-anel,2px) * 2); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
+:is(.nx-av,.nx-com-borda)[data-borda="tema"]::before { background:linear-gradient(135deg,var(--v1),var(--v2)); }
+:is(.nx-av,.nx-com-borda)[data-borda="brilho"]::before { background:conic-gradient(from var(--nx-giro),var(--v1),color-mix(in srgb,var(--v1) 40%,#fff),var(--v2),var(--v1)); animation:nx-girar-borda 4s linear infinite; }
+:is(.nx-av,.nx-com-borda)[data-borda="pulso"]::before { background:var(--v1); animation:nx-pulso-borda 2.4s ease-in-out infinite; }
 @keyframes nx-pulso-borda { 0%,100% { box-shadow:0 0 0 0 color-mix(in srgb,var(--v1) 60%,transparent); opacity:.85; } 50% { box-shadow:0 0 14px 3px color-mix(in srgb,var(--v1) 55%,transparent); opacity:1; } }
-.nx-av[data-borda="orbita"]::before { background:color-mix(in srgb,var(--v1) 55%,transparent); padding:2px; }
+:is(.nx-av,.nx-com-borda)[data-borda="orbita"]::before { background:color-mix(in srgb,var(--v1) 55%,transparent); }
+.nx-av[data-borda="orbita"]::before { padding:2px; }
 .nx-av[data-borda="orbita"]::after { display:block; inset:calc(var(--anel) * -2.4); z-index:2; background:radial-gradient(circle at 50% 4px,#fff 0 3px,color-mix(in srgb,var(--v1) 70%,#fff) 3.5px,transparent 6px); animation:nx-orbitar 3.2s linear infinite; }
 @keyframes nx-orbitar { to { transform:rotate(360deg); } }
-.nx-av[data-borda="arco-iris"]::before { background:conic-gradient(from var(--nx-giro),#ff6b6b,#ffd93d,#6bff95,#4fd1ff,#a78bfa,#ff6bd6,#ff6b6b); animation:nx-girar-borda 3s linear infinite; }
-.nx-av[data-borda="fogo"]::before { background:conic-gradient(from var(--nx-giro),#ff4d1a,#ffb31a,#ff7a1a,#ffd84d,#ff4d1a); animation:nx-girar-borda 2.2s linear infinite,nx-chama 1.1s ease-in-out infinite alternate; }
+:is(.nx-av,.nx-com-borda)[data-borda="arco-iris"]::before { background:conic-gradient(from var(--nx-giro),#ff6b6b,#ffd93d,#6bff95,#4fd1ff,#a78bfa,#ff6bd6,#ff6b6b); animation:nx-girar-borda 3s linear infinite; }
+:is(.nx-av,.nx-com-borda)[data-borda="fogo"]::before { background:conic-gradient(from var(--nx-giro),#ff4d1a,#ffb31a,#ff7a1a,#ffd84d,#ff4d1a); animation:nx-girar-borda 2.2s linear infinite,nx-chama 1.1s ease-in-out infinite alternate; }
 @keyframes nx-chama { from { filter:drop-shadow(0 0 3px #ff6a1a); } to { filter:drop-shadow(0 -2px 9px #ffb31a); } }
-.nx-av[data-borda="neon"]::before { background:color-mix(in srgb,var(--v1) 75%,#fff); filter:drop-shadow(0 0 6px var(--v1)) drop-shadow(0 0 12px var(--v1)); animation:nx-neon 3.6s linear infinite; }
+:is(.nx-av,.nx-com-borda)[data-borda="neon"]::before { background:color-mix(in srgb,var(--v1) 75%,#fff); filter:drop-shadow(0 0 6px var(--v1)) drop-shadow(0 0 12px var(--v1)); animation:nx-neon 3.6s linear infinite; }
 @keyframes nx-neon { 0%,18%,22%,62%,64%,100% { opacity:1; } 20%,63% { opacity:.55; } }
-.nx-av[data-borda="estelar"]::before { background:conic-gradient(from var(--nx-giro),var(--v2),var(--v1),#fff,var(--v1),var(--v2)); animation:nx-girar-borda 6s linear infinite; }
+:is(.nx-av,.nx-com-borda)[data-borda="estelar"]::before { background:conic-gradient(from var(--nx-giro),var(--v2),var(--v1),#fff,var(--v1),var(--v2)); animation:nx-girar-borda 6s linear infinite; }
 .nx-av[data-borda="estelar"]::after { display:block; inset:calc(var(--anel) * -3.4); z-index:2; background:radial-gradient(circle at 12% 30%,#fff 0 1.4px,transparent 2.4px),radial-gradient(circle at 88% 22%,#fff 0 1.8px,transparent 2.8px),radial-gradient(circle at 80% 86%,#fff 0 1.2px,transparent 2.2px),radial-gradient(circle at 20% 84%,#fff 0 1.6px,transparent 2.6px),radial-gradient(circle at 50% 2%,#fff 0 1.2px,transparent 2.2px); animation:nx-cintilar 1.8s ease-in-out infinite alternate; }
 @keyframes nx-cintilar { from { opacity:.25; } to { opacity:1; } }
 /* Pequeno (listas): o anel afina junto com o avatar. */
@@ -111,11 +121,17 @@
 .nx-cartao-presenca { display:flex; align-items:center; gap:7px; color:#d6d5e3; font-size:var(--fs-sm); }
 .nx-cartao-presenca strong { font-weight:650; color:#f3f2fa; }
 
-/* Os estilos do nome. A cor da pessoa é clareada até ficar legível sobre o véu escuro. */
-.nx-cartao-nome[data-estilo="tema"],.nx-nome-estilo[data-estilo="tema"] { background:linear-gradient(90deg,color-mix(in oklab,var(--v1) 62%,#fff),color-mix(in oklab,var(--v2) 35%,#fff)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.nx-cartao-nome[data-estilo="brilho"],.nx-nome-estilo[data-estilo="brilho"] { background:linear-gradient(100deg,color-mix(in oklab,var(--v1) 55%,#fff) 30%,#fff 45%,color-mix(in oklab,var(--v1) 55%,#fff) 60%); background-size:250% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:nx-reflexo 3.2s ease-in-out infinite; }
+/* Os estilos do nome. A cor da pessoa é misturada à tinta do lugar até ficar legível: no escuro
+   (o cartão, sempre; a sala no tema escuro) a tinta é branca e o nome clareia; no tema claro ela é
+   quase preta e o nome escurece -- é o que deixa o nome estilizado legível também na lista, no
+   chat e na plateia de quem usa o claro.
+   A letra é pintada por `-webkit-text-fill-color`, e não por `color`: cada lugar tem a sua regra de
+   cor para o nome (o nome não lido do início, o "você" da conversa, o nome colorido do chat), e
+   várias pesam mais que estas -- com `color`, elas apagavam o estilo. */
+.nx-cartao-nome[data-estilo="tema"],.nx-nome-estilo[data-estilo="tema"] { background:linear-gradient(90deg,color-mix(in oklab,var(--v1) 62%,rgb(var(--tinta))),color-mix(in oklab,var(--v2) 35%,rgb(var(--tinta)))); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.nx-cartao-nome[data-estilo="brilho"],.nx-nome-estilo[data-estilo="brilho"] { background:linear-gradient(100deg,color-mix(in oklab,var(--v1) 55%,rgb(var(--tinta))) 30%,rgb(var(--tinta)) 45%,color-mix(in oklab,var(--v1) 55%,rgb(var(--tinta))) 60%); background-size:250% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; animation:nx-reflexo 3.2s ease-in-out infinite; }
 @keyframes nx-reflexo { from { background-position:100% 0; } to { background-position:-50% 0; } }
-.nx-cartao-nome[data-estilo="neon"],.nx-nome-estilo[data-estilo="neon"] { color:color-mix(in oklab,var(--v1) 45%,#fff); text-shadow:0 0 6px color-mix(in srgb,var(--v1) 80%,transparent),0 0 16px color-mix(in srgb,var(--v1) 55%,transparent); }
+.nx-cartao-nome[data-estilo="neon"],.nx-nome-estilo[data-estilo="neon"] { -webkit-text-fill-color:color-mix(in oklab,var(--v1) 45%,rgb(var(--tinta))); text-shadow:0 0 6px color-mix(in srgb,var(--v1) 80%,transparent),0 0 16px color-mix(in srgb,var(--v1) 55%,transparent); }
 
 /* As conquistas à mostra: selos redondos, com o nome no título. */
 .nx-selos { display:flex; flex-wrap:wrap; gap:6px; }
@@ -123,13 +139,27 @@
 .nx-selo:hover { transform:translateY(-2px) scale(1.06); }
 .nx-selo svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
 
-/* ---------- As molduras do cartão inteiro ---------- */
-.nx-cartao[data-moldura]:not([data-moldura="nenhuma"])::after { content:''; position:absolute; inset:0; z-index:4; pointer-events:none; border-radius:inherit; padding:3px; -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
-.nx-cartao[data-moldura="tema"]::after { background:linear-gradient(135deg,var(--v1),var(--v2)); }
-.nx-cartao[data-moldura="dourada"]::after { background:linear-gradient(135deg,#fff3b0,#d4a017 25%,#8a5a00 50%,#ffe27a 75%,#b8860b); background-size:200% 200%; animation:nx-ouro 6s ease-in-out infinite alternate; }
+/* ---------- As molduras do cartão inteiro ----------
+   E de peças que fazem as vezes de cartão fora dele (cartao.js, `moldurar`): o quadradinho da
+   plateia e a foto grande, com a moldura mais fina (`--moldura`). */
+.nx-moldurado { --moldura:2px; position:relative; isolation:isolate; }
+:is(.nx-cartao,.nx-moldurado)[data-moldura]:not([data-moldura="nenhuma"])::after { content:''; position:absolute; inset:0; z-index:4; pointer-events:none; border-radius:inherit; padding:var(--moldura,3px); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
+:is(.nx-cartao,.nx-moldurado)[data-moldura="tema"]::after { background:linear-gradient(135deg,var(--v1),var(--v2)); }
+:is(.nx-cartao,.nx-moldurado)[data-moldura="dourada"]::after { background:linear-gradient(135deg,#fff3b0,#d4a017 25%,#8a5a00 50%,#ffe27a 75%,#b8860b); background-size:200% 200%; animation:nx-ouro 6s ease-in-out infinite alternate; }
 @keyframes nx-ouro { from { background-position:0 0; } to { background-position:100% 100%; } }
-.nx-cartao[data-moldura="neon"]::after { background:color-mix(in srgb,var(--v1) 80%,#fff); filter:drop-shadow(0 0 6px var(--v1)); animation:nx-neon 4.2s linear infinite; }
-.nx-cartao[data-moldura="holografica"]::after { background:conic-gradient(from var(--nx-giro),#ffb3d9,#b3e5ff,#c9b3ff,#b3ffd9,#fff2b3,#ffb3d9); animation:nx-girar-borda 5s linear infinite; }
+:is(.nx-cartao,.nx-moldurado)[data-moldura="neon"]::after { background:color-mix(in srgb,var(--v1) 80%,#fff); filter:drop-shadow(0 0 6px var(--v1)); animation:nx-neon 4.2s linear infinite; }
+:is(.nx-cartao,.nx-moldurado)[data-moldura="holografica"]::after { background:conic-gradient(from var(--nx-giro),#ffb3d9,#b3e5ff,#c9b3ff,#b3ffd9,#fff2b3,#ffb3d9); animation:nx-girar-borda 5s linear infinite; }
+
+/* ---------- O fundo do cartão fora dele (cartao.js, `vestirFundo`) ----------
+   Uma camada por baixo do conteúdo da peça (o `z-index:-1` num contexto isolado fica acima do
+   fundo próprio dela e abaixo de tudo o que ela tem dentro), com o mesmo desenho do fundo do
+   cartão e um véu mais leve: aqui não há texto em cima, só o avatar ou a foto. */
+.nx-vestido { position:relative; isolation:isolate; }
+.nx-fundo-vestido { position:absolute; inset:0; z-index:-1; overflow:hidden; border-radius:inherit; pointer-events:none; background:linear-gradient(180deg,color-mix(in srgb,var(--v1) 30%,#14141c),color-mix(in srgb,var(--v2) 45%,#101016)); }
+.nx-vestido[data-fundo="liso"] > .nx-fundo-vestido { background:#17171f; }
+.nx-fundo-vestido > .nx-anim { opacity:.7; }
+.nx-fundo-vestido > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.85; }
+.nx-fundo-vestido::after { content:''; position:absolute; inset:0; background:#0c0c1240; }
 
 /* ---------- Os animados (banner e fundo) ----------
    `--v1` e `--v2` são as cores da pessoa. Tudo em CSS, sem imagem: pesa nada para baixar. */

@@ -307,10 +307,15 @@ function perfilDe(id) {
   return id === 'self' ? meuPerfil : perfisPorIdentidade.get(id) || null;
 }
 // Pinta um avatar com a foto da pessoa, ou com a cor e a marca, ou com a cor do nome e as
-// iniciais (perfil.js).
+// iniciais (perfil.js) -- e com a borda que ela escolheu no cartão, em todo lugar da sala onde
+// ela aparece: a lista, o "eu" lá embaixo, o quadradinho, o chat, as menções, o tempo na sala, a
+// folha de volume. O avatar de dentro do cartão de perfil tem a borda do próprio cartão.
 function pintarAvatar(el, nome, perfil) {
   NexoPerfil.pintar(el, nome, perfil);
+  if (!el.classList.contains('nx-av-img')) window.NexoCartao?.decorarAvatar(el, perfil?.cartao?.vitrine || null);
 }
+// A vitrine que a sala mostra de cada pessoa (a efetiva, mandada pelo servidor), ou null.
+const vitrineDe = id => perfilDe(id)?.cartao?.vitrine || null;
 
 // ---------- Entrada / nome ----------
 const nomeSalvo = Preferencias.lerAjuste('nome', '');
@@ -5495,9 +5500,9 @@ function criarTileBase(id, name, state, isSelf) {
   // O selo do dono é um elemento próprio, e não parte do texto do nome: o nome é escrito com
   // `textContent` justamente porque vem de quem escolheu o nome, e concatenar um selo ali
   // faria "Fulano · dono" ser um nome possível de escolher.
+  // O nome tem um elemento só dele: é nele que entra o estilo do nome do cartão, e não no selo.
   const linhaDoNome = el.querySelector('.participant-name');
-  linhaDoNome.textContent = `${name}${isSelf ? ' (você)' : ''}`;
-  linhaDoNome.append(elemento('span', 'dono-selo hidden', 'abriu a sala'));
+  linhaDoNome.append(elemento('span', 'participant-nome', `${name}${isSelf ? ' (você)' : ''}`), elemento('span', 'dono-selo hidden', 'abriu a sala'));
   pintarAvatar(el.querySelector('.avatar-fallback'), name, perfilDe(id));
   const volumeRow = el.querySelector('.volume-row');
   if (!isSelf) volumeRow.innerHTML = LINHA_DE_VOLUME('voz');
@@ -5522,6 +5527,7 @@ function criarTileBase(id, name, state, isSelf) {
     volumeDeVoz: 1
   };
   tiles.set(id, refs);
+  vestirQuadradinho(id);
   reordenarQuadradinhos();
   // Elemento novo nasce na saida escolhida: sem isto, so quem ja estava na sala sairia
   // pelo fone certo, e quem entrasse depois voltaria para o padrao do sistema.
@@ -5570,10 +5576,26 @@ function criarTileBase(id, name, state, isSelf) {
 // Os perfis chegam pela sinalização, e os quadradinhos nascem pela mídia -- quase sempre
 // antes. Repintar todos é barato numa sala de dezenas, e a lista lateral vem junto.
 function repintarAvatares() {
-  tiles.forEach((refs, id) => pintarAvatar(refs.avatar, id === 'self' ? myName : peers.get(id)?.name, perfilDe(id)));
+  tiles.forEach((refs, id) => {
+    pintarAvatar(refs.avatar, id === 'self' ? myName : peers.get(id)?.name, perfilDe(id));
+    vestirQuadradinho(id);
+  });
   atualizarRotulosDosQuadradinhos();
+  redecorarChat();
   window.NexoEspectadores?.repintar();
   document.dispatchEvent(new Event('room-update'));
+}
+
+// O quadradinho da plateia veste o cartão da pessoa: a moldura em volta, o fundo do cartão no
+// lugar do fundo escuro (atrás do avatar -- a câmera, quando liga, fica por cima) e o estilo do
+// nome. Quem não tem conta continua com o quadradinho de sempre.
+function vestirQuadradinho(id) {
+  const refs = tiles.get(id);
+  if (!refs || !window.NexoCartao) return;
+  const vitrine = vitrineDe(id);
+  NexoCartao.moldurar(refs.root, vitrine);
+  NexoCartao.vestirFundo(refs.root.querySelector('.avatar-wrap'), vitrine);
+  NexoCartao.estilizarNome(refs.root.querySelector('.participant-nome'), vitrine);
 }
 
 // ---------- Nomes que se repetem ----------
@@ -5594,8 +5616,8 @@ function rotuloDe(id) {
 }
 function atualizarRotulosDosQuadradinhos() {
   tiles.forEach((refs, id) => {
-    const texto = refs.root.querySelector('.participant-name')?.firstChild;
-    if (texto?.nodeType === Node.TEXT_NODE) texto.data = `${rotuloDe(id)}${id === 'self' ? ' (você)' : ''}`;
+    const texto = refs.root.querySelector('.participant-nome');
+    if (texto) texto.textContent = `${rotuloDe(id)}${id === 'self' ? ' (você)' : ''}`;
   });
 }
 
@@ -5646,7 +5668,7 @@ function abrirPerfil(id, reserva = null) {
     avatar.removeAttribute('title');
     avatar.setAttribute('aria-hidden', 'true');
   }
-  fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '' } : null;
+  fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '', vitrine: perfil?.cartao?.vitrine || null } : null;
   // O apelido que eu dei a um amigo vale aqui também; o nome dele aparece embaixo (cartao.js).
   if (ehEu) document.getElementById('perfilNome').textContent = `${nome} (você)`;
   document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
@@ -5686,6 +5708,15 @@ function abrirFoto() {
   imagem.alt = `Foto de ${fotoDoPerfil.nome}`;
   document.getElementById('fotoNome').textContent = fotoDoPerfil.nome;
   document.getElementById('fotoCodigo').textContent = fotoDoPerfil.codigo;
+  // A foto grande é emoldurada como o cartão da pessoa: a moldura dela em volta, o fundo do cartão
+  // atrás, o nome no estilo dela. Com fundo próprio, o visor fica escuro também no tema claro --
+  // o texto da legenda vai sobre a arte da pessoa, como no cartão.
+  const vitrine = fotoDoPerfil.vitrine || null;
+  const visor = document.querySelector('#fotoPanel .foto-card');
+  window.NexoCartao?.moldurar(visor, vitrine);
+  window.NexoCartao?.vestirFundo(visor, vitrine);
+  window.NexoCartao?.estilizarNome(document.getElementById('fotoNome'), vitrine);
+  visor.classList.toggle('contexto-escuro', Boolean(vitrine));
   document.getElementById('fotoPanel').classList.remove('hidden');
 }
 // O avatar nasce de novo a cada cartão (cartao.js monta a vitrine inteira): o ouvinte fica no
@@ -6958,6 +6989,24 @@ chatMsgs.addEventListener('scroll', () => {
   perto = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight < 80;
 });
 
+// Um perfil novo (a pessoa mudou o cartão, ou acabou de entrar) repinta as mensagens dela que já
+// estão no chat: o avatar, a borda e o estilo do nome passam a ser os de agora. Quem já saiu da
+// sala continua como estava -- não há perfil novo dele para mostrar.
+function redecorarChat() {
+  chatMsgs.querySelectorAll('.msg[data-message-id]').forEach(el => {
+    const msg = mensagensDoChat.get(el.dataset.messageId);
+    const perfil = msg && (ehMinha(msg) ? meuPerfil : perfisPorIdentidade.get(msg.autorId));
+    if (!perfil) return;
+    const avatar = el.querySelector(':scope > .msg-avatar');
+    const autor = el.querySelector('.msg-topo .msg-autor');
+    if (avatar) pintarAvatar(avatar, msg.autor || '?', perfil);
+    if (autor) {
+      autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfil).cor;
+      window.NexoCartao?.estilizarNome(autor, perfil.cartao?.vitrine || null);
+    }
+  });
+}
+
 function mostrarMensagem(msg) {
   const vazio = chatMsgs.querySelector('.chat-vazio');
   if (vazio) vazio.remove();
@@ -6991,6 +7040,8 @@ function mostrarMensagem(msg) {
   autor.className = 'msg-autor';
   autor.textContent = msg.autor || 'Alguém';
   autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfilDoAutor).cor;
+  // O estilo do nome do cartão, quando há, no lugar da cor do perfil.
+  window.NexoCartao?.estilizarNome(autor, perfilDoAutor?.cartao?.vitrine || null);
   // O nome e o avatar de quem escreveu abrem o perfil (abrirPerfilDoAutor). O nome é o que se
   // alcança pelo teclado; o avatar é o atalho do mouse, e fica de fora da ordem do Tab para não
   // dobrar as paradas de cada mensagem.

@@ -101,6 +101,76 @@
     ponto.title = NOMES_DOS_STATUS[status] || '';
   }
 
+  // ---------- A personalização fora do cartão ----------
+  //
+  // A borda, o estilo do nome, a moldura e o fundo aparecem também onde a pessoa aparece, para
+  // todo mundo ver o tempo todo: a lista da sala, o quadradinho da plateia, o chat, a foto grande,
+  // a conversa direta, o início, a página da conta. Cada lugar continua com a peça dele (o avatar
+  // de cantos arredondados da sala, o nome da lista); estas funções só acrescentam o que a pessoa
+  // escolheu, e tiram quando ela não escolheu nada. `vitrine` é a efetiva (o que o servidor manda
+  // em `perfil.cartao.vitrine`), ou null para quem não tem conta.
+  const escolhida = (vitrine, grupo, padrao) => (vitrine?.[grupo] && vitrine[grupo] !== padrao ? vitrine[grupo] : '');
+
+  // O anel em volta de um avatar que já existe, no formato dele (`--borda-raio`, cartao.css).
+  function decorarAvatar(el, vitrine) {
+    if (!el) return;
+    const borda = escolhida(vitrine, 'borda', 'nenhuma');
+    el.classList.toggle('nx-com-borda', Boolean(borda));
+    if (!borda) { delete el.dataset.borda; return; }
+    if (el.dataset.borda !== borda) el.dataset.borda = borda;
+    aplicarCores(el, vitrine);
+  }
+
+  // O estilo do nome num texto que já existe. A cor própria do lugar (o nome colorido do chat)
+  // sai quando há estilo: o estilo é a cor.
+  function estilizarNome(el, vitrine) {
+    if (!el) return;
+    const estilo = escolhida(vitrine, 'nome', 'padrao');
+    el.classList.toggle('nx-nome-estilo', Boolean(estilo));
+    if (!estilo) { delete el.dataset.estilo; return; }
+    if (el.dataset.estilo !== estilo) el.dataset.estilo = estilo;
+    el.style.removeProperty('color');
+    aplicarCores(el, vitrine);
+  }
+
+  // A moldura do cartão em volta de uma peça que já existe (o quadradinho, a foto grande).
+  function moldurar(el, vitrine) {
+    if (!el) return;
+    const moldura = escolhida(vitrine, 'moldura', 'nenhuma');
+    el.classList.toggle('nx-moldurado', Boolean(moldura));
+    if (!moldura) { delete el.dataset.moldura; return; }
+    if (el.dataset.moldura !== moldura) el.dataset.moldura = moldura;
+    aplicarCores(el, vitrine);
+  }
+
+  // O fundo do cartão atrás de uma peça que já existe: uma camada por baixo do conteúdo dela. A
+  // camada só é refeita quando o fundo muda -- o quadradinho é repintado a cada perfil que chega, e
+  // refazer a imagem ou a animação a cada vez faria ela piscar.
+  function vestirFundo(el, vitrine) {
+    if (!el) return;
+    let camadaEl = el.querySelector(':scope > .nx-fundo-vestido');
+    if (!vitrine) {
+      camadaEl?.remove();
+      el.classList.remove('nx-vestido');
+      delete el.dataset.fundo;
+      return;
+    }
+    const chave = `${vitrine.fundo}|${vitrine.imagens?.fundo || ''}`;
+    if (!camadaEl) {
+      camadaEl = elemento('span', 'nx-fundo-vestido');
+      camadaEl.setAttribute('aria-hidden', 'true');
+      el.prepend(camadaEl);
+    }
+    if (camadaEl.dataset.chave !== chave) {
+      const dentro = camada(vitrine.fundo, vitrine.imagens?.fundo);
+      camadaEl.replaceChildren(...(dentro ? [dentro] : []));
+      camadaEl.dataset.chave = chave;
+    }
+    el.classList.add('nx-vestido');
+    if (el.dataset.fundo !== vitrine.fundo) el.dataset.fundo = vitrine.fundo;
+    aplicarCores(el, vitrine);
+  }
+
   function selos(ids, vitrine) {
     const lista = elemento('div', 'nx-selos');
     for (const id of ids) {
@@ -313,5 +383,5 @@
     return () => { parado = true; root.cancelAnimationFrame(quadro); clearTimeout(prazo); canvas.remove(); };
   }
 
-  root.NexoCartao = { montar, avatar, trocarStatus, efeito, aplicarCores, selos, descreverPresenca, desde, svg, ICONES, ICONE_DA_CONQUISTA, NOMES_DOS_STATUS };
+  root.NexoCartao = { montar, avatar, trocarStatus, efeito, aplicarCores, decorarAvatar, estilizarNome, moldurar, vestirFundo, selos, descreverPresenca, desde, svg, ICONES, ICONE_DA_CONQUISTA, NOMES_DOS_STATUS };
 })(window);

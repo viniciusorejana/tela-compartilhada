@@ -190,6 +190,7 @@
     pintarAvatar($('configAvatar'), nome, perfil);
     $('configFaixa').style.background = `linear-gradient(120deg, ${aparenciaDoPerfil.cor}, ${aparenciaDoPerfil.cor}66)`;
     $('configNome').textContent = nome;
+    window.NexoCartao?.estilizarNome($('configNome'), perfil?.cartao?.vitrine || null);
     const conta = window.NexoConta?.atual()?.conta;
     $('configCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : conta ? `@${conta.usuario}` : 'Entrou sem conta';
     const nivel = typeof nivelDoPlano === 'string' ? nivelDoPlano : conta?.nivel || 'anonimo';
