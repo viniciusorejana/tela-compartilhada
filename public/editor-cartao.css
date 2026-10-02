@@ -1,0 +1,135 @@
+/* O editor do cartão de perfil (editor-cartao.js), no início e no painel da sala.
+ *
+ * Duas colunas -- os controles e a prévia, presa no alto -- quando o EDITOR tem largura para isso,
+ * e uma coluna, com a prévia em cima, quando não tem. A pergunta é a largura dele, e não a da
+ * janela: no início ele divide a tela com a trilha, a lateral e "Agora no Nexo"; na sala ele é um
+ * painel. Daí o container.
+ *
+ * Quem usa dá a altura (o editor ocupa 100%: as colunas rolam por dentro e o rodapé de salvar fica
+ * embaixo, fora da rolagem) e o fundo (`--ed-fundo`, o do rodapé). Os botões são os de social.css
+ * (`.nx-social` na raiz). Os seletores dos campos pesam mais que os de sala.css
+ * (`input[type="text"]`), que valeriam lá. */
+.ed { --ed-fundo:var(--bg); container:editor / inline-size; display:flex; flex-direction:column; height:100%; min-height:0; }
+/* A folga mora nas colunas e no rodapé, e não na raiz: a consulta de largura do editor não alcança
+   a própria raiz. */
+.ed-colunas,.ed-rodape { --ed-folga:22px; }
+.ed-colunas { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-areas:"cabeca" "previa" "form"; align-content:start; overflow-y:auto; overscroll-behavior:contain; }
+.ed-cabeca { grid-area:cabeca; display:grid; gap:8px; min-width:0; padding:18px var(--ed-folga) 14px; }
+.ed .ed-cabeca h2 { margin:0; font-size:var(--fs-xl); font-weight:750; letter-spacing:-.02em; }
+.ed-explica { margin:0; color:var(--muted); font-size:var(--fs-sm); line-height:1.6; }
+.ed-dica { display:block; margin-top:6px; color:var(--faint); font-size:var(--fs-meta); line-height:1.5; }
+.ed-retorno { min-height:18px; margin:0; color:var(--online-texto); font-size:var(--fs-sm); }
+.ed-retorno[data-tom="erro"] { color:var(--danger-texto); }
+.ed-selo-premium { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:var(--r-pilula); background:var(--aviso-suave); color:var(--aviso-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; text-transform:uppercase; vertical-align:1px; }
+
+/* As abas das partes: a mesma pílula das abas dos amigos no início. */
+.ed-abas { justify-self:start; display:flex; gap:4px; max-width:100%; padding:3px; border-radius:11px; background:var(--bg-1); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 3.9%); overflow-x:auto; scrollbar-width:none; }
+.ed-abas::-webkit-scrollbar { display:none; }
+.ed-abas button { --nx-fundo-hover:rgb(var(--tinta) / 3.5%); --nx-cor:var(--muted); --nx-cor-hover:var(--text); flex:none; min-height:var(--ctl-p); padding:0 12px; border-radius:var(--r-sm); font-size:var(--fs-sm); font-weight:650; white-space:nowrap; }
+.ed-abas button[aria-selected="true"] { --nx-fundo:var(--accent-forte); --nx-fundo-hover:var(--accent-forte-hi); --nx-cor:#fff; --nx-cor-hover:#fff; }
+
+/* ---------- A prévia ---------- */
+.ed-previa { grid-area:previa; min-width:0; background:var(--bg-1); border-block:1px solid var(--line); }
+.ed-previa-dentro { display:grid; justify-items:center; gap:12px; padding:16px var(--ed-folga); }
+.ed-rotulo-previa { justify-self:start; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+.ed-previa-cartao { width:100%; max-width:320px; }
+.ed-previa-cartao .nx-cartao { box-shadow:var(--sombra-modal); }
+
+/* ---------- Os controles ---------- */
+.ed-form { grid-area:form; min-width:0; padding:16px var(--ed-folga) 8px; }
+.ed-parte { display:grid; gap:4px; animation:nexo-aparecer var(--dur) var(--curva); }
+.ed-grupo { min-width:0; margin:0 0 18px; padding:0; border:0; }
+.ed-grupo legend { margin-bottom:9px; padding:0; color:var(--text-2); font-size:var(--fs-sm); font-weight:650; }
+.ed-grupo-selos { margin-top:12px; }
+.ed-temas { display:flex; flex-wrap:wrap; gap:10px; }
+/* O degradê vai pela variável da base de botão (social.css): um `background` próprio perderia para
+   o do passar do mouse dela, e a bolinha ficava transparente sob o cursor. */
+.ed-tema { --nx-fundo:linear-gradient(135deg,var(--a),var(--b)); position:relative; width:42px; height:42px; border-radius:50%; box-shadow:0 0 0 2px var(--ed-fundo),0 0 0 3px transparent; transition:transform var(--dur) var(--curva-mola),box-shadow var(--dur) var(--curva); }
+.ed-tema:hover { transform:scale(1.08); }
+.ed-tema[aria-checked="true"] { box-shadow:0 0 0 2px var(--ed-fundo),0 0 0 4px var(--accent); }
+.ed-cores-exatas { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-top:12px; }
+.ed-cor { display:inline-flex; align-items:center; gap:8px; color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; }
+.ed-cor input { width:36px; height:28px; padding:0; border:0; border-radius:var(--r-sm); background:none; cursor:pointer; }
+.ed-opcoes { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:10px; }
+/* A base de botão (social.css) centraliza o conteúdo; numa grade isso encolhe a coluna até o
+   tamanho do conteúdo, e a amostra (vazia) sumia. Aqui a coluna é a largura inteira. */
+.ed-opcao { --nx-fundo:var(--bg-cartao); --nx-fundo-hover:var(--bg-cartao); position:relative; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:64px auto; justify-content:stretch; align-content:stretch; justify-items:stretch; align-items:stretch; padding:0; border-radius:var(--r-lg); overflow:hidden; box-shadow:inset 0 0 0 1px var(--line-2); text-align:left; transition:transform var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.ed-opcao:hover { transform:translateY(-2px); box-shadow:inset 0 0 0 1px var(--line-3),0 8px 18px rgb(0 0 0 / 18%); }
+.ed-opcao[aria-checked="true"] { box-shadow:inset 0 0 0 2px var(--accent),0 0 0 3px var(--accent-suave-hi); }
+.ed-opcao-amostra { position:relative; overflow:hidden; background:linear-gradient(135deg,var(--v1),var(--v2)); }
+.ed-opcao-nome { display:flex; align-items:center; gap:4px; min-width:0; padding:6px 8px; color:var(--text-2); font-size:var(--fs-meta); font-weight:600; }
+.ed-opcao-nome > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ed-opcao-requer { position:absolute; top:6px; right:6px; z-index:2; display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#0d0d16cc; color:#ffe9a8; }
+.ed-opcao-requer svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.ed-opcoes-redondas .ed-opcao-amostra { display:grid; place-items:center; background:#14141c; }
+.ed-opcoes-texto { grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); }
+.ed-opcoes-texto .ed-opcao { grid-template-rows:auto; }
+.ed-opcoes-texto .ed-opcao-nome { min-height:var(--ctl-m); padding:0 12px; font-size:var(--fs-sm); }
+.ed-opcao-moldura { position:absolute; inset:10px; border-radius:10px; background:#14141c; }
+.ed-imagem { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+.ed-imagem:empty { display:none; }
+.ed-imagem label.nx-botao { cursor:pointer; }
+.ed-imagem small { color:var(--faint); font-size:var(--fs-meta); }
+.ed-rotulo-campo { display:block; margin:12px 0 6px; color:var(--text-2); font-size:var(--fs-sm); font-weight:650; }
+.ed :is(input[type="text"],textarea,select) { width:100%; min-height:var(--ctl-g); margin:0; padding:10px 12px; border:1px solid rgb(var(--tinta) / 9%); border-radius:var(--r-md); background:var(--bg-0); color:var(--text); font:inherit; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.ed textarea { resize:vertical; line-height:1.5; }
+.ed :is(input[type="text"],textarea,select):hover { border-color:rgb(var(--tinta) / 15%); }
+.ed :is(input[type="text"],textarea,select):focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.ed ::placeholder { color:var(--faint); }
+.ed-selos-escolha { display:flex; flex-wrap:wrap; gap:8px; }
+.ed-selo-opcao { position:relative; display:inline-flex; align-items:center; gap:8px; padding:6px 10px 6px 6px; border-radius:var(--r-pilula); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; transition:box-shadow var(--dur) var(--curva),background-color var(--dur) var(--curva); }
+.ed-selo-opcao input { position:absolute; opacity:0; width:1px; height:1px; }
+.ed-selo-opcao:has(input:checked) { background:var(--accent-suave); box-shadow:inset 0 0 0 1px var(--accent); color:var(--text); }
+.ed-selo-opcao:has(input:focus-visible) { outline:2px solid var(--anel-cor); outline-offset:2px; }
+.ed-selo-opcao .nx-selo { width:26px; height:26px; border-radius:50%; }
+.ed-status { display:grid; gap:6px; max-width:420px; }
+.ed-status-opcao { --nx-fundo:var(--bg-cartao); --nx-fundo-hover:var(--bg-3); --nx-cor:var(--text-2); justify-content:flex-start; gap:12px; min-height:var(--ctl-g); padding:0 14px; border-radius:var(--r-md); box-shadow:inset 0 0 0 1px var(--line); }
+.ed-status-opcao[aria-checked="true"] { --nx-fundo:var(--accent-suave); --nx-fundo-hover:var(--accent-suave-hi); --nx-cor:var(--text); box-shadow:inset 0 0 0 1px var(--accent); }
+.ed-status-opcao small { margin-left:auto; color:var(--faint); font-size:var(--fs-meta); font-weight:500; }
+.ed-ponto { position:relative; flex:none; width:12px; height:12px; border-radius:50%; background:var(--online); }
+.ed-ponto[data-status="ausente"] { background:var(--aviso); }
+.ed-ponto[data-status="ocupado"] { background:var(--danger); }
+.ed-ponto[data-status="invisivel"] { background:transparent; box-shadow:inset 0 0 0 2.5px var(--faint); }
+.ed-frase { display:grid; grid-template-columns:64px minmax(0,1fr); gap:8px; }
+.ed .ed-frase input:first-child { text-align:center; font-size:18px; }
+.ed-frase-acoes { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.ed-chaves { display:grid; gap:8px; }
+.ed-chave { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0; padding:12px 14px; border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); box-shadow:inset 0 0 0 1px var(--line); cursor:pointer; }
+.ed-chave span { display:grid; gap:2px; min-width:0; }
+.ed-chave strong { color:var(--text-2); font-size:var(--fs-md); font-weight:600; }
+.ed-chave small { color:var(--faint); font-size:var(--fs-meta); }
+/* O interruptor do padrão (4.3): 38×22, bolinha branca, trilho de destaque ligado. */
+.ed-chave input { appearance:none; -webkit-appearance:none; flex:none; position:relative; width:38px; height:22px; margin:0; border-radius:var(--r-pilula); background:var(--bg-fundo); cursor:pointer; transition:background-color var(--dur) var(--curva); }
+.ed-chave input::after { content:''; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform var(--dur) var(--curva-mola); box-shadow:0 1px 3px rgb(0 0 0 / 30%); }
+.ed-chave input:checked { background:var(--accent); }
+.ed-chave input:checked::after { transform:translateX(16px); }
+.ed-chave input:focus-visible { outline:2px solid var(--anel-cor); outline-offset:2px; }
+
+/* O rodapé fica embaixo, de lado a lado, enquanto os controles rolam acima dele. */
+.ed-rodape { flex:none; display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; padding:12px var(--ed-folga); border-top:1px solid var(--line); background:var(--ed-fundo); }
+.ed-rodape .ed-retorno { flex:1 1 160px; min-height:0; }
+.ed-rodape .ed-retorno:empty { display:none; }
+
+/* ---------- Duas colunas ---------- */
+@container editor (min-width:700px) {
+  .ed-colunas { grid-template-columns:minmax(0,1fr) 320px; grid-template-rows:auto 1fr; grid-template-areas:"cabeca previa" "form previa"; }
+  .ed-previa { border-block:0; border-left:1px solid var(--line); }
+  .ed-previa-dentro { position:sticky; top:0; padding:18px var(--ed-folga); }
+  .ed-form { padding-top:0; }
+}
+@container editor (min-width:900px) {
+  .ed-colunas { grid-template-columns:minmax(0,1fr) 360px; }
+}
+/* Estreito, cada coisa com mais ar e os botões do rodapé do tamanho do polegar. */
+@container editor (max-width:520px) {
+  .ed-colunas,.ed-rodape { --ed-folga:14px; }
+  .ed-rodape .ed-retorno { flex-basis:100%; }
+  .ed-rodape .nx-botao { flex:1; min-height:var(--ctl-g); }
+  .ed-opcoes { grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); }
+  .ed-status-opcao small { display:none; }
+}
+/* No celular, 16 px nos campos: abaixo disso o navegador aproxima a página ao focar. */
+@media (max-width:760px) {
+  .ed :is(input[type="text"],textarea,select) { font-size:16px; }
+  .ed-rodape { padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
+}

@@ -6,8 +6,11 @@
 
 /* ---------- O botão da barra de baixo ----------
    Nunca no celular: montar uma cena de OBS é coisa de computador, e a barra do celular já está
-   no limite. estudio-sala.js também não o mostra num aparelho de toque. */
-#estudioBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='12' rx='2'/%3E%3Cpath d='m16 10 6-3v10l-6-3'/%3E%3C/svg%3E"); }
+   no limite. estudio-sala.js também não o mostra num aparelho de toque.
+
+   O desenho é o de transmissão -- um ponto com ondas dos dois lados --, e não uma câmera: o
+   botão Câmera fica ao lado, e duas câmeras na mesma barra faziam a pessoa ligar a errada. */
+#estudioBtn { --control-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cpath d='M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2'/%3E%3C/svg%3E"); }
 @media(max-width:760px) { #estudioBtn { display:none!important; } }
 
 /* ---------- O painel ---------- */
@@ -90,7 +93,7 @@
 .estudio-pessoa { display:grid; gap:8px; padding:10px; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--bg-2); transition:opacity var(--dur) var(--curva); }
 .estudio-pessoa.oculta .estudio-quem, .estudio-pessoa.oculta .estudio-imagem { opacity:.5; }
 .estudio-quem { display:flex; align-items:center; gap:10px; min-width:0; }
-.estudio-avatar { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:50%; color:#22202e; font-size:12px; font-weight:750; }
+.estudio-avatar { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:50%; color:#22202e; font-size:var(--fs-sm); font-weight:750; }
 .estudio-quem > div { min-width:0; }
 .estudio-quem strong { display:block; overflow:hidden; color:var(--text); font-size:var(--fs-md); font-weight:600; white-space:nowrap; text-overflow:ellipsis; }
 .estudio-quem small { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; color:var(--faint); font-size:var(--fs-meta); }

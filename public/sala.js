@@ -644,8 +644,10 @@ async function iniciarConexao() {
       atualizarModoSegundoPlano();
       try {
         const recent = JSON.parse(localStorage.getItem('nexoRecentRooms') || '[]');
-        localStorage.setItem('nexoRecentRooms', JSON.stringify([roomCode, ...(Array.isArray(recent) ? recent.filter(code => code !== roomCode) : [])].slice(0, 4)));
-      } catch (_) { /* Recent rooms are optional. */ }
+        // Doze: é a trilha do início de quem tem conta (inicio.js). A apresentação mostra as quatro
+        // primeiras. Continua só neste navegador (docs/plano-contas.md, seção 5).
+        localStorage.setItem('nexoRecentRooms', JSON.stringify([roomCode, ...(Array.isArray(recent) ? recent.filter(code => code !== roomCode) : [])].slice(0, 12)));
+      } catch (_) { /* As salas recentes são opcionais. */ }
       // Numa reconexao o microfone ja pode estar aberto; numa entrada normal, nao existe
       // microfone nenhum ainda e nao ha o que acompanhar.
       if (micStream) { acompanharVoz('self', micStream); montarFiltroDeRuido(); }
@@ -4001,7 +4003,7 @@ function atualizarExplicacaoDeAudio() {
   const plano = planoDeAudio();
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
-    aba: 'Marque "Compartilhar áudio da guia" na janela do navegador. Como vai só o som daquela aba, não há risco de eco.',
+    aba: 'Marque “Compartilhar áudio da guia” na janela do navegador. Como vai só o som daquela aba, não há risco de eco.',
     'janela-navegador': 'Vai só o som da janela escolhida, quando o navegador oferece essa opção — nunca o som do resto do sistema. Se não oferecer, a tela vai sem áudio.',
     agente: textoDaCaptura('agente'),
     helper: textoDaCaptura('helper'),
@@ -4010,7 +4012,7 @@ function atualizarExplicacaoDeAudio() {
     // ouvido dos outros, não no dela, e ela seria a última a descobrir.
     loopback: 'O som deste computador vai junto, inteiro. Use fones: sem eles, a voz dos outros'
       + ' volta para a sala como eco. Neste sistema o Nexo ainda não consegue tirar a si mesmo da captura.',
-    'navegador-sistema': 'Marque "Compartilhar áudio do sistema" na janela que abrir. Sem isso o navegador não envia som nenhum.'
+    'navegador-sistema': 'Marque “Compartilhar áudio do sistema” na janela que abrir. Sem isso o navegador não envia som nenhum.'
   };
   echoHint.textContent = textos[plano];
   if (captureMode.value === 'window' && aplicativoNativo && audioPolicy.value !== 'none') {
@@ -4035,7 +4037,7 @@ function atualizarExplicacaoDeAudio() {
       + ' em caixas de som, a voz dos outros volta como eco. Compartilhar uma aba do navegador não tem esse risco.';
   } else if (riscoDeEco) {
     const explicacoes = {
-      'helper-ausente': 'Sem o helper nativo não dá para tirar esta chamada da captura, e a voz dos outros pode voltar como eco. Rode "npm start" para compilá-lo, ou compartilhe uma aba.',
+      'helper-ausente': 'Sem o helper nativo não dá para tirar esta chamada da captura, e a voz dos outros pode voltar como eco. Rode “npm start” para compilá-lo, ou compartilhe uma aba.',
       'atras-de-proxy': 'Por um endereço público a captura nativa fica desativada: ela rodaria na máquina do servidor e enviaria o áudio de lá. O navegador captura o som daqui, mas a voz dos outros pode voltar como eco. Se você hospeda a sala, abra-a por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador.',
       remoto: 'A captura nativa só vale no computador que executa o servidor. O navegador captura o som daqui normalmente, mas a voz dos outros pode voltar como eco.'
     };
@@ -4082,7 +4084,7 @@ function atualizarCaixaDoAgente(plano) {
     ? (excluindoOutro
       ? 'O som do seu computador vai junto com a tela, sem o programa escolhido abaixo.'
       : 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.')
-    : 'Um arquivo só, sem instalar: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus reclamar, é alarme falso — escolha "Manter" nos downloads do navegador.';
+    : 'Um arquivo só, sem instalar: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus reclamar, é alarme falso — escolha “Manter” nos downloads do navegador.';
   // Dentro do aplicativo o agente vem junto: oferecer o download seria mandar a pessoa
   // resolver a mao um problema que o proprio aplicativo ja resolve.
   agenteDownload.hidden = conectado || Boolean(aplicativoNativo);
@@ -4293,7 +4295,7 @@ function avaliarRiscoDeEco() {
   if (!emRisco) return;
   avisoDeEco.textContent = `Eco à vista: o som da sua tela inclui este navegador, que está tocando a tela de `
     + `${outrosQueMandam.join(', ')}. O som deles volta para a sala pela sua transmissão. `
-    + `Para resolver, troque o modo para "Somente um programa" e escolha o que você quer transmitir.`;
+    + `Para resolver, troque o modo para “Somente um programa” e escolha o que você quer transmitir.`;
 }
 
 // Enquanto o painel esta aberto a lista se mantem viva: um programa que comeca a tocar
@@ -5104,7 +5106,9 @@ function encerrarMidiasDaSala() {
   transporte?.desconectar();
   limparAudioDoAplicativo().catch(() => {});
 }
-async function sairDaSala() {
+// `destino` é para onde a pessoa vai depois de sair direito: o início, ou a página da conta
+// (perfil-sala.js, "Senha e conta"), que é outra página e tira a pessoa da chamada do mesmo jeito.
+async function sairDaSala(destino = '/') {
   if (saindoDaSala) return;
   saindoDaSala = true;
   await Promise.race([relatarRecebimento(), new Promise(resolve => setTimeout(resolve, 400))]);
@@ -5113,9 +5117,9 @@ async function sairDaSala() {
     await new Promise(resolve => socket.timeout(900).emit('leave-room', () => resolve()));
   }
   socket?.disconnect();
-  window.location.assign('/');
+  window.location.assign(destino);
 }
-leaveBtn.onclick = sairDaSala;
+leaveBtn.onclick = () => sairDaSala();
 document.querySelectorAll('a[href="/"]').forEach(link => link.addEventListener('click', event => {
   if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
@@ -5604,6 +5608,7 @@ function atualizarRotulosDosQuadradinhos() {
 // do chat: o cartão abre com o que a mensagem sabe dele, diz que ele saiu e não oferece o que só
 // vale para quem está aqui (moderar, levar para o OBS, o tempo na sala).
 let perfilAberto = null;
+let pararEfeitoDoCartao = () => {};
 function abrirPerfil(id, reserva = null) {
   const ehEu = id === 'self';
   const par = ehEu ? null : peers.get(id);
@@ -5612,6 +5617,17 @@ function abrirPerfil(id, reserva = null) {
   perfilAberto = presente ? id : null;
   const nome = ehEu ? myName : par ? par.name : reserva.nome;
   const perfil = perfilDe(id) || reserva?.perfil || null;
+  // A vitrine da pessoa (cartao.js): banner, borda, bolha de pensamento, frase, bio e conquistas,
+  // como ela escolheu (o servidor já mandou só o que vale). Quem não tem conta ganha o cartão
+  // padrão do Nexo. Os ids são os de sempre, para o resto deste cartão continuar igual.
+  const codigoDaPessoa = perfil?.conta ? perfil.codigo : '';
+  const montado = NexoCartao.montar({
+    nome, perfil, cartao: perfil?.cartao || null, compacto: true, codigo: codigoDaPessoa,
+    apelidoMeu: !ehEu && codigoDaPessoa && window.NexoSocial?.relacao(codigoDaPessoa) === 'amigos' ? window.NexoSocial.pessoa(codigoDaPessoa)?.apelidoMeu || null : null,
+    ids: { avatar: 'perfilAvatar', nome: 'perfilNome', codigo: 'perfilCodigo' }
+  });
+  document.getElementById('perfilVitrine').replaceChildren(montado.el);
+  pararEfeitoDoCartao();
   const avatar = document.getElementById('perfilAvatar');
   pintarAvatar(avatar, nome, perfil);
   // Com foto, o avatar do cartão abre a foto grande. Sem foto não há o que ampliar: a cor e as
@@ -5631,7 +5647,8 @@ function abrirPerfil(id, reserva = null) {
     avatar.setAttribute('aria-hidden', 'true');
   }
   fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '' } : null;
-  document.getElementById('perfilNome').textContent = `${nome}${ehEu ? ' (você)' : ''}`;
+  // O apelido que eu dei a um amigo vale aqui também; o nome dele aparece embaixo (cartao.js).
+  if (ehEu) document.getElementById('perfilNome').textContent = `${nome} (você)`;
   document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
   document.getElementById('perfilDica').textContent = `${presente ? '' : 'Não está mais na sala. '}${perfil?.conta
     ? 'O código é permanente e não muda com o apelido: é ele que distingue esta pessoa de outras com o mesmo nome.'
@@ -5646,10 +5663,17 @@ function abrirPerfil(id, reserva = null) {
   const criar = document.getElementById('perfilCriarConta');
   criar.hidden = !(ehEu && !perfil?.conta);
   criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
-  // O próprio cartão leva ao editor: é ali que a pessoa se vê e pensa em mudar.
+  // O próprio cartão leva aos editores: é ali que a pessoa se vê e pensa em mudar. O do cartão
+  // completo abre aqui mesmo, num painel (social-sala.js).
   document.getElementById('perfilEditar').hidden = !(ehEu && perfil?.conta);
+  document.getElementById('perfilPersonalizar').hidden = !(ehEu && perfil?.conta && window.NexoSalaSocial);
   document.getElementById('perfilModerar').hidden = ehEu || !presente || !podeModerar || id === donoDaSala;
+  // Amizade (social-sala.js): adicionar, aceitar, mandar mensagem -- só entre contas.
+  window.NexoSalaSocial?.pintarCartao(document.getElementById('perfilSocial'), { codigo: codigoDaPessoa, nome, ehEu });
   document.getElementById('perfilPanel').classList.remove('hidden');
+  // O efeito escolhido pela pessoa toca por cima do cartão, depois de ele ter tamanho.
+  const vitrine = perfil?.cartao?.vitrine;
+  requestAnimationFrame(() => { pararEfeitoDoCartao = NexoCartao.efeito(montado.el, vitrine?.efeito, vitrine); });
 }
 // A foto grande, por cima do cartão. A imagem é a mesma do avatar: o navegador já a tem, e ela
 // aparece na hora. Fotos enviadas desde esta versão têm 512 px (imagem-envio.js), nítidas até o
@@ -5664,9 +5688,13 @@ function abrirFoto() {
   document.getElementById('fotoCodigo').textContent = fotoDoPerfil.codigo;
   document.getElementById('fotoPanel').classList.remove('hidden');
 }
-document.getElementById('perfilAvatar').addEventListener('click', abrirFoto);
-document.getElementById('perfilAvatar').addEventListener('keydown', evento => {
-  if (!fotoDoPerfil || !['Enter', ' '].includes(evento.key)) return;
+// O avatar nasce de novo a cada cartão (cartao.js monta a vitrine inteira): o ouvinte fica no
+// painel, e não nele.
+document.getElementById('perfilPanel').addEventListener('click', evento => {
+  if (evento.target.closest('#perfilAvatar')) abrirFoto();
+});
+document.getElementById('perfilPanel').addEventListener('keydown', evento => {
+  if (!evento.target.closest('#perfilAvatar') || !fotoDoPerfil || !['Enter', ' '].includes(evento.key)) return;
   evento.preventDefault();
   abrirFoto();
 });
@@ -5689,6 +5717,10 @@ document.getElementById('perfilModerar').onclick = () => {
 document.getElementById('perfilEditar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
   window.NexoPerfilSala?.abrir();
+};
+document.getElementById('perfilPersonalizar').onclick = () => {
+  document.getElementById('perfilPanel').classList.add('hidden');
+  window.NexoSalaSocial?.abrirEditor();
 };
 
 function removerTile(id) {
@@ -6834,7 +6866,9 @@ function abrirChat() {
   naoLidas = 0;
   chatBadge.classList.add('hidden');
   divisorDeNaoLidas = false;
-  chatInput.focus();
+  // Sem rolar: no começo do deslize o campo ainda está fora da coluna, e o navegador rolava a
+  // página inteira para alcançá-lo.
+  chatInput.focus({ preventScroll: true });
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 // "aberto" vale na tela estreita, onde o chat e uma camada; "sem-chat" vale na tela larga,

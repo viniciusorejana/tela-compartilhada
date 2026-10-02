@@ -21,9 +21,11 @@
   const conta = window.NexoConta ? window.NexoConta.pronto : Promise.resolve({ conta: null });
   conta.then(dados => {
     if (!dados?.conta) return;
+    // Com conta, `/` é o início (amigos e conversas); esta apresentação continua em `/sobre`.
     const link = document.getElementById('contaLink');
     link.textContent = dados.conta.apelido;
-    link.title = `Sua conta · @${dados.conta.usuario}`;
+    link.title = `Abrir o seu início · @${dados.conta.usuario}`;
+    link.href = '/';
   });
   // Criar uma sala é abrir uma, e só uma conta abre sala: quem clica sem conta vai para o
   // cadastro e volta direto para a sala nova. Entrar numa sala aberta continua sem cadastro.

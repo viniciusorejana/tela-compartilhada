@@ -25,7 +25,8 @@ const porta = 3233;
 const origem = `http://localhost:${porta}`;
 const LARGURAS = [320, 360, 390, 430, 480, 540, 600, 640, 700, 761, 800, 860, 920, 1000, 1101, 1180, 1251, 1320, 1440, 1600, 1920, 2560];
 const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'musica',
-  'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca'];
+  'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca',
+  'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta'];
 // Os painéis não mudam a cada 20 px: uma amostra das larguras basta, com os extremos.
 const LARGURAS_DE_PAINEL = [320, 360, 600, 760, 900, 1000, 1300, 1600, 2560];
 // O Estúdio também em janela baixa: é o painel mais alto da sala.
@@ -127,10 +128,18 @@ async function prepararEstado(pagina, estado) {
     if (e === 'tela') abrirPainelDeTela('start');
     if (e === 'convite') document.getElementById('invitePanel').classList.remove('hidden');
     if (e === 'sugestao') document.getElementById('sugestaoPanel').classList.remove('hidden');
+    // Amigos na sala (social-sala.js): o painel de convidar e as mensagens diretas.
+    if (e === 'convidar-amigos') NexoSalaSocial.abrirConvite();
+    if (e === 'mensagens') NexoSalaSocial.abrirMensagens();
+    // O cartão completo, num painel da sala, e o aviso antes de sair para a página da conta.
+    if (e === 'editor-cartao') NexoSalaSocial.abrirEditor();
+    if (e === 'ir-para-conta') NexoPerfilSala.confirmarIrParaConta();
     if (e.startsWith('novidades')) NexoNovidades.abrir({ aba: e === 'novidades' ? 'novidades' : 'conheca' });
   }, estado);
   // O Estúdio pede a sala ao servidor ao abrir: o desenho só vale depois da resposta.
   if (estado.startsWith('estudio')) await pagina.waitForFunction(() => document.querySelectorAll('#estudioLista .estudio-pessoa').length >= 2, null, { timeout: 5000 });
+  // O editor pede a vitrine ao servidor na primeira vez: o desenho só vale com a prévia na tela.
+  if (estado === 'editor-cartao') await pagina.waitForSelector('#editorCartaoSala .ed-previa-cartao .nx-cartao', { timeout: 5000 });
 }
 
 // Uma segunda pessoa, com nome longo e som de tela, para o quadradinho dela, a pílula de volume
@@ -175,6 +184,10 @@ async function criarSegundaPessoa(pagina) {
   const conferir = async (estado, largura, altura) => {
     await pagina.setViewportSize({ width: largura, height: altura });
     await prepararEstado(pagina, estado);
+    // As colunas deslizam quando a janela cruza um degrau de largura (sala.css): no meio do
+    // deslize, o chat já tem a largura final e a coluna ainda não -- o que é o efeito, e não
+    // defeito. O desenho que vale é o de depois.
+    await pagina.waitForFunction(() => !document.querySelector('.app').getAnimations().length, null, { timeout: 2000 }).catch(() => {});
     await pagina.waitForTimeout(60);
     for (const problema of await pagina.evaluate(detectar)) achados.push(`[${estado} ${largura}×${altura}] ${problema}`);
   };
@@ -188,7 +201,9 @@ async function criarSegundaPessoa(pagina) {
   // horizontal move a página? --, e não a largura medida: a órbita decorativa da página inicial
   // passa da borda de propósito, cortada pela janela, e isso não é defeito.
   const fora = await contexto.newPage();
-  for (const caminho of ['/', '/conta', '/pagina-que-nao-existe']) {
+  // Com o cookie da conta, `/` é o início de quem tem conta (e as seções dele); `/sobre` é a
+  // apresentação de sempre.
+  for (const caminho of ['/', '/?secao=perfil', '/?secao=conquistas', '/?secao=adicionar', '/sobre', '/conta', '/pagina-que-nao-existe']) {
     for (const largura of LARGURAS) {
       await fora.setViewportSize({ width: largura, height: 820 });
       await fora.goto(`${origem}${caminho}`);

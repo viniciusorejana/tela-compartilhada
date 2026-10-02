@@ -43,7 +43,7 @@
     <h1>Esta página saiu da sala.</h1>
     <p class="explica">O endereço <code id="caminho">/</code> não leva a lugar nenhum no Nexo. Pode ser um convite cortado, um código digitado errado ou uma página que mudou de lugar.</p>
 
-    <a class="sugestao" id="sugestao" href="/" hidden><span class="sugestao-icone" aria-hidden="true">#</span><span><small>Você quis dizer a sala</small><strong id="sugestaoNome"></strong></span><span class="sugestao-seta" aria-hidden="true">→</span></a>
+    <a class="sugestao" id="sugestao" href="/" hidden><span class="sugestao-icone" aria-hidden="true">#</span><span><small>Você quis dizer a sala</small><strong id="sugestaoNome"></strong></span><svg class="sugestao-seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
 
     <div class="acoes">
       <a class="botao" id="inicioBtn" href="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7M5 10v10h5v-6h4v6h5V10"/></svg>Ir para o início</a>
@@ -52,7 +52,7 @@
 
     <form class="entrar" id="entrarForm" novalidate>
       <label for="codigoSala">Tem o código de uma sala?</label>
-      <div class="campo"><span aria-hidden="true">#</span><input id="codigoSala" type="text" maxlength="32" placeholder="ex.: squad-da-noite" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="codigoErro"><button type="submit">Entrar <span aria-hidden="true">→</span></button></div>
+      <div class="campo"><span aria-hidden="true">#</span><input id="codigoSala" type="text" maxlength="32" placeholder="ex.: squad-da-noite" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="codigoErro"><button type="submit">Entrar <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
       <p class="erro" id="codigoErro" role="alert" hidden></p>
     </form>
 

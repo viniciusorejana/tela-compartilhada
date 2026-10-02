@@ -44,7 +44,8 @@
     $('chatPanel').classList.remove('aberto');
     naoLidasNaMusica = 0;
     marcarSidebar();
-    entrada.focus();
+    // Sem rolar, como o do chat: o campo nasce fora da coluna que ainda está abrindo.
+    entrada.focus({ preventScroll: true });
     mensagens.scrollTop = mensagens.scrollHeight;
   }
 
@@ -319,7 +320,7 @@
     titulo.textContent = disponivel ? 'Peça uma música.' : 'O bot não está instalado.';
     p.append(titulo, document.createTextNode(disponivel
       ? 'Escreva o nome, cole um link do YouTube, SoundCloud ou Spotify, e eu entro na chamada para tocar.'
-      : 'Na máquina que hospeda a sala, rode "npm run musica:instalar". O resto da sala funciona normalmente.'));
+      : 'Na máquina que hospeda a sala, rode “npm run musica:instalar”. O resto da sala funciona normalmente.'));
     mensagens.appendChild(p);
   }
 

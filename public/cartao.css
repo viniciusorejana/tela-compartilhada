@@ -1,0 +1,183 @@
+/* O cartão de perfil personalizável (cartao.js monta, public/vitrine.js decide o que vale).
+ *
+ * Vive no início, na sala e no editor do cartão, então se defende das regras globais de cada
+ * página (docs/interface.md, seção 8): nada de `button` ou `h2` solto aqui dentro sem classe.
+ *
+ * ---------- Por que as cores daqui são fixas ----------
+ *
+ * O cartão é a arte da pessoa -- como o vídeo é o de quem transmite --, e por isso é
+ * `.contexto-escuro`: escuro nos dois temas do Nexo. As duas cores da pessoa chegam como
+ * `--v1` e `--v2` (cartao.js) e são DECORAÇÃO: banner, borda, moldura. O texto nunca é a cor da
+ * pessoa crua: ele fica sobre um véu escuro (`.nx-cartao-corpo`) e usa os tokens do escuro; o
+ * nome colorido é a cor da pessoa clareada até ser legível.
+ *
+ * ---------- Movimento ----------
+ *
+ * Tudo o que anima aqui é contínuo e lento. Com menos movimento (do sistema ou da Aparência),
+ * tema.css encurta as animações para 1 ms com uma volta só: elas param no primeiro quadro, e o
+ * cartão fica como ficaria parado. */
+
+/* Um ângulo animável, para as bordas que giram. Sem isto (navegador antigo) elas ficam paradas,
+   no desenho do primeiro quadro -- continuam bonitas, só não giram. */
+@property --nx-giro { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+@keyframes nx-girar-borda { to { --nx-giro:360deg; } }
+
+.nx-cartao { --v1:#8879f6; --v2:#2b2456; --raio-cartao:var(--r-xl); position:relative; isolation:isolate; display:flex; flex-direction:column; width:100%; min-width:0; border-radius:var(--raio-cartao); background:#14141c; color:var(--text); text-align:left; overflow:hidden; font:14px/1.45 "Segoe UI",system-ui,sans-serif; }
+.nx-cartao :where(h2,h3,p) { margin:0; padding:0; font:inherit; letter-spacing:normal; }
+
+/* ---------- O fundo do cartão ---------- */
+.nx-cartao-fundo { position:absolute; inset:0; z-index:-1; overflow:hidden; background:linear-gradient(180deg,color-mix(in srgb,var(--v1) 22%,#14141c),color-mix(in srgb,var(--v2) 40%,#101016)); }
+.nx-cartao[data-fundo="liso"] .nx-cartao-fundo { background:#17171f; }
+.nx-cartao-fundo > .nx-anim { opacity:.55; }
+.nx-cartao-fundo > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.75; }
+/* O véu que garante o contraste do texto sobre qualquer fundo que a pessoa escolher. */
+.nx-cartao-fundo::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,#0c0c1255,#0c0c12b0 55%,#0c0c12d9); }
+
+/* ---------- O banner ---------- */
+/* O banner é posicionado, e não um irmão do topo com margem negativa: o avatar entra por cima dele
+   de propósito, e assim a sobreposição é uma camada, e não duas peças da mesma linha brigando pelo
+   lugar (é o que o teste de layout procura). */
+.nx-cartao { --altura-banner:104px; --avatar-sobe:42px; }
+.nx-cartao.compacto { --altura-banner:76px; --avatar-sobe:34px; }
+.nx-cartao-banner { position:absolute; top:0; left:0; right:0; height:var(--altura-banner); overflow:hidden; background:linear-gradient(135deg,var(--v1),var(--v2)); }
+.nx-cartao-banner > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+/* ---------- O avatar com borda e status ---------- */
+.nx-cartao-topo { position:relative; display:flex; align-items:flex-end; gap:12px; min-height:46px; margin-top:calc(var(--altura-banner) - var(--avatar-sobe)); padding:0 18px; }
+.nx-cartao.compacto .nx-cartao-topo { padding:0 14px; }
+.nx-av { --av:84px; --anel:4px; position:relative; flex:none; display:inline-grid; place-items:center; width:var(--av); height:var(--av); border-radius:50%; }
+.nx-av > .nx-av-img { position:relative; z-index:1; display:grid; place-items:center; width:100%; height:100%; border-radius:50%; color:var(--sobre-cor); font-weight:750; font-size:calc(var(--av) * .36); line-height:1; overflow:hidden; background-size:cover; background-position:center; box-shadow:0 0 0 var(--anel) #14141c; }
+.nx-av > .nx-av-img.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; }
+.nx-av > .nx-av-img.com-foto { color:transparent; }
+.nx-cartao .nx-av { --av:86px; }
+.nx-cartao.compacto .nx-av { --av:68px; }
+/* O ponto de status, no canto de baixo. A cor diz o estado; o título, para quem lê, também. */
+.nx-av-status { position:absolute; z-index:3; right:calc(var(--av) * .02); bottom:calc(var(--av) * .02); width:calc(var(--av) * .24); height:calc(var(--av) * .24); min-width:10px; min-height:10px; border-radius:50%; background:var(--faint); box-shadow:0 0 0 max(2px, calc(var(--av) * .05)) var(--nx-chao,#14141c); }
+.nx-av-status[data-status="online"] { background:var(--online); }
+.nx-av-status[data-status="ausente"] { background:var(--aviso); -webkit-mask:radial-gradient(circle at 30% 30%,transparent 32%,#000 34%); mask:radial-gradient(circle at 30% 30%,transparent 32%,#000 34%); }
+/* Ausente é a lua (o círculo comido no canto); não incomodar, o círculo com o traço. */
+.nx-av-status[data-status="ocupado"] { background:var(--danger); }
+.nx-av-status[data-status="ocupado"]::after { content:''; position:absolute; left:22%; right:22%; top:44%; height:12%; border-radius:2px; background:var(--nx-chao,#14141c); }
+.nx-av-status[data-status="offline"] { background:transparent; border:max(2px,calc(var(--av) * .045)) solid var(--faint); }
+.nx-av-status[hidden] { display:none; }
+
+/* As bordas: um anel em volta do avatar, desenhado num pseudo-elemento com a máscara de anel. */
+.nx-av::before,.nx-av::after { content:''; position:absolute; pointer-events:none; border-radius:50%; }
+/* O anel fica FORA do contorno escuro do avatar (a sombra de `--anel`), senão ele some por baixo. */
+.nx-av::before { inset:calc(var(--anel) * -2.1); z-index:0; padding:calc(var(--anel) * 1.05); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
+.nx-av[data-borda="nenhuma"]::before,.nx-av:not([data-borda])::before { display:none; }
+.nx-av::after { display:none; }
+.nx-av[data-borda="tema"]::before { background:linear-gradient(135deg,var(--v1),var(--v2)); }
+.nx-av[data-borda="brilho"]::before { background:conic-gradient(from var(--nx-giro),var(--v1),color-mix(in srgb,var(--v1) 40%,#fff),var(--v2),var(--v1)); animation:nx-girar-borda 4s linear infinite; }
+.nx-av[data-borda="pulso"]::before { background:var(--v1); animation:nx-pulso-borda 2.4s ease-in-out infinite; }
+@keyframes nx-pulso-borda { 0%,100% { box-shadow:0 0 0 0 color-mix(in srgb,var(--v1) 60%,transparent); opacity:.85; } 50% { box-shadow:0 0 14px 3px color-mix(in srgb,var(--v1) 55%,transparent); opacity:1; } }
+.nx-av[data-borda="orbita"]::before { background:color-mix(in srgb,var(--v1) 55%,transparent); padding:2px; }
+.nx-av[data-borda="orbita"]::after { display:block; inset:calc(var(--anel) * -2.4); z-index:2; background:radial-gradient(circle at 50% 4px,#fff 0 3px,color-mix(in srgb,var(--v1) 70%,#fff) 3.5px,transparent 6px); animation:nx-orbitar 3.2s linear infinite; }
+@keyframes nx-orbitar { to { transform:rotate(360deg); } }
+.nx-av[data-borda="arco-iris"]::before { background:conic-gradient(from var(--nx-giro),#ff6b6b,#ffd93d,#6bff95,#4fd1ff,#a78bfa,#ff6bd6,#ff6b6b); animation:nx-girar-borda 3s linear infinite; }
+.nx-av[data-borda="fogo"]::before { background:conic-gradient(from var(--nx-giro),#ff4d1a,#ffb31a,#ff7a1a,#ffd84d,#ff4d1a); animation:nx-girar-borda 2.2s linear infinite,nx-chama 1.1s ease-in-out infinite alternate; }
+@keyframes nx-chama { from { filter:drop-shadow(0 0 3px #ff6a1a); } to { filter:drop-shadow(0 -2px 9px #ffb31a); } }
+.nx-av[data-borda="neon"]::before { background:color-mix(in srgb,var(--v1) 75%,#fff); filter:drop-shadow(0 0 6px var(--v1)) drop-shadow(0 0 12px var(--v1)); animation:nx-neon 3.6s linear infinite; }
+@keyframes nx-neon { 0%,18%,22%,62%,64%,100% { opacity:1; } 20%,63% { opacity:.55; } }
+.nx-av[data-borda="estelar"]::before { background:conic-gradient(from var(--nx-giro),var(--v2),var(--v1),#fff,var(--v1),var(--v2)); animation:nx-girar-borda 6s linear infinite; }
+.nx-av[data-borda="estelar"]::after { display:block; inset:calc(var(--anel) * -3.4); z-index:2; background:radial-gradient(circle at 12% 30%,#fff 0 1.4px,transparent 2.4px),radial-gradient(circle at 88% 22%,#fff 0 1.8px,transparent 2.8px),radial-gradient(circle at 80% 86%,#fff 0 1.2px,transparent 2.2px),radial-gradient(circle at 20% 84%,#fff 0 1.6px,transparent 2.6px),radial-gradient(circle at 50% 2%,#fff 0 1.2px,transparent 2.2px); animation:nx-cintilar 1.8s ease-in-out infinite alternate; }
+@keyframes nx-cintilar { from { opacity:.25; } to { opacity:1; } }
+/* Pequeno (listas): o anel afina junto com o avatar. */
+.nx-av.pequeno { --av:34px; --anel:2px; }
+.nx-av.medio { --av:44px; --anel:2.5px; }
+
+/* ---------- A bolha de pensamento ---------- */
+/* Flutua ao lado do avatar, com as duas bolinhas de "pensamento" apontando para ele. */
+.nx-pensamento { position:relative; z-index:2; align-self:center; max-width:min(220px,calc(100% - 110px)); margin:0 0 6px; padding:8px 12px; border-radius:16px; background:#1d1d29f2; color:#eeeef5; font-size:var(--fs-sm); line-height:1.35; box-shadow:0 6px 18px #0007,0 0 0 1px #ffffff14; overflow-wrap:anywhere; animation:nx-flutuar 5s ease-in-out infinite; }
+.nx-pensamento::before,.nx-pensamento::after { content:''; position:absolute; border-radius:50%; background:#1d1d29f2; box-shadow:0 0 0 1px #ffffff14; }
+.nx-pensamento::before { left:-9px; bottom:4px; width:10px; height:10px; }
+.nx-pensamento::after { left:-17px; bottom:-2px; width:6px; height:6px; }
+@keyframes nx-flutuar { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+
+/* ---------- O corpo: nome, frase, bio, conquistas ---------- */
+.nx-cartao-corpo { position:relative; display:grid; gap:10px; margin:12px 12px 12px; padding:14px; border-radius:var(--r-lg); background:#0b0b11b8; box-shadow:inset 0 0 0 1px #ffffff0f; -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+.nx-cartao.compacto .nx-cartao-corpo { margin:10px; padding:12px; gap:8px; }
+.nx-cartao-quem { display:grid; gap:2px; min-width:0; }
+.nx-cartao-nome { font-size:20px; font-weight:750; letter-spacing:-.02em; line-height:1.2; color:#f3f2fa; overflow-wrap:anywhere; }
+.nx-cartao.compacto .nx-cartao-nome { font-size:var(--fs-lg); }
+.nx-cartao-linha { color:#b9b7cc; font-size:var(--fs-sm); overflow-wrap:anywhere; }
+.nx-cartao-codigo { font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
+.nx-cartao-frase { display:flex; align-items:baseline; gap:6px; color:#dcdbe8; font-size:var(--fs-sm); overflow-wrap:anywhere; }
+.nx-cartao-frase b { font-weight:400; flex:none; }
+.nx-cartao-separador { height:1px; background:#ffffff14; }
+.nx-cartao-rotulo { color:#a7a5bb; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+.nx-cartao-bio { color:#e2e1ee; font-size:var(--fs-sm); line-height:1.55; white-space:pre-line; overflow-wrap:anywhere; }
+.nx-cartao-desde { color:#a7a5bb; font-size:var(--fs-meta); }
+.nx-cartao-presenca { display:flex; align-items:center; gap:7px; color:#d6d5e3; font-size:var(--fs-sm); }
+.nx-cartao-presenca strong { font-weight:650; color:#f3f2fa; }
+
+/* Os estilos do nome. A cor da pessoa é clareada até ficar legível sobre o véu escuro. */
+.nx-cartao-nome[data-estilo="tema"],.nx-nome-estilo[data-estilo="tema"] { background:linear-gradient(90deg,color-mix(in oklab,var(--v1) 62%,#fff),color-mix(in oklab,var(--v2) 35%,#fff)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.nx-cartao-nome[data-estilo="brilho"],.nx-nome-estilo[data-estilo="brilho"] { background:linear-gradient(100deg,color-mix(in oklab,var(--v1) 55%,#fff) 30%,#fff 45%,color-mix(in oklab,var(--v1) 55%,#fff) 60%); background-size:250% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:nx-reflexo 3.2s ease-in-out infinite; }
+@keyframes nx-reflexo { from { background-position:100% 0; } to { background-position:-50% 0; } }
+.nx-cartao-nome[data-estilo="neon"],.nx-nome-estilo[data-estilo="neon"] { color:color-mix(in oklab,var(--v1) 45%,#fff); text-shadow:0 0 6px color-mix(in srgb,var(--v1) 80%,transparent),0 0 16px color-mix(in srgb,var(--v1) 55%,transparent); }
+
+/* As conquistas à mostra: selos redondos, com o nome no título. */
+.nx-selos { display:flex; flex-wrap:wrap; gap:6px; }
+.nx-selo { display:inline-grid; place-items:center; width:30px; height:30px; border-radius:10px; background:linear-gradient(135deg,color-mix(in srgb,var(--v1) 35%,#1e1e2a),#1a1a24); box-shadow:inset 0 0 0 1px #ffffff1a; color:#ffe9a8; transition:transform var(--dur) var(--curva-mola); }
+.nx-selo:hover { transform:translateY(-2px) scale(1.06); }
+.nx-selo svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ---------- As molduras do cartão inteiro ---------- */
+.nx-cartao[data-moldura]:not([data-moldura="nenhuma"])::after { content:''; position:absolute; inset:0; z-index:4; pointer-events:none; border-radius:inherit; padding:3px; -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
+.nx-cartao[data-moldura="tema"]::after { background:linear-gradient(135deg,var(--v1),var(--v2)); }
+.nx-cartao[data-moldura="dourada"]::after { background:linear-gradient(135deg,#fff3b0,#d4a017 25%,#8a5a00 50%,#ffe27a 75%,#b8860b); background-size:200% 200%; animation:nx-ouro 6s ease-in-out infinite alternate; }
+@keyframes nx-ouro { from { background-position:0 0; } to { background-position:100% 100%; } }
+.nx-cartao[data-moldura="neon"]::after { background:color-mix(in srgb,var(--v1) 80%,#fff); filter:drop-shadow(0 0 6px var(--v1)); animation:nx-neon 4.2s linear infinite; }
+.nx-cartao[data-moldura="holografica"]::after { background:conic-gradient(from var(--nx-giro),#ffb3d9,#b3e5ff,#c9b3ff,#b3ffd9,#fff2b3,#ffb3d9); animation:nx-girar-borda 5s linear infinite; }
+
+/* ---------- Os animados (banner e fundo) ----------
+   `--v1` e `--v2` são as cores da pessoa. Tudo em CSS, sem imagem: pesa nada para baixar. */
+.nx-anim { position:absolute; inset:0; overflow:hidden; background:linear-gradient(160deg,var(--v1),var(--v2)); }
+.nx-anim::before,.nx-anim::after { content:''; position:absolute; pointer-events:none; }
+
+.nx-anim[data-anim="aurora"] { background:linear-gradient(170deg,color-mix(in srgb,var(--v2) 80%,#05060c),#06070d); }
+.nx-anim[data-anim="aurora"]::before { inset:-50%; background:radial-gradient(38% 48% at 32% 42%,color-mix(in srgb,var(--v1) 85%,#fff),transparent 70%),radial-gradient(34% 44% at 68% 58%,color-mix(in srgb,var(--v1) 40%,#5ef2c8),transparent 70%),radial-gradient(30% 36% at 50% 30%,color-mix(in srgb,var(--v2) 60%,#c58cff),transparent 72%); filter:blur(16px); opacity:.9; animation:nx-aurora 10s ease-in-out infinite alternate; }
+@keyframes nx-aurora { 0% { transform:translate(-7%,-5%) rotate(0deg); } 100% { transform:translate(7%,6%) rotate(28deg); } }
+
+.nx-anim[data-anim="estrelas"] { background:radial-gradient(130% 100% at 50% 0%,color-mix(in srgb,var(--v1) 40%,#0b0b16),#06060b); }
+.nx-anim[data-anim="estrelas"]::before,.nx-anim[data-anim="estrelas"]::after { inset:0; background-image:radial-gradient(1.3px 1.3px at 18px 26px,#fff,transparent),radial-gradient(1px 1px at 74px 64px,#fff,transparent),radial-gradient(1.6px 1.6px at 128px 18px,#fff,transparent),radial-gradient(1px 1px at 150px 82px,#fff,transparent),radial-gradient(1.2px 1.2px at 40px 90px,#fff,transparent); background-size:170px 104px; animation:nx-cintilar 2.6s ease-in-out infinite alternate; }
+.nx-anim[data-anim="estrelas"]::after { background-size:230px 150px; background-position:60px 34px; animation-delay:-1.3s; opacity:.7; }
+
+.nx-anim[data-anim="bolhas"] { background:linear-gradient(180deg,color-mix(in srgb,var(--v1) 70%,#0a0a12),color-mix(in srgb,var(--v2) 80%,#07070c)); }
+.nx-anim[data-anim="bolhas"]::before,.nx-anim[data-anim="bolhas"]::after { inset:0; background-image:radial-gradient(circle at 20px 20px,transparent 6px,#ffffff59 7px,transparent 8.5px),radial-gradient(circle at 70px 60px,transparent 3px,#ffffff47 4px,transparent 5px),radial-gradient(circle at 120px 30px,transparent 9px,#ffffff40 10px,transparent 11.5px); background-size:150px 110px; animation:nx-subir 9s linear infinite; }
+.nx-anim[data-anim="bolhas"]::after { background-size:210px 160px; background-position:50px 0; animation-duration:13s; opacity:.7; }
+@keyframes nx-subir { from { background-position-y:0; } to { background-position-y:-220px; } }
+
+.nx-anim[data-anim="ondas"] { background:linear-gradient(180deg,color-mix(in srgb,var(--v1) 85%,#fff 5%),var(--v2)); }
+.nx-anim[data-anim="ondas"]::before,.nx-anim[data-anim="ondas"]::after { left:0; right:0; bottom:0; height:70%; background:radial-gradient(70px 26px at 50% 0,transparent 97%,#ffffff26 100%) 0 0 / 120px 100% repeat-x; animation:nx-ondas 6s linear infinite; }
+.nx-anim[data-anim="ondas"]::after { height:45%; background:radial-gradient(60px 22px at 50% 0,transparent 97%,#0000002e 100%) 0 0 / 100px 100% repeat-x; animation-duration:4s; animation-direction:reverse; }
+@keyframes nx-ondas { from { background-position-x:0; } to { background-position-x:240px; } }
+
+.nx-anim[data-anim="prisma"] { background:#0c0c14; }
+.nx-anim[data-anim="prisma"]::before { inset:-60%; background:conic-gradient(from var(--nx-giro),var(--v1),#ff8fd0,#ffd27a,#7affc8,#7ab8ff,var(--v1)); filter:blur(22px) saturate(1.1); opacity:.85; animation:nx-girar-borda 12s linear infinite; }
+
+.nx-anim[data-anim="chuva"] { background:linear-gradient(180deg,#05050a,color-mix(in srgb,var(--v2) 60%,#05050a)); }
+.nx-anim[data-anim="chuva"]::before { inset:0; background-image:linear-gradient(180deg,transparent 0 55%,color-mix(in srgb,var(--v1) 90%,#fff) 85%,transparent 100%),linear-gradient(180deg,transparent 0 60%,#7affff 88%,transparent 100%),linear-gradient(180deg,transparent 0 50%,color-mix(in srgb,var(--v1) 70%,#ff7ad9) 82%,transparent 100%),linear-gradient(180deg,transparent 0 58%,#fff 86%,transparent 100%); background-size:2px 90px,2px 120px,2px 70px,1px 100px; background-repeat:repeat-y; background-position:12% 0,37% 30px,63% 10px,86% 50px; animation:nx-chuva 1.4s linear infinite; filter:drop-shadow(0 0 3px var(--v1)); }
+@keyframes nx-chuva { to { background-position:12% 90px,37% 150px,63% 80px,86% 150px; } }
+
+.nx-anim[data-anim="nebulosa"] { background:#05050b; }
+.nx-anim[data-anim="nebulosa"]::before { inset:-40%; background:radial-gradient(30% 40% at 35% 45%,color-mix(in srgb,var(--v1) 90%,#fff),transparent 70%),radial-gradient(28% 34% at 65% 50%,#ff7ad9,transparent 70%),radial-gradient(40% 30% at 50% 70%,color-mix(in srgb,var(--v2) 80%,#7ab8ff),transparent 70%),conic-gradient(from var(--nx-giro) at 50% 50%,transparent,color-mix(in srgb,var(--v1) 35%,transparent),transparent 40%); filter:blur(14px); animation:nx-girar-borda 30s linear infinite; }
+.nx-anim[data-anim="nebulosa"]::after { inset:0; background-image:radial-gradient(1px 1px at 22px 18px,#fff,transparent),radial-gradient(1.4px 1.4px at 90px 70px,#fff,transparent),radial-gradient(1px 1px at 150px 40px,#fff,transparent); background-size:180px 110px; animation:nx-cintilar 3s ease-in-out infinite alternate; }
+
+.nx-anim[data-anim="grade"] { background:linear-gradient(180deg,#0b0216 0%,color-mix(in srgb,var(--v1) 60%,#2a0638) 52%,#0a0212 53%); }
+.nx-anim[data-anim="grade"]::before { left:50%; top:16%; width:42%; aspect-ratio:1; transform:translateX(-50%); border-radius:50%; background:linear-gradient(180deg,#ffd27a,#ff5ec4 70%); -webkit-mask:repeating-linear-gradient(180deg,#000 0 7px,transparent 7px 10px); mask:repeating-linear-gradient(180deg,#000 0 7px,transparent 7px 10px); opacity:.9; }
+.nx-anim[data-anim="grade"]::after { left:-30%; right:-30%; bottom:0; height:48%; background:linear-gradient(transparent 92%,color-mix(in srgb,var(--v1) 80%,#ff5ec4) 92%) 0 0 / 100% 20px,linear-gradient(90deg,transparent 94%,color-mix(in srgb,var(--v1) 80%,#ff5ec4) 94%) 0 0 / 34px 100%; transform:perspective(160px) rotateX(58deg); transform-origin:bottom; animation:nx-grade 1.2s linear infinite; }
+@keyframes nx-grade { to { background-position:0 20px,0 0; } }
+
+/* O efeito ao abrir o cartão: um canvas transparente por cima de tudo, que não recebe clique. */
+.nx-cartao-efeito { position:absolute; inset:0; z-index:6; width:100%; height:100%; pointer-events:none; }
+
+/* As ações (a página põe as dela): os botões ficam embaixo, dentro do véu. */
+.nx-cartao-acoes { display:flex; flex-wrap:wrap; gap:6px; }
+.nx-cartao-acoes:empty { display:none; }
+
+@media (max-width:420px) {
+  .nx-cartao .nx-av { --av:72px; }
+  .nx-pensamento { max-width:calc(100% - 92px); }
+}

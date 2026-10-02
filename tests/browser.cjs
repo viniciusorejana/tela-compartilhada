@@ -196,7 +196,8 @@ async function esperarCodec(page, fonte, esperado) {
   await host.setViewportSize({ width: 1440, height: 940 });
 
   await host.locator('#audienceToggle').click();
-  assert.equal(await host.locator('.participants-section').isVisible(), false);
+  // A plateia dobra (sala.css): some de vez no fim do deslize, e não no clique.
+  await host.locator('.participants-section').waitFor({ state: 'hidden' });
   assert.equal(await host.locator('#audienceToggle').getAttribute('aria-pressed'), 'true');
   await host.locator('#sidebarToggle').click();
   assert.equal(await host.locator('.app').evaluate(el => el.classList.contains('barra-recolhida') && el.classList.contains('plateia-oculta')), true);
@@ -224,7 +225,8 @@ async function esperarCodec(page, fonte, esperado) {
     await host.getByText('Teste de interface WebKit', { exact: true }).waitFor();
     await host.locator('#devicesBtn').click();
     await host.keyboard.press('Escape');
-    assert.equal(await host.locator('#devicesPanel').isVisible(), false);
+    // O painel sai com movimento (sala.css): fechado é no fim da saída.
+    await host.locator('#devicesPanel').waitFor({ state: 'hidden' });
     await host.setViewportSize({ width: 390, height: 844 });
     await host.screenshot({ path: path.join(output, 'sala-mobile.png') });
     assert.ok(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -789,7 +791,7 @@ async function esperarCodec(page, fonte, esperado) {
 
   await viewer.locator('#devicesBtn').click();
   await viewer.keyboard.press('Escape');
-  assert.equal(await viewer.locator('#devicesPanel').isVisible(), false);
+  await viewer.locator('#devicesPanel').waitFor({ state: 'hidden' });
   await viewer.locator('#sidebarToggle').click();
   await viewer.locator('.connection-box [data-action="diagnostics"]').click();
   await viewer.waitForFunction(() => document.getElementById('diagnosticsReport').textContent.includes('quadros decodificados='));

@@ -200,6 +200,7 @@
     $('configEditarPerfil').hidden = !temConta;
     $('configCriarConta').hidden = temConta;
     $('configConta').hidden = !temConta;
+    $('configCartao').hidden = !temConta || !window.NexoSalaSocial;
     $('configPerfilDica').textContent = temConta
       ? 'Apelido, cor e marca mudam na hora para todo mundo nesta sala, e valem nas próximas.'
       : 'Sem conta, o nome vale só nesta entrada. Com uma conta grátis você escolhe apelido, cor e marca, e o perfil segue você em todo aparelho.';
@@ -207,6 +208,11 @@
   $('configEditarPerfil').addEventListener('click', () => {
     painel.classList.add('hidden');
     window.NexoPerfilSala?.abrir();
+  });
+  // O cartão completo abre num painel da sala, sem sair da chamada (social-sala.js).
+  $('configCartao').addEventListener('click', () => {
+    painel.classList.add('hidden');
+    window.NexoSalaSocial?.abrirEditor();
   });
   $('configCriarConta').href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
 

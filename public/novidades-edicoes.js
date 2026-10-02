@@ -21,13 +21,28 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 4,
+      data: '2026-10-01',
+      titulo: 'Amigos, conversas e um perfil só seu',
+      resumo: 'Quem tem conta ganhou um início com os amigos, as conversas e as salas recentes, um cartão de perfil para montar do seu jeito e conquistas que se ganham usando o Nexo.',
+      aparecer: true,
+      itens: [
+        { icone: 'casa', titulo: 'Um início para quem tem conta', texto: 'Abrindo o Nexo com a conta, você cai direto nos seus amigos: quem está conectado, em que sala cada um está, e um botão para entrar junto. As salas recentes ficam na trilha da esquerda.', onde: 'O endereço do Nexo, com a conta aberta' },
+        { icone: 'amigos', titulo: 'Amigos', texto: 'Peça amizade pelo nome de usuário ou pelo código, aceite, recuse e bloqueie. Dê um apelido a cada amigo: só você vê.', onde: 'Início → Adicionar amigo, ou o cartão de alguém na sala' },
+        { icone: 'chat', titulo: 'Mensagens diretas e convites', texto: 'Converse com um amigo fora da chamada e chame para uma sala com um clique; o convite chega como aviso, onde a pessoa estiver. As mensagens ficam só na memória do servidor e somem três dias depois da última.', onde: 'Início → Mensagens diretas, ou o botão de mensagens na sala' },
+        { icone: 'tema', titulo: 'Um cartão de perfil do seu jeito', texto: 'Banner e fundo animados ou com imagem, borda no avatar, moldura, um efeito que toca quando alguém abre o seu cartão, estilo do nome, bio, pronomes e uma bolha de pensamento que dura um dia. Dá para montar no meio da chamada, sem sair da sala.', onde: 'Início → Personalizar perfil, ou Meu perfil → Personalizar o cartão, na sala' },
+        { icone: 'trofeu', titulo: 'Conquistas', texto: 'Horas em sala, salas abertas, telas e mensagens viram conquistas, e algumas liberam peças do cartão. São só somas: o Nexo não guarda onde, com quem nem quando.', onde: 'Início → Conquistas' },
+        { icone: 'estudio', titulo: 'O Estúdio ganhou desenho próprio', texto: 'O botão do Estúdio deixou de ser uma câmera: agora é o sinal de transmissão, e não se confunde mais com o da câmera, logo ao lado.', onde: 'Barra de baixo da sala' }
+      ]
+    },
+    {
       id: 3,
       data: '2026-09-29',
       titulo: 'A sala no seu OBS',
       resumo: 'A câmera, a tela e a voz de quem está na sala viram fontes do OBS por um link, os rostos da sala reagem a quem fala, e o seu perfil ganhou foto.',
       aparecer: true,
       itens: [
-        { icone: 'camera', titulo: 'Qualquer fonte da sala no OBS', texto: 'Copie o link da câmera, da tela, da voz ou do som da tela de alguém e cole como fonte Navegador no OBS. Sem capturar janela: a imagem chega direto do Nexo, na qualidade de quem transmite.', onde: 'Clique no nome da pessoa → Levar para o OBS' },
+        { icone: 'estudio', titulo: 'Qualquer fonte da sala no OBS', texto: 'Copie o link da câmera, da tela, da voz ou do som da tela de alguém e cole como fonte Navegador no OBS. Sem capturar janela: a imagem chega direto do Nexo, na qualidade de quem transmite.', onde: 'Clique no nome da pessoa → Levar para o OBS' },
         { icone: 'rosto', titulo: 'Rostos que reagem à voz', texto: 'Uma fonte com o rosto de cada pessoa da sala: quem fala pula, quem está quieto fica apagado. Escolha o efeito, o formato e o tamanho dos rostos e dos nomes, e dê a cada pessoa uma imagem parada e outra falando — só no seu OBS.', onde: 'Botão Estúdio, na barra de baixo (no computador)' },
         { icone: 'link', titulo: 'Os links seguem você', texto: 'Monte a cena uma vez: a câmera da Ana funciona em qualquer chamada com a Ana, em qualquer sala. Colou um link no lugar errado? Desligue todos de uma vez.', onde: 'Estúdio → Desligar meus links' },
         { icone: 'olho', titulo: 'Quem aparece fica sabendo', texto: 'Um selo OBS mostra na sala quem está levando o quê, e cada pessoa decide se pode ser levada. Desligar tira do ar na hora.', onde: 'Configurações → Estúdio (OBS)' },

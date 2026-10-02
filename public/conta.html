@@ -32,7 +32,7 @@
         <label for="entrarSenha">Senha</label>
         <input id="entrarSenha" name="senha" type="password" autocomplete="current-password" maxlength="128" required>
         <p class="error" role="alert" hidden></p>
-        <button type="submit">Entrar <span aria-hidden="true">→</span></button>
+        <button type="submit">Entrar <svg class="ico seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
         <button type="button" class="conta-link-texto" id="irParaRecuperar">Esqueci a senha</button>
       </form>
 
@@ -45,10 +45,10 @@
         <small id="criarApelidoDica">É o nome que a sala mostra. Pode repetir o de outra pessoa e pode ser trocado quando quiser.</small>
         <label for="criarSenha">Senha</label>
         <input id="criarSenha" name="senha" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="criarSenhaDica">
-        <small id="criarSenhaDica">Pelo menos 10 caracteres. Uma frase curta é mais fácil de lembrar e mais difícil de adivinhar do que "Senha@123".</small>
+        <small id="criarSenhaDica">Pelo menos 10 caracteres. Uma frase curta é mais fácil de lembrar e mais difícil de adivinhar do que “Senha@123”.</small>
         <p class="conta-aviso"><strong>Sem e-mail, por enquanto.</strong> No lugar dele você recebe um código de recuperação, mostrado uma vez só. Perdeu a senha e o código, perdeu a conta.</p>
         <p class="error" role="alert" hidden></p>
-        <button type="submit">Criar minha conta <span aria-hidden="true">→</span></button>
+        <button type="submit">Criar minha conta <svg class="ico seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
       </form>
 
       <form id="formRecuperar" role="tabpanel" aria-labelledby="abaRecuperar" novalidate hidden>
@@ -65,7 +65,7 @@
         <input id="recuperarSenha" name="nova" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="recuperarSenhaDica">
         <small id="recuperarSenhaDica">Pelo menos 10 caracteres, e não pode ser o seu usuário nem o seu apelido.</small>
         <p class="error" role="alert" hidden></p>
-        <button type="submit">Recuperar a conta <span aria-hidden="true">→</span></button>
+        <button type="submit">Recuperar a conta <svg class="ico seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
       </form>
     </section>
 
@@ -77,7 +77,7 @@
       <p class="conta-sub" id="copiarAviso" role="status"></p>
       <p class="conta-aviso"><strong>Perdeu a senha e o código, perdeu a conta.</strong> Anote num lugar seu: um gerenciador de senhas, um papel guardado.</p>
       <label class="conta-confirma"><input type="checkbox" id="guardeiCodigo"> Guardei o código</label>
-      <button type="button" id="seguirDoCodigo" disabled>Continuar <span aria-hidden="true">→</span></button>
+      <button type="button" id="seguirDoCodigo" disabled>Continuar <svg class="ico seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </section>
 
     <!-- Com conta. -->

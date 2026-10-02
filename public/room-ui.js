@@ -23,7 +23,8 @@
   // desktop ela e uma coluna do grid, e o botao so aparece quando ela esta recolhida, para
   // traze-la de volta. Um estado unico para os dois faria o botao mentir numa das larguras.
   const CHAVE_DA_BARRA = 'nexoBarraRecolhida';
-  const estreita = window.matchMedia('(max-width:700px)');
+  // 760 px, a fronteira do celular (docs/interface.md): abaixo dela a barra é gaveta (sala.css).
+  const estreita = window.matchMedia('(max-width:760px)');
   const telaEstreita = () => estreita.matches;
 
   // Um botao so, e ele fica no TOPO -- nunca dentro da barra. A primeira versao tinha um
@@ -72,6 +73,15 @@
   catch (_) { definirPlateiaOculta(false, false); }
   $('audienceToggle').onclick = () => definirPlateiaOculta(!appRoot.classList.contains('plateia-oculta'));
 
+  // Lateral, chat e plateia deslizam (sala.css), e o palco muda de tamanho DURANTE o movimento.
+  // Quem mede o palco -- o zoom, o arrasto, a grade -- ouve `resize`; ele vai de novo no fim do
+  // deslize, quando o tamanho é o definitivo.
+  appRoot.addEventListener('transitionend', evento => {
+    const fim = (evento.target === appRoot && evento.propertyName === 'grid-template-columns')
+      || (evento.target.classList?.contains('participants-section') && evento.propertyName === 'grid-template-rows');
+    if (fim) window.dispatchEvent(new Event('resize'));
+  });
+
   $('sidebarToggle').onclick = () => {
     if (!telaEstreita()) { definirBarraRecolhida(!appRoot.classList.contains('barra-recolhida')); return; }
     const open = appRoot.classList.toggle('sidebar-open');
@@ -117,7 +127,14 @@
     $('sessionClock').textContent = joined && desde ? `Você está há ${NexoTempo.relogio(Date.now() - desde)}` : 'Sua sessão começa aqui';
     $('selfName').textContent = myName || 'Seu perfil';
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
-    $('selfState').textContent = !joined ? 'Pronto para entrar' : ensurdecido ? 'Ensurdecido' : micMuted ? 'Microfone desligado' : 'Microfone ligado';
+    // Duas formas da mesma frase: a inteira onde ela cabe (a gaveta do celular) e a curta na lateral
+    // do computador, onde "Microfone desligado" quebrava em duas linhas em qualquer largura
+    // (sala.css, `container: eu`). A inteira fica no `title`.
+    const [longo, curto] = !joined ? ['Pronto para entrar', 'Fora da sala'] : ensurdecido ? ['Ensurdecido', 'Ensurdecido'] : micMuted ? ['Microfone desligado', 'Mic mudo'] : ['Microfone ligado', 'Mic ligado'];
+    const estadoEu = $('selfState');
+    estadoEu.title = longo;
+    estadoEu.querySelector('.estado-longo').textContent = longo;
+    estadoEu.querySelector('.estado-curto').textContent = curto;
     for (const id of ['memberTotal', 'sidebarCount', 'tileCount']) $(id).textContent = total;
     const live = [...peers.values()].filter(p => p.state.screen).length + Number(Boolean(screenStream));
     $('sessionBadge').textContent = live ? `${live} ${live === 1 ? 'TELA AO VIVO' : 'TELAS AO VIVO'}` : 'SALA DE VOZ';
@@ -314,7 +331,7 @@
       linhas.push(`Sem codificação eficiente em 1080p/30 para: ${software.join(', ')}.`
         + (hardware.length || !transmitindo ? '' : ' Quem codifica é o processador, e isso pesa no computador de'
           + ' quem transmite — inclusive nos jogos. Não é ajustável por aqui: confira'
-          + ' "Video Encode" em chrome://gpu, o driver de vídeo e adaptadores de vídeo'
+          + ' “Video Encode” em chrome://gpu, o driver de vídeo e adaptadores de vídeo'
           + ' virtuais (Parsec, monitores USB) que possam estar no caminho.'));
     }
     if (desconhecido.length) linhas.push(`Sem resposta do navegador para: ${desconhecido.join(', ')}.`);
@@ -818,7 +835,7 @@
     faltouTexto: 'Escreva em uma linha o que aconteceu. Sem isso, o relatório é só números.',
     // Aqui a alternativa importa mais do que o erro: se o envio falhou, é bem possível que o
     // problema seja exatamente o servidor, e o caminho que sobra é copiar.
-    aoFalhar: ' Use "Copiar diagnóstico" e mande por outro caminho.'
+    aoFalhar: ' Use “Copiar diagnóstico” e mande por outro caminho.'
   });
 
   ligarEnvio({
@@ -857,7 +874,9 @@
     if (next) {
       if (!activeDialog) previousFocus = document.activeElement;
       activeDialog = next;
-      (next.querySelector('input:not([type="file"])') || focusable(next)[0])?.focus();
+      // `data-foco-inicial` vence o primeiro campo: no editor do cartão o primeiro campo é o seletor
+      // de cor, e o lugar de começar é a aba escolhida.
+      (next.querySelector('[data-foco-inicial]') || next.querySelector('input:not([type="file"])') || focusable(next)[0])?.focus();
     } else {
       activeDialog = null;
       const currentFocus = document.activeElement;

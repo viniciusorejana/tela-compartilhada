@@ -10,9 +10,9 @@ button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .brand { display:flex; gap:12px; align-items:center; }
 .brand strong { font-size:21px; letter-spacing:.08em; }
 .brand strong span { color:var(--apagado); margin-left:8px; font-weight:400; }
-.brand small { color:var(--muted); font-size:11px; }
-.nav-note { color:var(--faint); font-size:var(--fs-rotulo); font-weight:650; letter-spacing:.12em; display:flex; align-items:center; gap:10px; }
-.nav-note i { width:6px; height:6px; background:#98c9a9; border-radius:50%; }
+.brand small { color:var(--muted); font-size:var(--fs-meta); }
+.nav-note { color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.12em; display:flex; align-items:center; gap:10px; }
+.nav-note i { width:6px; height:6px; background:var(--online); border-radius:50%; }
 .nav-acoes { display:flex; align-items:center; gap:22px; }
 .nav-link { display:inline-flex; align-items:center; min-height:var(--ctl-m); color:var(--text-2); font-size:var(--fs-sm); font-weight:600; border:1px solid var(--line-3); border-radius:var(--r-md); padding:0 14px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; transition:background-color var(--dur) var(--curva),border-color var(--dur) var(--curva); }
 .nav-link:hover { background:rgb(var(--tinta) / 5.9%); border-color:rgb(var(--tinta) / 22%); }
@@ -24,8 +24,8 @@ button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
 main { max-width:1160px; margin:0 auto; padding:0 40px; }
 .hero { display:grid; grid-template-columns:1.15fr 1fr; align-items:center; gap:90px; padding:63px 0 68px; }
 .hero-copy { position:relative; }
-.eyebrow { font-size:var(--fs-rotulo); letter-spacing:.14em; font-weight:650; color:var(--text-3); }
-.eyebrow span { font-size:19px; color:var(--accent-texto); margin-right:9px; vertical-align:middle; }
+.eyebrow { font-size:var(--fs-rotulo); letter-spacing:.14em; font-weight:750; color:var(--text-3); }
+.eyebrow span { font-size:var(--fs-xl); color:var(--accent-texto); margin-right:9px; vertical-align:middle; }
 h1 { font-size:clamp(48px,5.1vw,71px); line-height:1.05; letter-spacing:-.065em; font-weight:650; margin:22px 0 24px; }
 h1 em { font-style:normal; color:var(--accent-hi); }
 .hero-copy>p { color:var(--muted); font-size:14px; max-width:355px; line-height:1.9; margin:0; }
@@ -38,7 +38,7 @@ h1 em { font-style:normal; color:var(--accent-hi); }
 .entry-orbit { position:absolute; width:105%; height:92%; border:1px dashed rgb(var(--tinta) / 10.2%); border-radius:45%; top:9px; left:-7px; transform:rotate(24deg); }
 .entry-spark { position:absolute; right:-28px; top:-36px; font-size:37px; color:var(--accent-hi); transform:rotate(12deg); }
 .entry-card { position:relative; border-radius:20px; padding:31px; background:linear-gradient(140deg,var(--bg-cartao),var(--bg-2)); border:1px solid rgb(var(--tinta) / 14.9%); box-shadow:0 30px 70px #0002; }
-.card-heading { display:flex; align-items:center; gap:11px; color:var(--muted); font-size:var(--fs-rotulo); letter-spacing:.11em; font-weight:650; }
+.card-heading { display:flex; align-items:center; gap:11px; color:var(--muted); font-size:var(--fs-rotulo); letter-spacing:.11em; font-weight:750; }
 .door-icon { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:rgb(var(--tinta) / 11%); color:var(--accent-hi); }
 h2 { font-size:27px; letter-spacing:-.045em; margin:19px 0 5px; font-weight:650; }
 .entry-card>p { font-size:var(--fs-sm); color:var(--muted); margin:0 0 25px; }
@@ -88,7 +88,7 @@ h3 { margin:0 0 4px; font-size:var(--fs-md); font-weight:600; }
    como a peça menor da mesma família: mesmo gradiente, mesma cor de borda, e um raio um grau
    abaixo do principal. Antes eram duas superfícies diferentes empilhadas. */
 .recent { position:relative; z-index:1; padding:14px 17px; margin:0 0 11px; display:flex; align-items:center; flex-wrap:wrap; gap:9px 14px; border:1px solid rgb(var(--tinta) / 12.2%); border-radius:16px; background:linear-gradient(140deg,var(--bg-2),var(--bg-2)); box-shadow:0 18px 40px #00000022; }
-.recent>span { flex-basis:100%; font-size:var(--fs-rotulo); font-weight:650; letter-spacing:.11em; color:var(--muted); }
+.recent>span { flex-basis:100%; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; color:var(--muted); }
 #recentLinks { display:flex; gap:8px; flex-wrap:wrap; }
 #recentLinks a { display:inline-flex; align-items:center; min-height:var(--ctl-p); border:1px solid color-mix(in srgb, var(--accent-hi) 18%, transparent); border-radius:var(--r-sm); padding:0 12px; font-size:var(--fs-sm); color:var(--text-2); background:color-mix(in srgb, var(--accent-hi) 4.3%, transparent); transition:background-color var(--dur) var(--curva),border-color var(--dur) var(--curva); }
 #recentLinks a:hover { background:color-mix(in srgb, var(--accent-hi) 9.4%, transparent); border-color:color-mix(in srgb, var(--accent-hi) 29%, transparent); }
@@ -128,7 +128,7 @@ footer b { color:var(--aviso-texto); margin-left:8px; }
 @media(max-width:760px) { .desktop-download { flex-wrap:wrap; gap:14px; padding:20px; } .desktop-download>img { width:36px; height:36px; } .download-copy { flex-basis:calc(100% - 50px); } .download-copy h2 { font-size:20px; } .download-action { flex-basis:100%; } }
 @media(min-height:950px) { .hero { padding-top:105px; padding-bottom:100px; } }
 @media(max-width:1050px) { .hero { gap:45px; } .hero-sticker { display:none; } .entry-card { padding:25px; } .features { gap:24px; } }
-@media(max-width:760px) { .home-nav { height:82px; padding:0 24px; } .brand small,.nav-note { display:none; } .hero { grid-template-columns:1fr; gap:44px; padding:32px 0 35px; } main { padding:0 25px; max-width:510px; } h1 { font-size:56px; } .hero-copy>p { font-size:13px; } .hero-note { margin-top:20px; } .entry-spark { right:-8px; top:-27px; font-size:30px; } .features { grid-template-columns:1fr; gap:26px; } .features p { max-width:none; font-size:12px; } .features h3 { font-size:14px; } .entry-card { padding:27px; } input { font-size:16px; } footer { flex-direction:column; padding:22px 25px; max-width:510px; } }
+@media(max-width:760px) { .home-nav { height:82px; padding:0 24px; } .brand small,.nav-note { display:none; } .hero { grid-template-columns:1fr; gap:44px; padding:32px 0 35px; } main { padding:0 25px; max-width:510px; } h1 { font-size:56px; } .hero-copy>p { font-size:var(--fs-md); } .hero-note { margin-top:20px; } .entry-spark { right:-8px; top:-27px; font-size:30px; } .features { grid-template-columns:1fr; gap:26px; } .features p { max-width:none; font-size:var(--fs-sm); } .features h3 { font-size:14px; } .entry-card { padding:27px; } input { font-size:16px; } footer { flex-direction:column; padding:22px 25px; max-width:510px; } }
 /* Nada rola para o lado. A órbita tracejada atrás do cartão de entrada é decoração, e girada ela
    passa da borda da tela entre 768 e 1300 px: a página ganhava 60 px de rolagem lateral. `clip`
    corta o que sai sem criar uma área de rolagem, e sem desligar o `sticky` de nada. */

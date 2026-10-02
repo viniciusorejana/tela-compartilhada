@@ -81,6 +81,9 @@
     $('meuPerfilSemConta').hidden = comConta;
     salvar.hidden = !comConta;
     $('meuPerfilConta').hidden = !comConta;
+    // O cartão completo (banner, borda, efeito, bio, status) tem o painel dele, aberto daqui sem
+    // sair da sala (social-sala.js): aqui ficam só apelido, cor, marca e foto.
+    $('meuPerfilCartao').hidden = !comConta || !window.NexoSalaSocial;
     $('meuPerfilCriar').hidden = comConta;
     dizer('');
     if (!comConta) {
@@ -146,9 +149,58 @@
     }
   });
 
-  // "Criar conta" abre noutra aba, e sem `?voltar=`: com ele, a aba nova entraria na sala
-  // depois do cadastro, e a pessoa ficaria duas vezes na mesma chamada.
   $('meuPerfilBtn').addEventListener('click', abrir);
+  $('meuPerfilCriar').href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
+  $('meuPerfilCartao').addEventListener('click', () => {
+    painel.classList.add('hidden');
+    window.NexoSalaSocial?.abrirEditor();
+  });
 
-  window.NexoPerfilSala = { abrir };
+  // ---------- Ir para a página da conta ----------
+  // A página da conta abre NESTA janela, e não numa aba nova: no aplicativo, a aba nova era o
+  // navegador, fora do Nexo. Vale para "Senha e conta" e para todo "Criar conta grátis" de dentro
+  // da chamada. Ir até lá tira a pessoa da chamada, então um painel avisa antes; confirmado, ela
+  // sai direito (`sairDaSala`, sala.js) com `?voltar=`: a página da conta oferece a volta, e o
+  // cadastro termina de volta nesta sala, já com a conta.
+  const TEXTOS_DA_IDA = {
+    conta: {
+      titulo: 'Sair da sala para ir à conta?',
+      texto: 'A senha, o código de recuperação e os seus dados ficam na página da conta, que abre aqui, no lugar da sala. Você sai da chamada: o microfone, a câmera e a tela param, e a sala vê você sair. Na página da conta, “Voltar para a sala” traz você de volta.',
+      botao: 'Sair e ir para a conta'
+    },
+    criar: {
+      titulo: 'Sair da sala para criar a conta?',
+      texto: 'A conta é criada na página da conta, que abre aqui, no lugar da sala. Você sai da chamada: o microfone, a câmera e a tela param, e a sala vê você sair. Criada a conta, você volta direto para esta sala, já com ela.',
+      botao: 'Sair e criar a conta'
+    }
+  };
+  function confirmarIrParaConta() {
+    const textos = TEXTOS_DA_IDA[window.NexoConta?.atual()?.conta ? 'conta' : 'criar'];
+    $('irParaContaTitulo').textContent = textos.titulo;
+    $('irParaContaTexto').textContent = textos.texto;
+    $('irParaContaConfirmar').textContent = textos.botao;
+    $('irParaContaConfirmar').disabled = false;
+    $('irParaContaPanel').classList.remove('hidden');
+  }
+  document.querySelectorAll('[data-ir-para-conta]').forEach(botao => botao.addEventListener('click', confirmarIrParaConta));
+  // Todo link para a página da conta passa pelo aviso enquanto a pessoa está na chamada -- os de
+  // "Criar conta grátis" (configurações, Estúdio, meu perfil, mesa de sons, o aviso de qualidade, o
+  // próprio cartão) e os que ainda vierem. Antes de entrar (a porta, a espera) ou depois de sair
+  // (o aviso de remoção), a página troca direto: não há chamada para perder. Clique com Ctrl ou
+  // Shift continua sendo a escolha de quem quer a página noutra aba.
+  document.addEventListener('click', evento => {
+    const link = evento.target.closest?.('a[href^="/conta"]');
+    if (!link || evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
+    if (link.closest('#nameGate, #waitingPanel, #removidoPanel')) return;
+    if (typeof tiles === 'undefined' || !tiles.has('self')) return;
+    evento.preventDefault();
+    confirmarIrParaConta();
+  }, true);
+  $('irParaContaConfirmar').addEventListener('click', () => {
+    $('irParaContaConfirmar').disabled = true;
+    $('irParaContaConfirmar').textContent = 'Saindo da sala…';
+    sairDaSala(`/conta?voltar=${encodeURIComponent(location.pathname)}`);
+  });
+
+  window.NexoPerfilSala = { abrir, confirmarIrParaConta };
 })();

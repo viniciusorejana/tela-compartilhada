@@ -195,7 +195,7 @@
       // O código com espaço dos dois lados na mesma linha: se as quebras sumirem no caminho,
       // ele continua separado do texto em volta.
       `Conta: ${quem}`, `Código: ${codigo}  (vale uma vez)`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, '',
-      'Use em "Esqueci a senha", na página da conta. O código vale uma vez: depois de usado,',
+      'Use em “Esqueci a senha”, na página da conta. O código vale uma vez: depois de usado,',
       'o Nexo mostra outro. Gerar um código novo cancela este.'
     ].join('\r\n');
     const url = URL.createObjectURL(new Blob([texto + '\r\n'], { type: 'text/plain;charset=utf-8' }));
@@ -301,13 +301,13 @@
     if (voltar) $('voltarParaSala').href = voltar;
   }
 
-  // Quem veio de uma sala volta para ela: é para isso que entrou.
+  // Quem veio de uma sala volta para ela: é para isso que entrou. Quem entrou pela porta da frente
+  // vai para o início de quem tem conta (amigos, conversas, salas recentes), que é o que `/` mostra
+  // com a sessão aberta.
   function concluir(novaConta, novoPerfil) {
     conta = novaConta;
     if (novoPerfil) perfil = novoPerfil;
-    if (voltar) { location.assign(voltar); return; }
-    pintarConta();
-    mostrar('comConta');
+    location.assign(voltar || '/');
   }
 
   function dizer(texto, problema = false) {

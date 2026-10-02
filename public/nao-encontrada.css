@@ -71,11 +71,11 @@ h1 { margin:14px 0 10px; font-size:clamp(28px,5vw,38px); line-height:1.12; lette
 .sugestao { width:100%; display:flex; align-items:center; gap:12px; margin:0 0 18px; padding:12px 14px; text-align:left; border:1px solid color-mix(in srgb, var(--accent-hi) 23.9%, transparent); border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 12.2%, transparent),color-mix(in srgb, var(--accent) 3.9%, transparent)); transition:border-color var(--dur) var(--curva),background-color var(--dur) var(--curva),transform var(--dur) var(--curva); animation:nexo-surgir var(--dur-lenta) var(--curva); }
 .sugestao:hover { border-color:color-mix(in srgb, var(--accent-hi) 50.2%, transparent); transform:translateY(-1px); }
 .sugestao:active { transform:scale(.99); }
-.sugestao-icone { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:var(--r-md); background:var(--accent-suave-hi); color:var(--accent-texto); font-size:19px; }
+.sugestao-icone { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:var(--r-md); background:var(--accent-suave-hi); color:var(--accent-texto); font-size:var(--fs-xl); }
 .sugestao>span:nth-child(2) { flex:1; min-width:0; display:grid; }
 .sugestao small { color:var(--muted); font-size:var(--fs-meta); }
 .sugestao strong { font-size:var(--fs-lg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.sugestao-seta { flex:none; color:var(--accent-texto); font-size:20px; transition:transform var(--dur) var(--curva); }
+.sugestao-seta { flex:none; width:20px; height:20px; fill:none; stroke:var(--accent-texto); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition:transform var(--dur) var(--curva); }
 .sugestao:hover .sugestao-seta { transform:translateX(3px); }
 
 /* ---------- Os caminhos de volta ---------- */
@@ -91,20 +91,20 @@ h1 { margin:14px 0 10px; font-size:clamp(28px,5vw,38px); line-height:1.12; lette
 .entrar label { display:block; margin-bottom:9px; color:var(--text-3); font-size:var(--fs-sm); font-weight:600; }
 .campo { display:flex; align-items:center; gap:4px; padding:4px; border:1px solid rgb(var(--tinta) / 14.9%); border-radius:var(--r-md); background:var(--bg-0); transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
 .campo:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
-.campo>span { margin-left:10px; color:var(--faint); font-size:19px; }
+.campo>span { margin-left:10px; color:var(--faint); font-size:var(--fs-xl); }
 .campo input { flex:1; min-width:0; min-height:var(--ctl-m); padding:0 6px; border:0; background:transparent; color:var(--text); font-size:14px; }
 .campo input:focus-visible { outline:none; }
 .campo input::placeholder { color:var(--apagado); }
 .campo input[aria-invalid="true"] { color:var(--danger-texto); }
 .campo button { flex:none; display:inline-flex; align-items:center; gap:6px; min-height:var(--ctl-m); padding:0 14px; border:0; border-radius:var(--r-sm); background:var(--accent-forte); color:#fff; font-size:var(--fs-sm); font-weight:650; cursor:pointer; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
 .campo button:hover { background:var(--accent-forte-hi); }
-.campo button:hover span { transform:translateX(2px); }
-.campo button span { transition:transform var(--dur) var(--curva); }
+.campo button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transition:transform var(--dur) var(--curva); }
+.campo button:hover svg { transform:translateX(2px); }
 .campo button:active { transform:scale(.97); }
 .erro { margin:9px 0 0; color:var(--danger-texto); font-size:var(--fs-sm); }
 
 .recentes { width:100%; margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 10px; }
-.recentes>span { flex-basis:100%; color:var(--faint); font-size:var(--fs-rotulo); font-weight:650; letter-spacing:.11em; }
+.recentes>span { flex-basis:100%; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; }
 #recentesLinks { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 #recentesLinks a { display:inline-flex; align-items:center; min-height:var(--ctl-p); padding:0 12px; border:1px solid color-mix(in srgb, var(--accent-hi) 18%, transparent); border-radius:var(--r-sm); background:color-mix(in srgb, var(--accent-hi) 4.3%, transparent); color:var(--text-2); font-size:var(--fs-sm); transition:background-color var(--dur) var(--curva),border-color var(--dur) var(--curva),transform var(--dur) var(--curva); }
 #recentesLinks a:hover { background:color-mix(in srgb, var(--accent-hi) 9.4%, transparent); border-color:color-mix(in srgb, var(--accent-hi) 29%, transparent); transform:translateY(-1px); }

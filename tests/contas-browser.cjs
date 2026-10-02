@@ -56,7 +56,8 @@ async function entrarPelaTela(pagina, usuario) {
   await pagina.locator('#entrarUsuario').fill(usuario);
   await pagina.locator('#entrarSenha').fill(SENHA);
   await pagina.locator('#formEntrar button[type="submit"]').click();
-  await pagina.locator('#comConta').waitFor();
+  // Quem entra pela porta da frente vai para o início de quem tem conta (docs/amigos-e-perfil.md).
+  await pagina.locator('#inicioApp').waitFor();
 }
 
 async function entrarNaSala(pagina, sala, nome) {
@@ -70,6 +71,9 @@ async function etapaB(contextoA, contextoB, contextoC) {
   // ---------- Cadastro e perfil, pela tela ----------
   const ana = await novaPagina(contextoA);
   await cadastrarPelaTela(ana, { usuario: 'Molejo', apelido: 'Molejo 🎮' });
+  // A conta nova cai no início; a página da conta continua em /conta.
+  await ana.locator('#inicioApp').waitFor();
+  await ana.goto(`${origin}/conta`);
   await ana.locator('#comConta').waitFor();
   assert.equal(await ana.locator('#contaUsuario').textContent(), '@molejo');
   assert.equal(await ana.locator('#contaAvatar').textContent(), 'M🎮', 'a inicial de um emoji não é meia letra');
