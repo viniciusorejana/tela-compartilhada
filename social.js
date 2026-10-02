@@ -11,6 +11,11 @@
 //   - as MENSAGENS DIRETAS: até 60 por conversa, 1.000 caracteres cada, e a conversa some três
 //     dias depois da última mensagem, ou quando o servidor reinicia. Decisão, e não descuido: a
 //     promessa de que conversa não toca o disco continua valendo (docs/amigos-e-perfil.md).
+//   - as IMAGENS das mensagens diretas, também só na memória, e com teto: até 20 por conversa e
+//     64 MB no servidor inteiro. Passou do teto, a mais antiga sai primeiro, e a mensagem dela diz
+//     que a imagem saiu. Elas não vão dentro da mensagem: cada uma tem um endereço
+//     (/api/social/imagem/:id, server.js) que só os dois da conversa abrem -- o histórico continua
+//     leve, e quem nunca rola até a imagem nunca a baixa.
 //
 // Amizades, apelidos e bloqueios são da conta, e moram no banco (contas/amigos.js).
 //
@@ -22,11 +27,18 @@
 const crypto = require('node:crypto');
 const { criarAntiabuso, regrasDoAmbiente } = require('./telemetria/abuso');
 const { formatarCodigo, normalizarCodigo } = require('./contas/regras');
+const { tipoDosBytes } = require('./contas/imagens');
 
 const DIA = 24 * 60 * 60 * 1000;
 const VIDA_DA_CONVERSA = 3 * DIA;
 const MENSAGENS_POR_CONVERSA = 60;
 const TEXTO_MAXIMO = 1000;
+// A imagem chega reduzida pela página (public/imagem-envio.js, até 1280 px), como data URL -- o
+// mesmo formato e o mesmo teto do chat da sala, que cabem no limite de um evento do Socket.IO.
+const IMAGEM_EM_DATA_URL = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)$/;
+const DATA_URL_MAXIMA = 820 * 1024;
+const IMAGENS_POR_CONVERSA = 20;
+const BYTES_DE_IMAGENS_NO_SERVIDOR = 64 * 1024 * 1024;
 const CONVERSAS_NO_SERVIDOR = 20000;
 const ABAS_POR_CONTA = 8;
 const CODIGO_DE_SALA = /^[a-z0-9_-]{4,32}$/;
@@ -52,6 +64,8 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
   const conversasDe = new Map();   // contaId -> Set<chave>
   const avisosPendentes = new Map();
   const codigoDe = new Map();      // contaId -> código formatado (cache: o código nunca muda)
+  const imagens = new Map();       // id da imagem -> { bytes, tipo, chave, mensagemId }, na ordem de chegada
+  let bytesDeImagens = 0;
 
   function codigoDaConta(contaId) {
     if (codigoDe.has(contaId)) return codigoDe.get(contaId);
@@ -112,6 +126,7 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
   function esquecerConversa(chave) {
     const conversa = conversas.get(chave);
     if (!conversa) return;
+    for (const m of conversa.mensagens) if (m.imagem?.id) largarImagem(m.imagem.id);
     conversas.delete(chave);
     for (const id of [conversa.a, conversa.b]) {
       conversasDe.get(id)?.delete(chave);
@@ -154,12 +169,61 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
     return lista.sort((x, y) => y.ultimaEm - x.ultimaEm);
   }
 
+  // ---------- Imagens ----------
+  //
+  // A data URL é lida aqui e guardada em bytes; o tipo é o dos BYTES (contas/imagens.js), e não o
+  // que a data URL diz: o endereço da imagem é servido com esse tipo, e um "PNG" que fosse outra
+  // coisa por dentro não passa.
+  function lerImagem(dataUrl) {
+    if (typeof dataUrl !== 'string' || dataUrl.length > DATA_URL_MAXIMA) return { erro: 'A imagem é grande demais. Mande uma menor.' };
+    const partes = IMAGEM_EM_DATA_URL.exec(dataUrl);
+    if (!partes) return { erro: 'Aceitamos PNG, JPEG, GIF e WebP.' };
+    const bytes = Buffer.from(partes[2], 'base64');
+    if (tipoDosBytes(bytes) !== `image/${partes[1]}`) return { erro: 'O arquivo não é do tipo que diz ser.' };
+    return { bytes, tipo: `image/${partes[1]}` };
+  }
+  // As dimensões que a página manda servem só para reservar o lugar da imagem antes de ela chegar
+  // (a conversa não pula); fora do razoável, ficam de fora.
+  const dimensao = valor => (Number.isInteger(valor) && valor > 0 && valor <= 8192 ? valor : null);
+  function guardarImagem(chave, mensagemId, { bytes, tipo }) {
+    const id = crypto.randomBytes(16).toString('hex');
+    imagens.set(id, { bytes, tipo, chave, mensagemId });
+    bytesDeImagens += bytes.length;
+    return id;
+  }
+  // Tira a imagem da memória; a mensagem fica, dizendo que a imagem saiu.
+  function largarImagem(id) {
+    const imagem = imagens.get(id);
+    if (!imagem) return;
+    imagens.delete(id);
+    bytesDeImagens -= imagem.bytes.length;
+    const mensagem = conversas.get(imagem.chave)?.mensagens.find(m => m.id === imagem.mensagemId);
+    if (mensagem?.imagem) mensagem.imagem = { saiu: true };
+  }
+  // Os tetos: as 20 mais novas de cada conversa, e 64 MB no servidor. A mais antiga sai primeiro.
+  function caberImagens(conversa) {
+    const comImagem = conversa.mensagens.filter(m => m.imagem?.id);
+    for (const m of comImagem.slice(0, Math.max(0, comImagem.length - IMAGENS_POR_CONVERSA))) largarImagem(m.imagem.id);
+    while (bytesDeImagens > BYTES_DE_IMAGENS_NO_SERVIDOR && imagens.size) largarImagem(imagens.keys().next().value);
+  }
+  // A imagem de uma mensagem, para quem é da conversa -- e só para quem é.
+  function imagemPara(contaId, id) {
+    const imagem = imagens.get(String(id || ''));
+    const conversa = imagem && conversas.get(imagem.chave);
+    if (!conversa || (conversa.a !== contaId && conversa.b !== contaId)) return null;
+    return { bytes: imagem.bytes, tipo: imagem.tipo };
+  }
+
   // Uma mensagem nova numa conversa, para os dois lados. `com` é sempre a OUTRA pessoa, do ponto
   // de vista de quem recebe o evento.
   function publicar(de, para, mensagem) {
     const { chave, conversa } = conversaEntre(de.id, para.id, true);
     conversa.mensagens.push(mensagem);
-    while (conversa.mensagens.length > MENSAGENS_POR_CONVERSA) conversa.mensagens.shift();
+    while (conversa.mensagens.length > MENSAGENS_POR_CONVERSA) {
+      const saiu = conversa.mensagens.shift();
+      if (saiu.imagem?.id) largarImagem(saiu.imagem.id);
+    }
+    caberImagens(conversa);
     // Quem escreve leu tudo até a própria mensagem.
     conversa.lidas[de.id] = mensagem.em;
     tocar(chave, conversa);
@@ -224,15 +288,27 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
       };
     }));
 
-    socket.on('dm-enviar', responderCom(({ para, texto }) => {
+    // Texto, imagem, ou os dois: a imagem vai junto da legenda, como no chat da sala.
+    socket.on('dm-enviar', responderCom(({ para, texto, imagem, largura, altura }) => {
       const eu = conta();
       const outro = contaPeloCodigo(para);
       if (!eu || !outro || contas.suspensa(outro)) return { ok: false, error: 'Essa conta não existe mais.' };
       // Só entre amigos, e nunca com bloqueio no meio -- em qualquer direção.
       if (!amigos.saoAmigos(eu.id, outro.id) || banco.bloqueioEntre(eu.id, outro.id)) return { ok: false, error: 'Mensagem direta é só entre amigos.' };
       const limpo = limparTexto(texto);
-      if (!limpo) return { ok: false, error: 'A mensagem está vazia.' };
+      let lida = null;
+      if (imagem) {
+        lida = lerImagem(imagem);
+        if (lida.erro) return { ok: false, error: lida.erro };
+        const freada = freio.verificar(contaId, 'dm-imagem');
+        if (!freada.ok) return { ok: false, error: 'Imagens demais em pouco tempo. Aguarde um instante.', segundos: freada.segundos || 10 };
+      }
+      if (!limpo && !lida) return { ok: false, error: 'A mensagem está vazia.' };
       const mensagem = { id: crypto.randomUUID(), de: formatarCodigo(eu.codigo), texto: limpo, em: agora(), tipo: 'texto' };
+      if (lida) {
+        const { chave } = conversaEntre(eu.id, outro.id, true);
+        mensagem.imagem = { id: guardarImagem(chave, mensagem.id, lida), largura: dimensao(largura), altura: dimensao(altura) };
+      }
       publicar(eu, outro, mensagem);
       return { ok: true, mensagem };
     }));
@@ -271,7 +347,8 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
       const meu = codigoDaConta(contaId);
       const indice = achada ? achada.conversa.mensagens.findIndex(m => m.id === String(id || '') && m.de === meu) : -1;
       if (indice < 0) return { ok: false, error: 'Mensagem não encontrada.' };
-      achada.conversa.mensagens.splice(indice, 1);
+      const [apagada] = achada.conversa.mensagens.splice(indice, 1);
+      if (apagada.imagem?.id) largarImagem(apagada.imagem.id);
       emitirPara(contaId, 'dm-apagada', { com: formatarCodigo(outro.codigo), id });
       emitirPara(outro.id, 'dm-apagada', { com: meu, id });
       return { ok: true };
@@ -321,9 +398,9 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
   }
 
   return {
-    mudouAmizade, mudouPerfil, mudouSala, mudouPresenca, conquistou, esquecerConta, presencaDe,
+    mudouAmizade, mudouPerfil, mudouSala, mudouPresenca, conquistou, esquecerConta, presencaDe, imagemPara,
     conectado: contaId => abas.has(contaId),
-    estado: () => ({ contasConectadas: abas.size, conversas: conversas.size }),
+    estado: () => ({ contasConectadas: abas.size, conversas: conversas.size, imagens: imagens.size, bytesDeImagens }),
     encerrar() { clearInterval(limpeza); for (const timer of avisosPendentes.values()) clearTimeout(timer); avisosPendentes.clear(); },
     VIDA_DA_CONVERSA, MENSAGENS_POR_CONVERSA, TEXTO_MAXIMO
   };

@@ -1,4 +1,5 @@
-/* Preparar uma imagem no navegador antes de enviá-la: o avatar e as do Estúdio.
+/* Preparar uma imagem no navegador antes de enviá-la: o avatar, as do Estúdio e a da conversa
+ * direta.
  *
  * O servidor não decodifica imagem nenhuma (contas/imagens.js): ele confere o tipo pelos bytes
  * e o tamanho. Quem recorta e reduz é a página, e por um motivo prático -- uma foto de celular
@@ -89,6 +90,48 @@
     return blob;
   }
 
+  // A imagem de uma mensagem direta: até 1280 px no lado maior, como no chat da sala, e no teto do
+  // servidor (social.js: uma data URL de até 820 KB). Sai em data URL, com as dimensões -- elas
+  // reservam o lugar da imagem na conversa antes de ela carregar. O GIF vai como está quando cabe
+  // (passar pelo canvas guardaria só o primeiro quadro).
+  const DATA_URL_DA_CONVERSA = 820 * 1024;
+  const LADO_DA_CONVERSA = 1280;
+  const lerComoDataUrl = blob => new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(String(leitor.result));
+    leitor.onerror = () => reject(new ProblemaDeImagem('Não foi possível ler esta imagem.'));
+    leitor.readAsDataURL(blob);
+  });
+  async function prepararParaConversa(arquivo) {
+    conferirTipo(arquivo);
+    const imagem = await decodificar(arquivo);
+    const { width, height } = imagem;
+    try {
+      if (arquivo.type === 'image/gif') {
+        const dataUrl = await lerComoDataUrl(arquivo);
+        if (dataUrl.length > DATA_URL_DA_CONVERSA) throw new ProblemaDeImagem('Esse GIF é grande demais para a conversa (até uns 600 KB).');
+        return { dataUrl, largura: width, altura: height };
+      }
+      // WebP guarda a transparência de um print recortado; o navegador que não gera WebP sai em JPEG.
+      for (const lado of [LADO_DA_CONVERSA, 960, 720]) {
+        const escala = Math.min(1, lado / Math.max(width, height));
+        const canvas = Object.assign(document.createElement('canvas'), { width: Math.max(1, Math.round(width * escala)), height: Math.max(1, Math.round(height * escala)) });
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(imagem, 0, 0, canvas.width, canvas.height);
+        for (const qualidade of [0.86, 0.72, 0.58]) {
+          let blob = await paraBlob(canvas, 'image/webp', qualidade);
+          if (!blob || blob.type !== 'image/webp') blob = await paraBlob(canvas, 'image/jpeg', qualidade);
+          const dataUrl = blob && await lerComoDataUrl(blob);
+          if (dataUrl && dataUrl.length <= DATA_URL_DA_CONVERSA) return { dataUrl, largura: canvas.width, altura: canvas.height };
+        }
+      }
+    } finally {
+      imagem.close?.();
+    }
+    throw new ProblemaDeImagem('Não foi possível reduzir esta imagem o bastante.');
+  }
+
   // Sobe o arquivo como corpo cru, com o tipo dele: o servidor confere os bytes de qualquer jeito.
   async function enviar(caminho, blob, { metodo = 'PUT', csrf = '' } = {}) {
     let resposta;
@@ -101,5 +144,5 @@
     return { ok: resposta.ok, status: resposta.status, dados };
   }
 
-  root.NexoImagem = { prepararAvatar, prepararDoEstudio, enviar, ProblemaDeImagem, TIPOS_ACEITOS };
+  root.NexoImagem = { prepararAvatar, prepararDoEstudio, prepararParaConversa, enviar, ProblemaDeImagem, TIPOS_ACEITOS };
 })(window);

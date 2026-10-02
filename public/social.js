@@ -44,10 +44,11 @@
   }
 
   // Um pedido pelo socket, com resposta. Sem socket (ainda conectando), a resposta diz isso.
-  function pedirAoSocket(evento, dados) {
+  // O prazo é maior para quem leva imagem: até 800 KB numa conexão lenta de celular.
+  function pedirAoSocket(evento, dados, prazoMs = 8000) {
     return new Promise(resolve => {
       if (!socket?.connected) { resolve({ ok: false, error: 'Conectando… Tente de novo em um instante.' }); return; }
-      const prazo = setTimeout(() => resolve({ ok: false, error: 'O servidor não respondeu. Tente de novo.' }), 8000);
+      const prazo = setTimeout(() => resolve({ ok: false, error: 'O servidor não respondeu. Tente de novo.' }), prazoMs);
       socket.emit(evento, dados, resposta => { clearTimeout(prazo); resolve(resposta || { ok: false }); });
     });
   }
@@ -150,7 +151,10 @@
     desbloquear: codigo => api(`/api/conta/amigos/${codigoNaRota(codigo)}/bloqueio`, { metodo: 'DELETE' }).then(depois),
     cartao: codigo => api(`/api/conta/pessoa/${codigoNaRota(codigo)}`),
     definirSocial: dados => api('/api/conta/social', { metodo: 'PUT', corpo: dados }),
-    enviar: (para, texto) => pedirAoSocket('dm-enviar', { para, texto }),
+    // `imagem` é o que NexoImagem.prepararParaConversa devolve ({ dataUrl, largura, altura }).
+    enviar: (para, texto, imagem = null) => (imagem
+      ? pedirAoSocket('dm-enviar', { para, texto, imagem: imagem.dataUrl, largura: imagem.largura, altura: imagem.altura }, 30000)
+      : pedirAoSocket('dm-enviar', { para, texto })),
     convidar: (para, sala) => pedirAoSocket('convidar', { para, sala }),
     historico: com => pedirAoSocket('dm-historico', { com }),
     marcarLida: com => { guardarConversa(com, { naoLidas: 0 }); return pedirAoSocket('dm-lida', { com }); },

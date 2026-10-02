@@ -32,8 +32,42 @@
     voltar: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
     perfil: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     chamar: '<path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3z"/><path d="M12 3v4M10 5h4"/>',
-    relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+    relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    imagem: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+    fechar: '<path d="M18 6 6 18M6 6l12 12"/>'
   };
+
+  // ---------- O visor da imagem ----------
+  // Clicar numa imagem da conversa abre ela grande, por cima de tudo; clicar ou Esc fecha. O Esc é
+  // ouvido na janela, antes de qualquer outro: na sala, o Esc fecharia o painel de mensagens junto.
+  function abrirVisor(src, descricao) {
+    // `nx-social`: o visor mora fora da conversa (no fim da página), e é essa classe que dá ao X a
+    // base de botão das peças sociais, a salvo das regras globais de botão da sala.
+    const visor = elemento('div', 'nx-dm-visor nx-social');
+    visor.setAttribute('role', 'group');
+    visor.setAttribute('aria-label', descricao);
+    const img = elemento('img');
+    img.src = src;
+    img.alt = descricao;
+    const fechar = elemento('button', 'nx-dm-visor-fechar');
+    fechar.type = 'button';
+    fechar.title = 'Fechar';
+    fechar.setAttribute('aria-label', 'Fechar a imagem');
+    fechar.append(icone(DESENHOS.fechar));
+    visor.append(img, fechar);
+    const antes = doc.activeElement;
+    const sair = () => { root.removeEventListener('keydown', teclas, true); visor.remove(); antes?.focus?.(); };
+    function teclas(evento) {
+      if (evento.key !== 'Escape') return;
+      evento.preventDefault();
+      evento.stopImmediatePropagation();
+      sair();
+    }
+    visor.addEventListener('click', sair);
+    root.addEventListener('keydown', teclas, true);
+    doc.body.append(visor);
+    fechar.focus();
+  }
 
   const hora = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   function quando(ms) {
@@ -127,21 +161,36 @@
     enviar.title = 'Enviar';
     enviar.setAttribute('aria-label', 'Enviar');
     enviar.append(icone(DESENHOS.enviar));
-    compor.append(campo, enviar);
+    // A imagem: pelo botão, colando no campo ou arrastando para a conversa. Ela fica numa prévia
+    // acima do campo até ir, para dar tempo de escrever a legenda -- ou de desistir.
+    const anexar = elemento('button', 'nx-dm-anexar');
+    anexar.type = 'button';
+    anexar.title = 'Mandar uma imagem';
+    anexar.setAttribute('aria-label', 'Mandar uma imagem');
+    anexar.append(icone(DESENHOS.imagem));
+    const arquivo = elemento('input');
+    arquivo.type = 'file';
+    arquivo.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    arquivo.hidden = true;
+    compor.append(anexar, arquivo, campo, enviar);
+    const previaDoAnexo = elemento('div', 'nx-dm-anexo');
+    previaDoAnexo.hidden = true;
     const status = elemento('p', 'nx-dm-status');
     status.setAttribute('role', 'status');
-    caixa.append(topo, lista, digitandoEl, compor, status);
+    caixa.append(topo, lista, digitandoEl, previaDoAnexo, compor, status);
     raiz.replaceChildren(caixa);
 
     function pintarTopo() {
       const p = pessoa();
       const pres = social.presencaDe(codigo);
       nome.textContent = social.nomeDe(codigo);
+      root.NexoCartao.estilizarNome(nome, p?.vitrine || null);
       presenca.textContent = root.NexoCartao.descreverPresenca(pres);
       avatarLugar.replaceChildren(root.NexoCartao.avatar({ nome: p?.apelido || codigo, perfil: p?.perfil, vitrine: p?.vitrine, status: pres.status, tamanho: 'pequeno' }));
       campo.placeholder = podeEscrever ? `Mensagem para ${social.nomeDe(codigo)}` : 'Só dá para escrever para amigos';
       campo.disabled = !podeEscrever;
       enviar.disabled = !podeEscrever;
+      anexar.disabled = !podeEscrever;
     }
 
     const perto = () => lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
@@ -159,11 +208,17 @@
         if (!agrupa) {
           const autor = minha ? root.NexoConta?.atual()?.conta : pessoa();
           const perfilDoAutor = minha ? { conta: true, codigo: eu, ...(root.NexoConta?.atual()?.perfil || {}) } : pessoa()?.perfil;
+          // A borda e o estilo do nome de cada um, como no cartão: os meus pelo cartão que a minha
+          // conta mostra (conta-cliente.js), os do amigo pela lista de amigos.
+          const vitrineDoAutor = (minha ? root.NexoConta?.atual()?.cartao?.vitrine : pessoa()?.vitrine) || null;
           const av = elemento('span', 'nx-dm-msg-avatar');
           root.NexoPerfil.pintar(av, minha ? (autor?.apelido || 'Você') : (autor?.apelido || '?'), perfilDoAutor);
+          root.NexoCartao.decorarAvatar(av, vitrineDoAutor);
           av.setAttribute('aria-hidden', 'true');
           const cabeca = elemento('div', 'nx-dm-msg-cabeca');
-          cabeca.append(elemento('strong', '', minha ? 'Você' : social.nomeDe(m.de)), elemento('time', '', quando(m.em)));
+          const nomeDoAutor = elemento('strong', '', minha ? 'Você' : social.nomeDe(m.de));
+          root.NexoCartao.estilizarNome(nomeDoAutor, vitrineDoAutor);
+          cabeca.append(nomeDoAutor, elemento('time', '', quando(m.em)));
           linha.append(av, cabeca);
         }
         if (m.tipo === 'convite') {
@@ -176,9 +231,12 @@
           convite.append(textos, entrar);
           linha.append(convite);
         } else {
-          const corpo = elemento('p', 'nx-dm-msg-texto');
-          texto(corpo, m.texto);
-          linha.append(corpo);
+          if (m.texto) {
+            const corpo = elemento('p', 'nx-dm-msg-texto');
+            texto(corpo, m.texto);
+            linha.append(corpo);
+          }
+          if (m.imagem) linha.append(imagemDaMensagem(m, minha));
         }
         if (minha) {
           const apagar = elemento('button', 'nx-dm-apagar');
@@ -204,8 +262,39 @@
       if (!mensagens.length) mensagensEl.append(elemento('p', 'nx-dm-vazio', `Diga oi para ${social.nomeDe(codigo)}. A conversa é só de vocês dois.`));
     }
 
-    function dizer(textoDoStatus) {
+    // A imagem da mensagem, pelo endereço dela (só os dois da conversa abrem). O lugar já nasce do
+    // tamanho certo -- as dimensões vêm com a mensagem --, e a conversa não pula quando ela chega.
+    // A que saiu da memória (o teto do servidor, social.js) vira uma linha dizendo isso.
+    const LARGURA_DA_IMAGEM = 360, ALTURA_DA_IMAGEM = 300;
+    const saiuDaMemoria = () => elemento('p', 'nx-dm-img-saiu', 'Esta imagem já saiu da memória do servidor.');
+    function imagemDaMensagem(m, minha) {
+      if (!m.imagem?.id) return saiuDaMemoria();
+      const descricao = `Imagem enviada por ${minha ? 'você' : social.nomeDe(m.de)}`;
+      const src = `/api/social/imagem/${encodeURIComponent(m.imagem.id)}`;
+      const botao = elemento('button', 'nx-dm-img');
+      botao.type = 'button';
+      botao.title = 'Ver a imagem maior';
+      const img = elemento('img');
+      img.alt = descricao;
+      img.decoding = 'async';
+      img.loading = 'lazy';
+      const { largura, altura } = m.imagem;
+      if (largura && altura) {
+        const escala = Math.min(1, LARGURA_DA_IMAGEM / largura, ALTURA_DA_IMAGEM / altura);
+        img.style.width = `${Math.round(largura * escala)}px`;
+        img.style.aspectRatio = `${largura} / ${altura}`;
+      }
+      img.onerror = () => botao.replaceWith(saiuDaMemoria());
+      img.src = src;
+      botao.append(img);
+      botao.onclick = () => abrirVisor(src, descricao);
+      return botao;
+    }
+
+    // `tom`: 'erro' (o padrão, em vermelho) ou 'andamento' ("Enviando a imagem…", sem alarme).
+    function dizer(textoDoStatus, tom = 'erro') {
       status.textContent = textoDoStatus || '';
+      status.dataset.tom = tom;
       if (textoDoStatus) setTimeout(() => { if (status.textContent === textoDoStatus) status.textContent = ''; }, 4000);
     }
 
@@ -222,15 +311,70 @@
       social.marcarLida(codigo);
     }
 
+    // ---------- A imagem a enviar ----------
+    let anexo = null;          // { dataUrl, largura, altura } (imagem-envio.js)
+    let preparando = false;
+    function pintarAnexo() {
+      previaDoAnexo.hidden = !anexo;
+      if (!anexo) { previaDoAnexo.replaceChildren(); return; }
+      const miniatura = elemento('img', 'nx-dm-anexo-miniatura');
+      miniatura.src = anexo.dataUrl;
+      miniatura.alt = '';
+      const textos = elemento('span', 'nx-dm-anexo-textos');
+      textos.append(elemento('strong', '', 'Imagem pronta para enviar'), elemento('small', '', 'Escreva uma legenda, se quiser, e envie.'));
+      const tirar = elemento('button', 'nx-dm-botao');
+      tirar.type = 'button';
+      tirar.title = 'Tirar a imagem';
+      tirar.setAttribute('aria-label', 'Tirar a imagem');
+      tirar.append(icone(DESENHOS.fechar));
+      tirar.onclick = () => { anexo = null; pintarAnexo(); campo.focus(); };
+      previaDoAnexo.replaceChildren(miniatura, textos, tirar);
+    }
+    async function anexarArquivo(arquivoEscolhido) {
+      if (!arquivoEscolhido || !podeEscrever || preparando) return;
+      if (!root.NexoImagem?.prepararParaConversa) { dizer('Este navegador não consegue preparar a imagem.'); return; }
+      preparando = true;
+      dizer('Preparando a imagem…', 'andamento');
+      try {
+        anexo = await root.NexoImagem.prepararParaConversa(arquivoEscolhido);
+        dizer('');
+        pintarAnexo();
+        campo.focus();
+      } catch (erro) {
+        dizer(erro?.message || 'Não foi possível usar esta imagem.');
+      } finally {
+        preparando = false;
+      }
+    }
+    anexar.onclick = () => arquivo.click();
+    arquivo.onchange = () => { const escolhido = arquivo.files?.[0]; arquivo.value = ''; anexarArquivo(escolhido); };
+    campo.addEventListener('paste', evento => {
+      const item = [...(evento.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+      if (!item) return;
+      evento.preventDefault();
+      anexarArquivo(item.getAsFile());
+    });
+    caixa.addEventListener('dragover', evento => { if ([...(evento.dataTransfer?.types || [])].includes('Files')) evento.preventDefault(); });
+    caixa.addEventListener('drop', evento => {
+      const solto = evento.dataTransfer?.files?.[0];
+      if (!solto) return;
+      evento.preventDefault();
+      anexarArquivo(solto);
+    });
+
     compor.addEventListener('submit', async evento => {
       evento.preventDefault();
       const conteudo = campo.value.trim();
-      if (!conteudo || enviar.disabled) return;
+      if ((!conteudo && !anexo) || enviar.disabled || preparando) return;
       enviar.disabled = true;
-      const r = await social.enviar(codigo, conteudo);
+      if (anexo) dizer('Enviando a imagem…', 'andamento');
+      const r = await social.enviar(codigo, conteudo, anexo);
       enviar.disabled = !podeEscrever;
       if (!r.ok) { dizer(r.error || 'Não foi possível enviar.'); return; }
+      dizer('');
       campo.value = '';
+      anexo = null;
+      pintarAnexo();
       ajustarAltura();
       campo.focus();
     });

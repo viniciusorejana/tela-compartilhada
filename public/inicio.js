@@ -487,7 +487,9 @@
         const pr = S.presencaDe(p.codigo);
         b.append(C.avatar({ nome: p.apelido, perfil: p.perfil, vitrine: p.vitrine, status: pr.status, tamanho: 'pequeno' }));
         const t = elemento('span', 'ini-conversa-textos');
-        t.append(elemento('strong', '', p.apelidoMeu || p.apelido), elemento('small', '', p.frase?.texto ? `${p.frase.emoji || ''} ${p.frase.texto}`.trim() : C.NOMES_DOS_STATUS[pr.status]));
+        const nome = elemento('strong', '', p.apelidoMeu || p.apelido);
+        C.estilizarNome(nome, p.vitrine);
+        t.append(nome, elemento('small', '', p.frase?.texto ? `${p.frase.emoji || ''} ${p.frase.texto}`.trim() : C.NOMES_DOS_STATUS[pr.status]));
         b.append(t);
         bloco.append(b);
       }
@@ -521,8 +523,10 @@
       b.append(C.avatar({ nome: p.apelido, perfil: p.perfil, vitrine: p.vitrine, status: pr.status, tamanho: 'pequeno' }));
       const t = elemento('span', 'ini-conversa-textos');
       const ultima = c.ultima;
-      const previa = !ultima ? '' : ultima.tipo === 'convite' ? `Convite para #${ultima.sala}` : `${ultima.de === S.estado.eu ? 'Você: ' : ''}${ultima.texto}`;
-      t.append(elemento('strong', '', p.apelidoMeu || p.apelido), elemento('small', '', previa));
+      const previa = !ultima ? '' : ultima.tipo === 'convite' ? `Convite para #${ultima.sala}` : `${ultima.de === S.estado.eu ? 'Você: ' : ''}${ultima.texto || (ultima.imagem ? 'Imagem' : '')}`;
+      const nome = elemento('strong', '', p.apelidoMeu || p.apelido);
+      C.estilizarNome(nome, p.vitrine);
+      t.append(nome, elemento('small', '', previa));
       b.append(t);
       if (c.naoLidas) { const n = elemento('b', 'ini-contagem', String(c.naoLidas)); n.setAttribute('aria-label', `${c.naoLidas} não lidas`); b.append(n); }
       item.append(b);
@@ -670,8 +674,11 @@
     const perfil = NexoConta.atual().perfil || {};
     const escolhido = minhaPresencaEscolhida();
     const statusDoPonto = escolhido === 'invisivel' ? 'offline' : escolhido;
-    $('euAvatar').replaceChildren(C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine: editor.dados()?.vitrine, status: statusDoPonto, tamanho: 'pequeno' }));
+    // Como os outros veem: a borda e o estilo do nome do cartão efetivo.
+    const vitrine = editor.dados()?.vitrine || NexoConta.atual().cartao?.vitrine || null;
+    $('euAvatar').replaceChildren(C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine, status: statusDoPonto, tamanho: 'pequeno' }));
     $('euNome').textContent = conta.apelido;
+    C.estilizarNome($('euNome'), vitrine);
     const frase = minha?.frase || perfil.social?.frase;
     $('euStatus').textContent = frase && (frase.texto || frase.emoji) ? `${frase.emoji || ''} ${frase.texto || ''}`.trim() : C.NOMES_DOS_STATUS[escolhido];
   }
@@ -765,7 +772,7 @@
     if (mensagem.de === S.estado.eu) return;
     const vendo = secao === 'conversa' && conversa?.codigo === com && document.visibilityState === 'visible';
     if (vendo || naoIncomodar() || mensagem.tipo === 'convite') return;
-    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: mensagem.texto.slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirConversa(com) }] });
+    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: (mensagem.texto || 'Mandou uma imagem').slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirConversa(com) }] });
   });
   S.on('convite', ({ de, apelido, sala }) => {
     pintarConversas();

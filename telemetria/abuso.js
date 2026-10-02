@@ -65,6 +65,9 @@ const REGRAS = Object.freeze({
   // Mensagem direta: uma conversa animada manda várias seguidas; uma rajada de oito em três
   // segundos já é colar texto em laço.
   'dm-enviar': { sessao: 40, rajada: [8, 3000], longa: [600, 60 * MINUTO] },
+  // A imagem na mensagem direta pesa na memória do servidor (social.js tem o teto dela): poucas
+  // por minuto bastam para mostrar um print, e uma pasta inteira colada de uma vez não passa.
+  'dm-imagem': { sessao: 10, rajada: [4, 10000], longa: [120, 60 * MINUTO] },
   'dm-acao': { sessao: 90 },
   'dm-digitando': { sessao: 40 },
   'convidar': { sessao: 10, longa: [80, 60 * MINUTO] },

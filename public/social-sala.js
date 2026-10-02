@@ -87,7 +87,9 @@
       linha.append(C.avatar({ nome: p.apelido, perfil: p.perfil, vitrine: p.vitrine, status: presenca.status, tamanho: 'medio' }));
       const textos = elemento('span', 'nx-amigo-textos');
       const nomeEl = elemento('span', 'nx-amigo-nome');
-      nomeEl.append(elemento('span', '', p.apelidoMeu || p.apelido));
+      const nomeDoAmigo = elemento('span', '', p.apelidoMeu || p.apelido);
+      C.estilizarNome(nomeDoAmigo, p.vitrine);
+      nomeEl.append(nomeDoAmigo);
       const aqui = presenca.sala?.codigo === roomCode;
       textos.append(nomeEl, elemento('span', 'nx-amigo-detalhe', aqui ? 'Já está nesta sala' : C.descreverPresenca(presenca)));
       linha.append(textos);
@@ -141,7 +143,9 @@
       if (conversa?.codigo === item.codigo) b.setAttribute('aria-current', 'true');
       b.append(C.avatar({ nome: p.apelido, perfil: p.perfil, vitrine: p.vitrine, status: S.presencaDe(item.codigo).status, tamanho: 'pequeno' }));
       const t = elemento('span', 'mensagens-item-textos');
-      t.append(elemento('strong', '', p.apelidoMeu || p.apelido), elemento('small', '', item.ultima ? (item.ultima.tipo === 'convite' ? `Convite para #${item.ultima.sala}` : item.ultima.texto) : C.descreverPresenca(S.presencaDe(item.codigo))));
+      const nome = elemento('strong', '', p.apelidoMeu || p.apelido);
+      C.estilizarNome(nome, p.vitrine);
+      t.append(nome, elemento('small', '', item.ultima ? (item.ultima.tipo === 'convite' ? `Convite para #${item.ultima.sala}` : item.ultima.texto || (item.ultima.imagem ? 'Imagem' : '')) : C.descreverPresenca(S.presencaDe(item.codigo))));
       b.append(t);
       if (item.naoLidas) b.append(elemento('b', 'mensagens-contagem', String(item.naoLidas)));
       b.onclick = () => abrirMensagens(item.codigo);
@@ -199,7 +203,7 @@
     if (!$('mensagensPanel').classList.contains('hidden')) pintarConversas();
     if (mensagem.de === S.estado.eu || mensagem.tipo === 'convite' || naoIncomodar()) return;
     if (conversa?.codigo === com && !$('mensagensPanel').classList.contains('hidden')) return;
-    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: mensagem.texto.slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
+    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: (mensagem.texto || 'Mandou uma imagem').slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
   });
   S.on('convite', ({ de, apelido, sala }) => {
     if (sala === roomCode) return;

@@ -241,6 +241,24 @@ app.get(['/', '/index.html'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', comConta ? 'inicio.html' : 'index.html'));
 });
 app.get('/sobre', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// A imagem de uma mensagem direta (social.js): só na memória, e só para os dois da conversa -- a
+// sessão da conta é conferida a cada pedido, e o id não se adivinha. A entrega é a das imagens da
+// conta (contas/rotas.js): tipo conferido pelos bytes, `nosniff` e uma CSP que não deixa nada
+// rodar. O cache é privado: é a conversa de duas pessoas, e não uma imagem pública.
+app.get('/api/social/imagem/:id', (req, res) => {
+  if (!telemetria.limitarOrigem(req, 'imagem')) return res.status(429).set('Retry-After', '60').end();
+  const achada = rotasDeContas.sessaoDoPedido(req, res);
+  const imagem = achada && social?.imagemPara(achada.conta.id, String(req.params.id || ''));
+  if (!imagem) return res.status(404).end();
+  res.set({
+    'Content-Type': imagem.tipo, 'Content-Length': String(imagem.bytes.length),
+    'Cache-Control': 'private, max-age=259200, immutable',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; sandbox",
+    'Cross-Origin-Resource-Policy': 'same-origin'
+  });
+  res.end(imagem.bytes);
+});
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 app.get('/sala', (req, res) => {

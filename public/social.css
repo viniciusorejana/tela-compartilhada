@@ -56,7 +56,7 @@
 .nx-amigo-clicavel { cursor:pointer; }
 
 /* ---------- A conversa ---------- */
-.nx-dm { position:relative; display:grid; grid-template-rows:auto minmax(0,1fr) auto auto auto; height:100%; min-height:0; min-width:0; color:var(--text); }
+.nx-dm { position:relative; display:grid; grid-template-rows:auto minmax(0,1fr) auto auto auto auto; height:100%; min-height:0; min-width:0; color:var(--text); }
 .nx-dm-topo { display:flex; align-items:center; gap:8px; min-height:56px; padding:8px 14px; border-bottom:1px solid var(--line); }
 .nx-dm-botao { --nx-cor:var(--muted); --nx-cor-hover:var(--text); --nx-fundo-hover:var(--bg-3); flex:none; width:var(--ctl-m); height:var(--ctl-m); }
 .nx-dm-botao .ico { width:18px; height:18px; }
@@ -73,11 +73,16 @@
 .nx-dm-msg { position:relative; display:grid; grid-template-columns:34px minmax(0,1fr); column-gap:11px; padding:6px 36px 2px 6px; margin-top:10px; border-radius:var(--r-md); transition:background-color var(--dur-rapida) var(--curva); animation:nexo-surgir var(--dur) var(--curva); }
 .nx-dm-msg.agrupada { margin-top:0; padding-top:1px; }
 .nx-dm-msg:hover { background:rgb(var(--tinta) / 3%); }
-.nx-dm-msg-avatar { grid-row:1 / 3; display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:var(--sobre-cor); font-size:var(--fs-md); font-weight:750; background-size:cover; background-position:center; overflow:hidden; }
+.nx-dm-msg-avatar { grid-row:1 / 3; display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:var(--sobre-cor); font-size:var(--fs-md); font-weight:750; background-size:cover; background-position:center; }
 .nx-dm-msg-avatar.com-foto { color:transparent; }
 .nx-dm-msg-cabeca { display:flex; align-items:baseline; gap:8px; min-width:0; }
 .nx-dm-msg-cabeca strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-md); font-weight:650; color:var(--text); }
 .nx-dm-msg.minha .nx-dm-msg-cabeca strong { color:var(--accent-texto); }
+/* A borda de cada um (cartao.js) no avatar de cantos arredondados; parada até o mouse passar pela
+   mensagem, como no chat da sala -- a conversa pode ter dezenas delas. */
+.nx-dm-msg-avatar { --borda-raio:11px; }
+.nx-dm-mensagens .nx-dm-msg .nx-com-borda::before,.nx-dm-mensagens .nx-dm-msg .nx-nome-estilo { animation-play-state:paused; }
+.nx-dm-mensagens .nx-dm-msg:hover .nx-com-borda::before,.nx-dm-mensagens .nx-dm-msg:hover .nx-nome-estilo { animation-play-state:running; }
 .nx-dm-msg-cabeca time { flex:none; color:var(--faint); font-size:var(--fs-meta); }
 .nx-dm-msg-texto { grid-column:2; margin:1px 0 0; color:var(--text-2); font-size:14px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
 .nx-dm-msg-texto a { color:var(--accent-texto); }
@@ -95,7 +100,7 @@
 .nx-dm-visto { justify-self:end; margin:2px 6px 0 0; color:var(--faint); font-size:var(--fs-meta); }
 .nx-dm-vazio { margin:20px 0; color:var(--faint); font-size:var(--fs-sm); text-align:center; }
 .nx-dm-digitando { min-height:18px; margin:0; padding:0 18px; color:var(--muted); font-size:var(--fs-meta); font-style:italic; }
-.nx-dm-compor { display:flex; align-items:flex-end; gap:8px; margin:0 14px 6px; padding:6px 6px 6px 14px; border-radius:var(--r-lg); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); transition:box-shadow var(--dur) var(--curva); }
+.nx-dm-compor { display:flex; align-items:flex-end; gap:6px; margin:0 14px 6px; padding:6px; border-radius:var(--r-lg); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); transition:box-shadow var(--dur) var(--curva); }
 .nx-dm-compor:focus-within { box-shadow:inset 0 0 0 1px var(--accent),0 0 0 3px var(--accent-suave-hi); }
 .nx-dm-compor textarea { flex:1; min-width:0; min-height:var(--ctl-m); max-height:140px; margin:0; padding:8px 0; border:0; border-radius:0; background:transparent; color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; resize:none; box-shadow:none; outline:none; }
 .nx-dm-compor textarea:hover,.nx-dm-compor textarea:focus-visible { border:0; box-shadow:none; outline:none; }
@@ -104,6 +109,30 @@
 .nx-dm-enviar .ico { width:17px; height:17px; transition:transform var(--dur) var(--curva); }
 .nx-dm-enviar:hover:not(:disabled) .ico { transform:translate(2px,-2px); }
 .nx-dm-status { min-height:16px; margin:0 18px 8px; color:var(--danger-texto); font-size:var(--fs-meta); }
+.nx-dm-status[data-tom="andamento"] { color:var(--muted); }
+
+/* ---------- A imagem na conversa direta ----------
+   O botão de anexar (à esquerda do campo), a prévia da imagem antes de ir, a imagem na mensagem e
+   o visor que a abre grande. A imagem nasce do tamanho certo (conversa.js reserva o lugar pelas
+   dimensões que vêm com a mensagem) e mora num botão: clicar abre o visor. */
+.nx-dm-anexar { --nx-cor:var(--muted); --nx-cor-hover:var(--text); --nx-fundo-hover:var(--bg-3); flex:none; width:var(--ctl-m); height:var(--ctl-m); }
+.nx-dm-anexar .ico { width:19px; height:19px; transition:transform var(--dur) var(--curva-mola); }
+.nx-dm-anexar:hover:not(:disabled) .ico { transform:scale(1.1); }
+.nx-dm-anexo { display:flex; align-items:center; gap:10px; min-width:0; margin:0 14px 6px; padding:8px; border-radius:var(--r-lg); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); animation:nexo-surgir var(--dur) var(--curva); }
+.nx-dm-anexo-miniatura { flex:none; width:56px; height:56px; border-radius:var(--r-md); object-fit:cover; background:var(--bg-0); }
+.nx-dm-anexo-textos { flex:1; min-width:0; display:grid; gap:2px; }
+.nx-dm-anexo-textos strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-size:var(--fs-sm); font-weight:650; }
+.nx-dm-anexo-textos small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); }
+.nx-dm-img { --nx-fundo:var(--bg-0); grid-column:2; justify-self:start; display:block; max-width:100%; margin:6px 0 2px; padding:0; border-radius:var(--r-lg); overflow:hidden; box-shadow:inset 0 0 0 1px var(--line); cursor:zoom-in; }
+.nx-dm-img img { display:block; max-width:min(100%,360px); max-height:300px; height:auto; object-fit:cover; transition:transform var(--dur) var(--curva); }
+.nx-dm-img:hover img { transform:scale(1.02); }
+.nx-dm-img-saiu { grid-column:2; margin:4px 0 0; color:var(--faint); font-size:var(--fs-meta); font-style:italic; }
+/* O visor fica acima dos painéis da sala e do visualizador de imagem do chat (docs/interface.md,
+   2.9): ele nasce de dentro de um painel. Escuro nos dois temas, como o do chat. */
+.nx-dm-visor { position:fixed; inset:0; z-index:97; display:grid; place-items:center; padding:28px; background:#090910f2; cursor:zoom-out; animation:nexo-aparecer var(--dur) var(--curva); }
+.nx-dm-visor > img { display:block; max-width:100%; max-height:calc(100vh - 56px); max-height:calc(100dvh - 56px); border-radius:var(--r-lg); box-shadow:0 28px 70px #0009; }
+.nx-dm-visor-fechar { --nx-fundo:#ffffff1f; --nx-fundo-hover:#ffffff33; --nx-cor:#fff; position:fixed; top:14px; right:14px; width:var(--ctl-m); height:var(--ctl-m); border-radius:50%; }
+.nx-dm-visor-fechar .ico { width:18px; height:18px; }
 @media (max-width:760px) { .nx-dm-compor textarea { font-size:16px; } .nx-dm-msg { padding-right:30px; } }
 
 /* ---------- Escolher (convidar, chamar para uma sala) ----------

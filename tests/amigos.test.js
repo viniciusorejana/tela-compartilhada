@@ -255,3 +255,41 @@ test('mensagens diretas: só entre amigos, ao vivo, com lida, convite e presenç
   await bia.pedir('/api/conta/social', { metodo: 'PUT', corpo: { status: 'invisivel' } });
   assert.equal((await sumiu).presenca.status, 'offline');
 });
+
+test('imagem na mensagem direta: só na memória, só para os dois da conversa, e o tipo pelos bytes', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = await criarConta(servidor, 'ana6', 'Ana');
+  const bia = await criarConta(servidor, 'bia6', 'Bia');
+  const caio = await criarConta(servidor, 'caio6', 'Caio');
+  await ana.pedir('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: '@bia6' } });
+  await bia.pedir(`/api/conta/amigos/${ana.conta.codigo}/aceitar`, { metodo: 'POST' });
+  const a = await conectarSocial(servidor.origem, ana.cookie()); t.after(a.fechar);
+  await a.evento('pronto');
+
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const enviada = await a.pedir('dm-enviar', { para: bia.conta.codigo, texto: '', imagem: `data:image/png;base64,${png.toString('base64')}`, largura: 640, altura: 360 });
+  assert.equal(enviada.ok, true, JSON.stringify(enviada));
+  assert.match(enviada.mensagem.imagem.id, /^[a-f0-9]{32}$/);
+  assert.equal(enviada.mensagem.imagem.largura, 640);
+  assert.equal(JSON.stringify(enviada).includes('base64'), false, 'a imagem não volta dentro da mensagem: tem endereço próprio');
+
+  const caminho = `${servidor.origem}/api/social/imagem/${enviada.mensagem.imagem.id}`;
+  const daBia = await fetch(caminho, { headers: { Cookie: bia.cookie() } });
+  assert.equal(daBia.status, 200);
+  assert.equal(daBia.headers.get('content-type'), 'image/png');
+  assert.equal(daBia.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(daBia.headers.get('cache-control'), /private/);
+  assert.deepEqual(Buffer.from(await daBia.arrayBuffer()), png);
+  assert.equal((await fetch(caminho, { headers: { Cookie: caio.cookie() } })).status, 404, 'quem não é da conversa não abre');
+  assert.equal((await fetch(caminho)).status, 404, 'nem quem não tem conta');
+
+  // O tipo é o dos bytes: um "PNG" que é outra coisa por dentro não passa, e nem o grande demais.
+  const falso = await a.pedir('dm-enviar', { para: bia.conta.codigo, imagem: `data:image/png;base64,${Buffer.from('<svg onload="alert(1)"></svg>').toString('base64')}` });
+  assert.equal(falso.ok, false);
+  const grande = await a.pedir('dm-enviar', { para: bia.conta.codigo, imagem: `data:image/png;base64,${'A'.repeat(900 * 1024)}` });
+  assert.equal(grande.ok, false);
+
+  // Apagar a mensagem tira a imagem da memória.
+  assert.equal((await a.pedir('dm-apagar', { com: bia.conta.codigo, id: enviada.mensagem.id })).ok, true);
+  assert.equal((await fetch(caminho, { headers: { Cookie: bia.cookie() } })).status, 404);
+});
