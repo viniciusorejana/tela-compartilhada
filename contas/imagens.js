@@ -22,7 +22,12 @@ const LIMITES = Object.freeze({
   estudio: { bytes: 12 * MiB, quantas: 40, total: 64 * MiB },
   // O rosto que a própria pessoa escolhe para os Estúdios dos outros: uma imagem por estado
   // (quatro no máximo, pela forma -- contas/banco.js troca a anterior), com o teto das do Estúdio.
-  rosto: { bytes: 12 * MiB }
+  rosto: { bytes: 12 * MiB },
+  // O banner e o fundo do cartão de perfil (public/vitrine.js). A imagem parada chega reduzida
+  // pela página; o GIF vem como está -- é a animação que a pessoa escolheu --, e cada pessoa que
+  // abre o cartão o baixa uma vez (o endereço muda a cada troca e fica em cache para sempre).
+  banner: { bytes: 8 * MiB },
+  fundo: { bytes: 8 * MiB }
 });
 
 function tipoDosBytes(bytes) {

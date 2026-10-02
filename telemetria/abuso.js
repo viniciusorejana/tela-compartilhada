@@ -50,6 +50,25 @@ const REGRAS = Object.freeze({
   // Cada fonte do OBS é uma página com a sua conexão, e uma cena com seis delas abre seis de
   // uma vez; o OBS as reabre a cada troca de cena com "atualizar ao ficar visível".
   'estudio-conexao': { sessao: 60 },
+  // ---------- Amigos, cartão e mensagens diretas (contas/amigos.js, social.js) ----------
+  // O socket de amigos abre uma vez por aba logada (o início e cada sala).
+  'social-conexao': { sessao: 60 },
+  // Pedir amizade é gesto de mão; o teto longo é o que impede de sair pedindo a todo código.
+  'amizade-pedir': { sessao: 10, longa: [60, 60 * MINUTO] },
+  'amizade-acao': { sessao: 40, longa: [400, 60 * MINUTO] },
+  // O cartão é salvo por um botão, e não a cada clique; as imagens têm o balde de 'conta-imagem'.
+  'conta-vitrine': { sessao: 30, longa: [400, 60 * MINUTO] },
+  'conta-social': { sessao: 30, longa: [300, 60 * MINUTO] },
+  // Abrir o cartão de alguém pelo código: é o que a lista de amigos e a sala fazem a cada clique
+  // num nome, e o teto longo é o mesmo da busca do Estúdio -- não dá para varrer códigos.
+  'perfil-ver': { sessao: 60, longa: [600, 60 * MINUTO] },
+  // Mensagem direta: uma conversa animada manda várias seguidas; uma rajada de oito em três
+  // segundos já é colar texto em laço.
+  'dm-enviar': { sessao: 40, rajada: [8, 3000], longa: [600, 60 * MINUTO] },
+  'dm-acao': { sessao: 90 },
+  'dm-digitando': { sessao: 40 },
+  'convidar': { sessao: 10, longa: [80, 60 * MINUTO] },
+  'social-total': { sessao: 300, rajada: [60, 5000] },
   // As imagens de perfil descem para cada pessoa da sala, uma vez por imagem (cache eterno).
   // Atrás de um túnel todo mundo divide a mesma origem, então o teto é folgado.
   'imagem': { sessao: 1200 },

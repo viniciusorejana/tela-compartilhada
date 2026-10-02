@@ -94,7 +94,7 @@ test('as PRAGMAs que o plano exige estão ligadas na conexão principal', t => {
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'sem isto o apagar da conta deixaria perfil e sessões para trás');
   assert.equal(db.prepare('PRAGMA wal_autocheckpoint').get().wal_autocheckpoint, 0);
-  assert.equal(banco.versao, 3, 'a migração 3 traz o rosto de cada pessoa no Estúdio');
+  assert.equal(banco.versao, 4, 'a migração 4 traz amigos, o cartão de perfil e as conquistas');
 });
 
 // A migração 3 refaz a tabela das imagens (o CHECK do uso não muda no lugar): um banco que já
@@ -113,7 +113,7 @@ test('a migração 3 refaz a tabela das imagens sem perder nenhuma', t => {
   inserir.run('e1', 'c1', 'estudio', 'image/gif', 2, Buffer.from([4, 5]), 2);
   assert.throws(() => inserir.run('r0', 'c1', 'rosto', 'image/png', 1, Buffer.from([6]), 3), /CHECK/, 'na versão 2 o rosto ainda não existe');
 
-  assert.equal(migrar(db, todas), 3);
+  assert.equal(migrar(db, todas.filter(m => m.versao <= 3)), 3);
   assert.deepEqual(db.prepare('SELECT id, uso, tamanho FROM imagem ORDER BY id').all().map(l => ({ ...l })), [
     { id: 'a1', uso: 'avatar', tamanho: 3 }, { id: 'e1', uso: 'estudio', tamanho: 2 }
   ]);
@@ -121,6 +121,36 @@ test('a migração 3 refaz a tabela das imagens sem perder nenhuma', t => {
   assert.equal(db.prepare("SELECT rosto FROM perfil WHERE conta_id = 'c1'").get().rosto, '{}', 'o perfil começa sem rosto próprio');
   db.prepare("DELETE FROM conta WHERE id = 'c1'").run();
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM imagem').get().n, 0, 'o CASCADE continua levando as imagens com a conta');
+});
+
+// A migração 4 refaz a tabela das imagens de novo (banner e fundo do cartão) e cria amizades,
+// apelidos, bloqueios e contadores -- tudo indo embora com a conta, pelo CASCADE.
+test('a migração 4 guarda as imagens, aceita banner e fundo, e o CASCADE leva amigos e contadores', t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'nexo-migracao-4-'));
+  const db = abrirConexao(path.join(pasta, 'nexo.db'), { principal: true });
+  t.after(() => { if (db.isOpen) db.close(); fs.rmSync(pasta, { recursive: true, force: true }); });
+  const todas = lerMigracoes();
+  assert.equal(migrar(db, todas.filter(m => m.versao <= 3)), 3);
+  const conta = db.prepare("INSERT INTO conta (id, codigo, usuario, apelido, senha, recuperacao, criada_em, vista_em) VALUES (?, ?, ?, ?, 's', 'r', 1, 1)");
+  conta.run('c1', 'K7M2PQ4X', 'ana', 'Ana');
+  conta.run('c2', 'P9QXW3RT', 'bia', 'Bia');
+  db.prepare("INSERT INTO perfil (conta_id) VALUES ('c1'), ('c2')").run();
+  const inserir = db.prepare('INSERT INTO imagem (id, conta_id, uso, tipo, tamanho, bytes, criada_em) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  inserir.run('r1', 'c1', 'rosto', 'image/png', 1, Buffer.from([6]), 3);
+  assert.throws(() => inserir.run('b0', 'c1', 'banner', 'image/png', 1, Buffer.from([6]), 3), /CHECK/, 'na versão 3 o banner ainda não existe');
+
+  assert.equal(migrar(db, todas), 4);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM imagem').get().n, 1, 'nenhuma imagem se perde');
+  inserir.run('b1', 'c1', 'banner', 'image/gif', 1, Buffer.from([7]), 4);
+  inserir.run('f1', 'c1', 'fundo', 'image/webp', 1, Buffer.from([8]), 4);
+  assert.equal(db.prepare("SELECT vitrine, social FROM perfil WHERE conta_id = 'c1'").get().vitrine, '{}');
+  db.prepare("INSERT INTO amizade (de_conta, para_conta, estado, criada_em) VALUES ('c1', 'c2', 'aceita', 1)").run();
+  assert.throws(() => db.prepare("INSERT INTO amizade (de_conta, para_conta, estado, criada_em) VALUES ('c1', 'c1', 'aceita', 1)").run(), /CHECK/, 'ninguém é amigo de si mesmo');
+  db.prepare("INSERT INTO apelido_de_amigo (dono, amigo, apelido) VALUES ('c2', 'c1', 'Aninha')").run();
+  db.prepare("INSERT INTO contador (conta_id, nome, valor) VALUES ('c1', 'minutos', 30)").run();
+  assert.throws(() => db.prepare("INSERT INTO contador (conta_id, nome, valor) VALUES ('c1', 'salas-secretas', 1)").run(), /CHECK/, 'o contador é de uma lista fechada');
+  db.prepare("DELETE FROM conta WHERE id = 'c1'").run();
+  for (const tabela of ['imagem', 'amizade', 'apelido_de_amigo', 'contador']) assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${tabela}`).get().n, 0, `o CASCADE leva ${tabela}`);
 });
 
 test('cadastrar devolve a conta, uma sessão e o código de recuperação, que é guardado só como scrypt', async t => {

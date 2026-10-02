@@ -14,7 +14,7 @@ const { instalarRotas } = require('./rotas');
 const { ipDoPedido } = require('./origem');
 const { criarRelatos, MAXIMO_DA_MENSAGEM, MAXIMO_DO_RELATORIO } = require('./relatos');
 
-function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, midia = null, aoFaixaDeTela = () => {}, tetoDePessoas = null, aceitarCaptura = () => false }) {
+function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao = null, contas = null, midia = null, aoFaixaDeTela = () => {}, aoPublicarTela = () => {}, tetoDePessoas = null, aceitarCaptura = () => false }) {
   const auth = criarAutenticacao();
   const alertas = criarAlertas({ pasta: PASTA_PRIVADA });
   let regras = {};
@@ -45,6 +45,9 @@ function iniciarTelemetria({ app, io, sfu, medicao, salas, soundboard, moderacao
     // A tela publicada segue para a conferência do teto do plano (server.js). O evento já
     // chega ligado à sessão -- é a sessão que sabe a conta, e a conta que sabe o plano.
     if (evento.tipo === 'track_published' && evento.fonte === 'screen_share' && evento.faixa) aoFaixaDeTela(sessao, evento.faixa);
+    // A publicação de uma tela, uma vez (a reconciliação abaixo vê a mesma tela de novo, e não
+    // passa por aqui): é o que soma no contador de telas da conta.
+    if (evento.tipo === 'track_published' && evento.fonte === 'screen_share') { try { aoPublicarTela(sessao); } catch (_) { /* contador é enfeite */ } }
     const con = { ...contexto(sessao), fonte: evento.fonte };
     const recente = Date.now() - evento.quando < 15000 && sfu.diagnostico().uptime > 60;
     if (evento.tipo === 'track_published') {

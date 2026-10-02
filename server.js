@@ -43,6 +43,8 @@ const { formatarCodigo } = require('./contas/regras');
 const { origemDaPaginaPermitida, origensConfiguradas } = require('./telemetria/origem');
 const { dimensaoDaFaixa } = require('./telemetria/livekit');
 const { criarEstudioAoVivo, PREFIXO_DA_IDENTIDADE: PREFIXO_DO_ESTUDIO } = require('./estudio-ao-vivo');
+const { criarAmigos } = require('./contas/amigos');
+const { criarSocial } = require('./social');
 
 // Quem manda em cada sala. Vive só em memória, como o resto da sala: ver moderacao.js.
 const moderacao = criarModeracao();
@@ -120,12 +122,22 @@ const chaveDeWebCodecs = criarChaveDeWebCodecs({
 // vão para a telemetria, que só existe uma linha abaixo -- daí o `telemetria?.`.
 let telemetria = null;
 let estudio = null;
-const contas = criarContas({ aoAlertar: alerta => telemetria?.alertar(alerta) });
+// Amigos ao vivo (social.js): nasce depois das contas e do Socket.IO, e as contas avisam por ele
+// quando alguém ganha uma conquista ou apaga a conta -- daí o `social?.`.
+let social = null;
+const contas = criarContas({
+  aoAlertar: alerta => telemetria?.alertar(alerta), planosLigados: PLANOS_LIGADOS,
+  aoGanharConquista: (contaId, conquista) => social?.conquistou(contaId, conquista),
+  aoApagarConta: contaId => social?.esquecerConta(contaId)
+});
 telemetria = iniciarTelemetria({
   app, io, sfu, medicao, soundboard, moderacao, salas: () => roomMembers,
   contas: { listar: contas.listarParaOPainel, agir: agirNaContaPeloPainel },
   midia: { estado: chaveDeWebCodecs.estado, definir: chaveDeWebCodecs.definir },
   aoFaixaDeTela: conferirTela, tetoDePessoas: estadoDoTeto,
+  // Cada tela que entra no ar soma no contador da conta (as conquistas "No palco" e "Diretor de
+  // cena"). Só a publicação conta, e não a conferência periódica, que vê a mesma tela de novo.
+  aoPublicarTela: sessao => contas.contar(sessao?.contaId, 'telas'),
   aceitarCaptura: identidade => Boolean(estudio?.aceita(identidade))
 });
 // O Estúdio: a câmera, a tela e a voz de quem está na sala levadas ao OBS por um link, e os
@@ -135,7 +147,28 @@ estudio = criarEstudioAoVivo({
   publicUrl: origemPublica(), formatarCodigo, salaPermite: estudioPermitidoNaSala,
   emitirNaSala: (sala, evento, dados) => io.to(roomName(sala)).emit(evento, dados)
 });
-const rotasDeContas = instalarRotasDeContas(app, { contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS, aoMudarPerfil: conta => aplicarPerfilNasSalas(conta), estudio });
+// Amigos: a regra (contas/amigos.js) e a parte ao vivo (social.js). Quem muda a lista de alguém
+// avisa as abas dessa pessoa pelo socket `/social`.
+const amigos = criarAmigos({ contas, aoMudar: (contaIds, motivo) => social?.mudouAmizade(contaIds, motivo) });
+const rotasDeContas = instalarRotasDeContas(app, {
+  contas, limitarOrigem: telemetria.limitarOrigem, abrirSemConta: ANONIMO_ABRE_SALA, planosLigados: PLANOS_LIGADOS, novidadesAutomaticas: NOVIDADES_AUTOMATICAS,
+  aoMudarPerfil: conta => aplicarPerfilNasSalas(conta), aoMudarSocial: conta => social?.mudouPresenca(conta.id), estudio, amigos
+});
+social = criarSocial({ io, contas, amigos, tokenDoPedido: rotasDeContas.tokenDoPedido, ondeEsta: salaDaConta, limitarOrigem: telemetria.limitarOrigem });
+
+// Em que sala uma conta está agora, para a presença dos amigos. "Uma conta, uma conexão"
+// (substituirConexoesAntigas): ela está em uma sala só.
+function salaDaConta(contaId) {
+  for (const [sala, membros] of roomMembers) {
+    for (const membro of membros.values()) {
+      if (membro.contaId !== contaId) continue;
+      return { sala, pessoas: salas.pessoas(sala), trancada: Boolean(configuracaoPorSala.get(sala)?.trancada), desde: membro.desde || null };
+    }
+  }
+  return null;
+}
+// Quem tem conta numa sala: é a presença dessas pessoas que muda quando a sala muda.
+const contasNaSala = sala => [...new Set([...(roomMembers.get(sala)?.values() || [])].map(m => m.contaId).filter(Boolean))];
 // Preferências temporárias da sala. Como chat e moderação, desaparecem quando a última
 // pessoa sai. A aprovação usa a identidade privada da sessão, nunca o nome exibido.
 const configuracaoPorSala = new Map();
@@ -198,7 +231,17 @@ app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dir
 app.get('/vendor/livekit-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/LICENSE')));
 app.get('/vendor/rnnoise-sync.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/dist/rnnoise-sync.js')));
 app.get('/vendor/rnnoise-LICENSE', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/@jitsi/rnnoise-wasm/LICENSE')));
-app.use(express.static(path.join(__dirname, 'public')));
+// A porta de entrada decide quem é: com conta, o início (amigos, conversas, salas recentes); sem,
+// a apresentação de sempre. Antes do `static`, que serviria o index.html em `/` sem perguntar. A
+// apresentação continua em `/sobre` para quem tem conta, e a resposta não fica em cache de
+// ninguém -- ela depende de quem pediu.
+app.get(['/', '/index.html'], (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const comConta = Boolean(rotasDeContas.sessaoDoPedido(req, res));
+  res.sendFile(path.join(__dirname, 'public', comConta ? 'inicio.html' : 'index.html'));
+});
+app.get('/sobre', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 app.get('/sala', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sala.html'));
@@ -337,8 +380,10 @@ app.get('/api/sala-config', (req, res) => {
 function perfilNaSala(conta) {
   const { cor, marca, avatar, rosto } = contas.perfil(conta);
   // O rosto do Estúdio vai junto, como a foto: é público por escolha da pessoa, e é daqui que o
-  // painel do Estúdio de quem está na sala e as fontes do OBS o leem.
-  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar, rosto };
+  // painel do Estúdio de quem está na sala e as fontes do OBS o leem. O cartão também (a vitrine
+  // efetiva, a frase do status e as conquistas ganhas, public/vitrine.js): é o que a sala mostra
+  // quando alguém clica na pessoa.
+  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar, rosto, cartao: contas.cartaoPublico(conta) };
 }
 
 // O endereço público configurado, para os convites e os links do OBS. Sem configuração, cada
@@ -405,6 +450,8 @@ function aplicarPerfilNasSalas(conta) {
       estudio.mudouSala(roomCode);
     }
   }
+  // E os amigos, onde estiverem: o cartão e a lista deles mostram o perfil novo.
+  social?.mudouPerfil(conta.id);
 }
 
 // Quem desistiu na tela de espera precisa sumir da fila imediatamente. `keepalive` permite
@@ -444,9 +491,6 @@ function enderecoDoSfu(req) {
   return `${protocolo === 'https' ? 'wss' : 'ws'}://${host}`;
 }
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 const TOKEN_VALIDO = /^[a-f0-9]{16,64}$/i;
 
@@ -1296,6 +1340,9 @@ io.on('connection', (socket) => {
     // O relógio da pessoa fica parado, e não apagado: se ela voltar logo, ele continua.
     const quemSai = roomMembers.get(roomCode)?.get(socket.id);
     if (quemSai?.chaveDeTempo) tempos.saiu(roomCode, quemSai.chaveDeTempo, socket.id);
+    // O tempo desta passagem soma nos minutos da conta (as conquistas de horas em sala). É só a
+    // soma: o contador não sabe em que sala, nem com quem.
+    if (quemSai?.contaId && quemSai.entrouEm) contas.contarTempo(quemSai.contaId, Date.now() - quemSai.entrouEm);
     // Sala vazia não é esquecida aqui: ela espera 60 segundos e, se ninguém voltar, as
     // limpezas registradas em `salas.aoFechar` apagam tudo o que era dela.
     salas.saiu(roomCode, socket.id);
@@ -1321,6 +1368,8 @@ io.on('connection', (socket) => {
     // Quem saiu pode ser quem criou uma captura (ela para) ou quem aparece nela (ela espera).
     estudio.mudouSala(roomCode);
     if (quemSai?.contaId) estudio.mudouConta(quemSai.contaId);
+    // Os amigos de quem saiu deixam de vê-lo na sala; os de quem ficou veem uma pessoa a menos.
+    social.mudouSala([...contasNaSala(roomCode), quemSai?.contaId].filter(Boolean));
   }
 
   socket.on('leave-room', callback => {
@@ -1396,7 +1445,9 @@ io.on('connection', (socket) => {
     // Se esta pessoa deixa ser levada para o OBS vem no aperto de mão, e não num aviso depois
     // da entrada: entre um e outro, uma captura já poderia ter começado contra a vontade dela.
     const permiteEstudio = socket.handshake.auth?.estudio !== false;
-    salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde, permiteEstudio });
+    const { abriu } = salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde, permiteEstudio, entrouEm: Date.now() });
+    // Abrir uma sala é ser o primeiro num código fechado (salas.js): soma no contador da conta.
+    if (abriu && sessao.contaId) contas.contar(sessao.contaId, 'salas');
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
     // A conta também: é ela que deixa quem tem conta voltar de um F5 numa sala trancada, já
     // com outra identidade, sem pedir aprovação para entrar na própria sala.
@@ -1449,6 +1500,8 @@ io.on('connection', (socket) => {
     // Quem chegou pode ser o diretor de páginas do OBS que o esperavam, ou a pessoa que elas
     // mostram.
     estudio.mudouSala(roomCode);
+    // Os amigos de quem chegou passam a vê-lo na sala, e os de quem já estava, uma pessoa a mais.
+    social.mudouSala(contasNaSala(roomCode));
   });
 
   // ---------- O Estúdio ----------
@@ -1587,6 +1640,8 @@ io.on('connection', (socket) => {
     io.to(roomName(roomCode)).emit('sala-configuracao', atual);
     // Desligar o OBS na sala derruba na hora o que os participantes tinham no ar.
     if (atual.estudio !== estudioAntes) estudio.mudouSala(roomCode);
+    // Trancada, a sala vira "Pedir para entrar" na lista dos amigos de quem está nela.
+    social.mudouSala(contasNaSala(roomCode));
     responder({ ok: true, configuracao: atual });
   });
 
@@ -1801,6 +1856,7 @@ io.on('connection', (socket) => {
     };
     guardarNoHistorico(roomCode, mensagem);
     io.to(roomName(roomCode)).emit('chat-mensagem', mensagemPublica(mensagem));
+    if (membro.contaId) contas.contar(membro.contaId, 'mensagens');
   });
 
   socket.on('chat-acao', (dados, callback) => {
@@ -2119,7 +2175,7 @@ function aoSubir() {
 let encerrandoServidor = false;
 function encerrarServidor() {
   if (encerrandoServidor) return;
-  encerrandoServidor = true; estudio.encerrar(); sfu.encerrarSfu(); salas.encerrar();
+  encerrandoServidor = true; estudio.encerrar(); social.encerrar(); sfu.encerrarSfu(); salas.encerrar();
   Promise.allSettled([telemetria.encerrar(), musica.encerrarTudo(), contas.encerrar()]).finally(() => process.exit(0));
 }
 for (const sinal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sinal, encerrarServidor);

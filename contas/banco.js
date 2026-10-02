@@ -121,7 +121,44 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     trocarRecuperacao: sql('UPDATE conta SET recuperacao = ? WHERE id = ?'),
     trocarApelido: sql('UPDATE conta SET apelido = ? WHERE id = ?'),
     apagarConta: sql('DELETE FROM conta WHERE id = ?'),
-    perfil: sql('SELECT cor, marca, avatar, rosto, ajustes FROM perfil WHERE conta_id = ?'),
+    perfil: sql('SELECT cor, marca, avatar, rosto, ajustes, vitrine, social FROM perfil WHERE conta_id = ?'),
+    salvarVitrine: sql('UPDATE perfil SET vitrine = ? WHERE conta_id = ?'),
+    salvarSocial: sql('UPDATE perfil SET social = ? WHERE conta_id = ?'),
+    // ---------- Amizades ----------
+    // Uma linha por par, com quem pediu em `de_conta`: toda consulta olha os dois lados.
+    amizadeEntre: sql(`SELECT de_conta, para_conta, estado, criada_em, aceita_em FROM amizade
+      WHERE (de_conta = ? AND para_conta = ?) OR (de_conta = ? AND para_conta = ?)`),
+    inserirPedido: sql("INSERT INTO amizade (de_conta, para_conta, estado, criada_em) VALUES (?, ?, 'pendente', ?)"),
+    aceitarPedido: sql("UPDATE amizade SET estado = 'aceita', aceita_em = ? WHERE de_conta = ? AND para_conta = ? AND estado = 'pendente'"),
+    apagarAmizade: sql('DELETE FROM amizade WHERE (de_conta = ? AND para_conta = ?) OR (de_conta = ? AND para_conta = ?)'),
+    // A lista inteira de uma conta, com o que a tela precisa de cada outra pessoa numa ida só.
+    // O id da outra conta vai junto, mas só para o servidor (presença); quem sai daqui é o código.
+    amizadesDe: sql(`SELECT a.de_conta, a.estado, a.criada_em, a.aceita_em, c.id AS outro, c.codigo, c.apelido, c.plano, c.plano_ate,
+        c.criada_em AS conta_criada_em, c.suspensa_ate, p.cor, p.marca, p.avatar, p.vitrine, p.social, ap.apelido AS apelido_meu
+      FROM amizade a
+      JOIN conta c ON c.id = CASE WHEN a.de_conta = ? THEN a.para_conta ELSE a.de_conta END
+      JOIN perfil p ON p.conta_id = c.id
+      LEFT JOIN apelido_de_amigo ap ON ap.dono = ? AND ap.amigo = c.id
+      WHERE a.de_conta = ? OR a.para_conta = ?`),
+    idsDosAmigos: sql(`SELECT CASE WHEN de_conta = ? THEN para_conta ELSE de_conta END AS id FROM amizade
+      WHERE estado = 'aceita' AND (de_conta = ? OR para_conta = ?)`),
+    contarAmigos: sql("SELECT COUNT(*) AS total FROM amizade WHERE estado = 'aceita' AND (de_conta = ? OR para_conta = ?)"),
+    contarPedidosEnviados: sql("SELECT COUNT(*) AS total FROM amizade WHERE estado = 'pendente' AND de_conta = ?"),
+    definirApelidoDeAmigo: sql(`INSERT INTO apelido_de_amigo (dono, amigo, apelido) VALUES (?, ?, ?)
+      ON CONFLICT (dono, amigo) DO UPDATE SET apelido = excluded.apelido`),
+    apagarApelidoDeAmigo: sql('DELETE FROM apelido_de_amigo WHERE dono = ? AND amigo = ?'),
+    apagarApelidosDoPar: sql('DELETE FROM apelido_de_amigo WHERE (dono = ? AND amigo = ?) OR (dono = ? AND amigo = ?)'),
+    bloquear: sql('INSERT INTO bloqueio (dono, alvo, criado_em) VALUES (?, ?, ?) ON CONFLICT (dono, alvo) DO NOTHING'),
+    desbloquear: sql('DELETE FROM bloqueio WHERE dono = ? AND alvo = ?'),
+    bloqueioEntre: sql('SELECT dono FROM bloqueio WHERE (dono = ? AND alvo = ?) OR (dono = ? AND alvo = ?)'),
+    bloqueadosPor: sql(`SELECT b.criado_em, c.codigo, c.apelido, p.cor, p.marca, p.avatar FROM bloqueio b
+      JOIN conta c ON c.id = b.alvo JOIN perfil p ON p.conta_id = c.id WHERE b.dono = ? ORDER BY b.criado_em DESC`),
+    // ---------- Conquistas ----------
+    somarContador: sql(`INSERT INTO contador (conta_id, nome, valor) VALUES (?, ?, ?)
+      ON CONFLICT (conta_id, nome) DO UPDATE SET valor = valor + excluded.valor`),
+    contadoresDe: sql('SELECT nome, valor FROM contador WHERE conta_id = ?'),
+    guardarConquista: sql('INSERT INTO conquista (conta_id, id, ganha_em) VALUES (?, ?, ?) ON CONFLICT (conta_id, id) DO NOTHING'),
+    conquistasGuardadas: sql('SELECT id, ganha_em FROM conquista WHERE conta_id = ?'),
     salvarAparencia: sql('UPDATE perfil SET cor = ?, marca = ? WHERE conta_id = ?'),
     salvarAjustes: sql('UPDATE perfil SET ajustes = ? WHERE conta_id = ?'),
     definirAvatar: sql('UPDATE perfil SET avatar = ? WHERE conta_id = ?'),
@@ -202,8 +239,76 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     apagarConta: contaId => q.apagarConta.run(contaId).changes,
     perfil(contaId) {
       const linha = q.perfil.get(contaId);
-      return linha ? { cor: linha.cor ?? null, marca: linha.marca ?? null, avatar: linha.avatar ?? null, rosto: lerAjustes(linha.rosto), ajustes: lerAjustes(linha.ajustes) } : null;
+      return linha ? {
+        cor: linha.cor ?? null, marca: linha.marca ?? null, avatar: linha.avatar ?? null, rosto: lerAjustes(linha.rosto), ajustes: lerAjustes(linha.ajustes),
+        vitrine: lerAjustes(linha.vitrine), social: lerAjustes(linha.social)
+      } : null;
     },
+    // A vitrine guarda junto os ids das imagens dela (banner e fundo), e quem os escreve é só o
+    // servidor: salvar o que a página mandou preserva os que já estão lá.
+    salvarVitrine(contaId, vitrine) {
+      return transacao(() => {
+        const imagens = lerAjustes(q.perfil.get(contaId)?.vitrine).imagens || {};
+        return q.salvarVitrine.run(JSON.stringify({ ...vitrine, imagens }), contaId).changes;
+      });
+    },
+    salvarSocial: (contaId, social) => q.salvarSocial.run(JSON.stringify(social), contaId).changes,
+    // Trocar a imagem do banner ou do fundo é como trocar o avatar: a nova entra, a anterior sai,
+    // na mesma transação. `imagem` nulo tira a do campo.
+    trocarImagemDaVitrine(contaId, campo, imagem) {
+      return transacao(() => {
+        const vitrine = lerAjustes(q.perfil.get(contaId)?.vitrine);
+        const imagens = { ...(vitrine.imagens || {}) };
+        const anterior = typeof imagens[campo] === 'string' ? imagens[campo] : null;
+        if (imagem) { q.inserirImagem.run(imagem.id, contaId, campo, imagem.tipo, imagem.bytes.length, imagem.bytes, imagem.agora); imagens[campo] = imagem.id; }
+        else delete imagens[campo];
+        q.salvarVitrine.run(JSON.stringify({ ...vitrine, imagens }), contaId);
+        if (anterior) q.apagarImagem.run(anterior, contaId);
+        return imagens;
+      });
+    },
+
+    // ---------- Amizades ----------
+    amizadeEntre(a, b) {
+      const linha = q.amizadeEntre.get(a, b, b, a);
+      return linha ? { de: linha.de_conta, para: linha.para_conta, estado: linha.estado, criadaEm: linha.criada_em, aceitaEm: linha.aceita_em ?? null } : null;
+    },
+    pedirAmizade: (de, para, agora) => q.inserirPedido.run(de, para, agora).changes,
+    aceitarAmizade: (de, para, agora) => q.aceitarPedido.run(agora, de, para).changes,
+    // Desfazer leva junto os apelidos que um deu ao outro: apelido de quem não é mais amigo é um
+    // dado que ninguém mais vê.
+    desfazerAmizade(a, b) {
+      return transacao(() => { q.apagarApelidosDoPar.run(a, b, b, a); return q.apagarAmizade.run(a, b, b, a).changes; });
+    },
+    amizadesDe(contaId) {
+      return q.amizadesDe.all(contaId, contaId, contaId, contaId).map(l => ({
+        outro: l.outro, pediu: l.de_conta === contaId, estado: l.estado, criadaEm: l.criada_em, aceitaEm: l.aceita_em ?? null,
+        conta: { id: l.outro, codigo: l.codigo, apelido: l.apelido, plano: l.plano, planoAte: l.plano_ate ?? null, criadaEm: l.conta_criada_em, suspensaAte: l.suspensa_ate ?? null },
+        perfil: { cor: l.cor ?? null, marca: l.marca ?? null, avatar: l.avatar ?? null, vitrine: lerAjustes(l.vitrine), social: lerAjustes(l.social) },
+        apelidoMeu: l.apelido_meu ?? null
+      }));
+    },
+    idsDosAmigos: contaId => q.idsDosAmigos.all(contaId, contaId, contaId).map(l => l.id),
+    contarAmigos: contaId => q.contarAmigos.get(contaId, contaId).total,
+    contarPedidosEnviados: contaId => q.contarPedidosEnviados.get(contaId).total,
+    definirApelidoDeAmigo: (dono, amigo, apelido) => (apelido ? q.definirApelidoDeAmigo.run(dono, amigo, apelido) : q.apagarApelidoDeAmigo.run(dono, amigo)).changes,
+    // Bloquear desfaz a amizade e os pedidos dos dois lados, na mesma transação.
+    bloquear(dono, alvo, agora) {
+      return transacao(() => { q.apagarApelidosDoPar.run(dono, alvo, alvo, dono); q.apagarAmizade.run(dono, alvo, alvo, dono); return q.bloquear.run(dono, alvo, agora).changes; });
+    },
+    desbloquear: (dono, alvo) => q.desbloquear.run(dono, alvo).changes,
+    // Quem bloqueou, se alguém bloqueou: `null`, ou o id de quem bloqueou (um dos dois).
+    bloqueioEntre: (a, b) => q.bloqueioEntre.get(a, b, b, a)?.dono ?? null,
+    bloqueadosPor: dono => q.bloqueadosPor.all(dono).map(l => ({ codigo: l.codigo, apelido: l.apelido, perfil: { cor: l.cor ?? null, marca: l.marca ?? null, avatar: l.avatar ?? null }, criadoEm: l.criado_em })),
+
+    // ---------- Conquistas ----------
+    // Vários contadores de uma vez, numa transação: é o que o servidor grava a cada 30 s.
+    somarContadores(somas) {
+      return transacao(() => { for (const { contaId, nome, valor } of somas) q.somarContador.run(contaId, nome, valor); });
+    },
+    contadoresDe: contaId => Object.fromEntries(q.contadoresDe.all(contaId).map(l => [l.nome, l.valor])),
+    guardarConquista: (contaId, id, agora) => q.guardarConquista.run(contaId, id, agora).changes,
+    conquistasGuardadas: contaId => q.conquistasGuardadas.all(contaId).map(l => ({ id: l.id, ganhaEm: l.ganha_em })),
     // Uma imagem do rosto, por estado (parado, falando, mudo, ensurdecido), como o avatar: a nova
     // entra e a anterior daquele estado sai na mesma transação. `imagem` nulo tira a do estado.
     trocarRosto(contaId, estado, imagem) {
@@ -238,7 +343,14 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     // O atalho do painel para uma imagem imprópria: todas as da conta, e o avatar volta à cor --
     // e o rosto do Estúdio fica sem imagem própria.
     apagarImagensDaConta(contaId) {
-      return transacao(() => { q.definirAvatar.run(null, contaId); q.definirRosto.run('{}', contaId); return q.apagarImagensDaConta.run(contaId).changes; });
+      return transacao(() => {
+        q.definirAvatar.run(null, contaId);
+        q.definirRosto.run('{}', contaId);
+        // O banner e o fundo do cartão vão junto: o cartão volta às cores do tema.
+        const vitrine = lerAjustes(q.perfil.get(contaId)?.vitrine);
+        if (vitrine.imagens) { delete vitrine.imagens; q.salvarVitrine.run(JSON.stringify(vitrine), contaId); }
+        return q.apagarImagensDaConta.run(contaId).changes;
+      });
     },
     estudio(contaId) {
       const linha = q.estudio.get(contaId);

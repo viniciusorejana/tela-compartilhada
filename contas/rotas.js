@@ -35,7 +35,9 @@ const iguais = (a, b) => {
 // `estudio` é a parte ao vivo do Estúdio (estudio-ao-vivo.js): quem está na sala do diretor,
 // os links assinados e o aviso de que a configuração mudou. Sem ela, as rotas do Estúdio não
 // existem -- os testes de conta sobem sem sala nenhuma.
-function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, novidadesAutomaticas = true, aoMudarPerfil = () => {}, estudio = null }) {
+// `amigos` é a regra de amizade (contas/amigos.js); `aoMudarSocial(conta)` avisa o servidor de que
+// o status de alguém mudou, para a presença chegar aos amigos (social.js).
+function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirSemConta = false, planosLigados = true, novidadesAutomaticas = true, aoMudarPerfil = () => {}, aoMudarSocial = () => {}, estudio = null, amigos = null }) {
   const json = express.json({ limit: 8 * 1024, strict: true });
   const imagemCrua = limite => express.raw({ type: () => true, limit: limite });
 
@@ -216,6 +218,64 @@ function instalarRotasDeContas(app, { contas, limitarOrigem = () => true, abrirS
       estudio.mudouConta(req.contaNexo.conta.id);
       res.json({ geracao: r.geracao });
     });
+  }
+
+  // ---------- O cartão de perfil (public/vitrine.js) ----------
+  //
+  // O editor pede tudo de uma vez: o que está guardado, o que vale agora e as conquistas.
+  app.get('/api/conta/vitrine', autenticada, (req, res) => res.json(contas.vitrine(req.contaNexo.conta)));
+
+  // A vitrine muda o cartão que a sala mostra: a sala inteira recebe o perfil novo, como na foto.
+  const jsonDaVitrine = express.json({ limit: 16 * 1024, strict: true });
+  app.put('/api/conta/vitrine', jsonDaVitrine, autenticada, (req, res) => {
+    const r = contas.salvarVitrine(req.contaNexo.conta, req.body?.vitrine);
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(req.contaNexo.conta);
+    res.json(r.vitrine);
+  });
+
+  // O banner e o fundo do cartão: como a foto, a sessão é conferida antes de o corpo ser lido.
+  app.put('/api/conta/vitrine/imagem/:campo', autenticada, imagemCrua('8mb'), (req, res) => {
+    const r = contas.salvarImagemDaVitrine(req.contaNexo.conta, String(req.params.campo || ''), { bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), tipo: req.headers['content-type'] });
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(req.contaNexo.conta);
+    res.json(r.vitrine);
+  });
+  app.delete('/api/conta/vitrine/imagem/:campo', autenticada, (req, res) => {
+    const r = contas.apagarImagemDaVitrine(req.contaNexo.conta, String(req.params.campo || ''));
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(req.contaNexo.conta);
+    res.json(r.vitrine);
+  });
+
+  // O status: disponível, ausente, não incomodar ou invisível; a frase com prazo; e as duas
+  // escolhas de privacidade. A frase aparece no cartão, então a sala também recebe.
+  app.put('/api/conta/social', json, autenticada, (req, res) => {
+    const r = contas.salvarSocial(req.contaNexo.conta, req.body || {});
+    if (!r.ok) return recusar(res, r);
+    avisarPerfil(req.contaNexo.conta);
+    try { aoMudarSocial(req.contaNexo.conta); } catch (erro) { console.error('Status para os amigos:', erro?.message || erro); }
+    res.json({ social: r.social });
+  });
+
+  // ---------- Amigos (contas/amigos.js) ----------
+  //
+  // Para fora, cada pessoa é o código. A presença (quem está conectado, e em que sala) não vem
+  // por aqui: ela é do momento, e chega pelo socket de amigos (social.js).
+  if (amigos) {
+    const responder = (res, r, corpo) => (r.ok ? res.json(corpo ?? r) : recusar(res, r));
+    app.get('/api/conta/amigos', autenticada, (req, res) => res.json(amigos.lista(req.contaNexo.conta)));
+    app.post('/api/conta/amigos', json, autenticada, (req, res) => {
+      const r = amigos.pedir(req.contaNexo.conta, req.body?.alvo);
+      if (!r.ok) return recusar(res, r);
+      res.status(r.estado === 'amigos' ? 200 : 201).json(r);
+    });
+    app.get('/api/conta/pessoa/:codigo', autenticada, (req, res) => responder(res, amigos.cartao(req.contaNexo.conta, String(req.params.codigo || '')), null));
+    app.post('/api/conta/amigos/:codigo/aceitar', autenticada, (req, res) => responder(res, amigos.aceitar(req.contaNexo.conta, String(req.params.codigo || ''))));
+    app.delete('/api/conta/amigos/:codigo', autenticada, (req, res) => responder(res, amigos.desfazer(req.contaNexo.conta, String(req.params.codigo || ''))));
+    app.put('/api/conta/amigos/:codigo/apelido', json, autenticada, (req, res) => responder(res, amigos.apelidar(req.contaNexo.conta, String(req.params.codigo || ''), req.body?.apelido)));
+    app.post('/api/conta/amigos/:codigo/bloquear', autenticada, (req, res) => responder(res, amigos.bloquear(req.contaNexo.conta, String(req.params.codigo || ''))));
+    app.delete('/api/conta/amigos/:codigo/bloqueio', autenticada, (req, res) => responder(res, amigos.desbloquear(req.contaNexo.conta, String(req.params.codigo || ''))));
   }
 
   app.get('/api/conta/dados', autenticada, (req, res) => {

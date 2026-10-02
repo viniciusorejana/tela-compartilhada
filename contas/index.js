@@ -18,6 +18,7 @@ const perfilComum = require('../public/perfil');
 const planos = require('../public/planos');
 const imagens = require('./imagens');
 const estudioComum = require('../estudio');
+const vitrineComum = require('../public/vitrine');
 
 const MINUTO = 60000;
 const DIA = 24 * 60 * MINUTO;
@@ -49,9 +50,13 @@ function resumirAparelho(agente) {
 // servidor. Sobrevive a reiniciar o processo, o que um segredo sorteado na memória não faria.
 const csrfDe = token => crypto.createHash('sha256').update(`nexo-csrf|${token}`).digest('base64url').slice(0, 32);
 
+// `planosLigados` decide o que é "premium" no cartão de perfil, como na tela: com os planos
+// desligados (NEXO_PLANOS=0), todo mundo tem. `aoGanharConquista(contaId, conquista)` é o aviso
+// que o servidor leva às abas da pessoa (social.js); `aoApagarConta(contaId)` esquece o que a
+// conta tinha na memória -- as conversas diretas, que nunca foram para o banco.
 function criarContas({
   arquivo = ARQUIVO, agora = Date.now, senhas = criarSenhas(), aoAlertar = () => {}, regrasDeLimite = regrasDoAmbiente() || {},
-  manutencao = true, proteger = arquivo !== ':memory:'
+  manutencao = true, proteger = arquivo !== ':memory:', planosLigados = true, aoGanharConquista = () => {}, aoApagarConta = () => {}
 } = {}) {
   if (proteger) protegerPasta(path.dirname(arquivo));
   const banco = abrirBanco({ arquivo });
@@ -304,14 +309,152 @@ function criarContas({
   // O que a sala mostra de quem tem conta: apelido, cor e marca. Os ajustes são a outra metade
   // -- o que dá trabalho refazer em cada aparelho --, e a lista do que pode entrar neles é
   // FECHADA (public/perfil.js): o que não está nela é descartado aqui, venha de onde vier.
+  // O perfil como a PRÓPRIA pessoa o vê: a vitrine guardada inteira (inclusive o que o plano não
+  // libera agora, para o editor mostrar com cadeado) e o status com a frase como está.
   function perfil(conta) {
-    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, avatar: null, rosto: {}, ajustes: {} };
+    const guardado = banco.perfil(conta.id) || { cor: null, marca: null, avatar: null, rosto: {}, ajustes: {}, vitrine: {}, social: {} };
     return {
       cor: perfilComum.corValida(guardado.cor), marca: perfilComum.marcaValida(guardado.marca),
       avatar: perfilComum.avatarValido(guardado.avatar), rosto: estudioComum.limparRosto(guardado.rosto),
-      ajustes: perfilComum.limparAjustes(guardado.ajustes)
+      ajustes: perfilComum.limparAjustes(guardado.ajustes),
+      vitrine: { ...vitrineComum.limparVitrine(guardado.vitrine, { agora: agora(), anterior: guardado.vitrine }), imagens: vitrineComum.limparImagens(guardado.vitrine?.imagens) },
+      social: vitrineComum.socialEfetivo(guardado.social, { agora: agora() })
     };
   }
+
+  // ---------- Contadores e conquistas ----------
+  //
+  // Somas, e nada mais (docs/amigos-e-perfil.md): os minutos em sala, as salas abertas, as
+  // mensagens no chat e as telas compartilhadas. Somados na memória e gravados a cada 30 s numa
+  // transação só -- uma mensagem de chat não pode virar uma escrita no banco. A conquista é
+  // anunciada no instante em que o contador passa do alvo, e não na próxima gravação.
+  const pendentes = new Map();       // `${contaId}|${nome}` -> quanto somar
+  const restoDoTempo = new Map();    // contaId -> ms que ainda não fecharam um minuto
+  function contadores(contaId) {
+    const valores = banco.contadoresDe(contaId);
+    for (const nome of vitrineComum.CONTADORES) {
+      const pendente = pendentes.get(`${contaId}|${nome}`) || 0;
+      if (pendente) valores[nome] = (valores[nome] || 0) + pendente;
+    }
+    return valores;
+  }
+  const nivelAgora = conta => planos.nivelDaConta(conta, agora());
+  // O que vale como "premium" no cartão: o plano, ou todo mundo com os planos desligados.
+  const premiumNoCartao = conta => !planosLigados || nivelAgora(conta) === 'premium';
+  function anunciarConquista(contaId, conquista) {
+    if (!banco.guardarConquista(contaId, conquista.id, agora())) return;
+    try { aoGanharConquista(contaId, { id: conquista.id, nome: conquista.nome, descricao: conquista.descricao }); }
+    catch (erro) { console.error('Aviso de conquista:', erro?.message || erro); }
+  }
+  function contar(contaId, nome, quantidade = 1) {
+    const soma = Math.round(Number(quantidade));
+    if (!contaId || !vitrineComum.CONTADORES.includes(nome) || !(soma > 0)) return;
+    const antes = contadores(contaId)[nome] || 0;
+    const chave = `${contaId}|${nome}`;
+    pendentes.set(chave, (pendentes.get(chave) || 0) + soma);
+    for (const c of vitrineComum.CONQUISTAS) if (c.contador === nome && antes < c.alvo && antes + soma >= c.alvo) anunciarConquista(contaId, c);
+  }
+  // O tempo em sala chega em milissegundos, a cada saída; o contador é de minutos inteiros, e o
+  // que sobra de uma saída soma na próxima.
+  function contarTempo(contaId, ms) {
+    if (!contaId || !(ms > 0)) return;
+    const total = (restoDoTempo.get(contaId) || 0) + ms;
+    const minutos = Math.floor(total / MINUTO);
+    restoDoTempo.set(contaId, total - minutos * MINUTO);
+    if (restoDoTempo.size > 10000) restoDoTempo.clear();
+    if (minutos) contar(contaId, 'minutos', minutos);
+  }
+  function gravarContadores() {
+    if (!pendentes.size) return;
+    const somas = [...pendentes].map(([chave, valor]) => { const [contaId, nome] = chave.split('|'); return { contaId, nome, valor }; });
+    pendentes.clear();
+    try { banco.somarContadores(somas); }
+    catch (_) {
+      // Uma conta apagada no meio da janela derruba a transação inteira (a chave estrangeira não
+      // existe mais). As outras são gravadas uma a uma, e a da conta que sumiu vai embora com ela.
+      for (const soma of somas) { try { banco.somarContadores([soma]); } catch (__) { /* conta apagada */ } }
+    }
+  }
+  const relogioDosContadores = setInterval(gravarContadores, 30000);
+  relogioDosContadores.unref?.();
+
+  function conquistasDaConta(conta) {
+    const lista = vitrineComum.conquistasDe({
+      contadores: contadores(conta.id), amigos: banco.contarAmigos(conta.id), criadaEm: conta.criadaEm,
+      premium: nivelAgora(conta) === 'premium', agora: agora(), jaGanhas: banco.conquistasGuardadas(conta.id).map(c => c.id)
+    });
+    return lista;
+  }
+  // Os amigos podem diminuir; a conquista ganha não. Quem chama depois de uma amizade nova confere
+  // e guarda (contas/amigos.js).
+  function conferirConquistasDeAmigos(contaId) {
+    const total = banco.contarAmigos(contaId);
+    const guardadas = new Set(banco.conquistasGuardadas(contaId).map(c => c.id));
+    for (const c of vitrineComum.CONQUISTAS) if (c.contador === 'amigos' && total >= c.alvo && !guardadas.has(c.id)) anunciarConquista(contaId, c);
+  }
+
+  // ---------- A vitrine e o status ----------
+  //
+  // O que OS OUTROS veem do cartão: a vitrine efetiva (sem o que o plano ou as conquistas não
+  // liberam agora), a frase do status e as conquistas ganhas. Nada de ajuste, nada de imagem não
+  // usada, nada do status escolhido -- quem está conectado é assunto da presença, que só os
+  // amigos veem (social.js).
+  function cartaoPublico(conta, guardado = banco.perfil(conta.id)) {
+    const conquistas = vitrineComum.ganhas(conquistasDaConta(conta));
+    const vitrine = vitrineComum.vitrineEfetiva(guardado?.vitrine || {}, { premium: premiumNoCartao(conta), conquistas, imagens: guardado?.vitrine?.imagens || {}, agora: agora() });
+    const social = vitrineComum.socialEfetivo(guardado?.social || {}, { agora: agora() });
+    return { vitrine, frase: social.frase, conquistas: [...conquistas], desde: conta.criadaEm };
+  }
+
+  // O editor do cartão precisa de mais: o que está guardado, o que vale, e por quê.
+  function vitrine(conta) {
+    const guardado = banco.perfil(conta.id) || {};
+    return {
+      guardada: perfil(conta).vitrine,
+      ...cartaoPublico(conta, guardado),
+      lista: conquistasDaConta(conta),
+      premium: premiumNoCartao(conta), planosLigados
+    };
+  }
+
+  function salvarVitrine(conta, bruto) {
+    if (!permitido(conta.id, 'conta-vitrine')) return falha(429, 'Mudanças demais no cartão em pouco tempo. Aguarde um minuto.', null, 60);
+    const anterior = banco.perfil(conta.id)?.vitrine || {};
+    const limpa = vitrineComum.limparVitrine(bruto, { agora: agora(), anterior });
+    if (Buffer.byteLength(JSON.stringify(limpa)) > vitrineComum.BYTES_MAXIMOS_DA_VITRINE) return falha(413, 'O cartão ficou grande demais.');
+    banco.salvarVitrine(conta.id, limpa);
+    return { ok: true, vitrine: vitrine(conta) };
+  }
+
+  function salvarImagemDaVitrine(conta, campo, { bytes, tipo } = {}) {
+    if (!['banner', 'fundo'].includes(campo)) return falha(404, 'Lugar de imagem desconhecido.');
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    const conferida = imagens.conferirImagem(bytes, campo, tipo);
+    if (conferida.erro) return falha(conferida.status || 400, conferida.erro);
+    banco.trocarImagemDaVitrine(conta.id, campo, { id: novoIdDeImagem(), tipo: conferida.tipo, bytes, agora: agora() });
+    return { ok: true, vitrine: vitrine(conta) };
+  }
+
+  function apagarImagemDaVitrine(conta, campo) {
+    if (!['banner', 'fundo'].includes(campo)) return falha(404, 'Lugar de imagem desconhecido.');
+    if (!permitido(conta.id, 'conta-imagem')) return falha(429, 'Imagens demais em pouco tempo. Aguarde alguns minutos.', null, 600);
+    banco.trocarImagemDaVitrine(conta.id, campo, null);
+    return { ok: true, vitrine: vitrine(conta) };
+  }
+
+  // O status (disponível, ausente, não incomodar, invisível), a frase com prazo, e as duas
+  // escolhas de privacidade: mostrar aos amigos em que sala está, e receber pedidos de amizade.
+  function salvarSocial(conta, bruto) {
+    if (!permitido(conta.id, 'conta-social')) return falha(429, 'Mudanças demais em pouco tempo. Aguarde um minuto.', null, 60);
+    const atual = vitrineComum.socialEfetivo(banco.perfil(conta.id)?.social || {}, { agora: agora() });
+    // Só o que veio muda: trocar o status não apaga a frase.
+    const junto = { ...atual };
+    for (const chave of ['status', 'frase', 'mostrarSala', 'pedidos']) if (bruto && Object.prototype.hasOwnProperty.call(bruto, chave)) junto[chave] = bruto[chave];
+    const limpo = vitrineComum.limparSocial(junto, { agora: agora(), conferirPrazo: Boolean(bruto && Object.prototype.hasOwnProperty.call(bruto, 'frase')) });
+    banco.salvarSocial(conta.id, limpo);
+    return { ok: true, social: limpo };
+  }
+  const socialDe = contaId => vitrineComum.socialEfetivo(banco.perfil(contaId)?.social || {}, { agora: agora() });
 
   function salvarPerfil(conta, { apelido, cor, marca } = {}) {
     if (!permitido(conta.id, 'conta-escrever')) return falha(429, 'Muitas alterações seguidas. Aguarde alguns minutos.', null, 600);
@@ -479,11 +622,20 @@ function criarContas({
         aparelho: s.aparelho, criadaEm: new Date(s.criadaEm).toISOString(), usadaEm: new Date(s.ultimaEm).toISOString(), expiraEm: new Date(s.expiraEm).toISOString()
       })),
       // As imagens vão como endereço, e não dentro do JSON: cada uma se baixa sozinha por ele.
-      imagens: ['avatar', 'rosto', 'estudio'].flatMap(uso => banco.imagensDaConta(conta.id, uso).map(img => ({
+      imagens: ['avatar', 'rosto', 'estudio', 'banner', 'fundo'].flatMap(uso => banco.imagensDaConta(conta.id, uso).map(img => ({
         uso, tipo: img.tipo, bytes: img.tamanho, enviadaEm: new Date(img.criadaEm).toISOString(), endereco: `/api/imagem/${img.id}`
       }))),
       estudio: { configuracao: configDoEstudio(conta.id), geracaoDosLinks: geracaoDoEstudio(conta.id) },
-      oQueNaoGuardamos: 'Conversas, sons, telas, voz, câmera e as salas em que você esteve não são guardados em lugar nenhum.'
+      // Os amigos vão pelo código, que é público, e com o apelido que VOCÊ deu a cada um.
+      amigos: banco.amizadesDe(conta.id).map(a => ({
+        codigo: regras.formatarCodigo(a.conta.codigo), apelido: a.conta.apelido, apelidoQueVoceDeu: a.apelidoMeu,
+        estado: a.estado === 'aceita' ? 'amigos' : a.pediu ? 'pedido enviado' : 'pedido recebido',
+        desde: new Date(a.aceitaEm || a.criadaEm).toISOString()
+      })),
+      bloqueados: banco.bloqueadosPor(conta.id).map(b => ({ codigo: regras.formatarCodigo(b.codigo), apelido: b.apelido, desde: new Date(b.criadoEm).toISOString() })),
+      contadores: contadores(conta.id),
+      conquistas: conquistasDaConta(atual).filter(c => c.ganhou).map(c => c.id),
+      oQueNaoGuardamos: 'Conversas (inclusive as mensagens diretas, que ficam só na memória do servidor e somem três dias depois da última), sons, telas, voz, câmera e as salas em que você esteve não são guardados em lugar nenhum. Os contadores das conquistas são somas: não dizem em que sala, com quem nem quando.'
     };
   }
 
@@ -492,13 +644,19 @@ function criarContas({
   async function apagar(conta, { senha }) {
     if (!permitido(conta.id, 'conta-escrever')) return falha(429, 'Muitas alterações seguidas. Aguarde alguns minutos.', null, 600);
     if (!(await exigirSenha(conta, senha))) return falha(401, 'A senha não confere.', 'senha');
+    // O que ainda não foi gravado dos contadores desta conta não tem mais para onde ir.
+    for (const chave of [...pendentes.keys()]) if (chave.startsWith(`${conta.id}|`)) pendentes.delete(chave);
+    restoDoTempo.delete(conta.id);
     banco.apagarConta(conta.id);
+    try { aoApagarConta(conta.id); } catch (erro) { console.error('Apagar a conta da memória:', erro?.message || erro); }
     return { ok: true };
   }
 
   return {
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, problemaNaRecuperacao, novaRecuperacao, apagar, publica,
     perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
+    contar, contarTempo, gravarContadores, conquistasDaConta, conferirConquistasDeAmigos, cartaoPublico, vitrine, salvarVitrine,
+    salvarImagemDaVitrine, apagarImagemDaVitrine, salvarSocial, socialDe, premiumNoCartao,
     salvarAvatar, apagarAvatar, salvarRosto, apagarRosto, imagem, estudio, geracaoDoEstudio, configDoEstudio, salvarEstudio,
     adicionarImagemDoEstudio, apagarImagemDoEstudio, revogarEstudio,
     contaPorCodigo: codigo => banco.contaPorCodigo(regras.normalizarCodigo(codigo)),
@@ -508,7 +666,7 @@ function criarContas({
     banco, senhas, freio, suspensa, csrfDe,
     copiarAgora: () => tarefas ? tarefas.copiarAgora() : Promise.reject(new Error('Manutenção desligada.')),
     manutencao: () => tarefas?.estado() || null,
-    async encerrar() { await tarefas?.encerrar(); banco.fechar(); }
+    async encerrar() { clearInterval(relogioDosContadores); gravarContadores(); await tarefas?.encerrar(); banco.fechar(); }
   };
 }
 
