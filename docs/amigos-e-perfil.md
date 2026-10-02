@@ -153,13 +153,13 @@ lugar onde ela aparece (`public/cartao.js`: `decorarAvatar`, `estilizarNome`, `m
 
 | lugar | borda do avatar | estilo do nome | moldura | fundo do cartão |
 |---|---|---|---|---|
-| Na sala: a lista "No squad", o "eu" lá embaixo, o chat, as menções, o tempo na sala, a folha de volume | sim | sim | | |
+| Na sala: a lista "No squad", o "eu" lá embaixo, o chat, o canal de música, as menções, o tempo na sala, a folha de volume | sim | sim | | |
 | Na sala: o quadradinho da plateia | sim | sim | sim | sim, atrás do avatar (a câmera fica por cima) |
 | Na sala: a foto grande | | sim | sim | sim |
 | A conversa direta (no início e na sala), as listas de amigos e de conversas | sim | sim | | |
 | A página da conta, no topo | sim | sim | sim | sim |
 
-O chat e a conversa mostram a borda e o nome **parados**, animando quando o mouse passa pela
+O chat, o canal de música e a conversa mostram a borda e o nome **parados**, animando quando o mouse passa pela
 mensagem: são centenas de mensagens, e cada borda que gira é uma pintura por quadro. Fora da
 sala, o que a pessoa vê de si mesma (as mensagens dela na conversa, o "eu" do início, a conta) é o
 cartão efetivo que `/api/conta/eu` devolve em `cartao`, e o editor o atualiza ao salvar.

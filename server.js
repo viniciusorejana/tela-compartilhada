@@ -1940,7 +1940,9 @@ io.on('connection', (socket) => {
     // uma busca demora alguns segundos, e sem este eco a sala fica sem saber que alguem
     // ja pediu -- e dois pedem a mesma coisa.
     const pedido = crypto.randomUUID();
-    publicarNaMusica(roomCode, { id: pedido, autor: membro.name, autorId: socket.id, texto, em: Date.now() });
+    // `autorIdentidade` é a identidade de mídia, a mesma pela qual a sala guarda o perfil de cada
+    // um: é com ela que o canal mostra a foto, a borda e o nome de quem pediu, como no chat.
+    publicarNaMusica(roomCode, { id: pedido, autor: membro.name, autorId: socket.id, autorIdentidade: membro.identidade || null, texto, em: Date.now() });
 
     if (!musica.disponivel()) {
       return falarComoBot(roomCode, 'O bot não está instalado neste servidor. Rode `npm run musica:instalar` na máquina que hospeda a sala.', 'erro');

@@ -316,6 +316,16 @@ function pintarAvatar(el, nome, perfil) {
 }
 // A vitrine que a sala mostra de cada pessoa (a efetiva, mandada pelo servidor), ou null.
 const vitrineDe = id => perfilDe(id)?.cartao?.vitrine || null;
+// O perfil pela identidade de mídia, a que vai nas mensagens do chat e do canal de música.
+const perfilDaIdentidade = identidade => (identidade && identidade === myId ? meuPerfil : perfisPorIdentidade.get(identidade) || null);
+// O autor de uma mensagem, no chat e no canal de música: a foto, a cor e a borda no avatar, e o
+// nome na cor do perfil -- ou no estilo do nome do cartão, quando há.
+function pintarAutor(avatar, autor, nome, perfil) {
+  if (avatar) pintarAvatar(avatar, nome || '?', perfil);
+  if (!autor) return;
+  autor.style.color = NexoPerfil.aparencia(nome || '', perfil).cor;
+  window.NexoCartao?.estilizarNome(autor, perfil?.cartao?.vitrine || null);
+}
 
 // ---------- Entrada / nome ----------
 const nomeSalvo = Preferencias.lerAjuste('nome', '');
@@ -5544,9 +5554,10 @@ function criarTileBase(id, name, state, isSelf) {
     // duas coisas nunca conseguia por a propria camera no centro.
     // Escolha manual: a partir daqui o destaque nao muda sozinho, ate esta fonte acabar.
     if (estado?.camera) pin(id, 'camera', true);
-    else if (estado?.screen) pin(id, 'screen', true);
-    // Sem câmera nem tela, não há o que pôr no palco: clicar na pessoa abre o perfil dela, como
-    // na lista ao lado. Antes este clique não fazia nada.
+    // Sem câmera, não há imagem da pessoa para pôr no palco: clicar nela abre o perfil, como na
+    // lista ao lado -- também quando ela compartilha a tela. Antes, aí, este clique punha a TELA
+    // no palco: o mesmo que o quadradinho da tela, logo ao lado, já faz, e o perfil ficava só no
+    // nome, sem ninguém achar.
     else abrirPerfil(id);
   });
 
@@ -6990,20 +7001,17 @@ chatMsgs.addEventListener('scroll', () => {
 });
 
 // Um perfil novo (a pessoa mudou o cartão, ou acabou de entrar) repinta as mensagens dela que já
-// estão no chat: o avatar, a borda e o estilo do nome passam a ser os de agora. Quem já saiu da
-// sala continua como estava -- não há perfil novo dele para mostrar.
+// estão no chat e no canal de música: o avatar, a borda e o estilo do nome passam a ser os de
+// agora. Quem já saiu da sala continua como estava -- não há perfil novo dele para mostrar.
 function redecorarChat() {
   chatMsgs.querySelectorAll('.msg[data-message-id]').forEach(el => {
     const msg = mensagensDoChat.get(el.dataset.messageId);
     const perfil = msg && (ehMinha(msg) ? meuPerfil : perfisPorIdentidade.get(msg.autorId));
-    if (!perfil) return;
-    const avatar = el.querySelector(':scope > .msg-avatar');
-    const autor = el.querySelector('.msg-topo .msg-autor');
-    if (avatar) pintarAvatar(avatar, msg.autor || '?', perfil);
-    if (autor) {
-      autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfil).cor;
-      window.NexoCartao?.estilizarNome(autor, perfil.cartao?.vitrine || null);
-    }
+    if (perfil) pintarAutor(el.querySelector(':scope > .msg-avatar'), el.querySelector('.msg-topo .msg-autor'), msg.autor, perfil);
+  });
+  document.querySelectorAll('#musicaMsgs .msg[data-autor-identidade]').forEach(el => {
+    const perfil = perfilDaIdentidade(el.dataset.autorIdentidade);
+    if (perfil) pintarAutor(el.querySelector(':scope > .msg-avatar'), el.querySelector('.msg-topo .msg-autor'), el.dataset.autorNome, perfil);
   });
 }
 
@@ -7031,7 +7039,6 @@ function mostrarMensagem(msg) {
   const avatar = document.createElement('span');
   avatar.className = 'msg-avatar';
   const perfilDoAutor = ehMinha(msg) ? meuPerfil : perfisPorIdentidade.get(msg.autorId);
-  pintarAvatar(avatar, msg.autor || '?', perfilDoAutor);
   avatar.setAttribute('aria-hidden', 'true');
 
   const topo = document.createElement('div');
@@ -7039,9 +7046,8 @@ function mostrarMensagem(msg) {
   const autor = document.createElement('span');
   autor.className = 'msg-autor';
   autor.textContent = msg.autor || 'Alguém';
-  autor.style.color = NexoPerfil.aparencia(msg.autor || '', perfilDoAutor).cor;
-  // O estilo do nome do cartão, quando há, no lugar da cor do perfil.
-  window.NexoCartao?.estilizarNome(autor, perfilDoAutor?.cartao?.vitrine || null);
+  // A foto, a cor e a borda no avatar; o nome na cor do perfil, ou no estilo do nome do cartão.
+  pintarAutor(avatar, autor, msg.autor, perfilDoAutor);
   // O nome e o avatar de quem escreveu abrem o perfil (abrirPerfilDoAutor). O nome é o que se
   // alcança pelo teclado; o avatar é o atalho do mouse, e fica de fora da ordem do Tab para não
   // dobrar as paradas de cada mensagem.

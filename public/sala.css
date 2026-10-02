@@ -1754,8 +1754,8 @@ h1#roomTitle { min-width:3ch; }
 /* No chat, a borda e o nome aparecem parados, e animam quando o mouse passa pela mensagem: são
    centenas de mensagens, e cada borda que gira é uma pintura por quadro na sala -- que é onde a
    tela compartilhada precisa do computador. */
-#chatMsgs .nx-com-borda::before,#chatMsgs .nx-nome-estilo { animation-play-state:paused; }
-#chatMsgs .msg:hover .nx-com-borda::before,#chatMsgs .msg:hover .nx-nome-estilo { animation-play-state:running; }
+:is(#chatMsgs,#musicaMsgs) .nx-com-borda::before,:is(#chatMsgs,#musicaMsgs) .nx-nome-estilo { animation-play-state:paused; }
+:is(#chatMsgs,#musicaMsgs) .msg:hover .nx-com-borda::before,:is(#chatMsgs,#musicaMsgs) .msg:hover .nx-nome-estilo { animation-play-state:running; }
 .perfil-social-linha { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; }
 .perfil-social-texto { flex:1 1 180px; min-width:0; color:var(--text-2); font-size:var(--fs-sm); line-height:1.5; }
 

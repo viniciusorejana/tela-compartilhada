@@ -211,18 +211,20 @@
         tempo.title = duracao == null ? '' : `Na sala há ${NexoTempo.extenso(duracao)}`;
       }
     });
-    // O quadradinho de quem não tem câmera nem tela não destaca nada: abre o perfil (sala.js). O
-    // nome embaixo abre o perfil sempre.
+    // O quadradinho da pessoa sem câmera não destaca nada: abre o perfil (sala.js) -- também
+    // quando ela compartilha a tela, que tem o quadradinho dela. O nome embaixo abre o perfil sempre.
     document.querySelectorAll('.avatar-wrap').forEach(element => {
       const tile = element.closest('.participant');
       const nome = tile?.querySelector('.participant-name');
       if (!nome) return;
       const id = tile.dataset.id;
       const estado = tile.dataset.source === 'camera' ? (id === 'self' ? meuEstado() : peers.get(id)?.state) : null;
-      const perfil = tile.dataset.source === 'camera' && !estado?.camera && !estado?.screen;
+      const perfil = tile.dataset.source === 'camera' && !estado?.camera;
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
-      element.setAttribute('aria-label', `${perfil ? 'Ver o perfil de' : 'Destacar'} ${nome.textContent}`);
+      // Só o nome: o texto da linha inteira levava junto o do selo de dono, escondido ("Caioabriu a sala").
+      const textoDoNome = tile.querySelector('.participant-nome')?.textContent || nome.textContent;
+      element.setAttribute('aria-label', `${perfil ? 'Ver o perfil de' : 'Destacar'} ${textoDoNome}`);
       nome.tabIndex = 0;
       nome.setAttribute('role', 'button');
       nome.title = 'Ver o perfil';

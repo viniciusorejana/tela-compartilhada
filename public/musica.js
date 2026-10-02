@@ -240,8 +240,6 @@
     ultimaDePessoa = { autorId: msg.autorId, em: msg.em || Date.now() };
     const avatar = document.createElement('span');
     avatar.className = 'msg-avatar';
-    avatar.textContent = iniciais(msg.autor || '?');
-    avatar.style.background = corDoNome(msg.autor || '');
     avatar.setAttribute('aria-hidden', 'true');
 
     const topo = document.createElement('div');
@@ -249,8 +247,15 @@
     const autor = document.createElement('span');
     autor.className = 'msg-autor';
     autor.textContent = msg.autor || 'Alguém';
-    autor.style.color = corDoNome(msg.autor || '');
     topo.append(autor, hora);
+    // Quem pediu aparece como no chat: a foto, a cor e a borda do cartão no avatar, e o nome no
+    // estilo dele (pintarAutor, sala.js). Antes era só a cor sorteada pelo nome. A identidade fica
+    // na mensagem para ela ser repintada quando o perfil da pessoa mudar.
+    pintarAutor(avatar, autor, msg.autor, perfilDaIdentidade(msg.autorIdentidade));
+    if (msg.autorIdentidade) {
+      el.dataset.autorIdentidade = msg.autorIdentidade;
+      el.dataset.autorNome = msg.autor || '';
+    }
 
     const corpo = document.createElement('div');
     corpo.className = 'msg-texto';

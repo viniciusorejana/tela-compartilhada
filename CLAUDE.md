@@ -108,7 +108,7 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Digitar o valor de qualquer régua (clicar no número ao lado) | `public/valor-digitado.js`, na sala e na inicial; o número é `.volume-valor`, `<output for>` ou `[data-valor-de]`, e a régua tem passo 1 para o valor digitado valer exato |
 | Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js`; a foto grande abre do cartão de perfil (`abrirFoto`, `sala.js`) |
 | O rosto que cada conta escolhe para o Estúdio dos outros | `perfil.rosto` (migração `0003`, `contas/banco.js` `trocarRosto`, rotas `/api/conta/rosto/:estado`); quem monta a cena escolhe a origem por pessoa (`usar`: pessoa, minhas, nenhuma), com a mesma regra em `estudio.js` e `public/reativo.js` (`origemDasImagens`) |
-| Abrir o perfil de alguém | `abrirPerfil` (`sala.js`): a lista, o nome embaixo do quadradinho, o quadradinho sem câmera nem tela, e o autor no chat (`abrirPerfilDoAutor`, que abre também para quem já saiu) |
+| Abrir o perfil de alguém | `abrirPerfil` (`sala.js`): a lista, o nome embaixo do quadradinho, o quadradinho sem câmera (mesmo compartilhando a tela, que tem o quadradinho dela), e o autor no chat (`abrirPerfilDoAutor`, que abre também para quem já saiu) |
 | Ensurdecido à vista da sala (e do OBS) | o som é cortado só em `sala.js` (`alternarEnsurdecimento`); o aviso vai pelo evento `ensurdecer` e volta junto com a presença (`presenca-atualizada`, `server.js`), chega em `guardarPresenca` e vira o fone cortado no quadradinho e na lista |
 
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em

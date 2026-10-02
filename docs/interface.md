@@ -440,8 +440,9 @@ microfone cortado em vermelho no canto de baixo do quadradinho e ao lado do nome
 ensurdece troca esse ícone pelo fone cortado (o mesmo do botão Ouvir), no mesmo lugar.
 
 **O perfil abre de qualquer lugar onde a pessoa aparece:** a lista, o nome embaixo do
-quadradinho, o quadradinho de quem não tem câmera nem tela, e o nome e o avatar do autor no
-chat (`abrirPerfil`). Nomes clicáveis sublinham ao passar o mouse.
+quadradinho, o quadradinho de quem não tem câmera — também quando a pessoa compartilha a tela,
+que tem o quadradinho dela ao lado para ir ao palco —, e o nome e o avatar do autor no chat
+(`abrirPerfil`). Nomes clicáveis sublinham ao passar o mouse.
 
 Nome repetido na sala ganha um trecho do código ao lado (`rotuloDe`) — só quando se repete.
 
@@ -507,8 +508,8 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   o estilo do nome, e no quadradinho da plateia, na foto grande e no topo da conta também a
   moldura e o fundo do cartão. O estilo do nome mistura a cor da pessoa à `--tinta` do lugar
   (clareia no escuro, escurece no claro) e pinta a letra por `-webkit-text-fill-color`, para a cor
-  própria de cada lugar não apagá-lo. No chat e na conversa, borda e nome animam só com o mouse
-  em cima da mensagem.
+  própria de cada lugar não apagá-lo. No chat, no canal de música e na conversa, borda e nome
+  animam só com o mouse em cima da mensagem.
 - **O editor** é um só (`editor-cartao.{js,css}`), em dois lugares: a seção "Personalizar
   perfil" do início e um painel na sala (Meu perfil → Personalizar o cartão, o próprio cartão, ou
   Configurações → Perfil), sem sair da chamada. Tem a prévia ao lado, ao vivo, e cada peça é um
