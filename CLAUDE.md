@@ -23,7 +23,7 @@ no PATH. `telemetria/autenticacao.js` usa caminho absoluto justamente por isso, 
 utilitários do sistema podem cair na mesma armadilha.
 
 ```powershell
-npm test              # unitários
+npm test              # unitários (inclui amigos, cartão e mensagens diretas: tests/amigos.test.js)
 npm run test:browser  # Playwright: sala, mídia, ICE
 npm run test:painel   # painel de telemetria
 npm run test:soundboard
@@ -97,6 +97,12 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Tela por WebCodecs pela faixa de dados (o "Forçar") | `public/tela-webcodecs.js` + `tela-{quadro,decisoes,codificador,decodificador}.js`; ligado em `room-transport.js`; chave do servidor em `chave-webcodecs.js` |
 | Estúdio: links para o OBS e rostos que reagem à voz | regra em `estudio.js`, no ar em `estudio-ao-vivo.js` (namespace `/estudio`); `public/obs.js` (a fonte do OBS), `reativo.js` (os rostos), `estudio.js` + `estudio.css` (o painel do Estúdio, na sala, só com conta), `estudio-sala.js` (permissão, cartão de perfil, selo OBS, botão da barra); o controle do dono é `estudio` na configuração da sala |
 | Volume por pessoa no toque (a pílula e a folha com a régua grande) | `public/volume-folha.js`; o volume em si continua em `sala.js` ("Volume, em um lugar so") |
+| O início de quem tem conta (`/` com sessão; a apresentação fica em `/sobre`) | `public/inicio.{html,css,js}`; a escolha da página é a rota `/` de `server.js`, antes do `static` |
+| Amigos: pedir, aceitar, apelidar (só para quem deu), bloquear | regra em `contas/amigos.js`, SQL em `contas/banco.js` (migração `0004`), rotas `/api/conta/amigos*` em `contas/rotas.js` |
+| Presença, mensagens diretas (só na memória, somem em 3 dias) e convites | `social.js` (namespace `/social`, pelo cookie da conta); na página, `public/social.js` (o cliente) + `conversa.js` (a conversa) + `social.css` |
+| O cartão de perfil personalizável (banner, fundo, borda, moldura, efeito, nome, bio, bolha, status) e as conquistas | catálogo e regra em `public/vitrine.js` (página e servidor); desenho em `public/cartao.{js,css}`; o editor em `public/editor-cartao.{js,css}`, o mesmo no início e num painel da sala (`social-sala.js`, `abrirEditor`); o que a sala recebe é `perfilNaSala` (`server.js`), com a vitrine efetiva |
+| "Senha e conta" e todo "Criar conta grátis" de dentro da chamada | um aviso (`irParaContaPanel`; `perfil-sala.js` intercepta todo link para `/conta`) e a saída por `sairDaSala(destino)` (`sala.js`) para `/conta?voltar=` na mesma janela: no aplicativo, outra aba é o navegador |
+| Amigos dentro da sala (cartão, convidar, mensagens, avisos) | `public/social-sala.js`; o cartão de perfil é `abrirPerfil` (`sala.js`) |
 | Digitar o valor de qualquer régua (clicar no número ao lado) | `public/valor-digitado.js`, na sala e na inicial; o número é `.volume-valor`, `<output for>` ou `[data-valor-de]`, e a régua tem passo 1 para o valor digitado valer exato |
 | Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js`; a foto grande abre do cartão de perfil (`abrirFoto`, `sala.js`) |
 | O rosto que cada conta escolhe para o Estúdio dos outros | `perfil.rosto` (migração `0003`, `contas/banco.js` `trocarRosto`, rotas `/api/conta/rosto/:estado`); quem monta a cena escolhe a origem por pessoa (`usar`: pessoa, minhas, nenhuma), com a mesma regra em `estudio.js` e `public/reativo.js` (`origemDasImagens`) |
@@ -106,4 +112,6 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`; a
 tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plano-webcodecs.md`; o
-Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`.
+Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`; amigos, mensagens
+diretas, o cartão de perfil, as conquistas e o início de quem tem conta — e o que fica guardado e
+o que não fica —, em `docs/amigos-e-perfil.md`.

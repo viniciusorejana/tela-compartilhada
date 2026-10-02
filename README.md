@@ -160,6 +160,29 @@ conta**, com a senha: o `ON DELETE CASCADE` leva perfil e sessões junto, e as c
 segurança expiram em até 30 dias. `npm run test:contas` percorre isso tudo pela tela, com
 navegadores de verdade — e também a espera de quem chega antes de a sala abrir.
 
+### Amigos, mensagens diretas e o cartão de perfil
+
+Com a conta aberta, `/` é o **início**: a trilha das salas recentes deste aparelho, os amigos (quem
+está conectado e em que sala, com o botão de entrar junto), as conversas diretas e "Agora no
+Nexo". A apresentação continua em `/sobre`.
+
+- **Amigos** por nome de usuário ou código; aceitar, recusar, remover, bloquear (silencioso para
+  quem foi bloqueado) e um apelido para cada amigo que só quem deu vê. Ficam no banco, com a conta.
+- **Mensagens diretas e convites** só entre amigos, pelo socket `/social`. **Moram na memória do
+  servidor**: até 60 por conversa, e a conversa some três dias depois da última mensagem (ou ao
+  reiniciar o servidor). Conversa continua não tocando o disco.
+- **O cartão de perfil** é personalizável: tema, banner e fundo (animados ou imagem), borda do
+  avatar, moldura, efeito ao abrir, estilo do nome, bio, pronomes, bolha de pensamento e frase do
+  status com prazo. Algumas peças pedem premium (regra do `NEXO_PLANOS`) ou uma **conquista**,
+  ganha usando o Nexo; as conquistas saem de somas (minutos em sala, salas abertas, mensagens,
+  telas) que não guardam onde, com quem nem quando. O editor é o mesmo no início e num painel da
+  sala, sem sair da chamada.
+- **Presença**: disponível, ausente, não incomodar ou invisível, e a escolha de mostrar ou não aos
+  amigos em que sala você está.
+
+O desenho inteiro, com o que fica guardado e o que não fica, está em
+[`docs/amigos-e-perfil.md`](docs/amigos-e-perfil.md).
+
 ## Requisitos
 
 - Windows 10/11 para executar o helper nativo de captura de audio por aplicativo.

@@ -18,6 +18,9 @@ a 2560 px**.
 | O modal da apresentação e das novidades (vale nas duas páginas) | `public/novidades.css` |
 | O Estúdio; os rostos que reagem e a fonte do OBS | `public/estudio.css`, `reativo.css`, `obs.css` |
 | A página de "não encontrada" | `public/nao-encontrada.css` |
+| O início de quem tem conta (amigos, conversas, salas recentes) | `public/inicio.css` + `inicio.js` |
+| O cartão de perfil personalizável (vitrine), o avatar com borda e status, os efeitos | `public/cartao.css` + `cartao.js`; o catálogo em `public/vitrine.js` |
+| Amigos e conversa direta, as mesmas peças no início e na sala | `public/social.css`, `conversa.js`, `social.js` (+ `social-sala.js` na sala) |
 | Avatar de qualquer pessoa, em qualquer página | `NexoPerfil.pintar` (`public/perfil.js`) |
 | Avisos no canto | `public/toast.js` |
 | Sons | `public/sons.js` |
@@ -119,6 +122,11 @@ Botão cheio leva **sempre** `--accent-forte` com texto `#fff`. Texto colorido l
 Cada uma tem a versão `-texto` (para letra) e, quando precisa, `-suave` (fundo translúcido) e
 `-forte` (preenchimento com texto branco).
 
+**Texto escuro sobre preenchimento colorido** — as iniciais no avatar de cor, o selo rosa da tela
+ao vivo, o número no quadrado da sala recente — é sempre `--sobre-cor`. É um só nos dois temas
+porque a cor por baixo também não muda. **Contagem** (não lidas, pedidos de entrada, pedidos de
+amizade) é `--danger-forte` com texto branco: 4,8:1 nos dois temas.
+
 ### 2.6 Letra
 
 Uma família só: `"Segoe UI", system-ui, sans-serif`. Números alinhados usam
@@ -182,12 +190,44 @@ Entradas prontas (`tema.css`): `nexo-surgir` (sobe 6 px e cresce de 98,5%), `nex
 (só opacidade), `nexo-descer` (lista que cai de um botão), `nexo-pulso`, `nexo-girar`.
 
 Respostas à mão: botão encolhe para 97% ao apertar; quadradinho sobe 1 px com sombra ao passar
-o mouse; avatar da lista e do chat cresce 6% com mola.
+o mouse; avatar da lista e do chat cresce 6% com mola; o ícone de cada botão da barra de controles
+sobe 1 px e cresce 8% com mola; a engrenagem gira um oitavo de volta; o "+" de criar gira 90°; a
+seta de "seguir adiante" anda 3 px; o cartão de sala ao vivo e o de conquista sobem 1–2 px com
+sombra. É pouco de propósito: o detalhe diz "isto está vivo", e não pula na cara de ninguém.
 
-**Menos movimento** vale em dois níveis: o do sistema (`prefers-reduced-motion`, em
-`tema.css`) e o "Menos animação" das configurações (`html.menos-movimento`). Os dois
-**encurtam** animações para 1 ms em vez de removê-las — código que espera `animationend` (as
-reações, os avisos) continua funcionando. Nunca escreva `animation:none!important` global: uma
+**Abrir e fechar, o mesmo movimento para tudo.** Uma regra para o que aparece e some:
+
+- **Colunas** (barra lateral, chat, canal de música): a coluna vai a zero e volta deslizando
+  (`transition: grid-template-columns var(--dur-lenta) var(--curva)` no `.app`). As larguras são
+  variáveis (`--col-lateral`, `--col-chat`) e cada estado só zera a sua, então o número de colunas
+  não muda e a troca sempre desliza. O conteúdo apaga rápido (`--dur-rapida`) antes de a coluna
+  estreitar, para ninguém ver texto se espremendo, e só fica `visibility:hidden` quando a coluna já
+  fechou (`transition-delay` de `--dur-lenta`); ao abrir, volta na hora. O chat abre **já com a
+  largura final** (a grade dele tem uma coluna de `--col-chat-aberto`) e a coluna o revela cortado
+  (`overflow:clip`): o texto não quebra linha a linha enquanto ela cresce.
+- **Nada que desliza rola a página.** O `.app` corta o que passa da janela com `overflow:clip`
+  (corta sem virar área de rolagem), e o foco dado a um campo que nasce numa coluna ainda abrindo
+  vai com `focus({ preventScroll: true })`. Sem os dois, abrir o chat rolava a página 166 px para o
+  lado por um instante: a lateral "piscava" e a tela inteira tremia.
+- **Faixas** (a plateia): a linha da grade vai de `1fr` a `0fr` no mesmo tempo, com o mesmo
+  apagar e o mesmo `hidden` no fim. O filho corta com `overflow:clip` e `overflow-clip-margin`,
+  que deixa a sombra do passar o mouse aparecer.
+- **Painéis e menus** saem como entraram: o fundo apaga e o cartão desce os 6 px que subiu.
+  `display` entra na transição (`transition-behavior: allow-discrete`), então o `.hidden` continua
+  sendo o jeito de fechar em todo o código e o painel só sai da tela no fim; durante a saída ele
+  não recebe clique. Navegador sem `allow-discrete` fecha na hora, como antes.
+- Quem mede o palco ouve `resize`, que vai de novo no fim do deslize (`room-ui.js`).
+- Troca de conteúdo no mesmo lugar (chat ↔ música, seções do início) é `nexo-aparecer`.
+
+Um teste que confere "fechou" logo depois do clique espera o fim (`waitFor({ state: 'hidden' })`):
+fechar agora leva o tempo da saída.
+
+**Menos movimento** vale em dois níveis: o do sistema (`prefers-reduced-motion`) e o "Menos
+animação" das configurações (`html.menos-movimento`, posto por `tema.js` em toda página). As duas
+regras moram em `tema.css`, e valem para todas as páginas. As duas **encurtam** animações para
+1 ms em vez de removê-las — código que espera `animationend` (as reações, os avisos) continua
+funcionando — e zeram os atrasos de transição (o painel que some "depois de a coluna fechar" some
+na hora). Nunca escreva `animation:none!important` global: uma
 regra assim em `sala.css` deixava as reações da sala presas na tela. Animação que **precisa**
 continuar visível com menos movimento (a reação discreta, que diz quem reagiu) vence o 1 ms com
 `!important` e especificidade maior, nos dois níveis. E quem remove um elemento no
@@ -200,11 +240,12 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | camada | z | quem |
 |---|---|---|
 | peças dentro do palco e do quadradinho | 1–4 | selos, controles, placar de quem assiste |
+| peças dentro do cartão de perfil | 1–8 | banner, avatar, bolha, moldura, efeito de abrir |
 | botão "ativar som" | 65 | |
-| lateral em gaveta (celular) / chat em gaveta (≤1100 px) | 68 / 70 | |
-| modal e o portão de entrada | 80 / 90 | |
+| lateral em gaveta (celular) / chat em gaveta (≤1100 px) / gaveta do início | 68 / 70 / 70 | |
+| modal, o cartão de um amigo no início, e o portão de entrada | 80 / 80 / 90 | |
 | visualizador de imagem, reações que voam | 95–96 | |
-| menu de presença, menu de mensagem | 105–106 | |
+| menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
 | aviso de pedido de entrada | 110 | |
 | botão de sair do compacto | 120 | |
 | apresentação e novidades | 125 | |
@@ -311,16 +352,33 @@ Todo painel é a mesma peça (`.modal` > `.modal-card`):
   à direita. "Fechar" (`[data-close]`) é sempre cinza;
 - no celular, as ações empilham em largura cheia com 44 px, a principal em cima;
 - o foco entra no primeiro campo (ou no primeiro botão), fica preso no painel pelo Tab e volta a
-  quem o abriu; com o painel aberto, a sala por trás fica `inert`.
+  quem o abriu; com o painel aberto, a sala por trás fica `inert`. Quando o primeiro campo não é o
+  lugar de começar (no editor do cartão ele é o seletor de cor), `data-foco-inicial` marca o que
+  recebe o foco.
 
 **Painel sobre painel** é permitido quando o segundo nasce do primeiro (a foto grande sobre o
-cartão de perfil): o de cima vem depois no HTML, e fechá-lo volta ao de baixo.
+cartão de perfil, o aviso de sair para a conta sobre "Meu perfil"): o de cima vem depois no HTML, e
+fechá-lo volta ao de baixo.
+
+**A sala não manda ninguém para outra aba.** No aplicativo, "outra aba" é o navegador, fora do
+Nexo. O que dá para fazer ali dentro vira painel (o cartão completo, abaixo); o que é outra página
+(a da conta: senha, código de recuperação, dados, e o cadastro) abre **na mesma janela**, depois de
+um painel que avisa que a pessoa sai da chamada — a ação de sair é `.danger`, "Continuar na sala"
+é o cinza. Vale para "Senha e conta" e para **todo link para `/conta` de dentro da chamada** ("Criar
+conta grátis" nas configurações, no Estúdio, em Meu perfil, na mesa de sons, na dica de qualidade,
+no próprio cartão): `perfil-sala.js` intercepta o clique e escolhe o texto do aviso (ir à conta ou
+criar uma). A saída passa por `sairDaSala` (`sala.js`), que avisa a sala e desliga a mídia direito,
+com `/conta?voltar=`: a página da conta oferece "Voltar para a sala", e o cadastro termina de volta
+na mesma sala, já com a conta. Antes de entrar (a porta, a espera) e depois de sair (o aviso de
+remoção), o link troca a página direto: não há chamada para perder. Ctrl ou Shift no clique
+continua abrindo noutra aba, que aí é escolha de quem clicou.
 
 Variações do mesmo cartão: as **configurações** (coluna de seções à esquerda como no Discord,
 altura fixa para não pular ao trocar de seção; no celular as seções viram uma fita que rola de
-lado), o **Estúdio** (sem preenchimento, com topo, corpo em duas colunas e rodapé próprios) e a
-**folha de volume**, que no celular vira folha presa embaixo, da largura da tela, subindo de
-baixo.
+lado), o **Estúdio** (sem preenchimento, com topo, corpo em duas colunas e rodapé próprios), o
+**editor do cartão** (largo, de altura fixa, sem preenchimento: o editor rola por dentro e tem o
+rodapé de salvar dele; no celular ocupa a tela quase toda) e a **folha de volume**, que no celular
+vira folha presa embaixo, da largura da tela, subindo de baixo.
 
 Dentro de um painel:
 - **`.config-bloco`**: borda `--line`, `--r-lg`, fundo de 1,6% de tinta, 14 px de folga — o
@@ -372,7 +430,8 @@ A cor fica por baixo da foto e aparece enquanto ela carrega.
 | lista lateral | 30, com ponto verde de conectado | quadrado arredondado |
 | quadradinho sem câmera | 36 | quadrado arredondado |
 | Estúdio, folha de volume | 36–44 | círculo |
-| cartão de perfil | 54 (64 com foto, que se abre grande) | círculo |
+| amigos e conversas (início, convidar, mensagens) | 34 (`.nx-av.pequeno`) ou 44 (`.medio`), com borda e ponto de status | círculo |
+| cartão de perfil (a vitrine) | 86; 68 no compacto da sala (a foto se abre grande) | círculo |
 | configurações → perfil | 72, sobre uma faixa de destaque | círculo |
 
 Quem fala ganha **anel verde** (`--online`) no quadradinho e na lista. O microfone mudo é o
@@ -398,7 +457,11 @@ pequenos), pontas e junções redondas, `fill:none`, cor `currentColor`:
   que é emoji (reações, presença);
 - **um desenho por conceito**, o mesmo em toda parte: microfone cortado, fone cortado, olho,
   câmera, tela, link, lixo. Antes de desenhar, procure o existente (`ICONES` em
-  `public/estudio.js` e `public/novidades.js`, máscaras em `sala.css`).
+  `public/estudio.js` e `public/novidades.js`, `ICONES` das conquistas em `public/cartao.js`,
+  máscaras em `sala.css`);
+- **conceitos vizinhos, desenhos diferentes**: a **câmera** é a filmadora; o **Estúdio** (levar
+  para o OBS) é o ponto com ondas dos dois lados, de transmissão. Dois botões lado a lado na mesma
+  barra com o mesmo desenho faziam ligar o errado.
 
 ### 4.11 Superfícies de vídeo
 
@@ -416,6 +479,58 @@ foco estiver neles pelo teclado ou se alguém estiver digitando o volume.
 - **Carregando**: anel girando pequeno (`nexo-girar`) ao lado do que espera, nunca uma tela
   inteira de carregamento.
 - **Lista vazia**: uma frase em `--faint` dizendo o que vai aparecer ali e como fazer aparecer.
+  Numa área grande (a lista de amigos), o mesmo com um ícone num quadrado de destaque, um
+  título curto e, quando há, o botão que resolve ("Adicionar amigo").
+
+### 4.13 O cartão de perfil (a vitrine)
+
+O cartão que abre ao clicar em alguém — na sala, na lista de amigos, na conversa — é a vitrine da
+pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.md):
+
+- **De cima para baixo**: o banner (cor, animado ou imagem), o avatar com a borda escolhida e o
+  ponto de status, a bolha de pensamento ao lado, e um **véu escuro** com o nome (no estilo
+  escolhido), o apelido que quem vê deu, os pronomes, o código, a frase do status, a sala, a bio, as
+  conquistas e "No Nexo desde". Embaixo, as ações de quem vê.
+- **Sempre escuro** (`.contexto-escuro`), como o vídeo: é a arte da pessoa. As duas cores dela
+  chegam como `--v1` e `--v2` e são só decoração; texto nunca é a cor crua — fica no véu, com os
+  tokens do escuro, e o nome colorido é a cor clareada até ser legível.
+- **O efeito de abrir** é um canvas transparente por cima, por 2,6 s, sem receber clique, que
+  começa depois de o cartão ter tamanho. Com menos movimento, não toca, e as animações contínuas
+  param no primeiro quadro.
+- **Na sala** ele é compacto, ocupa o topo do painel de perfil de borda a borda, e o resto do
+  painel (tempo na sala, amizade, OBS, ações) vem embaixo. O X do painel ganha fundo escuro fixo
+  por estar sobre a arte.
+- **O editor** é um só (`editor-cartao.{js,css}`), em dois lugares: a seção "Personalizar
+  perfil" do início e um painel na sala (Meu perfil → Personalizar o cartão, o próprio cartão, ou
+  Configurações → Perfil), sem sair da chamada. Tem a prévia ao lado, ao vivo, e cada peça é um
+  rádio de verdade com a amostra desenhada. Peça que pede premium ou conquista mostra o selo e diz
+  o que falta no título; escolher continua possível — fica guardado e vale quando a pessoa tiver.
+  Duas colunas quando **o editor** tem 700 px ou mais (consulta de contêiner `editor`), uma só,
+  com a prévia em cima, abaixo disso. As colunas rolam por dentro e o rodapé de salvar fica fixo
+  embaixo, fora da rolagem — grudado (`sticky`) dentro do formulário, ele não subia acima do começo
+  do formulário, e no celular nascia cortado embaixo da prévia.
+
+### 4.14 Amigos, conversa direta e convites
+
+- **A linha de um amigo** (`.nx-amigo`): avatar médio com borda e status, o nome (o apelido que
+  você deu, com o dele miúdo ao lado), e embaixo a sala em verde ou o status, com a frase. As
+  ações à direita: **Entrar** (verde, quando ele está numa sala; "Pedir" se ela estiver trancada),
+  mensagem e "⋯". A linha inteira abre o cartão.
+- **Status**: verde disponível, âmbar com a lua ausente, vermelho com o traço não incomodar, anel
+  vazio desconectado (e invisível, para os outros). Sempre o mesmo desenho, do avatar da lista ao
+  cartão.
+- **A conversa** (`conversa.js`): a mesma peça no início e no painel de mensagens da sala. Diz uma
+  vez, no topo, que as mensagens ficam só na memória e somem em três dias. Mensagens seguidas da
+  mesma pessoa em cinco minutos se agrupam; a própria se apaga para os dois; "Visto" embaixo da
+  última lida; "fulano está escrevendo…" em itálico, sem pular nada.
+- **O convite** é uma mensagem com cartão próprio (ícone de porta, "#sala", botão Entrar na sala) e
+  um aviso no canto de quem recebe, onde estiver — inclusive no meio de outra chamada, dizendo que
+  entrar sai dela.
+- **Avisos**: mensagem nova fora da conversa aberta vira aviso no canto com "Responder"; "Não
+  incomodar" segura os de mensagem (a contagem continua) e deixa passar os convites, que pedem uma
+  decisão. Pedido de amizade novo e conquista ganha também avisam.
+- **Menus** do início caem do botão que os abriu (4.6) e confirmam no próprio menu o que é de
+  perigo ("Remover a Bia dos amigos? A pessoa não é avisada.").
 
 ---
 
@@ -434,6 +549,44 @@ A sala é uma grade: **lateral | palco | chat**, com a barra de cima e a de cont
 
 Por altura: abaixo de 800, 690 e 480 px a ilustração do palco encolhe, some, e por fim a plateia
 sai, para o palco continuar com espaço.
+
+As larguras das colunas são `--col-lateral` e `--col-chat-aberto` (de onde vem `--col-chat`),
+redefinidas em cada degrau; a barra recolhida e o chat fechado só zeram a sua (2.8).
+
+**O topo da lateral** é uma linha com dois itens: o link da marca (sair para o início) e a estrela
+das novidades. Onde "seu espaço" não cabe ao lado de NEXO (lateral de 224 px ou menos), a frase
+desce para baixo dele (consulta de contêiner `marca`) — a estrela já foi posta por cima, com posição
+absoluta, e passava sobre a frase.
+
+**A caixa de conexão**, embaixo da lateral, é o estado em cima (o ponto, "Conectado à sala" e o
+relógio, cada um numa linha só) e as ações numa fileira de botões iguais embaixo (mensagens,
+sugestões, diagnóstico), como o painel de voz de um app de chamada. Com os ícones ao lado do texto,
+numa lateral de 200 px, cada texto quebrava em duas linhas.
+
+**O meu perfil**, no pé da lateral, tem o estado do microfone embaixo do nome, numa linha só. Entre
+o avatar e os dois botões sobram de 56 a 96 px para ele no computador, e "Microfone desligado" pede
+103: ali vale a **forma curta** ("Mic mudo", "Mic ligado", "Ensurdecido", "Fora da sala"), com os
+espaços um pouco mais justos; a frase inteira fica para a gaveta do celular, onde cabe, e para o
+`title` (consulta de contêiner `eu`). As duas formas estão no HTML e o CSS escolhe — a frase não
+muda de tamanho a cada segundo, quando o relógio da sala repinta.
+
+### 5.1 O início de quem tem conta
+
+`/` com a sessão aberta: **trilha | lateral | centro | Agora no Nexo**.
+
+| largura | o que muda |
+|---|---|
+| padrão | trilha 72, lateral 264, "Agora no Nexo" 340 |
+| ≤ 1250 | lateral 240, "Agora" 300 |
+| ≤ 1100 | "Agora no Nexo" sai da direita e as salas ao vivo descem para o topo dos amigos |
+
+O editor do cartão não segue esta tabela: ele decide pela própria largura (4.13), então tem duas
+colunas a 1440 e entre 1012 e 1100 px, e uma só (a prévia em cima) a 1250 e no celular.
+| ≤ 760 | uma coluna: trilha e lateral viram gaveta (botão no topo), as abas descem para uma linha própria |
+| ≤ 430 | os botões de linha ficam só com o ícone (o nome continua para o leitor de tela) |
+
+A trilha mostra as salas recentes deste aparelho (`localStorage`, até 12), cada uma com a cor
+sorteada pelo código e as duas iniciais; o número verde no canto é quantos amigos estão nela agora.
 
 **Consultas de contêiner** onde a peça divide a janela com outras e a largura da janela mente:
 
@@ -606,14 +759,19 @@ Quando a frase pede concordância, ela vai com "a pessoa".
 
 ## 13. O que ainda não está no padrão
 
-Diferenças que existem hoje e que este documento não esconde:
+Resolvido em 01/10/2026: os tamanhos de letra da escala viraram `--fs-*` em todas as páginas; as
+cores fixas fora do vídeo viraram tokens (menção em `--aviso`, "oculto para você" e tela ao vivo
+em `--rosa` com `--sobre-cor`, contagens em `--danger-forte`, pontos de conexão em
+`--online`/`--aviso`/`--danger`, o medidor do microfone nas três); as abas da conta viraram a fita
+das abas da sala; os rótulos em caixa alta são todos 750; as **aspas são curvas** (“…”) em todo
+texto da interface; glifos usados como ícone (`＋`, `✓`, `◆`, `✕`, `−`, `→`) viraram desenho em
+traço; e o Estúdio ganhou o desenho próprio de transmissão, longe da câmera.
 
-- **Tamanhos de letra soltos**: muitas regras antigas de `sala.css` usam `10px`, `11px`, `12px`
-  direto em vez de `--fs-*`. Os valores batem com a escala; a troca é mecânica.
-- **Cores fixas que não são de vídeo**: o amarelo da menção (`#d4ad4f`), o rosa de "ocultar
-  minha imagem" (`#dd7899`), as cores da ilustração do palco vazio. As da ilustração são
-  permitidas; as outras deveriam vir de `--aviso` e `--rosa`.
-- **Abas em três estilos**: cheia violeta (`.abas-fita`), coluna à esquerda (configurações) e
-  sublinhada (página da conta).
-- **Pesos de rótulo em caixa alta** variam entre 600, 650 e 750.
-- **Aspas**: curvas (“…”) nas mensagens do Estúdio e retas no resto.
+O que continua fora, e por quê:
+
+- **Tamanhos de título soltos** (18, 20, 22, 27 px…): títulos de painel e números grandes que não
+  estão na escala. A escala é de texto; um token por título seria um token por tela.
+- **A coluna de seções das configurações** é um desenho de navegação, e não de aba: fica como está
+  (4.5).
+- **As cores da ilustração** (palco vazio, 404) e da arte do cartão de perfil (4.13) são fixas por
+  serem arte, como o padrão permite.
