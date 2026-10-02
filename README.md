@@ -170,7 +170,10 @@ Nexo". A apresentação continua em `/sobre`.
   quem foi bloqueado) e um apelido para cada amigo que só quem deu vê. Ficam no banco, com a conta.
 - **Mensagens diretas e convites** só entre amigos, pelo socket `/social`. **Moram na memória do
   servidor**: até 60 por conversa, e a conversa some três dias depois da última mensagem (ou ao
-  reiniciar o servidor). Conversa continua não tocando o disco.
+  reiniciar o servidor). Conversa continua não tocando o disco. Dá para mandar imagem, também só na
+  memória e com teto (20 por conversa, 64 MB no servidor).
+- **A personalização aparece em todo lugar**: a borda do avatar e o estilo do nome na lista da sala,
+  no chat e na conversa; no quadradinho da plateia e na foto grande, também a moldura e o fundo.
 - **O cartão de perfil** é personalizável: tema, banner e fundo (animados ou imagem), borda do
   avatar, moldura, efeito ao abrir, estilo do nome, bio, pronomes, bolha de pensamento e frase do
   status com prazo. Algumas peças pedem premium (regra do `NEXO_PLANOS`) ou uma **conquista**,

@@ -38,6 +38,7 @@ guardar mais coisas que são *da pessoa*:
 | Quem você bloqueou | tabela `bloqueio` | idem |
 | Contadores das conquistas (minutos em sala, salas abertas, mensagens, telas) | tabela `contador` | idem |
 | **Mensagens diretas** | **memória do servidor** | **até 3 dias sem mensagem nova**, ou até o servidor reiniciar |
+| **Imagens das mensagens diretas** | **memória do servidor** | o mesmo da conversa, e menos: até 20 por conversa e 64 MB no servidor (a mais antiga sai primeiro) |
 | Em que sala cada amigo está agora | memória | enquanto ele estiver lá |
 | Salas recentes | `localStorage` do navegador | neste aparelho |
 
@@ -56,6 +57,15 @@ some **3 dias depois da última mensagem**: é tempo de sobra para o amigo que e
 e curto o bastante para nada virar arquivo.
 
 Reiniciar o servidor apaga as conversas. A tela diz isso uma vez, no topo de toda conversa.
+
+**As imagens** pesam mais que o texto, e têm teto próprio: a página as reduz antes de enviar (até
+1280 px, cerca de 600 KB; o GIF vai como está quando cabe), e o servidor guarda as **20 mais novas
+de cada conversa** e **64 MB no total**. Passou disso, a mais antiga sai primeiro, e a mensagem
+dela passa a dizer "Esta imagem já saiu da memória do servidor". Elas não vão dentro da mensagem:
+cada uma tem um endereço (`/api/social/imagem/:id`) que só os dois da conversa abrem, conferido
+pela sessão da conta a cada pedido, com o tipo decidido pelos bytes (`contas/imagens.js`) e a
+mesma entrega das imagens da conta (`nosniff`, uma CSP que não deixa nada rodar). Assim o histórico
+continua leve e quem nunca rola até a imagem nunca a baixa.
 
 ### Por que as salas recentes continuam no navegador
 
@@ -90,13 +100,16 @@ A conta é identificada para fora pelo **código** — nunca pelo id interno, qu
 ## Mensagens diretas e convites
 
 - Só entre amigos. Texto de até 1.000 caracteres; links viram links; nada vira HTML.
+- **Imagem**, com legenda ou sem: pelo botão ao lado do campo, colando ou arrastando para a
+  conversa. Ela fica numa prévia acima do campo até ir, e na conversa abre grande num visor.
 - Chegam ao vivo pelo socket `/social`, em qualquer aba onde a pessoa esteja logada (o início ou
   uma sala). Fora da conversa aberta, viram contagem de não lidas e um aviso no canto.
 - **Convite para uma sala**: uma mensagem especial com o botão "Entrar". Sai do início (o menu do
   amigo → "Chamar para uma sala", numa sala recente ou numa nova) ou de dentro da sala ("Convidar
   amigos"). Quem recebe vê também um aviso no canto, onde estiver.
 - Apagar uma mensagem própria apaga para os dois.
-- Freios: `dm-enviar` (rajada de 8 em 3 s, 40 por minuto), `convidar` (10 por minuto).
+- Freios: `dm-enviar` (rajada de 8 em 3 s, 40 por minuto), `dm-imagem` (rajada de 4 em 10 s, 10
+  por minuto), `convidar` (10 por minuto).
 
 ## A presença
 
@@ -131,6 +144,25 @@ Tudo o que se escolhe mora em `perfil.vitrine`, com forma fechada (`public/vitri
 | Estilo do nome | 4 |
 | Sobre | bio (190), pronomes (40), bolha de pensamento (70) |
 | Conquistas à mostra | até 5 das que a pessoa já tem |
+
+### Onde a personalização aparece
+
+Não só no cartão: para todo mundo ver o tempo todo, a pessoa aparece com o que escolheu em todo
+lugar onde ela aparece (`public/cartao.js`: `decorarAvatar`, `estilizarNome`, `moldurar`,
+`vestirFundo`), sempre com a vitrine **efetiva** — a que o servidor manda, sem o que ainda não vale.
+
+| lugar | borda do avatar | estilo do nome | moldura | fundo do cartão |
+|---|---|---|---|---|
+| Na sala: a lista "No squad", o "eu" lá embaixo, o chat, as menções, o tempo na sala, a folha de volume | sim | sim | | |
+| Na sala: o quadradinho da plateia | sim | sim | sim | sim, atrás do avatar (a câmera fica por cima) |
+| Na sala: a foto grande | | sim | sim | sim |
+| A conversa direta (no início e na sala), as listas de amigos e de conversas | sim | sim | | |
+| A página da conta, no topo | sim | sim | sim | sim |
+
+O chat e a conversa mostram a borda e o nome **parados**, animando quando o mouse passa pela
+mensagem: são centenas de mensagens, e cada borda que gira é uma pintura por quadro. Fora da
+sala, o que a pessoa vê de si mesma (as mensagens dela na conversa, o "eu" do início, a conta) é o
+cartão efetivo que `/api/conta/eu` devolve em `cartao`, e o editor o atualiza ao salvar.
 
 ### Comum, conquista e premium
 

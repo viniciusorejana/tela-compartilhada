@@ -245,6 +245,7 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | lateral em gaveta (celular) / chat em gaveta (≤1100 px) / gaveta do início | 68 / 70 / 70 | |
 | modal, o cartão de um amigo no início, e o portão de entrada | 80 / 80 / 90 | |
 | visualizador de imagem, reações que voam | 95–96 | |
+| o visor da imagem da conversa direta | 97 | nasce de dentro de um painel |
 | menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
 | aviso de pedido de entrada | 110 | |
 | botão de sair do compacto | 120 | |
@@ -500,6 +501,14 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
 - **Na sala** ele é compacto, ocupa o topo do painel de perfil de borda a borda, e o resto do
   painel (tempo na sala, amizade, OBS, ações) vem embaixo. O X do painel ganha fundo escuro fixo
   por estar sobre a arte.
+- **Fora do cartão** a pessoa aparece com o que escolheu em todo lugar (docs/amigos-e-perfil.md,
+  "Onde a personalização aparece"): a borda em volta do avatar que o lugar já tem — no formato
+  dele, `--borda-raio` (os da sala têm cantos arredondados), a um `--borda-anel` de distância —,
+  o estilo do nome, e no quadradinho da plateia, na foto grande e no topo da conta também a
+  moldura e o fundo do cartão. O estilo do nome mistura a cor da pessoa à `--tinta` do lugar
+  (clareia no escuro, escurece no claro) e pinta a letra por `-webkit-text-fill-color`, para a cor
+  própria de cada lugar não apagá-lo. No chat e na conversa, borda e nome animam só com o mouse
+  em cima da mensagem.
 - **O editor** é um só (`editor-cartao.{js,css}`), em dois lugares: a seção "Personalizar
   perfil" do início e um painel na sala (Meu perfil → Personalizar o cartão, o próprio cartão, ou
   Configurações → Perfil), sem sair da chamada. Tem a prévia ao lado, ao vivo, e cada peça é um
@@ -523,6 +532,12 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   vez, no topo, que as mensagens ficam só na memória e somem em três dias. Mensagens seguidas da
   mesma pessoa em cinco minutos se agrupam; a própria se apaga para os dois; "Visto" embaixo da
   última lida; "fulano está escrevendo…" em itálico, sem pular nada.
+- **A imagem na conversa**: o botão de imagem à esquerda do campo (ou colar, ou arrastar), uma
+  prévia acima do campo até enviar — com "Tirar" —, e na mensagem a imagem com o lugar já
+  reservado pelas dimensões (até 360 × 300), que abre grande num visor (`.nx-dm-visor`, clicar ou
+  Esc fecha só ele). A que saiu da memória do servidor vira uma linha em itálico dizendo isso. O
+  andamento ("Preparando a imagem…", "Enviando a imagem…") sai em `--muted`, e não no vermelho
+  dos erros.
 - **O convite** é uma mensagem com cartão próprio (ícone de porta, "#sala", botão Entrar na sala) e
   um aviso no canto de quem recebe, onde estiver — inclusive no meio de outra chamada, dizendo que
   entrar sai dela.
