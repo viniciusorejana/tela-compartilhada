@@ -4,6 +4,8 @@
   "private": true,
   "description": "Aplicativo de mesa do Nexo: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
   "author": "Nexo",
+  "_comentario_homepage": "O .deb exige a página do projeto (vai no campo Homepage do pacote, que o apt mostra): sem ela o electron-builder recusa o .deb, e o AppImage sai sozinho. É o repositório porque cada Nexo mora num servidor diferente -- não há um site que seja de todos.",
+  "homepage": "https://github.com/viniciusorejana/tela-compartilhada",
   "main": "main.js",
   "_comentario_desktopName": "Nível raiz de propósito: é daqui que o electron-builder lê o nome do arquivo .desktop quando linux.syncDesktopName está ligado. Sem ele, os ambientes de mesa do Linux não ligam a janela aberta ao ícone do aplicativo, e o Nexo aparece na barra de tarefas como um genérico sem nome.",
   "desktopName": "nexo.desktop",
