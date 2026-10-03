@@ -205,6 +205,10 @@ sombra. É pouco de propósito: o detalhe diz "isto está vivo", e não pula na 
   fechou (`transition-delay` de `--dur-lenta`); ao abrir, volta na hora. O chat abre **já com a
   largura final** (a grade dele tem uma coluna de `--col-chat-aberto`) e a coluna o revela cortado
   (`overflow:clip`): o texto não quebra linha a linha enquanto ela cresce.
+- **Coluna e gaveta são classes diferentes.** `sem-chat` (no `.app`) fecha a coluna na tela larga;
+  até 1100 px o chat e a música são gavetas por cima de tudo, inclusive da barra de controles, e
+  quem as mostra é o `aberto` do painel — `sem-chat` não as esconde. Fechar o chat é `fecharChat`,
+  que mexe nas duas; `NexoMusica.fechar()` fecha só a música.
 - **Nada que desliza rola a página.** O `.app` corta o que passa da janela com `overflow:clip`
   (corta sem virar área de rolagem), e o foco dado a um campo que nasce numa coluna ainda abrindo
   vai com `focus({ preventScroll: true })`. Sem os dois, abrir o chat rolava a página 166 px para o

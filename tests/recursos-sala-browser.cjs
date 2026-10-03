@@ -234,7 +234,11 @@ async function entrar(contexto, nome) {
   });
   assert.equal(await convidado.evaluate(() => document.activeElement?.id), 'chatInput');
 
-  await convidado.evaluate(() => window.NexoMusica.fechar());
+  // Quem ocupa a coluna aqui é o chat (o `abrirChat` lá de cima), e no celular ele é gaveta por
+  // cima da barra de controles: quem a fecha é `fecharChat`. `NexoMusica.fechar()` fecha só a
+  // música, que não estava aberta -- e passava porque `sem-chat` escondia a coluna em toda
+  // largura, até o deslize das colunas deixá-lo só para a tela larga (2.8 de docs/interface.md).
+  await convidado.evaluate(() => window.fecharChat());
   await convidado.locator('#soundboardBtn').click();
   await convidado.locator('[data-close="soundboardPanel"]').click();
   await convidado.evaluate(() => window.NexoMusica.abrir());
