@@ -1188,11 +1188,40 @@ const AJUDA_DA_MUSICA = [
   '`!bot <música>` · `!lista <nome ou link>` · `!pular` · `!pausar` · `!voltar`',
   '`!proxima <música>` toca a seguir · `!inserir <n> <música>` entra na posição n',
   '`!mover <de> <para>` · `!remover <n>` · `!embaralhar` · `!esvaziar` (a atual continua)',
+  '`!repetir` repete a faixa · `!repetir fila` gira a fila inteira · `!repetir não` desliga',
   '`!parar` esvazia a fila e me tira da chamada (`!sair` faz o mesmo).',
   '`!fila` · `!agora` · `!volume 0-150` · Na fila do painel dá para arrastar as faixas.',
   'Aceito YouTube, SoundCloud, Bandcamp, links diretos e muito mais. Link do Spotify eu procuro pelo nome.',
   'Link de playlist entra inteiro. Link de música que estava numa playlist toca só ela — use `!lista` para pegar tudo.'
 ].join('\n');
+
+// ---------- Repetir ----------
+//
+// `!repetir` sozinho liga e desliga a faixa, que é o pedido de todo dia ("deixa essa tocando");
+// a fila inteira se pede pelo nome. Palavras soltas, nas duas línguas que aparecem num canal de
+// música, para ninguém ter de decorar a grafia certa.
+const COMANDOS_DE_REPETIR = ['repetir', 'loop', 'repeat', 'rep'];
+const COMANDOS_DE_REPETIR_A_FILA = ['repetirfila', 'loopfila', 'loopqueue', 'lq'];
+function modoDeRepetirPedido(texto, atual) {
+  const palavra = String(texto || '').trim().toLowerCase();
+  if (!palavra) return atual === 'faixa' ? 'nao' : 'faixa';
+  if (/^(fila|tudo|todas|lista|queue|all)$/.test(palavra)) return 'fila';
+  if (/^(faixa|m[uú]sica|essa|esta|uma|1|one|track|song)$/.test(palavra)) return 'faixa';
+  if (/^(n[aã]o|off|desligar|desliga|nada|nenhum|0|none)$/.test(palavra)) return 'nao';
+  return null;
+}
+// A mesma frase para o comando e para o botão, com e sem quem mexeu.
+function fraseDoRepetir(modo, tocando, quem = null) {
+  const titulo = tocando ? musica.semMarcacao(tocando.titulo) : '';
+  if (quem) {
+    if (modo === 'faixa') return titulo ? `**${quem}** pôs **${titulo}** para repetir.` : `**${quem}** ligou repetir a faixa.`;
+    if (modo === 'fila') return `**${quem}** ligou repetir a fila: o que acaba volta para o fim.`;
+    return `**${quem}** desligou o repetir.`;
+  }
+  if (modo === 'faixa') return titulo ? `Repetindo **${titulo}** até alguém desligar.` : 'Repetindo a faixa que tocar até alguém desligar.';
+  if (modo === 'fila') return 'Repetindo a fila: cada faixa que acaba volta para o fim.';
+  return 'Repetir desligado. A fila segue e acaba.';
+}
 
 // `pedido` é o id da mensagem em que a pessoa pediu: é embaixo dela que a página mostra o
 // "procurando…", e é por ele que o indicador some quando a busca termina, dê certo ou não.
@@ -1296,6 +1325,8 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu, pedido = n
         .concat(estado.fila.slice(0, 15).map((faixa, i) => `${i + 1}. ${faixa.titulo} · ${duracaoLegivel(faixa.duracao)} · pedida por ${faixa.pedidoPor}`))
         .filter(Boolean);
       if (estado.fila.length > 15) linhas.push(`…e mais ${estado.fila.length - 15}.`);
+      if (estado.repetir === 'faixa') linhas.push('Repetindo a faixa atual.');
+      if (estado.repetir === 'fila') linhas.push('Repetindo a fila: o que acaba volta para o fim.');
       return falarComoBot(roomCode, linhas.join('\n'), 'lista-da-fila');
     }
     if (['agora', 'np', 'tocando'].includes(comando)) {
@@ -1316,6 +1347,16 @@ async function interpretarComandoDeMusica(roomCode, texto, quemPediu, pedido = n
     }
     if (['embaralhar', 'shuffle'].includes(comando)) {
       return musica.embaralhar(roomCode) ? falarComoBot(roomCode, 'Embaralhei a fila.', 'embaralhou') : falarComoBot(roomCode, 'Precisa de pelo menos duas faixas na fila.', 'dica');
+    }
+    if (COMANDOS_DE_REPETIR.includes(comando) || COMANDOS_DE_REPETIR_A_FILA.includes(comando)) {
+      if (!musica.estadoDaSala(roomCode)) return falarComoBot(roomCode, 'Peça uma música primeiro: o repetir vale para a fila que estiver tocando.', 'dica');
+      const atual = musica.instantaneo(roomCode);
+      const modo = COMANDOS_DE_REPETIR_A_FILA.includes(comando)
+        ? (atual.repetir === 'fila' ? 'nao' : 'fila')
+        : modoDeRepetirPedido(resto, atual.repetir);
+      if (!modo) return falarComoBot(roomCode, 'Use `!repetir` (a faixa), `!repetir fila` ou `!repetir não`.', 'dica');
+      musica.definirRepetir(roomCode, modo);
+      return falarComoBot(roomCode, fraseDoRepetir(modo, atual.tocando), 'repetir');
     }
     if (['ajuda', 'help', 'comandos'].includes(comando)) return falarComoBot(roomCode, AJUDA_DA_MUSICA, 'ajuda');
 
@@ -2001,6 +2042,17 @@ io.on('connection', (socket) => {
     if (acao === 'embaralhar') {
       if (!musica.embaralhar(roomCode)) return resposta({ ok: false, error: 'Precisa de pelo menos duas faixas na fila.' });
       falarComoBot(roomCode, `**${quem}** embaralhou a fila.`, 'embaralhou');
+      return resposta({ ok: true });
+    }
+    // O botão manda o modo que a pessoa VIU como o próximo, e não "avance um": dois cliques de
+    // duas pessoas ao mesmo tempo, avançando cada um, pulariam um modo sem ninguém ter pedido.
+    if (acao === 'repetir') {
+      const modo = String(dados?.modo || '');
+      if (!musica.MODOS_DE_REPETIR.includes(modo)) return resposta({ ok: false, error: 'Modo de repetir desconhecido.' });
+      const antes = musica.instantaneo(roomCode);
+      if (antes.repetir === modo) return resposta({ ok: true });
+      if (!musica.definirRepetir(roomCode, modo)) return resposta({ ok: false, error: 'Peça uma música primeiro: o repetir vale para a fila que estiver tocando.' });
+      falarComoBot(roomCode, fraseDoRepetir(modo, antes.tocando, quem), 'repetir');
       return resposta({ ok: true });
     }
     resposta({ ok: false, error: 'Ação desconhecida.' });

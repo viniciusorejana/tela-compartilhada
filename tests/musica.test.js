@@ -137,6 +137,60 @@ test('pedir numa posição: 1 é tocar a seguir, sem posição é o fim, e uma l
   assert.equal(musica.inserirNaLista(lista, [nova('x')], 50), 2, 'além do fim, entra no fim');
 });
 
+// O repetir decide o que toca depois que uma faixa sai, e o motivo da saída muda a resposta:
+// pular com "repetir a faixa" ligado tem de pular, e uma faixa que falhou não pode voltar --
+// senão é um laço de mensagens de erro.
+test('repetir: a faixa volta quando acaba, a fila gira, e o que falhou não volta', () => {
+  const faixa = id => ({ id });
+  const ids = lista => lista.map(f => f.id).join('');
+
+  let fila = ['b', 'c'].map(faixa);
+  const a = faixa('a');
+  assert.equal(musica.proximaFaixa(fila, a, 'nao', 'acabou').id, 'b', 'desligado, segue a fila');
+  assert.equal(ids(fila), 'c', 'e a que acabou não volta');
+
+  fila = ['b', 'c'].map(faixa);
+  assert.equal(musica.proximaFaixa(fila, a, 'faixa', 'acabou'), a, 'repetir a faixa: ela mesma de novo');
+  assert.equal(ids(fila), 'bc', 'sem mexer em quem espera');
+  assert.equal(musica.proximaFaixa(fila, a, 'faixa', 'pulou').id, 'b', 'pular continua pulando, mesmo repetindo a faixa');
+  assert.equal(ids(fila), 'c', 'e a pulada não volta para a fila');
+
+  fila = ['b', 'c'].map(faixa);
+  assert.equal(musica.proximaFaixa(fila, a, 'fila', 'acabou').id, 'b', 'repetir a fila: segue para a próxima');
+  assert.equal(ids(fila), 'ca', 'e a que acabou vai para o fim');
+  assert.equal(musica.proximaFaixa(fila, faixa('b'), 'fila', 'pulou').id, 'c', 'a pulada também continua no ciclo');
+  assert.equal(ids(fila), 'ab');
+
+  fila = [];
+  assert.equal(musica.proximaFaixa(fila, a, 'fila', 'acabou'), a, 'uma fila de uma faixa só gira nela mesma');
+
+  for (const modo of ['faixa', 'fila']) {
+    fila = ['b'].map(faixa);
+    assert.equal(musica.proximaFaixa(fila, a, modo, 'falhou').id, 'b', `o que falhou não volta (${modo})`);
+    assert.equal(ids(fila), '', `nem para o fim da fila (${modo})`);
+  }
+
+  fila = ['b'].map(faixa);
+  assert.equal(musica.proximaFaixa(fila, null, 'fila', null).id, 'b', 'sem nada saindo, começa pela primeira');
+  assert.equal(musica.proximaFaixa([], null, 'faixa', null), null, 'fila vazia, nada a tocar');
+});
+
+test('o modo de repetir é da fila do bot: sem bot não há o que repetir, e ele aparece no estado', async () => {
+  assert.equal(musica.definirRepetir('sala-sem-bot-repetir', 'fila'), null);
+  assert.equal(musica.instantaneo('sala-sem-bot-repetir').repetir, 'nao');
+
+  musica.filaDeTeste('sala-que-repete', { tocando: { id: 't', titulo: 'T' }, fila: [] });
+  assert.equal(musica.instantaneo('sala-que-repete').repetir, 'nao', 'começa desligado');
+  assert.equal(musica.definirRepetir('sala-que-repete', 'faixa'), 'faixa');
+  assert.equal(musica.instantaneo('sala-que-repete').repetir, 'faixa');
+  assert.equal(musica.definirRepetir('sala-que-repete', 'sempre'), null, 'modo inventado não entra');
+  assert.equal(musica.instantaneo('sala-que-repete').repetir, 'faixa');
+
+  // Diferente do volume: o bot saindo leva o repetir junto.
+  await musica.desconectar('sala-que-repete', 'silencioso');
+  assert.equal(musica.instantaneo('sala-que-repete').repetir, 'nao');
+});
+
 test('reordenar numa sala sem bot não quebra nada', () => {
   assert.equal(musica.moverNaFila('sala-vazia', 'x', 1), null);
   assert.equal(musica.removerDaFilaPorId('sala-vazia', 'x'), null);

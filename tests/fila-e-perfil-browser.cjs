@@ -114,6 +114,25 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   for (const pagina of [ana, bia]) await esperarOrdem(pagina, '5312', 'tirar pelo menu');
   console.log('PASS: o menu da faixa move para uma posição digitada e tira da fila');
 
+  // ---------- Repetir ----------
+  //
+  // Um botão que gira entre desligado, a fila e a faixa. O modo chega às duas telas, o canal diz
+  // quem mexeu, e o estado está no desenho (o ponto, o "1") e no nome falado.
+  const repetir = pagina => pagina.locator('#musicaRepetir');
+  assert.equal(await repetir(ana).getAttribute('aria-pressed'), 'false', 'começa desligado');
+  await repetir(ana).click();
+  for (const pagina of [ana, bia]) await esperarAte(async () => (await repetir(pagina).getAttribute('aria-label')) === 'Repetir: a fila inteira', 'repetir a fila não chegou às duas');
+  await esperarAte(async () => /Ana.*ligou repetir a fila/.test(await ultimaDoBot(bia)), 'o canal diz quem ligou o repetir');
+  assert.match(await bia.locator('#musicaFilaDuracao').textContent(), /repetindo/, 'a fila diz que não acaba');
+  await repetir(bia).click();
+  for (const pagina of [ana, bia]) await esperarAte(async () => (await repetir(pagina).getAttribute('data-modo')) === 'faixa', 'repetir a faixa não chegou às duas');
+  assert.equal(await repetir(ana).getAttribute('aria-pressed'), 'true');
+  await esperarAte(async () => /Bia.*pôs.*A que toca.*para repetir/.test(await ultimaDoBot(ana)), 'o canal diz que a faixa vai repetir');
+  await ana.locator('#tocandoAgora').screenshot({ path: path.join(saida, 'repetir-a-faixa.png') });
+  await repetir(ana).click();
+  for (const pagina of [ana, bia]) await esperarAte(async () => (await repetir(pagina).getAttribute('aria-pressed')) === 'false', 'desligar o repetir não chegou às duas');
+  console.log('PASS: o repetir gira entre fila, faixa e desligado, para as duas pessoas, com o canal dizendo quem mexeu');
+
   // ---------- Esvaziar ----------
   ana.once('dialog', dialogo => dialogo.accept());
   await ana.locator('#musicaEsvaziar').click();

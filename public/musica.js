@@ -17,7 +17,7 @@
   const entrada = $('musicaInput');
 
   let naoLidasNaMusica = 0;
-  let estadoAtual = { conectado: false, tocando: null, fila: [], volume: 15, pausado: false };
+  let estadoAtual = { conectado: false, tocando: null, fila: [], volume: 15, pausado: false, repetir: 'nao' };
   let disponivel = true;
   let pertoDoFim = true;
   // O tempo decorrido anda de segundo em segundo aqui, entre um aviso e outro do servidor.
@@ -146,6 +146,7 @@
     removeu: '<path d="M18 6 6 18M6 6l12 12"/>',
     esvaziou: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
     embaralhou: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+    repetir: '<path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/>',
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7"/>',
     erro: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
     aviso: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
@@ -350,7 +351,9 @@
     // A capa vem de fora e vai para uma propriedade de CSS: sem as aspas e a checagem de
     // esquema, uma URL com parenteses ou com "javascript:" sairia do lugar dela.
     pintarCapa($('tocandoCapa'), tocando.capa);
-    $('tocandoRotulo').textContent = estadoAtual.pausado ? 'PAUSADO' : 'TOCANDO AGORA';
+    // "TOCANDO", sem o "AGORA": o ponto verde pulsando já diz que é agora, e numa coluna de
+    // 266 px o rótulo inteiro não cabia ao lado do tempo.
+    $('tocandoRotulo').textContent = estadoAtual.pausado ? 'PAUSADO' : 'TOCANDO';
     // Troca o desenho, e não um glifo: ▶ e ⏸ mudavam de tamanho e de linha de base a cada fonte.
     if ($('musicaPausar').dataset.pausado !== String(estadoAtual.pausado)) {
       $('musicaPausar').dataset.pausado = String(estadoAtual.pausado);
@@ -358,6 +361,7 @@
     }
     $('musicaPausar').title = estadoAtual.pausado ? 'Voltar' : 'Pausar';
     $('musicaPausar').setAttribute('aria-label', $('musicaPausar').title);
+    pintarRepetir();
 
     const duracao = tocando.duracao || 0;
     $('tocandoTempo').textContent = duracao ? `${tempoLegivel(decorridoLocal)} / ${tempoLegivel(duracao)}` : tempoLegivel(decorridoLocal);
@@ -372,6 +376,48 @@
   const ICONE = caminho => `<svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true">${caminho}</svg>`;
   const ICONE_TOCAR = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8Z"/></svg>';
   const ICONE_PAUSAR = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>';
+
+  // ---------- Repetir ----------
+  //
+  // Um botão só, que gira entre os três modos na ordem de todo tocador: desligado, a fila, a
+  // faixa. O desenho diz o modo -- as setas em volta, com o "1" dentro quando é só esta faixa -- e
+  // o ponto embaixo diz que está ligado. O nome falado leva o modo, porque "pressionado" sozinho
+  // não diria qual dos dois.
+  const ICONE_REPETIR = '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>';
+  const ICONE_REPETIR_UMA = `${ICONE_REPETIR}<path d="M11 10h1v4"/>`;
+  const MODOS_DE_REPETIR = {
+    nao: { proximo: 'fila', nome: 'desligado', depois: 'repetir a fila' },
+    fila: { proximo: 'faixa', nome: 'a fila inteira', depois: 'repetir só esta faixa' },
+    faixa: { proximo: 'nao', nome: 'esta faixa', depois: 'desligar' }
+  };
+  const modoDeRepetir = () => (MODOS_DE_REPETIR[estadoAtual.repetir] ? estadoAtual.repetir : 'nao');
+
+  function pintarRepetir() {
+    const botao = $('musicaRepetir');
+    const modo = modoDeRepetir();
+    if (botao.dataset.modo !== modo) {
+      botao.dataset.modo = modo;
+      botao.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${modo === 'faixa' ? ICONE_REPETIR_UMA : ICONE_REPETIR}</svg>`;
+    }
+    botao.setAttribute('aria-pressed', String(modo !== 'nao'));
+    botao.setAttribute('aria-label', `Repetir: ${MODOS_DE_REPETIR[modo].nome}`);
+    botao.title = `Repetir: ${MODOS_DE_REPETIR[modo].nome}. Clique para ${MODOS_DE_REPETIR[modo].depois}`;
+  }
+
+  // Vai ao servidor o modo que a pessoa VIU como o próximo (ver server.js): dois cliques ao mesmo
+  // tempo, de duas pessoas, chegam ao mesmo modo em vez de pular um.
+  function trocarRepetir() {
+    if (!socket?.connected) { status.textContent = 'Aguarde a reconexão para mexer na fila.'; return; }
+    const modo = MODOS_DE_REPETIR[modoDeRepetir()].proximo;
+    estadoAtual = { ...estadoAtual, repetir: modo };
+    pintarRepetir();
+    pintarFila();
+    socket.emit('musica-fila', { acao: 'repetir', modo }, resposta => {
+      if (resposta?.ok) return;
+      status.textContent = resposta?.error || 'Não foi possível mudar o repetir.';
+      socket.emit('musica-estado', pacote => { if (pacote?.estado) aplicarEstado(pacote.estado); });
+    });
+  }
   const ICONE_ALCA = ICONE('<path d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01"/>');
   const ICONE_A_SEGUIR = ICONE('<path d="M5 4h14M12 20V9M7 13l5-5 5 5"/>');
   const ICONE_MAIS = ICONE('<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>');
@@ -411,7 +457,8 @@
     $('musicaFila').classList.toggle('recolhida', recolhida);
     $('musicaFilaRecolher').setAttribute('aria-expanded', String(!recolhida));
     $('musicaFilaTotal').textContent = fila.length;
-    $('musicaFilaDuracao').textContent = duracaoTotal(fila);
+    // A fila em repetição não acaba nunca, e quem olha a duração precisa saber disso.
+    $('musicaFilaDuracao').textContent = [duracaoTotal(fila), modoDeRepetir() === 'fila' && 'repetindo'].filter(Boolean).join(' · ');
     $('musicaEmbaralhar').disabled = fila.length < 2;
     // Redesenhar troca todos os elementos, e o foco iria junto para o nada. Toda mudança chega
     // duas vezes -- a otimista e a confirmação do servidor --, e sem isto quem reordena pelo
@@ -779,6 +826,7 @@
   $('musicaClose').onclick = fecharMusica;
   $('musicaPausar').onclick = () => enviarComando(estadoAtual.pausado ? '!voltar' : '!pausar');
   $('musicaPular').onclick = () => enviarComando('!pular');
+  $('musicaRepetir').onclick = trocarRepetir;
 
   // O volume do bot vale para a sala toda, entao ele so e enviado quando a pessoa SOLTA o
   // controle. Mandando a cada pixel, um arrasto viraria trinta avisos para todo mundo.

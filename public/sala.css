@@ -485,22 +485,32 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 
 /* O cartão do que está tocando. Fica preso no topo do canal: rolar as mensagens não pode
    esconder a única informação que a sala consulta o tempo todo. */
-.tocando { display:flex; gap:11px; align-items:center; padding:12px 12px 12px 13px; margin:12px 12px 0; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
-.tocando-capa { flex:none; display:grid; place-items:center; width:48px; height:48px; border-radius:var(--r-md); background:color-mix(in srgb, var(--accent) 30%, var(--bg-cartao)) center/cover no-repeat; color:var(--accent-texto); box-shadow:0 6px 16px #0006; transition:opacity var(--dur) var(--curva); }
+.tocando { display:grid; grid-template-columns:48px minmax(0,1fr); column-gap:11px; row-gap:7px; align-items:center; padding:12px 10px 8px 13px; margin:12px 12px 0; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
+.tocando-capa { display:grid; place-items:center; width:48px; height:48px; border-radius:var(--r-md); background:color-mix(in srgb, var(--accent) 30%, var(--bg-cartao)) center/cover no-repeat; color:var(--accent-texto); box-shadow:0 6px 16px #0006; transition:opacity var(--dur) var(--curva); }
 .tocando-capa .ico { width:22px; height:22px; }
-.tocando-info { flex:1; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:8px; }
-.tocando-rotulo { grid-column:1 / 3; display:flex; align-items:center; gap:5px; min-width:0; white-space:nowrap; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; color:var(--online-texto); margin-bottom:2px; }
-.tocando-rotulo::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulsa-nota 1.6s ease-in-out infinite; }
+.tocando-info { min-width:0; display:flex; flex-direction:column; }
+/* O rótulo e o tempo dividem a primeira linha: o tempo é o que se consulta de relance, e ao
+   lado do rótulo ele não toma o lugar de ninguém. */
+.tocando-linha { display:flex; align-items:center; gap:8px; min-width:0; margin-bottom:2px; }
+.tocando-rotulo { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.06em; color:var(--online-texto); }
+.tocando-rotulo::before { content:''; display:inline-block; width:6px; height:6px; margin:0 5px 1px 0; vertical-align:middle; border-radius:50%; background:currentColor; animation:pulsa-nota 1.6s ease-in-out infinite; }
 .tocando.pausado .tocando-rotulo { color:var(--aviso); }
 .tocando.pausado .tocando-rotulo::before { animation:none; }
-.tocando-info strong { grid-column:1 / 3; font-size:var(--fs-md); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.01em; }
-.tocando-info small { grid-column:1 / 3; font-size:var(--fs-meta); color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:7px; }
+.tocando-info strong { font-size:var(--fs-md); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.01em; }
+.tocando-info small { font-size:var(--fs-meta); color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .tocando-info small:empty { display:none; }
 .tocando-barra { height:4px; border-radius:2px; background:rgb(var(--tinta) / 11%); overflow:hidden; align-self:center; }
 .tocando-barra i { display:block; height:100%; width:0; border-radius:2px; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .9s linear; }
-.tocando-tempo { font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
-.tocando-botoes { flex:none; display:flex; gap:2px; }
-.tocando-botoes button { color:var(--text-2); }
+.tocando-tempo { flex:none; font-size:var(--fs-meta); color:var(--muted); font-variant-numeric:tabular-nums; }
+/* Tocar, pular, o progresso e o repetir: a linha de um tocador, presa embaixo do cartão. */
+.tocando-controles { grid-column:1 / -1; display:flex; align-items:center; gap:2px; min-width:0; margin-left:-5px; }
+.tocando-controles .tocando-barra { flex:1; min-width:24px; margin:0 8px; }
+.tocando-controles button { flex:none; color:var(--text-2); }
+/* Repetir ligado: a cor de destaque e um ponto embaixo, como em todo tocador. A cor sozinha
+   não bastava -- no tema claro, cinza e violeta escuro se confundem de relance. */
+#musicaRepetir { position:relative; }
+#musicaRepetir[aria-pressed="true"] { color:var(--accent-texto); }
+#musicaRepetir[aria-pressed="true"]::after { content:''; position:absolute; left:50%; bottom:2px; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:currentColor; }
 .tocando.pausado .tocando-capa { opacity:.5; }
 .tocando.pausado .tocando-barra i { transition:none; }
 
@@ -520,7 +530,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .fila-recolher svg { transition:transform var(--dur) var(--curva); }
 .fila-recolher[aria-expanded="false"] svg { transform:rotate(-90deg); }
 .fila-contagem { min-width:18px; padding:1px 6px; border-radius:var(--r-pilula); background:var(--accent-suave-hi); color:var(--accent-texto); font-size:var(--fs-rotulo); letter-spacing:0; text-align:center; }
-.fila-duracao { margin-right:auto; padding-left:4px; font-size:var(--fs-meta); color:var(--faint); font-variant-numeric:tabular-nums; }
+.fila-duracao { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:4px; font-size:var(--fs-meta); color:var(--faint); font-variant-numeric:tabular-nums; }
 .fila-topo .botao-icone { width:28px; height:28px; }
 .fila-lista { list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:1px; max-height:min(36vh,340px); overflow-y:auto; overscroll-behavior:contain; }
 .musica-fila.recolhida .fila-lista,.musica-fila.recolhida .fila-dica { display:none; }

@@ -151,15 +151,16 @@
       <div class="tocando" id="tocandoAgora" hidden>
         <div class="tocando-capa" id="tocandoCapa" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></div>
         <div class="tocando-info">
-          <span class="tocando-rotulo" id="tocandoRotulo">TOCANDO AGORA</span>
+          <div class="tocando-linha"><span class="tocando-rotulo" id="tocandoRotulo">TOCANDO</span><span class="tocando-tempo" id="tocandoTempo">0:00</span></div>
           <strong id="tocandoTitulo">—</strong>
           <small id="tocandoAutor"></small>
-          <div class="tocando-barra" role="img" aria-label="Progresso da faixa"><i id="tocandoProgresso"></i></div>
-          <span class="tocando-tempo" id="tocandoTempo">0:00</span>
         </div>
-        <div class="tocando-botoes">
+        <!-- Os controles numa linha própria, embaixo: ao lado do título eles o espremiam em dez letras. -->
+        <div class="tocando-controles">
           <button id="musicaPausar" class="ghost botao-icone" type="button" title="Pausar" aria-label="Pausar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
           <button id="musicaPular" class="ghost botao-icone" type="button" title="Pular" aria-label="Pular"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14l10-7ZM19 5v14"/></svg></button>
+          <div class="tocando-barra" role="img" aria-label="Progresso da faixa"><i id="tocandoProgresso"></i></div>
+          <button id="musicaRepetir" class="ghost botao-icone" type="button" data-modo="nao" aria-pressed="false" title="Repetir: desligado. Clique para repetir a fila" aria-label="Repetir: desligado"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
         </div>
       </div>
 

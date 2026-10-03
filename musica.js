@@ -79,6 +79,24 @@ const salas = new Map();
 const volumePorSala = new Map();
 const VOLUME_PADRAO = 0.15;
 
+// ---------- Repetir ----------
+//
+// Três modos, como em todo tocador: nada se repete; a faixa atual volta do começo quando
+// acaba; ou a fila inteira gira -- cada faixa que sai volta para o fim dela.
+//
+// Ao contrário do volume, o modo morre com o bot. O volume é da sala; repetir é desta fila. Quem
+// pediu uma música uma hora depois de alguém dar `!parar` não espera que ela toque para sempre.
+const MODOS_DE_REPETIR = ['nao', 'faixa', 'fila'];
+
+// Uma faixa que tocou menos que isto não se repete: ou o arquivo está quebrado, ou é um
+// vinhetinha que viraria um laço frenético -- e cada volta reabre a conexão com o site.
+const SEGUNDOS_MINIMOS_PARA_REPETIR = 5;
+
+// O endereço direto do áudio tem prazo (o do YouTube vale umas seis horas). Uma faixa avulsa
+// nunca chegava perto disso; uma fila em repetição chega. Passado este tempo, a faixa é
+// procurada de novo antes de tocar, em vez de tropeçar num endereço vencido.
+const MS_DE_VALIDADE_DO_ENDERECO = 3 * 60 * 60 * 1000;
+
 // Como a sala e avisada. Preenchido por server.js na inicializacao para este modulo nao
 // precisar conhecer o Socket.IO.
 let anunciar = () => {};
@@ -555,6 +573,7 @@ function garantirResolvida(faixa) {
   const alvo = faixa.busca ? `ytsearch${RESULTADOS_A_TENTAR}:${faixa.busca}` : faixa.endereco;
   faixa.resolvendo = tentarAlvo(alvo, faixa.plataformaDaPonte || null).then(cheia => {
     faixa.midia = cheia.midia;
+    faixa.resolvidaEm = cheia.resolvidaEm;
     faixa.duracao = faixa.duracao || cheia.duracao;
     faixa.capa = faixa.capa || cheia.capa;
     // Só quando não havia nenhum: o endereço da plataforma de origem é mais útil para
@@ -623,8 +642,19 @@ async function resolverUm(alvo, posicao, plataformaDaPonte) {
     capa: /^https:\/\//.test(ficha.thumbnail || '') ? String(ficha.thumbnail).slice(0, 400) : null,
     origem: plataformaDaPonte ? `${plataformaDaPonte} → YouTube` : String(ficha.extractor_key || 'Web'),
     // Fica de fora do que a sala ve: nao interessa a ninguem, e a URL assinada e longa.
-    midia: enderecoDeMidia(ficha)
+    midia: enderecoDeMidia(ficha),
+    resolvidaEm: Date.now()
   };
+}
+
+// Marca para ser procurada de novo a faixa que voltaria a tocar com um endereço que já não
+// serve: vencido pelo tempo, ou perdido numa queda anterior. O segundo caso só pesa nas faixas
+// que vieram de uma ponte (Spotify, Deezer, Apple): o endereço que elas guardam é o da página
+// da plataforma, que o yt-dlp não abre -- o caminho de volta delas é a busca pelo nome.
+function marcarSeVencida(faixa) {
+  if (!faixa || faixa.porResolver) return;
+  const vencida = faixa.resolvidaEm && Date.now() - faixa.resolvidaEm > MS_DE_VALIDADE_DO_ENDERECO;
+  if (vencida || (!faixa.midia && faixa.busca)) faixa.porResolver = true;
 }
 
 // O endereco direto do audio, com os cabecalhos que o fazem valer. Aceito so em HTTP(S):
@@ -656,6 +686,7 @@ function criarEstado(sala) {
     fila: [],
     tocando: null,
     pausado: false,
+    repetir: 'nao',
     // O que esta sala escolheu da última vez, e não o padrão de fábrica.
     volume: volumePorSala.get(sala) ?? VOLUME_PADRAO,
     processos: null,
@@ -702,10 +733,11 @@ function instantaneo(sala) {
   // Mostrar o padrão aqui fazia o controle mentir: dizia 15 enquanto o próximo pedido ia
   // tocar nos 40 que alguém tinha deixado.
   const volumeGuardado = Math.round((volumePorSala.get(sala) ?? VOLUME_PADRAO) * 100);
-  if (!estado) return { conectado: false, tocando: null, fila: [], volume: volumeGuardado, pausado: false };
+  if (!estado) return { conectado: false, tocando: null, fila: [], volume: volumeGuardado, pausado: false, repetir: 'nao' };
   return {
     conectado: Boolean(estado.room),
     pausado: estado.pausado,
+    repetir: estado.repetir,
     volume: Math.round(estado.volume * 100),
     tocando: estado.tocando && {
       ...comoASalaVe(estado.tocando),
@@ -985,13 +1017,31 @@ async function reproduzir(estado, faixa, { forcarYtdlp = false } = {}) {
   } else if (ficouPelaMetade) {
     console.warn(`[música] ${estado.sala}: "${faixa.titulo}" parou em ${tocouAte}s de ${faixa.duracao}s (${primeiraLinhaDeErro(pipeline.motivo())})`);
   }
-  seguirParaProxima(estado);
+  // O que não chegou a tocar de verdade não volta pelo repetir: repetir uma faixa quebrada é
+  // um laço de mensagens de erro, e uma de meio segundo seria um laço de conexões com o site.
+  const tocouDeVerdade = recebeuAudio && estado.msEnviados >= SEGUNDOS_MINIMOS_PARA_REPETIR * 1000;
+  seguirParaProxima(estado, tocouDeVerdade ? 'acabou' : 'falhou');
 }
 
-function seguirParaProxima(estado) {
+// A regra do repetir, sem efeito nenhum além de mexer na fila recebida: dada a faixa que está
+// saindo e por quê, devolve a que toca agora.
+//
+//   'acabou'  tocou até o fim. Com "faixa", ela mesma volta; com "fila", vai para o fim.
+//   'pulou'   alguém pulou. Pular é sempre ir para a próxima -- com "faixa" ligado, a pulada
+//             não volta (senão "pular" não pularia nada); com "fila", ela continua no ciclo.
+//   'falhou'  não tocou. Nunca volta, em modo nenhum.
+//   null      nada saindo: a fila estava parada e alguém pediu.
+function proximaFaixa(fila, saindo, modo, motivo) {
+  if (saindo && motivo === 'acabou' && modo === 'faixa') return saindo;
+  if (saindo && motivo !== 'falhou' && modo === 'fila') fila.push(saindo);
+  return fila.shift() || null;
+}
+
+function seguirParaProxima(estado, motivo = null) {
+  const saindo = estado.tocando;
   estado.tocando = null;
   estado.pausado = false;
-  const proxima = estado.fila.shift();
+  const proxima = proximaFaixa(estado.fila, saindo, estado.repetir, motivo);
   if (!proxima) {
     avisarSala(estado.sala);
     agendarSaidaPorOciosidade(estado);
@@ -1003,9 +1053,14 @@ function seguirParaProxima(estado) {
   // anterior e fica assim ate o primeiro quadro sair -- um salto para tras, visível.
   estado.msEnviados = 0;
   avisarSala(estado.sala);
-  mensagemDoBot(estado.sala, `Tocando **${proxima.titulo}**${proxima.autor ? ` · ${proxima.autor}` : ''}`, 'tocando', { capa: proxima.capa });
+  // A mesma faixa de novo (repetir a faixa, ou uma fila de uma faixa só girando) não se anuncia
+  // a cada volta: seriam vinte "Tocando" iguais por hora, empurrando a conversa para cima.
+  if (proxima !== saindo) {
+    mensagemDoBot(estado.sala, `Tocando **${proxima.titulo}**${proxima.autor ? ` · ${proxima.autor}` : ''}`, 'tocando', { capa: proxima.capa });
+  }
 
   const geracao = estado.geracao;
+  marcarSeVencida(proxima);
   // Faixa vinda de uma lista chega sem o endereco do audio -- so com o da pagina. Resolver
   // agora custa uns tres segundos; e a espera acontece UMA vez por faixa, porque a
   // seguinte ja e resolvida em paralelo logo abaixo.
@@ -1014,7 +1069,7 @@ function seguirParaProxima(estado) {
     .catch(erro => {
       if (estado.geracao !== geracao) return;
       mensagemDoBot(estado.sala, `Não consegui tocar **${proxima.titulo}**: ${erro.message}`, 'erro');
-      seguirParaProxima(estado);
+      seguirParaProxima(estado, 'falhou');
     });
   adiantarProxima(estado);
 }
@@ -1024,6 +1079,7 @@ function seguirParaProxima(estado) {
 // endereco. Nada fica aberto apodrecendo, e a troca de faixa nao paga os tres segundos.
 function adiantarProxima(estado) {
   const proxima = estado.fila[0];
+  marcarSeVencida(proxima);
   if (!proxima?.porResolver) return;
   // Se falhar, a vez dela tenta de novo -- e ai o erro e anunciado para a sala.
   garantirResolvida(proxima).catch(() => {});
@@ -1098,8 +1154,18 @@ function pular(sala) {
   // A fila do servidor de midia guarda meio segundo de audio ja entregue. Sem limpa-la, a
   // faixa pulada continuaria tocando por um instante em cima da proxima.
   estado.fonte?.clearQueue();
-  seguirParaProxima(estado);
+  seguirParaProxima(estado, 'pulou');
   return saindo;
+}
+
+// Só com o bot na sala: o modo é desta fila, e sem bot não há fila (ver MODOS_DE_REPETIR).
+// Devolve o modo que ficou valendo, ou null quando não há o que repetir.
+function definirRepetir(sala, modo) {
+  const estado = salas.get(sala);
+  if (!estado || !MODOS_DE_REPETIR.includes(modo)) return null;
+  estado.repetir = modo;
+  avisarSala(sala);
+  return modo;
 }
 
 // "Parar" e "sair" eram duas coisas: a primeira limpava a fila e deixava o bot plantado na
@@ -1201,10 +1267,11 @@ function tocarAgora(sala, id) {
 
 // Só para os testes de navegador: uma fila montada à mão, sem baixar nada nem entrar no
 // servidor de mídia. É o que deixa testar a tela da fila numa máquina sem yt-dlp.
-function filaDeTeste(sala, { tocando = null, fila = [] } = {}) {
+function filaDeTeste(sala, { tocando = null, fila = [], repetir = 'nao' } = {}) {
   const estado = salas.get(sala) || criarEstado(sala);
   estado.tocando = tocando;
   estado.fila = fila;
+  estado.repetir = MODOS_DE_REPETIR.includes(repetir) ? repetir : 'nao';
   avisarSala(sala);
 }
 
@@ -1298,8 +1365,8 @@ module.exports = {
   configurar, definirCanalDeMensagens, disponivel, semMarcacao, encerrarOrfaos,
   ehListaInteira, listaEmbutida, buscarListas, listarFaixasDaLista,
   ondeMora, atravessarPonte, expandirAtalho,
-  pedir, pular, pausar, definirVolume, removerDaFila, embaralhar,
-  moverNaFila, removerDaFilaPorId, tocarAgora, esvaziarFila, moverNaLista, inserirNaLista, filaDeTeste,
+  pedir, pular, pausar, definirVolume, definirRepetir, removerDaFila, embaralhar,
+  moverNaFila, removerDaFilaPorId, tocarAgora, esvaziarFila, moverNaLista, inserirNaLista, proximaFaixa, filaDeTeste,
   desconectar, esquecerSala, encerrarTudo, instantaneo, estadoDaSala, saudeDaSala,
-  PREFIXO_DA_IDENTIDADE, NOME_DO_BOT, MAXIMO_NA_FILA
+  PREFIXO_DA_IDENTIDADE, NOME_DO_BOT, MAXIMO_NA_FILA, MODOS_DE_REPETIR
 };
