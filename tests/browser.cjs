@@ -206,7 +206,9 @@ async function esperarCodec(page, fonte, esperado) {
   await host.evaluate(() => definirModoTeatro(false));
   await host.locator('#sidebarToggle').click();
   await host.locator('#audienceToggle').click();
-  assert.equal(await host.locator('.participants-section').isVisible(), true);
+  // A plateia desdobra com movimento (sala.css): conferir "apareceu" no clique pegava a linha da
+  // grade ainda em 0fr. Espera-se o fim, como no sentido contrário, acima.
+  await host.locator('.participants-section').waitFor({ state: 'visible' });
   await host.locator('#chatToggle').click();
   assert.equal(await host.locator('#chatPanel').isVisible(), true);
 

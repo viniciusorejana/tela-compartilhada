@@ -241,7 +241,9 @@ async function etapaC(contextoAnonimo, contextoDaDona) {
   await entrarNaSala(dona, 'sala-da-dona');
   // A página da Bia pergunta de novo a cada cinco segundos: ela entra sem apertar nada.
   await bia.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
-  assert.equal(await bia.locator('#waitingPanel').isVisible(), false);
+  // O painel de espera sai com movimento (docs/interface.md, 2.8): conferir "fechou" logo depois da
+  // entrada pegava o fim da saída. Espera-se o fim.
+  await bia.locator('#waitingPanel').waitFor({ state: 'hidden' });
 
   // ---------- A lista, o cartão de perfil e a mesa de sons de quem não tem conta ----------
   await bia.locator('#soundboardBtn').click();
