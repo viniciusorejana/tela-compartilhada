@@ -136,8 +136,10 @@
 @media (max-width:760px) { .nx-dm-compor textarea { font-size:16px; } .nx-dm-msg { padding-right:30px; } }
 
 /* ---------- Escolher (convidar, chamar para uma sala) ----------
-   Um menu que cai do botão que o abriu, como os da sala (4.6). */
-.nx-menu { position:fixed; z-index:106; display:grid; gap:2px; width:min(280px,calc(100vw - 24px)); max-height:min(420px,70vh); overflow-y:auto; padding:6px; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); color:var(--text); animation:nexo-surgir var(--dur) var(--curva); }
+   Um menu que cai do botão que o abriu, como os da sala (4.6). A coluna é `minmax(0,1fr)`, e não a
+   automática: esta cresce até o tamanho natural do campo de um `.nx-menu-campo`, e no celular (a
+   letra de 16 px) o campo passava da largura do menu e levava o botão ao lado para fora dele. */
+.nx-menu { position:fixed; z-index:106; display:grid; grid-template-columns:minmax(0,1fr); gap:2px; width:min(280px,calc(100vw - 24px)); max-height:min(420px,70vh); overflow-y:auto; padding:6px; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); color:var(--text); animation:nexo-surgir var(--dur) var(--curva); }
 .nx-menu[hidden] { display:none; }
 .nx-menu-titulo { padding:6px 10px 4px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
 /* O menu leva também a classe `.nx-social` (ele mora no `body`, fora de qualquer peça): a base de
@@ -147,7 +149,8 @@
 .nx-menu-item.perigo { --nx-cor:var(--danger-texto); --nx-cor-hover:var(--danger-texto); --nx-fundo-hover:var(--danger-suave); }
 .nx-menu-item.perigo .ico { color:currentColor; }
 .nx-menu-separador { height:1px; margin:4px 6px; background:var(--line-2); }
-.nx-menu-campo { display:flex; gap:6px; padding:4px; }
+.nx-menu-campo { display:flex; gap:6px; min-width:0; padding:4px; }
+.nx-menu-campo .nx-botao { flex:none; }
 .nx-menu-campo input { flex:1; min-width:0; min-height:var(--ctl-p); margin:0; padding:0 10px; border:1px solid rgb(var(--tinta) / 9%); border-radius:var(--r-sm); background:var(--bg-0); color:var(--text); font:var(--fs-sm)/1 "Segoe UI",system-ui,sans-serif; box-shadow:none; }
 .nx-menu-campo input:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
 /* No celular, 16 px (6.7): com menos, o iOS aproxima a página inteira ao focar o campo do menu. */

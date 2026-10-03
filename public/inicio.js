@@ -242,7 +242,9 @@
     let x = Math.min(r.left, window.innerWidth - largura - 12);
     let y = r.bottom + 6;
     if (y + altura > window.innerHeight - 12) y = Math.max(12, r.top - altura - 6);
-    if (ancoraDoMenu.closest('.ini-trilho')) { x = r.right + 8; y = Math.min(r.top, window.innerHeight - altura - 12); }
+    // Da trilha, o menu sai ao lado do botão -- mas nunca passa da borda direita: num celular
+    // estreito, os 280 px dele não cabem depois dos 72 da trilha.
+    if (ancoraDoMenu.closest('.ini-trilho')) { x = Math.min(r.right + 8, window.innerWidth - largura - 12); y = Math.min(r.top, window.innerHeight - altura - 12); }
     menu.style.left = `${Math.max(12, Math.round(x))}px`;
     menu.style.top = `${Math.round(y)}px`;
   }

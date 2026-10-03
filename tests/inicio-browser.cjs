@@ -114,7 +114,21 @@ async function novaPagina(contexto) {
   assert.equal(await campo.inputValue(), 'Squad da Noite');
   const menu = await tel.locator('#menuFlutuante').boundingBox();
   assert.ok(menu.y >= 0 && menu.y + menu.height <= 430, 'e ele continua dentro da janela que sobrou');
+  // O campo de 16 px alargava a coluna do balão, e o "Entrar" ficava cortado para fora dele.
+  const cabeInteiro = async largura => {
+    const caixa = await tel.locator('#menuFlutuante').boundingBox();
+    const entrar = await tel.locator('#menuFlutuante button[type="submit"]').boundingBox();
+    const rola = await tel.locator('#menuFlutuante').evaluate(el => el.scrollWidth - el.clientWidth);
+    assert.ok(entrar.x >= caixa.x && entrar.x + entrar.width <= caixa.x + caixa.width - 4, `o "Entrar" cabe inteiro no balão em ${largura} px: ${JSON.stringify({ caixa, entrar })}`);
+    assert.ok(caixa.x >= 0 && caixa.x + caixa.width <= largura, `o balão cabe na tela de ${largura} px: ${JSON.stringify(caixa)}`);
+    assert.equal(rola, 0, 'nada no balão passa da largura dele');
+  };
+  await cabeInteiro(390);
   await tel.screenshot({ path: path.join(saida, 'entrar-pelo-codigo-celular.png') });
+  await tel.setViewportSize({ width: 320, height: 430 });
+  await tel.waitForTimeout(100);
+  await cabeInteiro(320);
+  await tel.setViewportSize({ width: 390, height: 430 });
   await tel.locator('#menuFlutuante button[type="submit"]').tap();
   await tel.waitForURL('**/squad-da-noite/sala');
 
