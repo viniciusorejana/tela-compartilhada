@@ -147,14 +147,78 @@
   // como "abaixou o volume" e longo o suficiente para não estalar.
   const SEGUNDOS_DO_CORTE = 0.04;
 
-  function cortarDe(quem) {
+  // `id`, quando vem, é o som que se quer cortar: um "parar" atrasado pela rede não pode
+  // derrubar o som NOVO que a mesma pessoa disparou logo depois.
+  function cortarDe(quem, id = null) {
     const atual = tocandoPorPessoa.get(quem);
-    if (!atual) return;
+    if (!atual || (id && atual.id !== id)) return;
     tocandoPorPessoa.delete(quem);
     try {
       atual.ganho.gain.setTargetAtTime(0, atual.contexto.currentTime, SEGUNDOS_DO_CORTE / 3);
       atual.fonte.stop(atual.contexto.currentTime + SEGUNDOS_DO_CORTE);
     } catch (_) { /* Ja terminou sozinha; nao ha o que cortar. */ }
+  }
+
+  // ---------- Parar o som que eu toquei ----------
+  //
+  // Um som de trinta segundos disparado por engano ficava na sala inteira até o fim: a única
+  // saída era disparar outro por cima. Agora o botão do som que EU toquei vira "Parar" enquanto
+  // ele toca, e parar vale para todo mundo -- o aviso passa pelo servidor como o de tocar, e
+  // cada navegador corta o canal de quem pediu.
+  //
+  // Só o próprio som. Parar o de outra pessoa seria uma briga de botões, e a mesa já tem o
+  // mudo de cada um para quem não quer ouvir.
+  let meuToque = null;
+  // Cada disparo tem um número: o mesmo som tocado de novo é outro toque, e a barra dele
+  // recomeça do zero em vez de continuar a do anterior.
+  let toques = 0;
+
+  function souEu(quem) {
+    return Boolean(socket?.id) && quem === socket.id;
+  }
+
+  function pintarMeuToque() {
+    const atual = meuToque ? String(meuToque.numero) : null;
+    for (const botao of grade.querySelectorAll('.som-btn.meu-tocando')) {
+      if (botao.dataset.toque === atual) continue;
+      botao.classList.remove('meu-tocando');
+      delete botao.dataset.toque;
+      botao.style.removeProperty('--som-duracao');
+      botao.style.removeProperty('--som-inicio');
+      botao.title = botao.dataset.titulo || '';
+      botao.removeAttribute('aria-label');
+      const rodape = botao.querySelector('small');
+      if (rodape) rodape.textContent = rodape.dataset.texto || '';
+      // Tirar e pôr a classe no mesmo quadro não reinicia a animação; ler o tamanho no meio sim.
+      void botao.offsetWidth;
+    }
+    if (!meuToque) return;
+    const botao = grade.querySelector(`[data-som-id="${CSS.escape(meuToque.id)}"]`);
+    if (!botao || botao.dataset.toque === atual) return;
+    botao.dataset.toque = atual;
+    botao.classList.add('meu-tocando');
+    // A barra que anda embaixo do botão é uma animação CSS; redesenhar a grade no meio do som
+    // (alguém enviou outro) a recomeça do ponto certo, e não do zero.
+    const decorrido = Math.max(0, meuToque.contexto.currentTime - meuToque.inicio);
+    botao.style.setProperty('--som-duracao', `${meuToque.duracao.toFixed(2)}s`);
+    botao.style.setProperty('--som-inicio', `-${decorrido.toFixed(2)}s`);
+    const nome = botao.querySelector('strong')?.textContent || 'o som';
+    botao.title = `Parar "${nome}" para todo mundo`;
+    botao.setAttribute('aria-label', `Parar ${nome} para todo mundo`);
+    const rodape = botao.querySelector('small');
+    if (rodape) {
+      rodape.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+      rodape.append(document.createTextNode('Parar'));
+    }
+  }
+
+  function pararMeuSom() {
+    if (!meuToque) return;
+    const { id } = meuToque;
+    // Corta aqui na hora, sem esperar a volta do servidor: quem apertou "Parar" espera silêncio
+    // no mesmo instante. Os outros param quando o aviso chega, como pararam de esperar o "tocar".
+    if (socket?.id) cortarDe(socket.id, id);
+    if (socket?.connected) socket.emit('soundboard-parar', { id });
   }
 
   async function tocarLocalmente(id, quem) {
@@ -173,14 +237,16 @@
     const fonte = contexto.createBufferSource();
     fonte.buffer = buffer;
     fonte.connect(proprio);
-    const registro = { fonte, ganho: proprio, contexto };
+    const registro = { id, numero: ++toques, fonte, ganho: proprio, contexto, inicio: contexto.currentTime, duracao: buffer.duration };
     fonte.onended = () => {
       // Só se ainda for o meu: um corte já trocou a entrada por outra mais nova.
       if (tocandoPorPessoa.get(quem) === registro) tocandoPorPessoa.delete(quem);
       try { proprio.disconnect(); } catch (_) { /* ja desconectado */ }
+      if (meuToque === registro) { meuToque = null; pintarMeuToque(); }
     };
     tocandoPorPessoa.set(quem, registro);
     fonte.start();
+    if (souEu(quem)) { meuToque = registro; pintarMeuToque(); }
   }
 
   // ---------- Interface ----------
@@ -199,9 +265,17 @@
       nome.textContent = som.nome;
       const autoria = document.createElement('small');
       autoria.textContent = som.porQuem ? `por ${som.porQuem}` : '';
+      // O que o botão diz fora do "Parar", para voltar a dizer quando o som acaba.
+      autoria.dataset.texto = autoria.textContent;
       botao.append(nome, autoria);
       botao.title = `Tocar "${som.nome}" para a sala`;
-      botao.onclick = () => socket?.emit('soundboard-tocar', { id: som.id });
+      botao.dataset.titulo = botao.title;
+      // Enquanto o MEU toque deste som dura, o mesmo botão o para. Outro som continua sendo
+      // tocar (e corta o meu anterior, como sempre).
+      botao.onclick = () => {
+        if (meuToque?.id === som.id) pararMeuSom();
+        else socket?.emit('soundboard-tocar', { id: som.id });
+      };
       cartao.append(botao);
       if (!podeApagar) return cartao;
 
@@ -230,6 +304,7 @@
     }
     const resumo = $('sidebarSons');
     if (resumo) resumo.textContent = sons.length ? `${sons.length} ${sons.length === 1 ? 'som' : 'sons'}` : 'Nenhum som ainda';
+    pintarMeuToque();
   }
 
   // Um som recem-tocado se acende por um instante: numa sala com varias pessoas, saber
@@ -386,9 +461,13 @@
         audioLiberado: contexto ? contexto.state === 'running' : false,
         contextoCriado: Boolean(contexto),
         sonsNaMesa: sons.length,
-        sonsPreparados: decodificados.size
+        sonsPreparados: decodificados.size,
+        // Quantas pessoas têm um som tocando agora neste navegador, e qual é o meu.
+        canaisTocando: tocandoPorPessoa.size,
+        meuSom: meuToque?.id || null
       };
     },
+    pararMeuSom,
     ligar(soquete) {
       soquete.on('soundboard-lista', dados => {
         sons = Array.isArray(dados?.sons) ? dados.sons : [];
@@ -406,6 +485,11 @@
         // `||` é só para nunca cair num `undefined` que juntaria pessoas diferentes.
         tocarLocalmente(dados.id, String(dados.porId || 'sem-dono'));
         acenderBotao(dados.id);
+      });
+      // Quem tocou pediu para parar: corta o canal dessa pessoa, se ainda for o mesmo som.
+      soquete.on('soundboard-parou', dados => {
+        if (!dados?.porId || !dados.id) return;
+        cortarDe(String(dados.porId), String(dados.id));
       });
     },
     aoEntrar(pacote) {

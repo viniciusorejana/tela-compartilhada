@@ -2098,6 +2098,18 @@ io.on('connection', (socket) => {
     io.to(roomName(roomCode)).emit('soundboard-tocou', { id: som.id, nome: som.nome, por: membro.name, porId: socket.id });
   });
 
+  // Parar o próprio som no meio. Cada navegador corta o canal de quem mandou -- e só o dessa
+  // pessoa, que é o `porId` desta conexão, nunca um vindo do pedido: ninguém para o som dos
+  // outros. Vale mesmo com a mesa restringida: travar o tocar não pode prender ninguém num som
+  // que já começou.
+  socket.on('soundboard-parar', (dados) => {
+    const roomCode = roomCodeForSocket(socket);
+    if (!roomCode || !roomMembers.get(roomCode)?.has(socket.id)) return;
+    const id = String(dados?.id || '').slice(0, 40);
+    if (!id) return;
+    io.to(roomName(roomCode)).emit('soundboard-parou', { id, porId: socket.id });
+  });
+
   socket.on('soundboard-remover', (dados, callback) => {
     const responder = r => { if (typeof callback === 'function') callback(r); };
     const roomCode = roomCodeForSocket(socket);

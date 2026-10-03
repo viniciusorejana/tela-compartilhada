@@ -78,6 +78,8 @@ const REGRAS = Object.freeze({
   'estudio-link': { sessao: 30, sala: 120 },
   'estudio-permissao': { sessao: 12, sala: 120 },
   'soundboard-tocar': { sessao: 30, sala: 90, intervalo: 400 },
+  // Parar só vale para o próprio som, que só existe depois de um "tocar": o teto acompanha o dele.
+  'soundboard-parar': { sessao: 30, sala: 90 },
   'soundboard-upload': { sessao: 6, sala: 24 },
   'soundboard-bytes': { sessao: 12 * MiB, sala: 48 * MiB },
   'soundboard-download': { sessao: 90, sala: 900 },

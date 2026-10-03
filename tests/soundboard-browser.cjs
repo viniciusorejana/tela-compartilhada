@@ -134,10 +134,13 @@ const medir = page => page.evaluate(() => ({
     await page.waitForFunction(() => document.querySelectorAll('.som-btn').length === 1, null, { timeout: 30000 });
   }
 
-  // ---------- A mesma pessoa apertando cinco vezes ----------
+  // ---------- A mesma pessoa disparando cinco vezes ----------
+  // Pelo socket, e não pelo botão: o botão do próprio som vira "Parar" enquanto ele toca (abaixo).
+  // A regra de um som por pessoa vale em quem OUVE, venha o disparo de onde vier -- de um atalho,
+  // de outro som da mesa, ou de um cliente modificado.
   await Promise.all([zerar(ana), zerar(bia)]);
   for (let n = 0; n < 5; n++) {
-    await ana.locator('.som-btn').click();
+    await ana.evaluate(id => socket.emit('soundboard-tocar', { id }), envio.som.id);
     await ana.waitForTimeout(500);   // acima do limite de 400 ms por pessoa do servidor
   }
   await ana.waitForTimeout(400);
@@ -151,6 +154,25 @@ const medir = page => page.evaluate(() => ({
     assert.equal(medida.ativos, 1, `${quem} deveria estar ouvindo um único som da Ana`);
   }
   console.log('PASS: a mesma pessoa não empilha -- vale sempre o último toque');
+
+  // ---------- Parar o próprio som no meio ----------
+  // O som da Ana ainda tem uns oito segundos pela frente. O botão dele, na tela dela, é "Parar";
+  // na da Bia continua sendo tocar -- o som é da Ana.
+  const botaoDaAna = ana.locator('.som-btn');
+  await ana.waitForFunction(() => document.querySelector('.som-btn')?.classList.contains('meu-tocando'), null, { timeout: 5000 });
+  assert.equal(await botaoDaAna.getAttribute('aria-label'), 'Parar tom para todo mundo');
+  assert.match(await botaoDaAna.locator('small').textContent(), /Parar/);
+  assert.equal(await bia.locator('.som-btn.meu-tocando').count(), 0, 'na tela da Bia o som da Ana não vira "Parar"');
+  await ana.locator('#soundboardPanel .modal-card').screenshot({ path: path.join(__dirname, '..', 'test-results', 'mesa-parar.png') });
+  await botaoDaAna.click();
+  await ana.waitForTimeout(400);
+  for (const [quem, page] of [['Ana', ana], ['Bia', bia]]) {
+    assert.equal((await medir(page)).ativos, 0, `${quem} ainda ouvia o som que a Ana parou`);
+  }
+  await ana.waitForFunction(() => !document.querySelector('.som-btn.meu-tocando'), null, { timeout: 3000 });
+  assert.equal(await botaoDaAna.getAttribute('aria-label'), null, 'parado, o botão volta a ser o de tocar');
+  assert.match(await botaoDaAna.locator('small').textContent(), /por Ana/);
+  console.log('PASS: o botão do meu som vira "Parar", e parar corta o som para todo mundo');
 
   // ---------- Duas pessoas ao mesmo tempo ----------
   await Promise.all([zerar(ana), zerar(bia)]);
@@ -167,6 +189,21 @@ const medir = page => page.evaluate(() => ({
   await ana.waitForTimeout(1200);
   assert.equal((await medir(bia)).ativos, 2, 'depois do corte os dois sons continuam tocando');
   console.log('PASS: cortar troca o som em vez de deixar um buraco');
+
+  // ---------- Parar só para o som de quem pediu ----------
+  // As duas tocam o MESMO som. A Bia para o dela, e o da Ana continua: quem para é a conexão, e
+  // não o som -- e ninguém para o som dos outros, nem pedindo direto pelo socket.
+  await bia.locator('.som-btn').click();
+  await bia.waitForTimeout(400);
+  assert.equal((await medir(ana)).ativos, 1, 'o som da Ana tinha de continuar quando a Bia parou o dela');
+  assert.equal((await medir(bia)).ativos, 1);
+  await bia.evaluate(id => socket.emit('soundboard-parar', { id }), envio.som.id);
+  await bia.waitForTimeout(400);
+  assert.equal((await medir(ana)).ativos, 1, 'um "parar" de quem não está tocando não corta o som de outra pessoa');
+  await ana.evaluate(() => NexoSoundboard.pararMeuSom());
+  await ana.waitForTimeout(400);
+  assert.equal((await medir(bia)).ativos, 0);
+  console.log('PASS: parar corta só o som de quem pediu, nunca o dos outros');
 
   // ---------- Apagar um som pede conta, ou moderar a sala ----------
   // A Ana tem conta e abriu a sala; a Bia não tem conta e só participa. Antes qualquer pessoa

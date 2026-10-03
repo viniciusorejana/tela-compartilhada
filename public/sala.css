@@ -599,6 +599,17 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .som-btn small { font-size:var(--fs-meta); color:var(--muted); font-weight:400; }
 .som-btn.tocando-agora { background:var(--accent-forte); }
 .som-btn.tocando-agora small { color:var(--accent-texto); }
+/* O MEU som tocando: o botão vira "Parar" e uma barra anda embaixo até o fim do som. Vem depois
+   do aceso de 650 ms, que vale para os sons dos outros: no meu, o que importa é o "Parar". */
+.som-btn.meu-tocando { position:relative; overflow:hidden; background:var(--accent-suave-hi); border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+.som-btn.meu-tocando:hover:not(:disabled) { background:color-mix(in srgb, var(--accent) 24%, var(--bg-3)); }
+.som-btn.meu-tocando small { display:inline-flex; align-items:center; gap:4px; color:var(--accent-texto); font-weight:650; }
+.som-btn.meu-tocando small .ico { width:11px; height:11px; fill:currentColor; stroke:none; }
+.som-btn.meu-tocando::after { content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--accent); transform-origin:left; animation:som-andando var(--som-duracao, 1s) linear var(--som-inicio, 0s) both; }
+@keyframes som-andando { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+/* Com menos movimento a animação dura 1 ms, e a barra cheia diria "acabou" no começo do som. */
+@media (prefers-reduced-motion: reduce) { .som-btn.meu-tocando::after { display:none; } }
+html.menos-movimento .som-btn.meu-tocando::after { display:none; }
 .som-apagar { position:absolute; top:4px; right:4px; padding:2px 6px; font-size:var(--fs-meta); background:transparent; color:var(--faint); opacity:0; transition:opacity .12s; }
 .som-card:hover .som-apagar,.som-apagar:focus-visible { opacity:1; }
 .som-apagar:hover:not(:disabled) { background:color-mix(in srgb, var(--danger) 14.9%, transparent); color:var(--danger-texto); }
