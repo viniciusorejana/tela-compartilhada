@@ -19,6 +19,7 @@ a 2560 px**.
 | O Estúdio; os rostos que reagem e a fonte do OBS | `public/estudio.css`, `reativo.css`, `obs.css` |
 | A página de "não encontrada" | `public/nao-encontrada.css` |
 | O início de quem tem conta (amigos, conversas, salas recentes) | `public/inicio.css` + `inicio.js` |
+| O início e a conta por cima da sala, sem sair da chamada (a camada) | `public/inicio-na-sala.{js,css}` (a sala) + `public/camada.js` (a página de dentro) |
 | O cartão de perfil personalizável (vitrine), o avatar com borda e status, os efeitos | `public/cartao.css` + `cartao.js`; o catálogo em `public/vitrine.js` |
 | Amigos e conversa direta, as mesmas peças no início e na sala | `public/social.css`, `conversa.js`, `social.js` (+ `social-sala.js` na sala) |
 | Avatar de qualquer pessoa, em qualquer página | `NexoPerfil.pintar` (`public/perfil.js`) |
@@ -248,6 +249,7 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | botão "ativar som" | 65 | |
 | lateral em gaveta (celular) / chat em gaveta (≤1100 px) / gaveta do início | 68 / 70 / 70 | |
 | modal, o cartão de um amigo no início, e o portão de entrada | 80 / 80 / 90 | |
+| a camada do início por cima da sala / o que ela pergunta (entrar noutra sala) | 84 / 86 | acima dos painéis, abaixo do aviso de pedido de entrada (110) e das novidades (125) |
 | visualizador de imagem, reações que voam | 95–96 | |
 | o visor da imagem da conversa direta | 97 | nasce de dentro de um painel |
 | menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
@@ -377,18 +379,22 @@ Todo painel é a mesma peça (`.modal` > `.modal-card`):
 cartão de perfil, o aviso de sair para a conta sobre "Meu perfil"): o de cima vem depois no HTML, e
 fechá-lo volta ao de baixo.
 
-**A sala não manda ninguém para outra aba.** No aplicativo, "outra aba" é o navegador, fora do
-Nexo. O que dá para fazer ali dentro vira painel (o cartão completo, abaixo); o que é outra página
-(a da conta: senha, código de recuperação, dados, e o cadastro) abre **na mesma janela**, depois de
-um painel que avisa que a pessoa sai da chamada — a ação de sair é `.danger`, "Continuar na sala"
-é o cinza. Vale para "Senha e conta" e para **todo link para `/conta` de dentro da chamada** ("Criar
-conta grátis" nas configurações, no Estúdio, em Meu perfil, na mesa de sons, na dica de qualidade,
-no próprio cartão): `perfil-sala.js` intercepta o clique e escolhe o texto do aviso (ir à conta ou
-criar uma). A saída passa por `sairDaSala` (`sala.js`), que avisa a sala e desliga a mídia direito,
-com `/conta?voltar=`: a página da conta oferece "Voltar para a sala", e o cadastro termina de volta
-na mesma sala, já com a conta. Antes de entrar (a porta, a espera) e depois de sair (o aviso de
-remoção), o link troca a página direto: não há chamada para perder. Ctrl ou Shift no clique
-continua abrindo noutra aba, que aí é escolha de quem clicou.
+**A sala não manda ninguém para outra aba, e quem tem conta não sai da chamada para ver outra
+página.** No aplicativo, "outra aba" é o navegador, fora do Nexo. O que dá para fazer ali dentro
+vira painel (o cartão completo, abaixo) ou **camada** (o início e a conta, em 5.2): a página
+inteira, por cima da sala, com a chamada de pé por baixo. A marca do Nexo, Ctrl K, "Senha e conta"
+e todo link para `/conta` de quem tem conta abrem a camada.
+
+O que **muda quem entrou na sala** — criar a conta, que vira outra identidade na mesma sala — não
+cabe numa camada: abre **na mesma janela**, depois de um painel que avisa que a pessoa sai da
+chamada (a ação de sair é `.danger`, "Continuar na sala" é o cinza). Vale para **todo "Criar conta
+grátis" de dentro da chamada** (nas configurações, no Estúdio, em Meu perfil, na mesa de sons, na
+dica de qualidade, no próprio cartão): `perfil-sala.js` intercepta o clique e mostra o aviso. A
+saída passa por `sairDaSala` (`sala.js`), que avisa a sala e desliga a mídia direito, com
+`/conta?voltar=`: o cadastro termina de volta na mesma sala, já com a conta. Antes de entrar (a
+porta, a espera) e depois de sair (o aviso de remoção), o link troca a página direto: não há
+chamada para perder. Ctrl ou Shift no clique continua abrindo noutra aba, que aí é escolha de quem
+clicou.
 
 Variações do mesmo cartão: as **configurações** (coluna de seções à esquerda como no Discord,
 altura fixa para não pular ao trocar de seção; no celular as seções viram uma fita que rola de
@@ -620,8 +626,9 @@ sai, para o palco continuar com espaço.
 As larguras das colunas são `--col-lateral` e `--col-chat-aberto` (de onde vem `--col-chat`),
 redefinidas em cada degrau; a barra recolhida e o chat fechado só zeram a sua (2.8).
 
-**O topo da lateral** é uma linha com dois itens: o link da marca (sair para o início) e a estrela
-das novidades. Onde "seu espaço" não cabe ao lado de NEXO (lateral de 224 px ou menos), a frase
+**O topo da lateral** é uma linha com dois itens: o link da marca (para quem tem conta, abre o
+início por cima da sala — 5.2; sem conta, sai da sala para a apresentação) e a estrela das
+novidades. Onde "seu espaço" não cabe ao lado de NEXO (lateral de 224 px ou menos), a frase
 desce para baixo dele (consulta de contêiner `marca`) — a estrela já foi posta por cima, com posição
 absoluta, e passava sobre a frase.
 
@@ -672,6 +679,46 @@ num balão, com "Ctrl K" escrito ao lado — o atalho continua, só não ocupa m
 - **O palco** (`container-type: size`) decide pelo próprio tamanho o que cabe nele.
 - **A lista de pessoas do Estúdio** (`container: estudio-pessoas`) desce as imagens para uma
   linha própria, com legenda, quando fica estreita.
+
+### 5.2 O início por cima da sala (a camada)
+
+Para quem tem conta, a **marca do Nexo** na lateral, **Ctrl K** e "Senha e conta" abrem a página
+inteira — o início (`/`) ou a conta (`/conta`) — **por cima da sala, sem sair da chamada**. Antes,
+ver os amigos, as mensagens ou as conquistas pedia sair: o microfone, a câmera e a tela paravam, e a
+sala via a pessoa ir embora.
+
+- **É um painel como os outros** (4.5, `.modal.camada`, camada 84 em 2.9) que ocupa a janela: a sala
+  vira `inert`, o Esc fecha, o foco entra na página e volta a quem abriu. Fica depois de todos os
+  painéis no HTML, porque `room-ui.js` trata como o de cima o último `[role="dialog"]` visível. Não
+  tem `.modal-card`, então não ganha o X — tem o "Voltar para a sala".
+- **A página dentro é a de sempre**, num `<iframe>` da própria origem (`?camada=<sala>`; o lado de lá
+  é `public/camada.js`, que põe `html.na-camada`). Não é a mesma página dentro da sala por uma razão
+  só: o início e a sala têm regras globais de `button`, `input` e `h2` e ids repetidos (seção 8), e
+  reaproveitar a página pronta, isolada, é o que mantém uma tela só para dois lugares. O quadro
+  nasce a cada abertura e morre ao fechar, e leva o socket de amigos dele junto.
+- **A barra do alto** é o que a chamada precisa à mão, porque a barra de controles fica por baixo e
+  `inert`: o nome da sala com quantas pessoas e há quanto tempo (o ponto fica âmbar se a conexão
+  oscila), **Microfone**, **Ouvir**, **Sair** (`.danger`) e **Voltar para a sala** (a única ação
+  violeta). Os botões espelham os da sala e chamam as mesmas funções; Ctrl+Shift+M e D valem com o
+  foco dentro da página. Abaixo de 760 px ficam só os desenhos (o nome continua para o leitor de
+  tela), e abaixo de 430 o "Voltar para a sala" encurta para "Sala".
+- **Fechar**: Esc (só quando não há nada aberto na página para ele fechar, e a pessoa não está no
+  meio de um texto — um rascunho não some com um Esc), "Voltar para a sala", o "voltar" do navegador
+  (abrir acrescenta uma entrada ao histórico, e é ela que sai) e escolher a própria sala. Ser removido
+  da sala ou voltar à espera também fecham, porque esses avisos moram abaixo da camada.
+- **Entrar noutra sala sai desta**, então a camada pergunta (`#camadaSairPanel`, camada 86) antes de
+  `sairDaSala`. A sala da chamada é a primeira da trilha, com o anel verde; para quem já está nela,
+  o botão é "Voltar para a sala", e "Chamar para uma sala" põe a sala dela em primeiro. Criar uma sala
+  nova não aparece no convite de dentro da chamada: o convite sairia antes da pergunta.
+- **Os avisos são os da página de dentro** com a camada aberta (a sala fica calada, senão o aviso
+  viria duas vezes); fechada, voltam a ser os da sala. A apresentação das novidades não abre sozinha
+  lá dentro.
+- **Sair da conta e apagar a conta** tiram a pessoa da sala também — a conta é quem a abriu —, e a
+  página diz isso nos botões. **Criar conta** continua sendo fora da chamada (4.5).
+
+`npm run test:camada` prova a chamada de pé por baixo (o servidor e os outros nunca veem a pessoa
+sair), a barra, os atalhos, o Esc, o Ctrl K, o histórico, o aviso único, a conta e a pergunta de
+trocar de sala; `npm run test:layout` tem os três estados (`camada`, `camada:conta`, `camada-sair`).
 
 ---
 

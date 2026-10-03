@@ -22,6 +22,7 @@ Escrito em 01/10/2026, junto com a implementação. São quatro peças que andam
 | A conversa (lista e mensagens), a mesma peça no início e na sala | `public/conversa.js` + `public/social.css` |
 | O início de quem tem conta | `public/inicio.html` + `inicio.css` + `inicio.js` |
 | A sala: cartão novo, convidar amigos, avisos de mensagem, o painel do editor do cartão | `public/social-sala.js` |
+| O início (e a conta) por cima da sala, sem sair da chamada | `public/inicio-na-sala.js` + `inicio-na-sala.css` (a sala) e `public/camada.js` (a página de dentro) |
 
 ---
 
@@ -228,6 +229,31 @@ e a lateral viram gaveta.
 de pedidos, como qualquer um — o botão já diz "Pedir para entrar".
 
 ---
+
+## O início dentro de uma chamada
+
+Até 03/10/2026, ver os amigos, as mensagens ou as conquistas de dentro de uma sala pedia sair dela.
+Agora a marca do Nexo na lateral da sala, **Ctrl K** e "Senha e conta" abrem o início (ou a conta)
+**por cima da sala**, com a chamada de pé por baixo: a mesma conexão, o mesmo microfone, a mesma
+presença para os outros. O desenho e as regras de tela estão em `docs/interface.md` (5.2); o que
+interessa aqui é o que isso significa para os dados:
+
+- **É a mesma página, num `<iframe>` da própria origem** (`/?camada=<sala>`). Ela abre o socket de
+  amigos dela — uma conta já podia ter várias abas (até 8, `ABAS_POR_CONTA`), e o quadro conta como
+  uma — e o fecha ao sair. Nada novo é guardado, e o servidor não mudou.
+- **A presença não muda.** "Conectado" é estar numa sala ou com o início aberto; a camada não
+  desfaz nem duplica isso: o amigo continua vendo "Na sala #…", e a camada mostra a sala da pessoa
+  como "Na sua sala" nas listas.
+- **A conversa aberta lá dentro marca como lida** o que chega, como no início. Fechada a camada, o
+  quadro some, e nada fica lendo por baixo.
+- **A ponte do aplicativo Android não é carregada no quadro** (`app-android.js` volta logo se estiver
+  num quadro): o aplicativo injeta `nexoAndroid` em todo quadro da origem, mas só ouve o principal, e
+  a página de dentro, com o mesmo socket de amigos da de cima, montaria notificações que ninguém
+  recebe. O toque numa notificação de mensagem abre a conversa **na camada**, se ela estiver aberta
+  (`docs/android.md` conta como o "voltar" do aparelho também a fecha).
+- **Entrar numa sala de dentro da camada pergunta antes**, porque uma conta está numa sala só.
+- **Sair da conta e apagar a conta** de dentro da camada tiram a pessoa da sala também; criar uma
+  conta continua sendo fora dela.
 
 ## O que isto não resolve
 

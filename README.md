@@ -166,6 +166,13 @@ Com a conta aberta, `/` é o **início**: a trilha das salas recentes deste apar
 está conectado e em que sala, com o botão de entrar junto), as conversas diretas e "Agora no
 Nexo". A apresentação continua em `/sobre`.
 
+**Dentro de uma chamada, o início abre por cima da sala, sem sair dela**: a marca do Nexo na lateral,
+**Ctrl K** (com o foco na busca) e "Senha e conta" abrem o início ou a conta numa camada, com o
+microfone, o ouvir e o sair à mão no alto, e "Voltar para a sala" fecha. A chamada segue conectada por
+baixo — os outros nunca veem a pessoa sair. Entrar noutra sala de dentro da camada pergunta antes
+(uma conta está numa sala só), e criar uma conta continua sendo fora da chamada. Veja
+[`docs/interface.md`](docs/interface.md) (5.2).
+
 - **Amigos** por nome de usuário ou código; aceitar, recusar, remover, bloquear (silencioso para
   quem foi bloqueado) e um apelido para cada amigo que só quem deu vê. Ficam no banco, com a conta.
 - **Mensagens diretas e convites** só entre amigos, pelo socket `/social`. **Moram na memória do

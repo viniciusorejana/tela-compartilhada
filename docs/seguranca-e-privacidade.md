@@ -117,7 +117,7 @@ O painel tem uma CSP rígida; a página inicial e a sala só têm `nosniff` numa
 | cabeçalho | o que evita |
 |---|---|
 | `Content-Security-Policy` | que uma falha de XSS, se um dia existir, consiga rodar script de fora |
-| `frame-ancestors 'none'` | a sala aberta dentro de um `<iframe>` de outro site (clickjacking) |
+| `frame-ancestors 'self'` (e **não** `'none'`) | a sala aberta dentro de um `<iframe>` de outro site (clickjacking) |
 | `Referrer-Policy` | o código da sala vazando para sites de links clicados |
 | `Permissions-Policy` | câmera, microfone e captura de tela pedidos de dentro de conteúdo embutido |
 | `Strict-Transport-Security` | a primeira visita cair em HTTP (entra pelo Caddy, no VPS) |
@@ -127,6 +127,14 @@ A notícia boa é que as páginas não têm nada embutido, então `script-src 's
 reescrita. O cuidado é ligar a política primeiro em modo relatório
 (`Content-Security-Policy-Report-Only`): o RNNoise compila WebAssembly
 (`'wasm-unsafe-eval'`), as imagens do chat são `data:`, e há workers. **Meio dia.**
+
+**Um cuidado que a camada do início criou (03/10/2026):** dentro de uma chamada, o início (`/`) e a
+conta (`/conta`) abrem num `<iframe>` **da própria origem**, por cima da sala (`docs/interface.md`,
+5.2). Por isso `frame-ancestors` e `X-Frame-Options` têm de ser `'self'`/`SAMEORIGIN` — `'none'`/`DENY`
+deixaria a camada em branco, sem erro à vista — e `frame-src` precisa de `'self'`. A camada só aceita
+mensagem da janela do quadro que ela criou e da mesma origem, e o quadro só aceita da janela de
+cima; o endereço `?camada=` só vale com um código de sala no formato certo. Se a `Permissions-Policy`
+bloquear `clipboard-write`, "Copiar meu código", dentro do quadro, deixa de funcionar.
 
 ### 3. O Socket.IO aceitava conexão de qualquer origem — corrigido
 

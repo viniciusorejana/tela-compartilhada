@@ -76,6 +76,15 @@ O que mais segura a chamada:
   aplicativo inteiro cair (`onRenderProcessGone`).
 - **Voltar, numa chamada, guarda o Nexo** como o botão de início. Um gesto de voltar no lugar
   errado não pode derrubar a conversa de todo mundo; sair é o botão Sair.
+- **Com o início aberto por cima da sala, voltar o fecha** (a camada, `docs/interface.md` 5.2). A
+  página conta ao aplicativo quando a camada abre e fecha (`{"tipo":"camada","aberta":…}`), e
+  `MainActivity.voltar` devolve `{"tipo":"voltar-camada"}` em vez de guardar o Nexo. Sem o canal de
+  volta da página (ela recomeçou), o voltar segue o caminho de cima. **Só vale a partir do APK que
+  traz esse pedido**: um APK mais velho ignora o tipo desconhecido e continua guardando o Nexo, com a
+  camada aberta. O quadro da camada **não** liga a ponte (`app-android.js` volta se estiver num
+  quadro): o aplicativo põe `nexoAndroid` em todo quadro da origem, mas só ouve o principal
+  (`aoMensagemDaSala` descarta o resto), e a sala cuida dos avisos. A notificação de uma conversa,
+  tocada com a camada aberta, abre a conversa nela.
 
 ## As notificações de amigos
 
@@ -275,7 +284,9 @@ O que ele não resolve:
   aceita o pedido) sem recarregar, o que foi lido sai da gaveta, e `/?conversa=` abre direto. E
   o atualizador do APK 1.1.0, no início: o pedido de atualizar com a versão e o endereço, o
   progresso, "Instalar agora", a permissão, a falha com o motivo do aplicativo, e a notificação
-  "disponível" tocada com a página aberta.
+  "disponível" tocada com a página aberta. E a camada do início na sala: ela conta ao aplicativo
+  que abriu e fechou, o quadro dela não fala pela ponte, a notificação de uma conversa abre a
+  conversa nela, e o `voltar-camada` a fecha sem derrubar a chamada.
 - `npm run test:inicio` — o mesmo botão "Atualizar" no início para o aplicativo de mesa, e o
   aviso no canto da apresentação (o aplicativo sem conta), com "Depois" valendo.
 - `npm test` (`tests/amigos.test.js`) — o `/api/social/avisos`: as não lidas só de amigos, o
@@ -283,7 +294,8 @@ O que ele não resolve:
 - O lado nativo se prova num aparelho (o lint do Gradle roda junto do build). A lista do que
   conferir: entrar numa sala em `https://`, ligar o microfone, apagar a tela por um minuto
   falando e ouvindo; abrir outro aplicativo; desligar o microfone e sair pela notificação; girar
-  a tela no meio da chamada; "Trocar de servidor" segurando o ícone. As notificações: com o Nexo
+  a tela no meio da chamada; "Trocar de servidor" segurando o ícone; abrir a marca do Nexo na sala
+  e fazer o gesto de voltar (tem de fechar o início, e não guardar o Nexo). As notificações: com o Nexo
   em segundo plano, receber mensagem, convite e pedido de outra conta; tocar em cada uma; ler a
   conversa no computador e ver a notificação sumir na rodada seguinte; fechar o Nexo de vez e
   esperar a rodada do `AvisosJob` (`adb shell cmd jobscheduler run -f com.telacompartilhada.nexo
