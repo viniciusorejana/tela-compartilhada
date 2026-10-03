@@ -53,6 +53,9 @@ const REGRAS = Object.freeze({
   // ---------- Amigos, cartão e mensagens diretas (contas/amigos.js, social.js) ----------
   // O socket de amigos abre uma vez por aba logada (o início e cada sala).
   'social-conexao': { sessao: 60 },
+  // O aplicativo Android pergunta o que chegou a cada 15 minutos, com a página parada; atrás de
+  // um túnel todo mundo divide a mesma origem, e cada celular conta uma vez por rodada.
+  'social-avisos': { sessao: 60 },
   // Pedir amizade é gesto de mão; o teto longo é o que impede de sair pedindo a todo código.
   'amizade-pedir': { sessao: 10, longa: [60, 60 * MINUTO] },
   'amizade-acao': { sessao: 40, longa: [400, 60 * MINUTO] },

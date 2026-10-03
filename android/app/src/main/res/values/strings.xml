@@ -13,6 +13,47 @@
     <string name="chamada_desligar_microfone">Desligar microfone</string>
     <string name="chamada_sair">Sair da sala</string>
 
+    <string name="canal_mensagens">Mensagens diretas</string>
+    <string name="canal_mensagens_descricao">Quando um amigo manda uma mensagem e o Nexo está fora da tela.</string>
+    <string name="canal_convites">Convites para salas</string>
+    <string name="canal_convites_descricao">Quando um amigo chama você para uma sala.</string>
+    <string name="canal_amigos">Amigos</string>
+    <string name="canal_amigos_descricao">Pedidos de amizade, e quando alguém aceita o seu.</string>
+    <string name="aviso_voce">Você</string>
+    <string name="aviso_imagem">Imagem</string>
+    <string name="aviso_responder">Responder</string>
+    <string name="aviso_entrar">Entrar na sala</string>
+    <string name="aviso_aceitar">Aceitar</string>
+    <string name="aviso_convite_titulo">%1$s chamou você</string>
+    <string name="aviso_convite_texto">Para a sala #%1$s</string>
+    <string name="aviso_pedido_titulo">%1$s quer ser seu amigo</string>
+    <string name="aviso_pedido_texto">Toque para ver o pedido.</string>
+    <string name="aviso_aceito_titulo">%1$s aceitou seu pedido</string>
+    <string name="aviso_aceito_texto">Agora vocês são amigos. Toque para mandar uma mensagem.</string>
+
+    <string name="canal_atualizacoes">Atualizações do Nexo</string>
+    <string name="canal_atualizacoes_descricao">Quando o servidor tem uma versão nova do aplicativo, e quando ela está pronta para instalar.</string>
+    <string name="aviso_atualizacao_titulo">Nexo %1$s disponível</string>
+    <string name="aviso_atualizacao_texto">Você está com a %1$s. Toque para baixar; instalar é com você.</string>
+    <string name="aviso_atualizacao_baixar">Baixar</string>
+    <string name="aviso_atualizacao_pronta_titulo">Nexo %1$s pronto para instalar</string>
+    <string name="aviso_atualizacao_pronta_texto">Instalar fecha o Nexo por um instante.</string>
+    <string name="aviso_atualizacao_instalar">Instalar</string>
+    <string name="aviso_atualizado_titulo">Nexo atualizado para a %1$s</string>
+    <string name="aviso_atualizado_texto">Toque para abrir.</string>
+
+    <string name="atualizacao_baixando">Nexo %1$s</string>
+    <string name="atualizacao_endereco_invalido">O servidor anunciou o aplicativo num endereço que não é o dele.</string>
+    <string name="atualizacao_sem_download">O Android não deixou baixar agora. Tente de novo, ou baixe pelo navegador.</string>
+    <string name="atualizacao_conexao">A conexão com o servidor caiu durante o download.</string>
+    <string name="atualizacao_arquivo_invalido">O arquivo que veio do servidor não é um aplicativo Android válido.</string>
+    <string name="atualizacao_outro_aplicativo">O arquivo que veio do servidor é de outro aplicativo, e não do Nexo.</string>
+    <string name="atualizacao_nao_e_mais_nova">O arquivo do servidor não é mais novo que este Nexo. Quem hospeda precisa subir o versionCode ao empacotar.</string>
+    <string name="atualizacao_outra_chave">A versão nova foi assinada com outra chave e não instala por cima desta. Quem hospeda o Nexo precisa usar a mesma chave de sempre.</string>
+    <string name="atualizacao_sem_permissao">Este celular não abriu a permissão de instalar. Baixe pelo navegador.</string>
+    <string name="atualizacao_instalador_recusou">O instalador do Android não aceitou a versão nova.</string>
+    <string name="atualizacao_sem_espaco">Falta espaço no celular para instalar a versão nova.</string>
+
     <string name="atalho_servidor">Trocar de servidor</string>
     <string name="atalho_servidor_curto">Servidor</string>
 

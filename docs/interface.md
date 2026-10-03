@@ -588,6 +588,12 @@ perdeu o "AGORA" pelo mesmo motivo: o ponto pulsando já diz que é agora.
 - **A atualização do instalado não aparece enquanto desce.** Só o fim: um aviso, uma vez ("Ele se
   instala quando você fechar o Nexo"), e o botão **Reiniciar** no topo. O progresso só aparece
   quando foi a pessoa que pediu.
+- **A versão nova aparece fora da sala também.** O botão **Atualizar** (verde, o ícone de
+  download) mora no topo da sala e no topo do início, antes do "Adicionar amigo"; abaixo de
+  1400 px os dois ficam só com o ícone, para não apertar as abas. Numa página sem esse botão (a
+  apresentação, que é o que o aplicativo abre sem conta) o mesmo convite vem no canto, com
+  **Atualizar agora** e **Depois**. No Android o fim é **Instalar** em vez de Reiniciar, e o
+  aviso diz que instalar fecha o Nexo (e, na sala, que a chamada cai).
 - **Os downloads da página inicial**: o sistema de quem lê ganha o botão cheio, na forma que se
   instala (o instalador antes do portátil; o APK num Android), e as outras formas viram pílulas
   de 32 px embaixo ("Linux .deb"), com tamanho e versão no `title`. Dentro do aplicativo Android a

@@ -29,7 +29,7 @@ npm run test:painel   # painel de telemetria
 npm run test:soundboard
 npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
-npm run test:inicio   # a busca do início (campo com sugestões) e os balões que aguentam o teclado do celular
+npm run test:inicio   # a busca do início (campo com sugestões), os balões que aguentam o teclado do celular, e a versão nova do app fora da sala
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
 npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
@@ -39,7 +39,7 @@ npm run test:estudio       # Estúdio: perfil pela plateia e pelo chat, foto gra
 npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel
 npm run test:webcodecs:placa  # a placa de verdade pelo RTP: combinações, câmera, aba parada (Chrome instalado; pula sem placa)
 npm run test:electron      # o aplicativo de mesa de verdade: seletor de tela, origem presa, atualização do portátil e a sozinha do instalado
-npm run test:android       # o lado da sala do app Android: a chamada ligando o serviço, os botões da notificação, o APK novo
+npm run test:android       # o lado da sala do app Android: a chamada ligando o serviço, os botões da notificação, o APK novo, as notificações de amigos, o atualizador
 ```
 
 O Android em si (`android/`) compila com o Gradle do wrapper e um JDK 17 ou 21 (o 25 da máquina
@@ -100,6 +100,9 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Instalador do aplicativo de mesa (NSIS, .deb) e a atualização sozinha | `build` em `app/package.json`; `app/atualizacao-automatica.js` (electron-updater pelo servidor escolhido), `app/iniciar-com-o-sistema.js`; a pasta `/downloads/atualizacoes` em `desktop-download.js`; na sala, `public/atualizacao-app.js` (o aviso e a seção "Aplicativo de mesa") |
 | Downloads da página inicial (todos os sistemas e o APK) | `desktop-download.js` (`SISTEMAS`) + `public/download.js`; a versão de cada build em `app/dist/versao.json` |
 | Aplicativo Android (WebView, chamada em segundo plano) | `android/` (`MainActivity`, `ChamadaService`); na sala, `public/app-android.js` e os ganchos em `sala.js`; o APK por `scripts/empacotar-android.cjs`; tudo em `docs/android.md` |
+| Atualização do Android (baixar, conferir a assinatura, instalar) e "Nexo X disponível" | `Atualizador.java` + `AtualizacaoRecebedor.java`; a notificação na rodada do `AvisosJob` (`conferirVersao`); na página, o mesmo `public/atualizacao-app.js` do aplicativo de mesa (o "motor" do Android vem de `app-android.js`, só do APK 1.1.0 em diante) |
+| O aviso de versão nova fora da sala (PC e Android) | `public/atualizacao-app.js` também no início (o botão `#atualizarAppBtn` no topo) e na apresentação (sem o botão, o aviso vem no canto) |
+| Notificações de amigos no Android (mensagem, convite, pedido, aceito) | `Avisos.java` + `AvisosJob.java` (a cada 15 min, com o app congelado); a página pede pelo fim de `public/app-android.js` e recebe o toque em `inicio.js`/`social-sala.js` (`aviso-tocado`); o servidor responde em `/api/social/avisos` (`avisosPara`, `social.js`) |
 | Tema claro/escuro, temas prontos, cores exatas | `public/tema.js` (no `<head>` de toda página) + tokens em `public/tema.css` |
 | Quem está vendo cada tela | `espectadores.js` (servidor) + `public/espectadores.js` |
 | Sugestão de `@` no chat | `public/mencoes.js` |

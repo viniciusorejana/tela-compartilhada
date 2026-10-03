@@ -264,6 +264,17 @@ app.get('/api/social/imagem/:id', (req, res) => {
   });
   res.end(imagem.bytes);
 });
+// O que chegou para a conta, para o aplicativo Android notificar com a página parada
+// (social.js, `avisosPara`; android/…/AvisosJob.java). Só leitura, pelo cookie da sessão.
+app.get('/api/social/avisos', (req, res) => {
+  if (!telemetria.limitarOrigem(req, 'social-avisos')) return res.status(429).set('Retry-After', '60').end();
+  res.set('Cache-Control', 'no-store');
+  const achada = rotasDeContas.sessaoDoPedido(req, res);
+  if (!achada) return res.status(401).json({ error: 'sem-conta' });
+  const avisos = social?.avisosPara(achada.conta.id);
+  if (!avisos) return res.status(401).json({ error: 'sem-conta' });
+  res.json(avisos);
+});
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 app.get('/sala', (req, res) => {

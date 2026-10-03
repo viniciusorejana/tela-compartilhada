@@ -256,6 +256,50 @@ test('mensagens diretas: só entre amigos, ao vivo, com lida, convite e presenç
   assert.equal((await sumiu).presenca.status, 'offline');
 });
 
+// O que o aplicativo Android pergunta com a página congelada (android/…/AvisosJob.java): só leitura,
+// pelo cookie, com as não lidas de amigos e os pedidos esperando -- e nada depois de lido.
+test('os avisos do aplicativo Android: não lidas, convite, pedidos, e o que some ao ler', async t => {
+  const servidor = await iniciarServidor(); t.after(servidor.encerrar);
+  const ana = await criarConta(servidor, 'ana9', 'Ana');
+  const bia = await criarConta(servidor, 'bia9', 'Bia');
+  const caio = await criarConta(servidor, 'caio9', 'Caio');
+  await ana.pedir('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: '@bia9' } });
+  await bia.pedir(`/api/conta/amigos/${ana.conta.codigo}/aceitar`, { metodo: 'POST' });
+  await caio.pedir('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: '@bia9' } });
+
+  assert.equal((await cliente(servidor.origem).pedir('/api/social/avisos')).status, 401, 'sem conta, nada');
+  const vazio = await bia.pedir('/api/social/avisos');
+  assert.equal(vazio.status, 200);
+  assert.deepEqual(vazio.dados.conversas, []);
+  assert.deepEqual(vazio.dados.pedidos.map(p => [p.codigo, p.nome]), [[caio.conta.codigo, 'Caio']]);
+  assert.equal(vazio.dados.naoIncomodar, false);
+
+  const a = await conectarSocial(servidor.origem, ana.cookie()); t.after(a.fechar);
+  await a.evento('pronto');
+  await a.pedir('dm-enviar', { para: bia.conta.codigo, texto: 'primeira' });
+  await a.pedir('dm-enviar', { para: bia.conta.codigo, texto: 'x'.repeat(600) });
+  await a.pedir('convidar', { para: bia.conta.codigo, sala: 'squad-da-noite' });
+  const r = await bia.pedir('/api/social/avisos');
+  assert.equal(r.dados.conversas.length, 1);
+  const [conversa] = r.dados.conversas;
+  assert.equal(conversa.com, ana.conta.codigo);
+  assert.equal(conversa.nome, 'Ana');
+  assert.equal(conversa.naoLidas, 3);
+  assert.deepEqual(conversa.mensagens.map(m => m.tipo), ['texto', 'texto', 'convite']);
+  assert.equal(conversa.mensagens[1].texto.length, 200, 'o texto vai curto');
+  assert.equal(conversa.mensagens[2].sala, 'squad-da-noite');
+  // A Ana mandou; para ela não há nada a avisar.
+  assert.deepEqual((await ana.pedir('/api/social/avisos')).dados.conversas, []);
+
+  const b = await conectarSocial(servidor.origem, bia.cookie()); t.after(b.fechar);
+  await b.evento('pronto');
+  await b.pedir('dm-lida', { com: ana.conta.codigo });
+  assert.deepEqual((await bia.pedir('/api/social/avisos')).dados.conversas, [], 'lida, sai dos avisos');
+
+  await bia.pedir('/api/conta/social', { metodo: 'PUT', corpo: { status: 'ocupado' } });
+  assert.equal((await bia.pedir('/api/social/avisos')).dados.naoIncomodar, true);
+});
+
 test('imagem na mensagem direta: só na memória, só para os dois da conversa, e o tipo pelos bytes', async t => {
   const servidor = await iniciarServidor(); t.after(servidor.encerrar);
   const ana = await criarConta(servidor, 'ana6', 'Ana');

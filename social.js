@@ -389,6 +389,39 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
 
   function conquistou(contaId, conquista) { emitirPara(contaId, 'conquista', conquista); }
 
+  // O que o aplicativo Android pergunta quando a página dele está parada (o Android congela o
+  // aplicativo que saiu da tela, e o socket vai junto): as conversas com mensagem não lida e os
+  // pedidos de amizade esperando. Só o que vira notificação -- o texto vai curto, a imagem vira
+  // "imagem", e nada de quem não é amigo (um bloqueio desfaz a amizade, então sai daqui também).
+  function avisosPara(contaId) {
+    const conta = contas.contaPorId(contaId);
+    if (!conta) return null;
+    const lista = amigos.lista(conta);
+    const nomes = new Map(lista.amigos.map(p => [p.codigo, p.apelidoMeu || p.apelido]));
+    const meu = codigoDaConta(contaId);
+    const conversasNaoLidas = [];
+    for (const chave of conversasDe.get(contaId) || []) {
+      const conversa = conversas.get(chave);
+      if (!conversa) continue;
+      const com = codigoDaConta(conversa.a === contaId ? conversa.b : conversa.a);
+      if (!nomes.has(com)) continue;
+      const lida = conversa.lidas[contaId] || 0;
+      const novas = conversa.mensagens.filter(m => m.em > lida && m.de !== meu);
+      if (!novas.length) continue;
+      conversasNaoLidas.push({
+        com, nome: nomes.get(com), naoLidas: novas.length,
+        mensagens: novas.slice(-5).map(m => ({ id: m.id, em: m.em, tipo: m.tipo, sala: m.sala || null, texto: m.texto.slice(0, 200), imagem: Boolean(m.imagem) }))
+      });
+    }
+    conversasNaoLidas.sort((x, y) => y.mensagens.at(-1).em - x.mensagens.at(-1).em);
+    return {
+      // "Não incomodar" segura as mensagens, como o aviso no canto da página; convites passam.
+      naoIncomodar: contas.socialDe(contaId).status === 'ocupado',
+      conversas: conversasNaoLidas.slice(0, 10),
+      pedidos: lista.recebidos.slice(0, 10).map(p => ({ codigo: p.codigo, nome: p.apelido, desde: p.desde || 0 }))
+    };
+  }
+
   // A conta foi apagada: as conversas dela somem agora, e não em três dias.
   function esquecerConta(contaId) {
     for (const chave of [...(conversasDe.get(contaId) || [])]) esquecerConversa(chave);
@@ -398,7 +431,7 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
   }
 
   return {
-    mudouAmizade, mudouPerfil, mudouSala, mudouPresenca, conquistou, esquecerConta, presencaDe, imagemPara,
+    mudouAmizade, mudouPerfil, mudouSala, mudouPresenca, conquistou, esquecerConta, presencaDe, imagemPara, avisosPara,
     conectado: contaId => abas.has(contaId),
     estado: () => ({ contasConectadas: abas.size, conversas: conversas.size, imagens: imagens.size, bytesDeImagens }),
     encerrar() { clearInterval(limpeza); for (const timer of avisosPendentes.values()) clearTimeout(timer); avisosPendentes.clear(); },

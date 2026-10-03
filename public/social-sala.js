@@ -230,5 +230,18 @@
     if (comConta) pintarContagem();
   });
 
+  // A notificação de amigos do aplicativo Android, tocada no meio da chamada (app-android.js). A
+  // conversa abre no painel, sem sair da sala; entrar noutra sala sai desta pelo caminho de sempre.
+  window.NexoAndroid?.ao('aviso-tocado', ({ acao, com, sala, codigo }) => {
+    if (!comConta) return;
+    if (acao === 'abrir' && S.relacao(com) === 'amigos') abrirMensagens(com);
+    else if (acao === 'entrar' && /^[a-z0-9_-]{4,32}$/.test(sala || '') && sala !== roomCode) {
+      const destino = `/${encodeURIComponent(sala)}/sala`;
+      if (typeof sairDaSala === 'function') sairDaSala(destino); else window.location.href = destino;
+    } else if (acao === 'aceitar' && S.relacao(codigo) === 'recebido') {
+      S.aceitar(codigo).then(r => { if (r.ok) aviso({ tom: 'ok', icone: 'amigo', titulo: `Você e ${S.nomeDe(codigo)} agora são amigos`, fecharEm: 3500 }); });
+    }
+  });
+
   window.NexoSalaSocial = { pintarCartao, abrirMensagens, abrirConvite, abrirEditor };
 })();

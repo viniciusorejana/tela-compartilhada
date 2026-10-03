@@ -39,12 +39,15 @@ import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 
 /**
@@ -89,6 +92,8 @@ public class MainActivity extends Activity {
     private boolean pedindoAvisos;
     private final Handler relogio = new Handler(Looper.getMainLooper());
     private final Runnable conferirChamada = () -> { if (!chamadaConfirmada) pararChamada(); };
+    // O Nexo à vista: o AvisosJob não toca nada, porque a página já mostra no canto dela.
+    static volatile boolean naFrente;
 
     @Override
     protected void onCreate(Bundle estado) {
@@ -104,19 +109,50 @@ public class MainActivity extends Activity {
         respeitarAsBarrasDoSistema(raiz);
         configurarWebView();
         ChamadaService.definirOuvinte(acao -> runOnUiThread(() -> repassarParaASala(acao)));
+        Atualizador.definirOuvinte(situacao -> runOnUiThread(() -> mandarParaASala(situacao)));
         registrarVoltar();
 
         String salvo = preferencias.getString("endereco", null);
-        if (ACAO_TROCAR_SERVIDOR.equals(getIntent().getAction()) || salvo == null) mostrarTelaDeEndereco(null, salvo);
-        else irPara(salvo);
+        if (ACAO_TROCAR_SERVIDOR.equals(getIntent().getAction()) || salvo == null) {
+            mostrarTelaDeEndereco(null, salvo);
+            return;
+        }
+        // A pergunta de 15 em 15 minutos (versão nova; e, com conta, os amigos).
+        AvisosJob.agendar(this);
+        if (Avisos.ACAO_AVISO.equals(getIntent().getAction())) {
+            // Aberto pela notificação, com o aplicativo fechado: direto para a conversa -- ou para
+            // o início, com a atualização já descendo (ou o instalador, se ela já desceu).
+            irPara(salvo, Avisos.caminhoDoToque(getIntent()));
+            atualizacaoDoToque(getIntent());
+        } else {
+            irPara(salvo);
+        }
     }
 
     @Override
     protected void onNewIntent(Intent pedido) {
         super.onNewIntent(pedido);
         setIntent(pedido);
-        // O atalho do ícone. A notificação só traz a sala de volta para a frente.
+        // O atalho do ícone. A notificação da chamada só traz a sala de volta para a frente.
         if (ACAO_TROCAR_SERVIDOR.equals(pedido.getAction())) mostrarTelaDeEndereco(null, preferencias.getString("endereco", null));
+        else if (Avisos.ACAO_AVISO.equals(pedido.getAction())) tocouNoAviso(pedido);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        naFrente = true;
+        // De volta das configurações ("Permitir desta fonte"), ou o download andou com o Nexo fora.
+        Atualizador.retomar(this);
+    }
+
+    // Só a atividade: a WebView continua rodando (ver o fim deste arquivo). Os cookies vão para o
+    // disco agora, para o AvisosJob achar a sessão com o aplicativo já congelado.
+    @Override
+    protected void onPause() {
+        naFrente = false;
+        CookieManager.getInstance().flush();
+        super.onPause();
     }
 
     // Do Android 15 em diante a página desenha por baixo das barras do sistema (e do teclado). O
@@ -177,15 +213,21 @@ public class MainActivity extends Activity {
     }
 
     private void irPara(String endereco) {
+        irPara(endereco, null);
+    }
+
+    // `caminho`: uma página da mesma origem no lugar do endereço salvo (a conversa de uma
+    // notificação). Ela não vira configuração -- o endereço salvo continua o de sempre.
+    private void irPara(String endereco, String caminho) {
         String origem = origemDe(Uri.parse(endereco));
         if (origem == null) {
             mostrarTelaDeEndereco("endereço inválido", endereco);
             return;
         }
-        enderecoPendente = endereco;
+        enderecoPendente = caminho == null ? endereco : null;
         origemDaSala = origem;
         ligarPonte(origem);
-        web.loadUrl(endereco);
+        web.loadUrl(caminho == null ? endereco : origem + caminho);
     }
 
     // A ponte nasce presa à origem escolhida. Trocar de servidor desfaz a antiga antes: uma
@@ -232,12 +274,128 @@ public class MainActivity extends Activity {
         respostaDaSala = resposta;
         try {
             JSONObject pedido = new JSONObject(mensagem.getData());
-            if (!"chamada".equals(pedido.optString("tipo"))) return;
-            if (pedido.optBoolean("ativa")) iniciarChamada(pedido.optString("sala"), pedido.optBoolean("microfone"), pedido.optBoolean("ensurdecido"));
-            else pararChamada();
+            switch (pedido.optString("tipo")) {
+                case "chamada":
+                    if (pedido.optBoolean("ativa")) iniciarChamada(pedido.optString("sala"), pedido.optBoolean("microfone"), pedido.optBoolean("ensurdecido"));
+                    else pararChamada();
+                    break;
+                case "avisos":
+                    ligarAvisos(pedido.optBoolean("ligado"));
+                    break;
+                case "aviso":
+                    avisar(pedido);
+                    break;
+                case "aviso-lido":
+                    Avisos.lido(this, pedido.optString("chave"));
+                    break;
+                case "pedidos":
+                    Set<String> pendentes = new HashSet<>();
+                    JSONArray codigos = pedido.optJSONArray("codigos");
+                    for (int i = 0; codigos != null && i < codigos.length(); i++) pendentes.add(codigos.optString(i));
+                    Avisos.pedidosPendentes(this, pendentes);
+                    break;
+                // O atualizador (Atualizador.java): o download só sai da origem da sala.
+                case "atualizar":
+                    Avisos.tirarAtualizacao(this);
+                    Atualizador.baixar(this, origemDaSala, pedido.optString("url"), pedido.optString("versao"));
+                    break;
+                case "atualizacao-cancelar":
+                    Atualizador.cancelar(this);
+                    break;
+                case "atualizacao-instalar":
+                    Atualizador.instalar(this);
+                    break;
+                case "atualizacao-estado":
+                    mandarParaASala(Atualizador.estadoAtual(this));
+                    break;
+                default:
+                    // Uma página que fala outra coisa não liga nem desliga nada.
+            }
         } catch (JSONException ignorada) {
-            // Uma página que fala outra coisa não liga nem desliga nada.
+            // Mensagem fora do formato: ignorada, como a de um tipo desconhecido.
         }
+    }
+
+    // ------------------------------------------------------------------ as notificações de amigos
+
+    // A página tem conta (o socket de amigos conectou): o aplicativo passa a perguntar sozinho ao
+    // servidor, e pede a licença de notificar -- é a primeira hora em que ela tem motivo.
+    private void ligarAvisos(boolean ligado) {
+        preferencias.edit().putBoolean("avisosLigados", ligado).apply();
+        if (ligado) {
+            AvisosJob.agendar(this);
+            pedirPermissaoDeAvisos();
+        } else {
+            // O trabalho continua (ele também confere a versão); só a parte da conta para.
+            Avisos.limparTudo(this);
+        }
+    }
+
+    @SuppressLint("RequiresFeature")
+    private void mandarParaASala(JSONObject mensagem) {
+        if (respostaDaSala == null) return;
+        try {
+            respostaDaSala.postMessage(mensagem.toString());
+        } catch (IllegalStateException ignorada) {
+            // A página já foi embora; a próxima pergunta de novo.
+        }
+    }
+
+    // As notificações da atualização: "disponível" baixa, "pronta" instala. Tocar é o pedido.
+    private boolean atualizacaoDoToque(Intent pedido) {
+        String acao = pedido.getStringExtra("acao");
+        if ("instalar".equals(acao)) {
+            Atualizador.instalar(this);
+            return true;
+        }
+        if ("atualizar".equals(acao)) {
+            Atualizador.baixarDoAviso(this, origemDaSala);
+            return true;
+        }
+        return false;
+    }
+
+    // O que a página manda é de uma pessoa: os códigos passam pelo molde, e o texto é só texto.
+    private void avisar(JSONObject pedido) {
+        String categoria = pedido.optString("categoria");
+        String nome = pedido.optString("nome");
+        long em = pedido.optLong("em", System.currentTimeMillis());
+        if ("mensagem".equals(categoria) || "convite".equals(categoria)) {
+            String com = pedido.optString("com");
+            if (!Avisos.CODIGO_DE_CONTA.matcher(com).matches()) return;
+            if ("convite".equals(categoria)) Avisos.convite(this, com, nome, pedido.optString("sala"), em);
+            else Avisos.mensagem(this, com, nome, pedido.optString("texto"), pedido.optBoolean("imagem"), em);
+        } else if ("pedido".equals(categoria) || "aceito".equals(categoria)) {
+            String codigo = pedido.optString("codigo");
+            if (!Avisos.CODIGO_DE_CONTA.matcher(codigo).matches()) return;
+            if ("pedido".equals(categoria)) Avisos.pedido(this, codigo, nome);
+            else Avisos.aceito(this, codigo, nome);
+        }
+    }
+
+    // Tocou numa notificação de amigo com o aplicativo aberto. Com a página viva, ela resolve sem
+    // recarregar nada (abre a conversa, até no meio de uma chamada); sem ela, abre o endereço da
+    // conversa -- menos numa chamada, que uma navegação derrubaria.
+    @SuppressLint("RequiresFeature")
+    private void tocouNoAviso(Intent pedido) {
+        // A atualização não depende da página: o download e o instalador são do aplicativo, e a
+        // página (se houver) acompanha pelo estado que ele manda.
+        if (atualizacaoDoToque(pedido)) return;
+        if (respostaDaSala != null) {
+            try {
+                JSONObject toque = new JSONObject().put("tipo", "aviso-tocado").put("acao", pedido.getStringExtra("acao"));
+                for (String campo : new String[]{"com", "sala", "codigo"}) {
+                    String valor = pedido.getStringExtra(campo);
+                    if (valor != null) toque.put(campo, valor);
+                }
+                respostaDaSala.postMessage(toque.toString());
+                return;
+            } catch (JSONException | IllegalStateException ignorada) {
+                // A página foi embora no meio: segue pelo endereço.
+            }
+        }
+        String caminho = Avisos.caminhoDoToque(pedido);
+        if (caminho != null && origemDaSala != null && !emChamada) web.loadUrl(origemDaSala + caminho);
     }
 
     private void iniciarChamada(String sala, boolean microfone, boolean ensurdecido) {
@@ -272,7 +430,8 @@ public class MainActivity extends Activity {
     }
 
     // O Android 13 pede licença para a notificação, e sem ela a chamada continua -- só não
-    // aparece na gaveta. Pedida uma vez, quando a primeira chamada começa, e não ao abrir.
+    // aparece na gaveta, e as mensagens dos amigos não avisam. Pedida uma vez, quando a primeira
+    // chamada começa ou quando a conta conecta, e não ao abrir.
     private void pedirPermissaoDeAvisos() {
         if (Build.VERSION.SDK_INT < 33 || pedindoAvisos || pedidoDeMidia != null || preferencias.getBoolean("avisosPedidos", false)) return;
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
@@ -387,6 +546,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         ChamadaService.definirOuvinte(null);
+        Atualizador.definirOuvinte(null);
         pararChamada();
         if (web != null) {
             web.stopLoading();
@@ -439,6 +599,7 @@ public class MainActivity extends Activity {
             // pessoa num servidor fora do ar.
             preferencias.edit().putString("endereco", enderecoPendente).apply();
             enderecoPendente = null;
+            AvisosJob.agendar(MainActivity.this);
             // Chegou noutra origem (o redirecionamento): a ponte vai para ela, e a página recarrega
             // para recebê-la -- a ponte só entra em páginas abertas depois de ligada.
             if (!origem.equals(origemDaSala)) {

@@ -896,9 +896,26 @@
     await S.iniciar();
     recebidosVistos = new Set(S.estado.amigos.recebidos.map(p => p.codigo));
     repintar();
-    const pedida = new URLSearchParams(window.location.search).get('secao');
+    const parametros = new URLSearchParams(window.location.search);
+    const pedida = parametros.get('secao');
     if (['perfil', 'conquistas', 'adicionar'].includes(pedida)) irPara(pedida);
+    if (pedida === 'pedidos') escolherAba('pedidos');
     if (S.estado.amigos.recebidos.length && !pedida) escolherAba('disponiveis');
+    // A notificação de mensagem do aplicativo Android, tocada com a página ainda fechada.
+    const comQuem = parametros.get('conversa');
+    if (comQuem && S.relacao(comQuem) === 'amigos') abrirConversa(comQuem);
+    if (pedida || comQuem) history.replaceState(null, '', window.location.pathname);
+  });
+  // A notificação tocada com a página aberta (app-android.js): sem recarregar nada.
+  window.NexoAndroid?.ao('aviso-tocado', ({ acao, com, sala, codigo }) => {
+    if (acao === 'abrir' && S.relacao(com) === 'amigos') abrirConversa(com);
+    else if (acao === 'entrar' && CODIGO_DE_SALA.test(sala || '')) irParaSala(sala);
+    else if (acao === 'aceitar' && S.relacao(codigo) === 'recebido') {
+      S.aceitar(codigo).then(r => {
+        if (!r.ok) aviso({ tom: 'erro', icone: 'erro', titulo: 'Não foi possível aceitar', detalhe: r.dados.error });
+        else aviso({ tom: 'ok', icone: 'amigo', titulo: `Você e ${S.nomeDe(codigo)} agora são amigos`, fecharEm: 3500 });
+      });
+    } else if (acao === 'aceitar' || acao === 'pedidos') escolherAba('pedidos');
   });
   // As salas recentes mudam quando outra aba entra numa sala.
   window.addEventListener('storage', evento => { if (evento.key === 'nexoRecentRooms') pintarTrilho(); });

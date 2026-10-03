@@ -94,7 +94,26 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-abas button { --nx-fundo-hover:rgb(var(--tinta) / 3.5%); --nx-cor:var(--muted); --nx-cor-hover:var(--text); flex:none; min-height:var(--ctl-p); padding:0 12px; border-radius:var(--r-sm); font-size:var(--fs-sm); font-weight:650; white-space:nowrap; }
 .ini-abas button[aria-selected="true"] { --nx-fundo:var(--accent-forte); --nx-fundo-hover:var(--accent-forte-hi); --nx-cor:#fff; --nx-cor-hover:#fff; }
 .ini-abas button .ini-contagem { margin-left:6px; }
-.ini-adicionar { margin-left:auto; --nx-fundo:var(--online-suave); --nx-fundo-hover:color-mix(in srgb,var(--online) 22%,transparent); --nx-cor:var(--online-texto); }
+/* "Atualizar" (só no aplicativo, com versão nova) vai à direita, antes do "Adicionar amigo". */
+.ini-atualizar { margin-left:auto; }
+/* Abaixo de 1400 px o rótulo apertaria as abas: fica o ícone, e o texto continua para o leitor de
+   tela (o `title` diz de qual versão para qual). */
+@media (max-width:1400px) {
+  .ini-atualizar,.ini-atualizar:not([hidden]) + .ini-adicionar { padding:0 10px; }
+  .ini-atualizar span,.ini-atualizar:not([hidden]) + .ini-adicionar span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+}
+.ini-atualizar:not([hidden]) + .ini-adicionar { margin-left:0; }
+.ini-atualizar-menu { gap:0; width:min(300px,calc(100vw - 24px)); padding:14px; }
+.ini-atualizar-menu.hidden { display:none; }
+.ini-atualizar-menu strong { font-size:var(--fs-md); }
+.ini-atualizar-menu p { margin:6px 0 12px; color:var(--muted); font-size:var(--fs-sm); line-height:1.55; }
+.ini-atualizar-acoes { display:flex; gap:6px; }
+.ini-atualizar-acoes > * { flex:1; }
+/* O "Atualizar agora" é um link (o endereço do arquivo fica de reserva): a base de botão de
+   social.css é só de `button`, então ele leva a mesma cara aqui. */
+.ini-atualizar-acoes a.nx-botao { display:inline-flex; align-items:center; justify-content:center; border-radius:var(--r-sm); background:var(--nx-fundo); color:var(--nx-cor); font-weight:600; text-decoration:none; transition:background-color var(--dur) var(--curva); }
+.ini-atualizar-acoes a.nx-botao:hover { background:var(--nx-fundo-hover); }
+.ini-adicionar { margin-left:auto;--nx-fundo:var(--online-suave); --nx-fundo-hover:color-mix(in srgb,var(--online) 22%,transparent); --nx-cor:var(--online-texto); }
 .ini-adicionar[aria-pressed="true"] { --nx-fundo:var(--online); --nx-fundo-hover:var(--online); --nx-cor:var(--sobre-cor); }
 .ini-vista { flex:1; min-height:0; overflow-y:auto; padding:16px 20px 24px; animation:nexo-aparecer var(--dur) var(--curva); }
 .ini-conversa-vista { padding:0; overflow:hidden; }

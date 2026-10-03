@@ -105,6 +105,145 @@ async function esperarAte(condicao, mensagem, prazo = 10000) {
   }
   console.log('PASS: "Sair da sala" na notificação tira a pessoa da sala e desliga o serviço');
 
+  // ---------- As notificações de amigos ----------
+  // A Ana no início, dentro do aplicativo e com ele fora da tela; a Bia num navegador comum,
+  // mandando mensagem e convite; o Caio pedindo amizade.
+  const ana = await instancia.conta('anaandroid', { apelido: 'Ana' });
+  const bia = await instancia.conta('biaandroid', { apelido: 'Bia' });
+  const caio = await instancia.conta('caioandroid', { apelido: 'Caio' });
+  const pedirAmizade = async (de, alvo) => {
+    const { csrf } = await (await fetch(`${origin}/api/conta/eu`, { headers: { Cookie: de.cookie } })).json();
+    const r = await fetch(`${origin}/api/conta/amigos`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Nexo-CSRF': csrf, Cookie: de.cookie }, body: JSON.stringify({ alvo }) });
+    assert.ok(r.ok, await r.text());
+  };
+  await pedirAmizade(ana, '@biaandroid');
+  await pedirAmizade(bia, '@anaandroid');
+  const comCookie = async (opcoes, quem) => {
+    const c = await browser.newContext(opcoes);
+    await c.addCookies([{ name: 'nexo_conta', value: quem.cookie.split('=')[1], url: origin }]);
+    return c;
+  };
+  const doApp = [];
+  const contextoAna = await comCookie({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: UA }, ana);
+  await contextoAna.exposeFunction('mensagemParaOAplicativo', texto => { doApp.push(JSON.parse(texto)); });
+  await contextoAna.addInitScript(() => {
+    const ponte = new EventTarget();
+    ponte.postMessage = texto => window.mensagemParaOAplicativo(String(texto));
+    window.nexoAndroid = ponte;
+    window.doAplicativo = dados => ponte.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(dados) }));
+    // O aplicativo fora da tela, até o teste dizer o contrário.
+    window.visivel = false;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (window.visivel ? 'visible' : 'hidden') });
+  });
+  const inicio = await contextoAna.newPage();
+  inicio.on('pageerror', erro => { throw new Error(`erro no início: ${erro.message}`); });
+  await inicio.goto(origin);
+  await inicio.locator('#inicioApp').waitFor();
+  const achar = predicado => doApp.find(predicado);
+  await esperarAte(() => achar(m => m.tipo === 'avisos' && m.ligado === true), `a conta conectada não ligou os avisos no aplicativo: ${JSON.stringify(doApp)}`);
+  await inicio.waitForFunction(() => NexoSocial.estado.amigos.amigos.length === 1, null, { timeout: 10000 });
+
+  const paginaBia = await (await comCookie({}, bia)).newPage();
+  await paginaBia.goto(origin);
+  await paginaBia.waitForFunction(() => NexoSocial.estado.pronto, null, { timeout: 10000 });
+  const enviada = await paginaBia.evaluate(codigo => NexoSocial.enviar(codigo, 'oi, chegou?'), ana.conta.codigo);
+  assert.equal(enviada.ok, true, JSON.stringify(enviada));
+  await esperarAte(() => achar(m => m.tipo === 'aviso' && m.categoria === 'mensagem'), `a mensagem não virou notificação: ${JSON.stringify(doApp)}`);
+  const mensagem = achar(m => m.tipo === 'aviso' && m.categoria === 'mensagem');
+  assert.deepEqual({ com: mensagem.com, nome: mensagem.nome, texto: mensagem.texto, imagem: mensagem.imagem }, { com: bia.conta.codigo, nome: 'Bia', texto: 'oi, chegou?', imagem: false });
+
+  await paginaBia.evaluate(codigo => NexoSocial.convidar(codigo, 'squad-do-android'), ana.conta.codigo);
+  await esperarAte(() => achar(m => m.tipo === 'aviso' && m.categoria === 'convite'), 'o convite não virou notificação');
+  assert.equal(achar(m => m.categoria === 'convite').sala, 'squad-do-android');
+
+  await pedirAmizade(caio, '@anaandroid');
+  await esperarAte(() => achar(m => m.tipo === 'aviso' && m.categoria === 'pedido'), 'o pedido de amizade não virou notificação');
+  assert.deepEqual(achar(m => m.categoria === 'pedido'), { tipo: 'aviso', categoria: 'pedido', codigo: caio.conta.codigo, nome: 'Caio' });
+  await esperarAte(() => doApp.some(m => m.tipo === 'pedidos' && m.codigos.includes(caio.conta.codigo)), 'os pedidos pendentes não foram ao aplicativo');
+  console.log('PASS: com o aplicativo fora da tela, mensagem, convite e pedido de amizade viram notificação');
+
+  // Tocar na notificação: o Nexo volta à frente e a conversa abre, sem recarregar a página. Aberta,
+  // ela é lida -- e a notificação dela sai da gaveta.
+  await inicio.evaluate(() => { window.visivel = true; });
+  await inicio.evaluate(codigo => doAplicativo({ tipo: 'aviso-tocado', acao: 'abrir', com: codigo }), bia.conta.codigo);
+  await inicio.locator('#vistaConversa:not([hidden])').waitFor({ timeout: 5000 });
+  await esperarAte(() => achar(m => m.tipo === 'aviso-lido' && m.chave === `conversa:${bia.conta.codigo}`), `ler a conversa não tirou a notificação: ${JSON.stringify(doApp.slice(-5))}`);
+  // À vista, o aviso é o do canto da página: nada vai para a gaveta.
+  const antesDaVisivel = doApp.filter(m => m.tipo === 'aviso').length;
+  await paginaBia.evaluate(codigo => NexoSocial.convidar(codigo, 'outra-sala'), ana.conta.codigo);
+  await inicio.locator('.nexo-toast').filter({ hasText: 'outra-sala' }).first().waitFor({ timeout: 5000 });
+  assert.equal(doApp.filter(m => m.tipo === 'aviso').length, antesDaVisivel, 'com o Nexo à vista, nada de notificação');
+  // Aceitar pela notificação, com a página aberta.
+  await inicio.evaluate(codigo => doAplicativo({ tipo: 'aviso-tocado', acao: 'aceitar', codigo }), caio.conta.codigo);
+  await inicio.waitForFunction(codigo => NexoSocial.relacao(codigo) === 'amigos', caio.conta.codigo, { timeout: 5000 });
+  await esperarAte(() => doApp.some(m => m.tipo === 'pedidos' && !m.codigos.includes(caio.conta.codigo)), 'o pedido aceito não saiu da gaveta');
+  await inicio.screenshot({ path: path.join(saida, 'conversa-pela-notificacao.png') });
+  console.log('PASS: tocar na notificação abre a conversa (ou aceita o pedido) sem recarregar, e o que foi lido sai da gaveta');
+
+  // A notificação tocada com o aplicativo fechado abre o endereço da conversa.
+  await inicio.goto(`${origin}/?conversa=${encodeURIComponent(bia.conta.codigo)}`);
+  await inicio.locator('#vistaConversa:not([hidden])').waitFor({ timeout: 10000 });
+  assert.equal(new URL(inicio.url()).search, '', 'o endereço volta a ser o do início');
+  console.log('PASS: aberta pelo endereço da notificação, a página vai direto para a conversa');
+
+  // ---------- O atualizador do APK 1.1.0 ----------
+  // Fora da sala (no início), o mesmo botão "Atualizar"; quem baixa e instala é o aplicativo
+  // (Atualizador.java), e a página só pede e mostra o estado que volta pela ponte.
+  const UA_NOVO = UA.replace('NexoAndroid/1.0.0', 'NexoAndroid/1.1.0');
+  const doAppNovo = [];
+  const contextoNovo = await comCookie({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: UA_NOVO }, ana);
+  await contextoNovo.exposeFunction('mensagemParaOAplicativo', texto => { doAppNovo.push(JSON.parse(texto)); });
+  await contextoNovo.addInitScript(() => {
+    const ponte = new EventTarget();
+    ponte.postMessage = texto => window.mensagemParaOAplicativo(String(texto));
+    window.nexoAndroid = ponte;
+    window.doAplicativo = dados => ponte.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(dados) }));
+  });
+  await contextoNovo.route('**/api/desktop-app', rota => rota.fulfill({ json: { available: false, sistemas: [
+    { chave: 'android', nome: 'Android', tipo: '.apk', familia: 'android', url: '/downloads/Nexo.apk', size: 1, builtAt: new Date().toISOString(), versao: '1.2.0' }
+  ] } }));
+  const novo = await contextoNovo.newPage();
+  novo.on('pageerror', erro => { throw new Error(`erro no início (1.1.0): ${erro.message}`); });
+  await novo.goto(origin);
+  await novo.locator('#atualizarAppBtn').waitFor({ timeout: 8000 });
+  assert.ok(doAppNovo.some(m => m.tipo === 'atualizacao-estado'), 'a página pergunta ao aplicativo se já há uma atualização descendo');
+  await novo.locator('#atualizarAppBtn').tap();
+  assert.match(await novo.locator('#atualizarAppTexto').textContent(), /O Nexo baixa a versão nova e pede para instalar por cima/);
+  assert.equal(await novo.locator('#atualizarAppBaixar').textContent(), 'Atualizar agora');
+  await novo.locator('#atualizarAppBaixar').tap();
+  await esperarAte(() => doAppNovo.some(m => m.tipo === 'atualizar'), 'o pedido de atualizar não chegou ao aplicativo');
+  assert.deepEqual(doAppNovo.find(m => m.tipo === 'atualizar'), { tipo: 'atualizar', versao: '1.2.0', url: '/downloads/Nexo.apk' });
+
+  const doAtualizador = dados => novo.evaluate(d => doAplicativo({ tipo: 'atualizacao', ...d }), dados);
+  await doAtualizador({ estado: 'baixando', versao: '1.2.0', recebidos: 5 * 1048576, total: 10 * 1048576 });
+  await novo.locator('.nexo-toast', { hasText: 'Baixando o Nexo 1.2.0 · 50%' }).waitFor({ timeout: 5000 });
+  await doAtualizador({ estado: 'pronto', versao: '1.2.0', recebidos: 10 * 1048576, total: 10 * 1048576 });
+  const pronto = novo.locator('.nexo-toast', { hasText: 'Nexo 1.2.0 pronto' });
+  await pronto.waitFor({ timeout: 5000 });
+  assert.match(await pronto.textContent(), /Instalar fecha o Nexo por um instante/);
+  assert.equal(await novo.locator('#atualizarAppBtn span').textContent(), 'Instalar');
+  await novo.waitForTimeout(250);
+  await novo.screenshot({ path: path.join(saida, 'atualizacao-pronta.png') });
+  await pronto.getByRole('button', { name: 'Instalar agora' }).tap();
+  await esperarAte(() => doAppNovo.some(m => m.tipo === 'atualizacao-instalar'), '"Instalar agora" não chegou ao aplicativo');
+  // A primeira vez, o Android pede a permissão de instalar; o aviso diz o que fazer.
+  await doAtualizador({ estado: 'permissao', versao: '1.2.0' });
+  await novo.locator('.nexo-toast', { hasText: 'Falta uma permissão' }).waitFor({ timeout: 5000 });
+  assert.match(await novo.locator('.nexo-toast', { hasText: 'Falta uma permissão' }).textContent(), /Permitir desta fonte/);
+  // Uma chave diferente: o motivo do aplicativo aparece como está.
+  await doAtualizador({ estado: 'falhou', versao: '1.2.0', motivo: 'A versão nova foi assinada com outra chave e não instala por cima desta.' });
+  await novo.locator('.nexo-toast', { hasText: 'A atualização não instalou' }).waitFor({ timeout: 5000 });
+  assert.match(await novo.locator('.nexo-toast', { hasText: 'A atualização não instalou' }).textContent(), /outra chave/);
+  console.log('PASS: no APK 1.1.0, "Atualizar agora" pede ao aplicativo, o progresso, o "Instalar", a permissão e a falha aparecem no início');
+
+  // A notificação "Nexo 1.2.0 disponível" tocada com a página aberta: vai direto ao download.
+  const pedidosAntes = doAppNovo.filter(m => m.tipo === 'atualizar').length;
+  await novo.reload();
+  await novo.locator('#atualizarAppBtn').waitFor({ timeout: 8000 });
+  await novo.evaluate(() => doAplicativo({ tipo: 'aviso-tocado', acao: 'atualizar' }));
+  await esperarAte(() => doAppNovo.filter(m => m.tipo === 'atualizar').length > pedidosAntes, 'tocar na notificação de versão nova não pediu o download');
+  console.log('PASS: tocar em "Nexo 1.2.0 disponível" com a página aberta começa o download');
+
   await browser.close();
   await instancia.encerrar();
   console.log('Aplicativo Android, do lado da sala: tudo certo.');

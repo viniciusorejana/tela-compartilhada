@@ -64,6 +64,8 @@
           <button type="button" role="tab" data-aba="pedidos" aria-selected="false" tabindex="-1">Pedidos<b class="ini-contagem" id="contagemAbaPedidos" hidden>0</b></button>
           <button type="button" role="tab" data-aba="bloqueados" aria-selected="false" tabindex="-1">Bloqueados</button>
         </div>
+        <!-- Só no aplicativo, com versão nova no servidor (atualizacao-app.js, o mesmo da sala). -->
+        <button class="nx-botao pequeno sucesso ini-atualizar" id="atualizarAppBtn" type="button" hidden aria-haspopup="true" aria-expanded="false" aria-controls="atualizarAppMenu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Atualizar</span></button>
         <button class="nx-botao pequeno ini-adicionar" id="adicionarBtn" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg><span>Adicionar amigo</span></button>
       </header>
 
@@ -122,7 +124,13 @@
 
   <div class="nx-menu nx-social" id="menuFlutuante" role="menu" hidden></div>
 
+  <!-- O cartão do botão Atualizar: de qual versão para qual. Fechado pela classe `hidden`, como o
+       da sala -- é o atualizacao-app.js dos dois que o abre. -->
+  <div class="nx-menu nx-social ini-atualizar-menu hidden" id="atualizarAppMenu" role="group" aria-labelledby="atualizarAppTitulo"><strong id="atualizarAppTitulo">Nova versão disponível</strong><p id="atualizarAppTexto"></p><div class="ini-atualizar-acoes"><a class="nx-botao pequeno" id="atualizarAppBaixar" href="#" target="_blank" rel="noopener">Baixar agora</a><button type="button" class="nx-botao secundario pequeno" id="atualizarAppDepois">Depois</button></div></div>
+
   <script src="/socket.io/socket.io.js"></script>
+  <!-- A ponte do aplicativo Android (só faz algo dentro dele): as notificações de amigos. -->
+  <script src="/app-android.js"></script>
   <script src="/perfil.js"></script>
   <script src="/preferencias.js"></script>
   <script src="/conta-cliente.js"></script>
@@ -135,6 +143,8 @@
   <script src="/toast.js"></script>
   <script src="/editor-cartao.js"></script>
   <script src="/inicio.js"></script>
+  <script src="/versao-app.js"></script>
+  <script src="/atualizacao-app.js"></script>
   <script src="/novidades-edicoes.js"></script>
   <script src="/novidades.js"></script>
 </body>
