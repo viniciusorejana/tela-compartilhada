@@ -37,7 +37,14 @@ npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela 
 npm run test:estudio       # Estúdio: perfil pela plateia e pelo chat, foto grande, link do OBS, selo, rostos (e o rosto de cada um), ensurdecida, permissão
 npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel
 npm run test:webcodecs:placa  # a placa de verdade pelo RTP: combinações, câmera, aba parada (Chrome instalado; pula sem placa)
+npm run test:electron      # o aplicativo de mesa de verdade: seletor de tela, origem presa, atualização do portátil e a sozinha do instalado
+npm run test:android       # o lado da sala do app Android: a chamada ligando o serviço, os botões da notificação, o APK novo
 ```
+
+O Android em si (`android/`) compila com o Gradle do wrapper e um JDK 17 ou 21 (o 25 da máquina
+não serve): `$env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'; .\gradlew.bat assembleDebug lintDebug`,
+dentro de `android/`. Não há emulador nesta máquina; o lado nativo se prova num aparelho
+(docs/android.md, "Testes").
 
 O Chromium do Playwright não tem placa de vídeo: tudo que depende de `prefer-hardware` só se
 prova com `test:webcodecs:placa`, que usa o Chrome da máquina.
@@ -87,6 +94,11 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Painel de configurações (perfil, sons, aparência, atalhos) | `public/configuracoes.js` + `sala.html` |
 | Página de "não encontrada" | `public/404.html` + `nao-encontrada.{css,js}`; a rota é a última de `server.js` |
 | Aviso no canto (download, atualização) | `public/toast.js`; o download do app em `app/main.js` |
+| Bot de música: fila, repetir (faixa e fila), volume | `musica.js` (a regra do repetir é `proximaFaixa`); os comandos em `server.js` (`interpretarComandoDeMusica`, `musica-fila`); a tela em `public/musica.js` |
+| Mesa de sons: um som por pessoa, parar o próprio som | `soundboard.js` (servidor) + `public/soundboard.js`; o parar é o evento `soundboard-parar` (`server.js`) |
+| Instalador do aplicativo de mesa (NSIS, .deb) e a atualização sozinha | `build` em `app/package.json`; `app/atualizacao-automatica.js` (electron-updater pelo servidor escolhido), `app/iniciar-com-o-sistema.js`; a pasta `/downloads/atualizacoes` em `desktop-download.js`; na sala, `public/atualizacao-app.js` (o aviso e a seção "Aplicativo de mesa") |
+| Downloads da página inicial (todos os sistemas e o APK) | `desktop-download.js` (`SISTEMAS`) + `public/download.js`; a versão de cada build em `app/dist/versao.json` |
+| Aplicativo Android (WebView, chamada em segundo plano) | `android/` (`MainActivity`, `ChamadaService`); na sala, `public/app-android.js` e os ganchos em `sala.js`; o APK por `scripts/empacotar-android.cjs`; tudo em `docs/android.md` |
 | Tema claro/escuro, temas prontos, cores exatas | `public/tema.js` (no `<head>` de toda página) + tokens em `public/tema.css` |
 | Quem está vendo cada tela | `espectadores.js` (servidor) + `public/espectadores.js` |
 | Sugestão de `@` no chat | `public/mencoes.js` |
@@ -114,6 +126,7 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
 `docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`; a
 tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plano-webcodecs.md`; o
-Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`; amigos, mensagens
-diretas, o cartão de perfil, as conquistas e o início de quem tem conta — e o que fica guardado e
-o que não fica —, em `docs/amigos-e-perfil.md`.
+Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`; o aplicativo Android
+— construir, a chave de assinatura, distribuir e o que ele não resolve —, em `docs/android.md`;
+amigos, mensagens diretas, o cartão de perfil, as conquistas e o início de quem tem conta — e o
+que fica guardado e o que não fica —, em `docs/amigos-e-perfil.md`.

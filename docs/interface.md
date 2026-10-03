@@ -40,7 +40,7 @@ a 2560 px**.
 4. **Um desenho por coisa.** O mesmo microfone, o mesmo fone cortado, a mesma régua, o mesmo
    cartão de painel em todo lugar. Quem aprende num canto reconhece no outro.
 5. **Nunca rola para o lado, nunca se sobrepõe.** Em nenhuma largura. `npm run test:layout`
-   confere isso em 27 estados, de 320 a 2560 px.
+   confere isso em 32 estados, de 320 a 2560 px.
 6. **Vídeo é sempre escuro.** O palco, o quadradinho e a grade ficam escuros mesmo no tema
    claro (`.contexto-escuro`), como no Discord: uma tela compartilhada cercada de branco ofusca.
 7. **Ação clara, saída cinza.** O botão principal é violeta cheio; "Fechar" e "Cancelar" são
@@ -306,6 +306,18 @@ o rótulo é o nome fixo da coisa ("Microfone", "Câmera", "Ouvir").
 Confirmação no próprio botão: o botão de copiar vira **"Copiado"** (ou "Link copiado!") em verde
 por um instante e volta — no Estúdio, 1,6 s. Não há aviso no canto para isso.
 
+**Botão de três estados** (o repetir do canal de música: desligado, a fila, a faixa): um botão só,
+que gira na ordem de todo tocador. O desenho diz o modo (as setas; com um "1" dentro quando é só a
+faixa), um ponto embaixo e a cor `--accent-texto` dizem que está ligado, `aria-pressed` é
+verdadeiro em qualquer modo ligado, e o `aria-label` leva o modo ("Repetir: a fila inteira"),
+porque "pressionado" sozinho não diria qual. Ao servidor vai o modo que a pessoa viu como o
+próximo, e não "avance um": dois cliques ao mesmo tempo chegam ao mesmo lugar.
+
+**A ação que está acontecendo vira o seu "parar".** Na mesa de sons, o botão do som que **você**
+tocou vira "Parar" (o quadrado cheio e o rótulo, em `--accent-texto`, sobre `--accent-suave-hi`)
+enquanto o som dura, com uma barra de 3 px andando embaixo até o fim. Com menos movimento a barra
+some — com a animação de 1 ms, ela diria "acabou" no começo do som.
+
 ### 4.2 Campos
 
 `input`, `select`, `textarea`: borda de 7% de tinta, fundo `--bg-0`, `--r-md`. No foco a caixa
@@ -548,6 +560,30 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
 - **Menus** do início caem do botão que os abriu (4.6) e confirmam no próprio menu o que é de
   perigo ("Remover a Bia dos amigos? A pessoa não é avisada.").
 
+### 4.15 O que está tocando
+
+O cartão do canal de música tem duas linhas: em cima a capa (48 px) e, ao lado, o rótulo
+("TOCANDO", com o ponto verde pulsando, ou "PAUSADO" em âmbar) dividindo a linha com o tempo, o
+título e o autor; embaixo, a linha de um tocador — pausar, pular, a barra de progresso e o
+repetir. Os controles ao lado do título o espremiam em dez letras numa coluna de 266 px. O rótulo
+perdeu o "AGORA" pelo mesmo motivo: o ponto pulsando já diz que é agora.
+
+### 4.16 O aplicativo, visto de dentro
+
+- **"Aplicativo de mesa"** é uma seção das configurações que só existe no aplicativo de mesa
+  (`atualizacao-app.js` a mostra). Tem a versão e o estado dela ("instalado · se atualiza
+  sozinho", "a 1.3.0 está pronta: reinicie para usar") com **Procurar atualização** ao lado, e os
+  interruptores **Atualizar sozinho** e **Abrir ao entrar no computador**. No portátil, a dica diz o
+  que ele não faz e onde está o instalador. O menu do aplicativo fica escondido (Alt mostra), e o
+  que só existe num menu escondido ninguém descobre.
+- **A atualização do instalado não aparece enquanto desce.** Só o fim: um aviso, uma vez ("Ele se
+  instala quando você fechar o Nexo"), e o botão **Reiniciar** no topo. O progresso só aparece
+  quando foi a pessoa que pediu.
+- **Os downloads da página inicial**: o sistema de quem lê ganha o botão cheio, na forma que se
+  instala (o instalador antes do portátil; o APK num Android), e as outras formas viram pílulas
+  de 32 px embaixo ("Linux .deb"), com tamanho e versão no `title`. Dentro do aplicativo Android a
+  seção não aparece: seria oferecer o que a pessoa já tem.
+
 ---
 
 ## 5. Leiaute da sala
@@ -645,7 +681,7 @@ Regras que valem para toda peça nova:
 9. **Janela baixa** também é caso: painéis altos tiram a frase de explicação abaixo de 560 px
    de altura; o celular deitado tem de caber.
 
-`npm run test:layout` é a prova: 27 estados da sala (painéis, configurações, Estúdio, chat
+`npm run test:layout` é a prova: 32 estados da sala (painéis, configurações, Estúdio, chat
 fechado, lateral recolhida, foco no chat…) em até 22 larguras de 320 a 2560 px, mais as páginas
 de fora. Painel ou estado novo entra na lista dele (`ESTADOS` em `tests/layout-browser.cjs`).
 

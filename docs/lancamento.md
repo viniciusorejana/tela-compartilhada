@@ -257,8 +257,11 @@ O que **de fato** falta, e é tudo pequeno:
 3. **Os instaladores do aplicativo precisam chegar lá por fora.** Desde `3668834` o agente de
    áudio vai **dentro** do aplicativo de Windows, então o servidor não precisa mais dele. O que
    continua fora do Git (`app/dist/` está no `.gitignore`) são os próprios instaladores —
-   `SalaCompartilhada.exe`, `Nexo.AppImage` e `Nexo.dmg`. Sem eles no `app/dist` do VPS, o
-   servidor **roda**, e a página apenas não oferece o download.
+   `Nexo-Setup.exe` e `SalaCompartilhada.exe` (Windows), `Nexo.AppImage` e `Nexo.deb` (Linux),
+   `Nexo.dmg` e `Nexo.apk` (Android, [`android.md`](android.md)) —, e, desde 02/10/2026, as
+   fichas `latest.yml` e `latest-linux.yml` com o `Nexo-Setup.exe.blockmap`, que é de onde o
+   aplicativo instalado se atualiza sozinho. Sem eles no `app/dist` do VPS, o servidor **roda**,
+   a página apenas não oferece o download, e o instalado não acha versão nova.
 4. ~~**arm64 não é aceito.**~~ **Resolvido em 24/09/2026**: `baixar-livekit.cjs` e
    `baixar-musica.cjs` declaram o `linux-arm64` com hash conferido, e `deploy/oracle/` instala
    tudo numa máquina do Oracle Cloud grátis, x86 ou ARM (roteiro em `docs/oracle.md`).

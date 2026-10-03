@@ -614,9 +614,21 @@ https://youtu.be/...                       link também: cole e pronto
 !parar                                     esvazia a fila e tira o bot da chamada (= !sair)
 !fila  !agora  !embaralhar  !remover <n>   a fila
 !mover <de> <para>  !esvaziar              reordena; esvaziar mantém a que está tocando
+!repetir                                   liga e desliga repetir a faixa (!loop também serve)
+!repetir fila  !repetir não                gira a fila inteira; desliga (!loopfila liga e desliga a fila)
 !volume 0-150                              volume do bot para a sala inteira (fica guardado)
 !ajuda
 ```
+
+**Repetir.** No cartão do que está tocando, o botão ao lado da barra gira entre os três modos de
+todo tocador: desligado, **a fila inteira** (cada faixa que acaba volta para o fim) e **só esta
+faixa** (o desenho ganha um "1"); o ponto embaixo diz que está ligado, e a duração da fila ganha
+"repetindo". **Pular continua pulando**: com a faixa em repetição, a pulada não volta; com a fila,
+ela segue no ciclo. Uma faixa que falhou ou tocou menos de 5 segundos não se repete (seria um laço
+de erros, ou de conexões com o site). Diferente do volume, o modo **morre com o bot**: repetir é
+desta fila, e quem pede música uma hora depois de um `!parar` não espera que ela toque para sempre.
+Numa fila que gira por horas, o endereço do áudio vence (o do YouTube vale umas seis); passado três
+horas, a faixa é procurada de novo antes de tocar.
 
 **A fila se mexe pela tela.** No painel do canal, cada faixa tem capa, duração e quem pediu,
 uma alça para **arrastar** (mouse ou dedo) e, na linha em que se está, **tocar a seguir** e um
@@ -830,16 +842,25 @@ Apertar de novo **troca** o som em vez de somar mais um por cima. A regra é por
 
 | Quem aperta | O que se ouve |
 | --- | --- |
-| Você, o mesmo som cinco vezes | só o último — cada toque corta o anterior |
+| Você, o mesmo som de novo enquanto ele toca | silêncio — o botão dele virou **Parar** (abaixo) |
 | Você, um som e depois outro | só o segundo |
 | Você e outra pessoa, ao mesmo tempo | **os dois juntos** — isso é a mesa funcionando |
 
 Duas pessoas tocando coisas diferentes é metade da graça; uma pessoa tocando quatro ao mesmo
-tempo é sempre engano ou bagunça. E não havia como desfazer: não existe botão de "parar", então
-cinco cliques num som de trinta segundos deixavam a sala inteira debaixo de uma parede de
-barulho até ela acabar sozinha. Medido antes: **cinco cópias vivas ao mesmo tempo**; depois,
-uma. O limite de dois cliques por segundo do servidor continua valendo, e ainda permitia umas
-setenta cópias no ar.
+tempo é sempre engano ou bagunça. Cinco cliques num som de trinta segundos deixavam a sala
+inteira debaixo de uma parede de barulho até ela acabar sozinha. Medido antes: **cinco cópias
+vivas ao mesmo tempo**; depois, uma. O limite de dois cliques por segundo do servidor continua
+valendo, e ainda permitia umas setenta cópias no ar.
+
+### Parar o seu som no meio
+
+Enquanto o **seu** som toca, o botão dele vira **Parar**, com uma barra embaixo andando até o fim
+do som. Clicar corta o som **para todo mundo** — na hora para você, e para os outros quando o
+aviso chega, como chegou o de tocar. Só o próprio som: o servidor manda cortar o canal de quem
+pediu (a conexão, nunca um nome vindo do pedido), então ninguém para o som dos outros, nem
+mandando o pedido direto. E o aviso leva qual som era: um "parar" atrasado pela rede não derruba o
+som novo que a mesma pessoa tocou logo depois. Vale mesmo com a mesa restringida pelo dono —
+travar o tocar não pode prender ninguém num som que já começou.
 
 O corte tem um desligamento de **40 ms** em vez de ser seco: cortar uma onda no meio estala, e
 um estalo assusta mais que o som. Quem decide é o navegador de cada ouvinte, sozinho — os avisos
@@ -940,11 +961,26 @@ npm install            # so na primeira vez
 npm run empacotar
 ```
 
-Sai um arquivo unico em **`app/dist/SalaCompartilhada.exe`**, com cerca de 96 MB. Nao precisa de
-instalacao: dois cliques e abre. O `AgenteAudio.exe` vai embutido dentro dele -- quem recebe nao
-baixa mais nada.
+Saem duas formas do mesmo build, com cerca de 96 MB cada:
+
+- **`app/dist/Nexo-Setup.exe`, o instalador.** Pergunta a pasta, instala só para quem está
+  usando (sem pedir administrador; dá para escolher todos os usuários), põe atalho no menu Iniciar
+  e na área de trabalho, deixa um desinstalador e **se atualiza sozinho** pelo próprio servidor:
+  a versão nova desce em silêncio e se instala quando o Nexo fecha. Ao lado dele saem
+  `Nexo-Setup.exe.blockmap` (para a atualização baixar só o que mudou) e `latest.yml` (a ficha
+  da versão) -- os três vão juntos para o `app/dist` do servidor.
+- **`app/dist/SalaCompartilhada.exe`, o portátil.** Nao precisa de instalacao: dois cliques e
+  abre. Ele nao se atualiza sozinho (ele É o arquivo); avisa da versão nova e baixa o `.exe` novo.
+  `npm run empacotar:portatil` gera só ele.
+
+O `AgenteAudio.exe` vai embutido nos dois -- quem recebe nao baixa mais nada.
 
 O tamanho e do Chromium, que vai inteiro no pacote. E o preco de a sala rodar fora do navegador.
+
+No aplicativo instalado, **Configurações → Aplicativo de mesa** mostra a versão, procura
+atualização na hora e liga ou desliga "Atualizar sozinho" e "Abrir ao entrar no computador" (que
+abre o Nexo minimizado). As mesmas opções estão no menu **Sala** (`Alt` mostra). O que cada peça
+faz está em `app/atualizacao-automatica.js` e `app/iniciar-com-o-sistema.js`.
 
 > Compile o agente **antes** de empacotar. O empacotamento le
 > `native/audio-agent/x64/Release/AgenteAudio.exe`; se ele nao existir, o pacote sai sem o agente
@@ -956,9 +992,15 @@ Cada um é construído **no próprio sistema**: o `electron-builder` não gera `
 e o AppImage precisa de ferramentas de Linux.
 
 ```bash
-npm --prefix app run empacotar:linux   # app/dist/Nexo.AppImage
+npm --prefix app run empacotar:linux   # app/dist/Nexo.AppImage, app/dist/Nexo.deb e latest-linux.yml
 npm --prefix app run empacotar:mac     # app/dist/Nexo.dmg
 ```
+
+No Linux saem as duas formas: o **AppImage**, que roda em qualquer distribuição, e o **`.deb`**,
+que instala no sistema (menu de aplicativos, `/opt/Nexo`) para Debian, Ubuntu e derivados. As duas
+se atualizam sozinhas pelo `latest-linux.yml`: o AppImage é trocado no lugar, e o `.deb` pede a
+senha de administrador (pkexec) para trocar o pacote, como todo `.deb`. O macOS não se atualiza
+sozinho -- sem assinatura, o atualizador do Mac recusa a troca.
 
 Três armadilhas, todas já encontradas na prática:
 
@@ -1636,25 +1678,37 @@ quando o mouse fica parado sobre um botão que foi clicado. Mouse/toque os revel
 o foco por teclado mantém os controles acessíveis enquanto você os utiliza.
 
 
-## Download público do aplicativo portátil
+## Download público dos aplicativos
 
-A página inicial lista **o que existe no servidor**, um botão por sistema, com tamanho e data
-de cada build. Os nomes e as rotas são fixos, declarados em `desktop-download.js`:
+A página inicial lista **o que existe no servidor**, com tamanho, versão e data de cada build.
+Os nomes e as rotas são fixos, declarados em `desktop-download.js`:
 
 | sistema | arquivo | rota | build |
 |---|---|---|---|
-| Windows x64 | `SalaCompartilhada.exe` | `/downloads/SalaCompartilhada.exe` | `npm --prefix app run empacotar` |
+| Windows x64, instalador | `Nexo-Setup.exe` | `/downloads/Nexo-Setup.exe` | `npm --prefix app run empacotar` |
+| Windows x64, portátil | `SalaCompartilhada.exe` | `/downloads/SalaCompartilhada.exe` | `npm --prefix app run empacotar` |
 | Linux x64 | `Nexo.AppImage` | `/downloads/Nexo.AppImage` | `npm --prefix app run empacotar:linux` |
+| Linux x64 (Debian, Ubuntu) | `Nexo.deb` | `/downloads/Nexo.deb` | `npm --prefix app run empacotar:linux` |
 | macOS | `Nexo.dmg` | `/downloads/Nexo.dmg` | `npm --prefix app run empacotar:mac` |
+| Android | `Nexo.apk` | `/downloads/Nexo.apk` | `npm run android:empacotar` ([`docs/android.md`](docs/android.md)) |
 
 Cada um é **opcional**: quem compila só o Windows serve só o Windows, e os botões dos outros
-não aparecem — um link de download que responde 503 é pior do que um link ausente. A página
-põe em primeiro lugar o sistema provável de quem está lendo e deixa os outros discretos.
+não aparecem — um link de download que responde 503 é pior do que um link ausente. O sistema
+provável de quem está lendo ganha o botão cheio, na forma que se instala (o instalador antes do
+portátil; o APK para quem abre a página num Android); as outras formas viram pílulas embaixo
+dele. Dentro do aplicativo Android, a seção não aparece.
 
-**Os três não saem da mesma máquina.** O `electron-builder` não gera `.dmg` no Windows, e o
-AppImage precisa de ferramentas de Linux; cada um é construído no seu sistema (ou em CI) e o
-arquivo copiado para `app/dist`. O servidor entrega somente esses três caminhos; a pasta
-`app/dist` não fica exposta para navegação.
+**Eles não saem da mesma máquina.** O `electron-builder` não gera `.dmg` no Windows, o AppImage
+e o `.deb` precisam de ferramentas de Linux, e o APK do Android SDK; cada um é construído no seu
+sistema (ou em CI) e o arquivo copiado para `app/dist`. O servidor entrega somente esses
+caminhos; a pasta `app/dist` não fica exposta para navegação.
+
+**A atualização sozinha** do aplicativo instalado lê `/downloads/atualizacoes/`, também de lista
+fechada: as fichas `latest.yml` (Windows) e `latest-linux.yml` (Linux), que o `electron-builder`
+escreve ao lado dos instaladores, o `Nexo-Setup.exe.blockmap` e os próprios instaladores. Não há
+servidor central de atualizações: cada Nexo instalado procura no servidor que a pessoa escolheu,
+na primeira vez 15 segundos depois de a sala abrir e depois a cada 4 horas. Sem as fichas no
+`app/dist`, a procura recebe 404 e nada acontece.
 
 **O agente de áudio existe só no Windows, e é ele o diferencial do aplicativo.** Ele é o
 programa que sabe excluir uma árvore de processos da captura — é essa exclusão que impede a
@@ -1675,7 +1729,8 @@ pelo Git.
 
 ### Versão do aplicativo e aviso de atualização
 
-A versão é a do `app/package.json` (hoje **1.1.0**). Os scripts `empacotar` rodam, depois do
+A versão é a do `app/package.json` (hoje **1.2.0**; a do Android é a do
+`android/app/build.gradle`). Os scripts `empacotar` rodam, depois do
 `electron-builder`, o `app/escrever-versao.js`, que anota a versão do build em
 `app/dist/versao.json` — uma linha por sistema, porque cada um sai de uma máquina diferente. É
 **desse arquivo**, e não do `package.json`, que o servidor tira a versão que anuncia: anunciar
@@ -1686,10 +1741,11 @@ em outra máquina copia junto a linha dele no `versao.json`.
 Para lançar uma versão: suba o `version` do `app/package.json`, rode o `empacotar` de cada
 sistema e ponha os arquivos (e o `versao.json`) no `app/dist` do servidor.
 
-No aplicativo, a sala compara a própria versão (que o `preload.js` expõe como
-`appNativo.versao`) com a do build servido para aquele sistema. Se houver uma mais nova,
-aparece um botão verde **Atualizar** no topo — nada abre sozinho, porque a pessoa está no meio
-de uma chamada. O botão mostra a versão nova, a atual e o link; **Depois** esconde o aviso por
+No aplicativo portátil (e no Android), a sala compara a própria versão (que o `preload.js` expõe
+como `appNativo.versao`; no Android, o user agent) com a do build servido para aquele sistema. Se
+houver uma mais nova, aparece um botão verde **Atualizar** no topo — nada abre sozinho, porque a
+pessoa está no meio de uma chamada. O instalado não passa por aqui: ele se atualiza sozinho, e a
+sala só mostra **Reiniciar** quando a versão nova já desceu. O botão mostra a versão nova, a atual e o link; **Depois** esconde o aviso por
 três dias para aquela versão. Um aplicativo anterior à 1.1.0 não conta a versão, e por isso é
 tratado como 1.0.0: quem já tem o `.exe` antigo também é avisado. A versão aparece ainda no
 diagnóstico da conexão (e no relatório técnico que vai junto de um relato) e na tela de
