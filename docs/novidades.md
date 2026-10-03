@@ -57,6 +57,10 @@ testes de navegador usam isso por padrão, porque todo navegador de teste é "pr
 
 | edição | data | título |
 |---|---|---|
+| 6 | 03/10/2026 | O início e a conta sem sair da chamada |
+| 5 | 02/10/2026 | Repetir, parar o som e o Nexo no celular |
+| 4 | 01/10/2026 | Amigos, conversas e um perfil só seu |
+| 3 | 29/09/2026 | A sala no seu OBS |
 | 2 | 28/09/2026 | A tela pela placa de vídeo |
 | 1 | 26/09/2026 | O Nexo de cara nova |
 

@@ -21,6 +21,19 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 6,
+      data: '2026-10-03',
+      titulo: 'O início e a conta sem sair da chamada',
+      resumo: 'Amigos, mensagens, conquistas e a sua conta abrem por cima da sala, e a chamada segue de pé por baixo.',
+      // Só o ponto no botão: muda onde a marca do Nexo leva, mas ninguém precisa ser interrompido por isso.
+      aparecer: false,
+      itens: [
+        { icone: 'casa', titulo: 'O início por cima da sala', texto: 'Toque na marca do Nexo, ou aperte Ctrl K, para ver os amigos, as mensagens, as conquistas e o cartão de perfil sem sair. O microfone, a câmera e a tela ficam como estão, e “Voltar para a sala” fecha tudo.', onde: 'A marca do Nexo, na barra lateral da sala' },
+        { icone: 'fone', titulo: 'Microfone e fone à mão', texto: 'A barra no alto da camada tem o microfone, o ouvir e o sair. Ctrl+Shift+M e Ctrl+Shift+D também valem lá dentro, e o “voltar” do navegador fecha a camada, e não a sala.', onde: 'No alto da camada do início' },
+        { icone: 'conta', titulo: 'A conta sem sair da sala', texto: 'Senha, código de recuperação e dados abrem na mesma camada. Só criar uma conta, sair da conta ou apagá-la ainda tira você da chamada — e o Nexo avisa antes.', onde: 'Meu perfil → Senha e conta' }
+      ]
+    },
+    {
       id: 5,
       data: '2026-10-02',
       titulo: 'Repetir, parar o som e o Nexo no celular',
