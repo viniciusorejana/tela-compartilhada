@@ -29,6 +29,7 @@ npm run test:painel   # painel de telemetria
 npm run test:soundboard
 npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
+npm run test:inicio   # a busca do início (campo com sugestões) e os balões que aguentam o teclado do celular
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
 npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @

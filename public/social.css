@@ -150,3 +150,5 @@
 .nx-menu-campo { display:flex; gap:6px; padding:4px; }
 .nx-menu-campo input { flex:1; min-width:0; min-height:var(--ctl-p); margin:0; padding:0 10px; border:1px solid rgb(var(--tinta) / 9%); border-radius:var(--r-sm); background:var(--bg-0); color:var(--text); font:var(--fs-sm)/1 "Segoe UI",system-ui,sans-serif; box-shadow:none; }
 .nx-menu-campo input:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+/* No celular, 16 px (6.7): com menos, o iOS aproxima a página inteira ao focar o campo do menu. */
+@media (max-width:760px) { .nx-menu-campo input { font-size:16px; } }

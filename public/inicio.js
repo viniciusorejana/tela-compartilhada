@@ -231,16 +231,20 @@
       menu.append(b);
     }
     menu.hidden = false;
-    // Ancorado no botão que o abriu, nunca a uma distância fixa da quina (4.6).
-    const r = ancora.getBoundingClientRect();
+    posicionarMenu();
+    (menu.querySelector('input') || menu.querySelector('button'))?.focus();
+  }
+  // Ancorado no botão que o abriu, nunca a uma distância fixa da quina (4.6).
+  function posicionarMenu() {
+    if (menu.hidden || !ancoraDoMenu) return;
+    const r = ancoraDoMenu.getBoundingClientRect();
     const largura = menu.offsetWidth, altura = menu.offsetHeight;
     let x = Math.min(r.left, window.innerWidth - largura - 12);
     let y = r.bottom + 6;
     if (y + altura > window.innerHeight - 12) y = Math.max(12, r.top - altura - 6);
-    if (ancora.closest('.ini-trilho')) { x = r.right + 8; y = Math.min(r.top, window.innerHeight - altura - 12); }
+    if (ancoraDoMenu.closest('.ini-trilho')) { x = r.right + 8; y = Math.min(r.top, window.innerHeight - altura - 12); }
     menu.style.left = `${Math.max(12, Math.round(x))}px`;
     menu.style.top = `${Math.round(y)}px`;
-    (menu.querySelector('input') || menu.querySelector('button'))?.focus();
   }
   document.addEventListener('pointerdown', evento => {
     if (!menu.hidden && !menu.contains(evento.target) && !ancoraDoMenu?.contains(evento.target)) fecharMenu();
@@ -254,7 +258,10 @@
       evento.preventDefault();
     }
   });
-  window.addEventListener('resize', () => { fecharMenu(); esconderDica(); });
+  // Mudar o tamanho da janela reposiciona o menu, e não o fecha: no celular, o teclado que sobe
+  // para o campo do menu muda o tamanho da janela, e fechar ali levava o campo e o teclado junto
+  // -- "Entrar numa sala pelo código" abria e sumia antes de dar para digitar.
+  window.addEventListener('resize', () => { posicionarMenu(); esconderDica(); });
 
   // ---------- Navegar entre as seções ----------
   const TITULOS = { amigos: 'Amigos', adicionar: 'Amigos', conversa: 'Conversa', perfil: 'Personalizar perfil', conquistas: 'Conquistas' };
@@ -300,11 +307,8 @@
 
   // ---------- Gaveta (celular) ----------
   function fecharGaveta() { app.classList.remove('menu-aberto'); $('iniVeu').hidden = true; $('menuBtn').setAttribute('aria-expanded', 'false'); }
-  $('menuBtn').onclick = () => {
-    const aberto = app.classList.toggle('menu-aberto');
-    $('iniVeu').hidden = !aberto;
-    $('menuBtn').setAttribute('aria-expanded', String(aberto));
-  };
+  function abrirGaveta() { app.classList.add('menu-aberto'); $('iniVeu').hidden = false; $('menuBtn').setAttribute('aria-expanded', 'true'); }
+  $('menuBtn').onclick = () => (app.classList.contains('menu-aberto') ? fecharGaveta() : abrirGaveta());
   $('iniVeu').onclick = fecharGaveta;
 
   // ---------- Amigos ----------
@@ -729,33 +733,103 @@
     }));
   }
 
-  // ---------- Buscar (Ctrl K) ----------
-  function abrirBusca() {
-    const lugar = elemento('div');
-    lugar.style.display = 'grid';
-    lugar.style.gap = '2px';
-    const resultados = termo => {
-      const t = termo.trim().toLowerCase();
-      const amigos = S.estado.amigos.amigos.filter(p => !t || [p.apelido, p.apelidoMeu, p.codigo].some(v => String(v || '').toLowerCase().includes(t))).slice(0, 8);
-      const salas = salasRecentes().filter(s => t && s.includes(t.replace(/^#/, ''))).slice(0, 4);
-      lugar.replaceChildren(
-        ...amigos.map(p => { const b = botao({ classe: 'nx-menu-item', rotulo: p.apelidoMeu || p.apelido, ico: 'mensagem', fazer: () => { fecharMenu(); abrirConversa(p.codigo); } }); return b; }),
-        ...salas.map(s => botao({ classe: 'nx-menu-item', rotulo: `#${s}`, ico: 'sala', fazer: () => irParaSala(s) }))
-      );
-      if (!lugar.childElementCount) lugar.append(elemento('p', 'nx-menu-titulo', t ? 'Nada com esse nome.' : 'Seus amigos aparecem aqui.'));
-    };
-    abrirMenu($('buscaBtn'), [{ campo: { placeholder: 'Nome do amigo ou #sala', rotulo: 'Ir', aoDigitar: resultados, aoSalvar: valor => {
-      const primeiro = lugar.querySelector('button');
-      if (primeiro) { primeiro.click(); return null; }
-      const codigo = normalizarCodigo(valor);
-      if (CODIGO_DE_SALA.test(codigo)) { irParaSala(codigo); return null; }
-      return 'Nada com esse nome.';
-    } } }, { lugar }]);
-    resultados('');
+  // ---------- Buscar ----------
+  // O campo do alto da lateral, com as sugestões caindo embaixo dele (o padrão de combobox: o foco
+  // fica no campo e as setas andam pela lista). Antes era um botão que abria outro campo num balão
+  // -- um campo para chegar a outro --, e no celular o balão fechava com o teclado que subia.
+  const busca = $('buscaCampo');
+  const buscaLugar = $('buscaLugar');
+  const buscaLista = $('buscaLista');
+  let sugestoes = [];
+  let escolhida = -1;
+  function marcarSugestao(i) {
+    escolhida = i;
+    sugestoes.forEach((s, j) => s.el.setAttribute('aria-selected', String(j === i)));
+    const el = sugestoes[i]?.el;
+    if (!el) { busca.removeAttribute('aria-activedescendant'); return; }
+    busca.setAttribute('aria-activedescendant', el.id);
+    // Rola só a lista. `scrollIntoView` rolaria também a página, que corta o que passa dela.
+    if (el.offsetTop < buscaLista.scrollTop) buscaLista.scrollTop = el.offsetTop;
+    else if (el.offsetTop + el.offsetHeight > buscaLista.scrollTop + buscaLista.clientHeight) buscaLista.scrollTop = el.offsetTop + el.offsetHeight - buscaLista.clientHeight;
   }
-  $('buscaBtn').onclick = abrirBusca;
+  function fecharBusca() {
+    buscaLista.hidden = true;
+    busca.setAttribute('aria-expanded', 'false');
+    marcarSugestao(-1);
+  }
+  function seguirSugestao(sugestao) {
+    fecharBusca();
+    busca.value = '';
+    sugestao.fazer();
+  }
+  function sugerir() {
+    const texto = busca.value.trim();
+    const t = texto.toLowerCase();
+    const amigos = S.estado.amigos.amigos.filter(p => !t || [p.apelido, p.apelidoMeu, p.codigo].some(v => String(v || '').toLowerCase().includes(t))).slice(0, 8);
+    const salas = salasRecentes().filter(s => t && s.includes(t.replace(/^#/, ''))).slice(0, 4);
+    const lista = [
+      ...amigos.map(p => ({ rotulo: p.apelidoMeu || p.apelido, ico: 'mensagem', fazer: () => abrirConversa(p.codigo) })),
+      ...salas.map(s => ({ rotulo: `#${s}`, ico: 'sala', fazer: () => irParaSala(s) }))
+    ];
+    // Um código que não está nas recentes também leva à sala -- quando não é o nome de um amigo,
+    // ou quando começa com "#". Sem botão de "Ir", era o Enter que fazia isso, sem ninguém saber.
+    const codigo = normalizarCodigo(texto);
+    if (CODIGO_DE_SALA.test(codigo) && !salas.includes(codigo) && (!amigos.length || texto.startsWith('#'))) {
+      lista.push({ rotulo: `Entrar na sala #${codigo}`, ico: 'porta', fazer: () => irParaSala(codigo) });
+    }
+    sugestoes = lista.map((s, i) => {
+      const el = botao({ classe: 'nx-menu-item', rotulo: s.rotulo, ico: s.ico, fazer: () => seguirSugestao(s) });
+      el.id = `buscaSugestao${i}`;
+      el.setAttribute('role', 'option');
+      el.tabIndex = -1;
+      return { el, fazer: s.fazer };
+    });
+    buscaLista.replaceChildren(...sugestoes.map(s => s.el));
+    if (!sugestoes.length) buscaLista.append(elemento('p', 'nx-menu-titulo', t ? 'Nada com esse nome.' : 'Seus amigos aparecem aqui.'));
+    buscaLista.hidden = false;
+    busca.setAttribute('aria-expanded', 'true');
+    // Com algo digitado, o Enter leva à primeira; com o campo vazio, a nenhuma.
+    marcarSugestao(t && sugestoes.length ? 0 : -1);
+  }
+  busca.addEventListener('focus', sugerir);
+  busca.addEventListener('input', sugerir);
+  // Tocar no campo que já tem o foco (depois do Esc) abre a lista de novo.
+  busca.addEventListener('click', () => { if (buscaLista.hidden) sugerir(); });
+  busca.addEventListener('keydown', evento => {
+    if (evento.isComposing) return;
+    if (evento.key === 'ArrowDown' || evento.key === 'ArrowUp') {
+      evento.preventDefault();
+      if (buscaLista.hidden) { sugerir(); return; }
+      const n = sugestoes.length;
+      if (!n) return;
+      const passo = evento.key === 'ArrowDown' ? 1 : -1;
+      marcarSugestao(escolhida < 0 ? (passo > 0 ? 0 : n - 1) : (escolhida + passo + n) % n);
+    } else if (evento.key === 'Enter') {
+      evento.preventDefault();
+      if (!buscaLista.hidden && sugestoes[escolhida]) seguirSugestao(sugestoes[escolhida]);
+    } else if (evento.key === 'Escape') {
+      // O Esc fecha a lista, depois apaga o que foi digitado, e só então chega à gaveta.
+      if (!buscaLista.hidden) fecharBusca();
+      else if (busca.value) busca.value = '';
+      else return;
+      evento.stopPropagation();
+    }
+  });
+  // Clicar numa sugestão não tira o foco do campo: a lista não corre o risco de fechar entre o
+  // apertar e o soltar, e quem usa o teclado continua nele.
+  buscaLista.addEventListener('mousedown', evento => evento.preventDefault());
+  // Fecha ao tocar fora, ou quando o foco sai pelo Tab. Perder o foco sem destino (o toque numa
+  // sugestão, num navegador que não foca botão) não fecha: a lista sumiria antes do clique.
+  document.addEventListener('pointerdown', evento => { if (!buscaLista.hidden && !buscaLugar.contains(evento.target)) fecharBusca(); });
+  buscaLugar.addEventListener('focusout', evento => { if (evento.relatedTarget && !buscaLugar.contains(evento.relatedTarget)) fecharBusca(); });
   document.addEventListener('keydown', evento => {
-    if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === 'k') { evento.preventDefault(); abrirBusca(); }
+    // Ctrl K continua levando à busca; só não aparece mais escrito no campo.
+    if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === 'k') {
+      evento.preventDefault();
+      if (window.matchMedia('(max-width:760px)').matches) abrirGaveta();
+      busca.focus();
+      if (buscaLista.hidden) sugerir();
+    }
     if (evento.key === 'Escape' && app.classList.contains('menu-aberto')) fecharGaveta();
   });
 

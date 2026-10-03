@@ -42,8 +42,17 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 
 /* ---------- A lateral ---------- */
 .ini-lateral { grid-area:lateral; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg-1); border-right:1px solid var(--line); }
-.ini-busca { --nx-fundo:var(--bg-0); --nx-fundo-hover:var(--bg-3); --nx-cor:var(--faint); --nx-cor-hover:var(--text-2); flex:none; justify-content:flex-start; gap:8px; margin:12px 10px 8px; min-height:var(--ctl-m); padding:0 10px; border-radius:var(--r-md); font-size:var(--fs-sm); font-weight:500; box-shadow:inset 0 0 0 1px var(--line); }
-.ini-busca span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* A busca: o campo acende inteiro no foco, como o filtro dos amigos (4.2), e as sugestões são um
+   `.nx-menu` preso embaixo dele pelo CSS -- não pelo JS --, então o teclado do celular que sobe e
+   muda a janela não o tira do lugar. */
+.ini-busca-lugar { position:relative; flex:none; margin:12px 10px 8px; }
+.ini-busca { display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:var(--r-md); background:var(--bg-0); box-shadow:inset 0 0 0 1px var(--line); color:var(--faint); transition:box-shadow var(--dur) var(--curva); }
+.ini-busca:focus-within { box-shadow:inset 0 0 0 1px var(--accent),0 0 0 3px var(--accent-suave-hi); }
+.ini-busca input { flex:1; min-width:0; min-height:var(--ctl-m); padding:0; border:0; background:transparent; color:var(--text); font-size:var(--fs-sm); outline:none; }
+.ini-busca input::placeholder { color:var(--faint); text-overflow:ellipsis; }
+.ini-busca-lista { position:absolute; top:calc(100% + 6px); left:0; right:0; width:auto; max-height:min(360px,60vh); }
+/* A sugestão que o Enter escolhe, andando pelas setas: o mesmo fundo do passar o mouse. */
+.ini-busca-lista .nx-menu-item[aria-selected="true"] { --nx-fundo:var(--nx-fundo-hover); --nx-cor:var(--nx-cor-hover); }
 .ini-secoes { display:grid; gap:2px; padding:4px 8px 6px; }
 .ini-secao { --nx-fundo-hover:rgb(var(--tinta) / 4.5%); --nx-cor:var(--muted); --nx-cor-hover:var(--text); justify-content:flex-start; gap:12px; min-height:42px; padding:0 12px; border-radius:var(--r-md); font-size:var(--fs-md); }
 .ini-secao span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

@@ -15,6 +15,7 @@
     "test:soundboard": "node tests/soundboard-browser.cjs",
     "test:painel": "node tests/painel-browser.cjs",
     "test:contas": "node tests/contas-browser.cjs",
+    "test:inicio": "node tests/inicio-browser.cjs",
     "test:planos": "node tests/planos-browser.cjs",
     "test:fila": "node tests/fila-e-perfil-browser.cjs",
     "test:volume": "node tests/volume-browser.cjs",

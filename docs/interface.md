@@ -412,6 +412,11 @@ fundo `--bg-1`, `--r-lg`, `--sombra-menu`, entrada `nexo-surgir`. Itens de `--ct
 mouse de 5,9% de tinta, ação de perigo em `--danger-texto`. **O menu é ancorado pelo JS no botão
 que o abriu**, nunca a uma distância fixa da quina — a lateral recolhe e no celular é gaveta.
 
+**Mudar o tamanho da janela reposiciona o menu, e não o fecha.** No celular, o teclado que sobe para
+um campo do menu muda o tamanho da janela: fechar no `resize` levava o campo e o teclado junto, e
+"Entrar numa sala pelo código" abria e sumia antes de dar para digitar (`posicionarMenu`, no
+`inicio.js`). A prova é `npm run test:inicio`, que encolhe a janela com o balão aberto.
+
 ### 4.7 Avisos no canto (`toast.js`)
 
 Um canto só, a mesma peça em toda página: ícone num quadrado de 34 px, título e linha de meta,
@@ -643,6 +648,14 @@ colunas a 1440 e entre 1012 e 1100 px, e uma só (a prévia em cima) a 1250 e no
 
 A trilha mostra as salas recentes deste aparelho (`localStorage`, até 12), cada uma com a cor
 sorteada pelo código e as duas iniciais; o número verde no canto é quantos amigos estão nela agora.
+
+**A busca** (o alto da lateral) é um campo de verdade, no padrão de combobox: digita-se nele mesmo,
+e as sugestões caem embaixo — vazio, os amigos; com texto, os amigos e as salas recentes que
+batem, e "Entrar na sala #código" quando o texto é um código e não um amigo (ou começa com `#`). O
+foco fica no campo: as setas andam pela lista, Enter segue a marcada (com texto, a primeira), Esc
+fecha a lista e, de novo, apaga o texto; tocar fora fecha. A lista é um `.nx-menu` preso ao campo
+pelo CSS, então o teclado do celular não a tira do lugar. Antes era um botão que abria outro campo
+num balão, com "Ctrl K" escrito ao lado — o atalho continua, só não ocupa mais o campo.
 
 **Consultas de contêiner** onde a peça divide a janela com outras e a largura da janela mente:
 
