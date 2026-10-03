@@ -157,11 +157,12 @@
   });
 
   // ---------- Ir para a página da conta ----------
-  // A página da conta abre NESTA janela, e não numa aba nova: no aplicativo, a aba nova era o
-  // navegador, fora do Nexo. Vale para "Senha e conta" e para todo "Criar conta grátis" de dentro
-  // da chamada. Ir até lá tira a pessoa da chamada, então um painel avisa antes; confirmado, ela
-  // sai direito (`sairDaSala`, sala.js) com `?voltar=`: a página da conta oferece a volta, e o
-  // cadastro termina de volta nesta sala, já com a conta.
+  // A página da conta não abre numa aba nova: no aplicativo, a aba nova era o navegador, fora do
+  // Nexo. Quem tem conta a vê por cima da sala, sem sair da chamada (inicio-na-sala.js: "Senha e
+  // conta", e qualquer link para /conta). Quem vai CRIAR uma conta muda quem entrou na sala, e isso
+  // só se faz fora dela: a página abre NESTA janela, depois de um painel que avisa que a pessoa sai
+  // da chamada; confirmado, ela sai direito (`sairDaSala`, sala.js) com `?voltar=`, e o cadastro
+  // termina de volta nesta sala, já com a conta.
   const TEXTOS_DA_IDA = {
     conta: {
       titulo: 'Sair da sala para ir à conta?',
@@ -175,6 +176,10 @@
     }
   };
   function confirmarIrParaConta() {
+    // Quem tem conta vê a página dela por cima da sala (inicio-na-sala.js), sem sair da chamada:
+    // senha, código de recuperação e dados não pedem mais que a pessoa saia. O aviso abaixo fica para
+    // quem vai criar uma conta (que muda quem entrou na sala) e para quando a camada não puder abrir.
+    if (window.NexoConta?.atual()?.conta && window.NexoInicioNaSala?.abrir({ pagina: 'conta' })) return;
     const textos = TEXTOS_DA_IDA[window.NexoConta?.atual()?.conta ? 'conta' : 'criar'];
     $('irParaContaTitulo').textContent = textos.titulo;
     $('irParaContaTexto').textContent = textos.texto;

@@ -8,6 +8,10 @@
   <meta name="description" content="Crie sua conta no Nexo para abrir salas, transmitir a 60 quadros e ter um perfil que segue você.">
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <script src="/tema.js"></script>
+  <!-- Dentro da sala (a camada do início, inicio-na-sala.js) esta página roda num quadro: este arquivo
+       é o que ela precisa para saber disso. No <head> e síncrono, como o tema, para a página já
+       nascer no modo certo. Fora da camada, não faz nada. -->
+  <script src="/camada.js"></script>
   <link rel="stylesheet" href="/home.css">
   <link rel="stylesheet" href="/conta.css">
   <!-- A borda, o nome, a moldura e o fundo do cartão no topo da conta (conta.js, vestirIdentidade). -->
@@ -156,6 +160,7 @@
         <summary>Apagar a conta</summary>
         <form id="formApagar" novalidate>
           <p class="conta-sub">Apaga a conta, o perfil, os ajustes e todas as sessões na hora. Não dá para desfazer, e o nome de usuário fica livre para outra pessoa. As cópias de segurança expiram em até 30 dias.</p>
+          <p class="conta-sub" id="apagarNaSala" hidden>Esta conta abriu a chamada em que você está: apagá-la também tira você da sala.</p>
           <label for="apagarSenha">Senha</label>
           <input id="apagarSenha" type="password" autocomplete="current-password" maxlength="128" required>
           <label class="conta-confirma"><input type="checkbox" id="apagarCerteza"> Entendo que não dá para desfazer</label>

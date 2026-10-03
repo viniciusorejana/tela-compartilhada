@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="/novidades.css">
 <link rel="stylesheet" href="/reativo.css">
 <link rel="stylesheet" href="/estudio.css">
+<link rel="stylesheet" href="/inicio-na-sala.css">
 </head>
 <body>
 
@@ -469,6 +470,7 @@
           <div><dt>Abrir e fechar o chat</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>H</kbd></dd></div>
           <div><dt>Abrir as configurações</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd></dd></div>
           <div><dt>Status e reações</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd></dd></div>
+          <div><dt>Abrir o início e buscar um amigo (a chamada continua)</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd></div>
           <div><dt>Falar enquanto segura (push-to-talk ligado)</dt><dd><kbd>Espaço</kbd></dd></div>
         </dl>
         <span class="config-rotulo">No chat e na música</span>
@@ -769,6 +771,33 @@
 <div class="modal hidden" id="moderarPanel" role="dialog" aria-modal="true" aria-labelledby="moderarTitulo"><div class="modal-card"><h2 id="moderarTitulo">Moderar <span id="moderarNome"></span></h2><p class="modal-sub">Você modera esta sala agora, então estas ações são suas. Elas valem enquanto a sala existir: nada disso fica guardado depois que ela fecha, um minuto após a última pessoa sair.</p><div class="moderar-acoes" id="moderarAcoes"><button type="button" id="moderarRemover">Remover da sala</button><button type="button" id="moderarBanir">Remover e bloquear por 1 h</button><button type="button" id="moderarBanirTrancar">Bloquear e trancar a sala</button><button class="secondary" type="button" id="moderarTransferir">Passar a sala para esta pessoa</button></div><p class="modal-sub moderar-dica" id="moderarTransferirDica" hidden>Esta pessoa entrou sem conta, e a sala só passa para quem tem uma: sem conta, um F5 já a tornaria outra pessoa, e a sala ficaria sem dono.</p><p class="modal-sub" id="moderarRessalva">Quem tem conta é bloqueado pela conta: nem um F5 nem outro apelido o trazem de volta. Quem não tem é bloqueado pelo nome — e voltar com outro nome escapa. Para isso, bloqueie e tranque: quem chegar depois cai na fila de pedidos.</p><section class="room-security" id="roomSecurity"><strong>Controles da sala</strong><label class="toggle-line" for="roomLocked"><span>Trancar novas entradas<small>Quem já está dentro continua e pode reconectar.</small></span><input id="roomLocked" type="checkbox"></label><label class="toggle-line" for="allowScreen"><span>Participantes podem compartilhar tela</span><input id="allowScreen" type="checkbox" checked></label><label class="toggle-line" for="allowSoundboard"><span>Participantes podem usar a mesa de sons</span><input id="allowSoundboard" type="checkbox" checked></label><label class="toggle-line" for="allowMusic"><span>Participantes podem pedir músicas</span><input id="allowMusic" type="checkbox" checked></label><label class="toggle-line" for="allowObs"><span>Participantes podem levar a sala para o OBS<small>Desligado, o que eles têm no OBS sai do ar na hora.</small></span><input id="allowObs" type="checkbox" checked></label><div id="joinRequests" class="join-requests"></div></section><div class="moderar-removidos"><strong>Bloqueados agora</strong><div id="moderarListaRemovidos"></div></div><div id="moderarStatus" class="relato-status" role="status"></div><div class="modal-actions"><button class="secondary" type="button" data-close="moderarPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="diagnosticsPanel" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle"><div class="modal-card diagnostics-card"><h2 id="diagnosticsTitle">Diagnóstico da conexão</h2><p class="modal-sub">O que está chegando, o que não está e por quê.</p><div id="diagnosticsSummary" role="status"></div><div id="diagnosticsCards"></div><details class="avancado"><summary>Relatório técnico (para colar num chat)</summary><pre id="diagnosticsReport"></pre><small class="modal-sub">Sem IPs, credenciais, mensagens ou o endereço privado da sala.</small></details><div class="relato"><label class="relato-titulo" for="relatoTexto">Continua errado? Conte o que aconteceu</label><textarea id="relatoTexto" rows="3" maxlength="500" placeholder="Ex.: a tela do Fulano ficou preta quando eu entrei pelo celular."></textarea><p class="relato-aviso">Vão junto <strong>o relatório técnico acima</strong>, a sala e o nome com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite nem senhas.</p><div id="relatoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendRelatoBtn">Enviar para o desenvolvedor</button><button class="secondary" type="button" id="copyDiagnosticsBtn">Copiar diagnóstico</button><button class="secondary" type="button" data-close="diagnosticsPanel">Fechar</button></div></div></div>
 <div class="modal hidden" id="waitingPanel" role="dialog" aria-modal="true" aria-labelledby="waitingTitle"><div class="modal-card waiting-card"><span class="waiting-spinner" aria-hidden="true"></span><h2 id="waitingTitle">Aguardando entrada</h2><p class="modal-sub" id="waitingText">A sala está trancada. Quem abriu recebeu seu pedido.</p><div class="modal-actions"><a class="botao-link" id="waitingConta" href="/conta" hidden>Tenho conta: abrir a sala</a><button class="secondary" id="waitingCancel" type="button">Cancelar e voltar</button></div></div></div>
+<!-- A camada do início (inicio-na-sala.js): o início de quem tem conta, e a página da conta, por cima
+     da sala, sem sair da chamada. Vem depois de todos os painéis de propósito: room-ui.js trata como
+     o de cima o último [role="dialog"] visível, e é ele quem põe a sala em `inert`, prende o Tab e
+     fecha no Esc. Não tem `.modal-card`, então não ganha o X dele -- a camada tem o "Voltar para a
+     sala". O <iframe> nasce a cada abertura (inicio-na-sala.js). -->
+<div class="modal camada hidden" id="camadaPanel" role="dialog" aria-modal="true" aria-labelledby="camadaTitulo">
+  <h2 class="so-leitor" id="camadaTitulo">Início do Nexo</h2>
+  <div class="camada-barra" role="group" aria-label="A chamada continua">
+    <span class="camada-sala"><i class="camada-ponto" aria-hidden="true"></i><span class="camada-sala-textos"><strong id="camadaSalaNome">#sala</strong><small id="camadaSalaMeta">A chamada continua</small></span></span>
+    <div class="camada-acoes">
+      <button id="camadaMic" class="secondary camada-btn" type="button" aria-pressed="false" title="Ativar o microfone"><svg class="ico ico-ligado" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><svg class="ico ico-cortado" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9.3V5a3 3 0 0 0-5.9-.7M9 9v5a3 3 0 0 0 5 2.2M5 10v2a7 7 0 0 0 10.7 6M19 12v-2M12 19v3M8 22h8M3 3l18 18"/></svg><span class="camada-rotulo">Microfone</span></button>
+      <button id="camadaOuvir" class="secondary camada-btn" type="button" aria-pressed="false" title="Ensurdecer: silenciar toda a sala"><svg class="ico ico-ligado" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-3a8 8 0 0 1 16 0v3"/><path d="M4 14H2v6h4v-7H4m16 1h2v6h-4v-7h2"/></svg><svg class="ico ico-cortado" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 14v-3a8 8 0 0 1 .8-3.5M9 3.6A8 8 0 0 1 20 11v3M5 14H3v6h4v-5M20 14h2v6h-4v-3M3 3l18 18"/></svg><span class="camada-rotulo">Ouvir</span></button>
+      <button id="camadaSair" class="danger camada-btn" type="button" title="Sair da sala"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12q10-10 20 0v5h-5v-5a13 13 0 0 0-10 0v5H2z"/></svg><span class="camada-rotulo">Sair</span></button>
+      <button id="camadaVoltar" class="camada-btn camada-voltar" type="button" title="Voltar para a sala (Esc)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="camada-rotulo-longo">Voltar para a sala</span><span class="camada-rotulo-curto">Sala</span></button>
+    </div>
+  </div>
+  <div class="camada-corpo" id="camadaCorpo">
+    <div class="camada-espera" id="camadaEspera" role="status"><span class="waiting-spinner" aria-hidden="true"></span><p id="camadaEsperaTexto">Abrindo…</p><button type="button" class="secondary" id="camadaTentar" hidden>Tentar de novo</button></div>
+  </div>
+</div>
+<!-- O que a camada pergunta antes de tirar a pessoa da chamada: entrar em outra sala sai desta. Vem
+     depois da camada, para ficar por cima dela (sala.css, `.acima-da-camada`). -->
+<div class="modal acima-da-camada hidden" id="camadaSairPanel" role="dialog" aria-modal="true" aria-labelledby="camadaSairTitulo"><div class="modal-card aviso-de-saida-card">
+  <h2 id="camadaSairTitulo">Sair desta sala?</h2>
+  <p class="modal-sub" id="camadaSairTexto"></p>
+  <div class="modal-actions"><button type="button" class="danger" id="camadaSairConfirmar">Sair e entrar</button><button type="button" data-close="camadaSairPanel">Continuar na sala</button></div>
+</div></div>
 <div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><strong>Meu status</strong><div class="presence-options"><button type="button" data-presence="">Disponível</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button></div></div>
 <div id="chatMsgMenu" class="msg-menu hidden" role="menu" aria-label="Ações da mensagem"></div>
 <div id="musicaFilaMenu" class="msg-menu menu-lista hidden" role="menu" aria-label="Ações da faixa"></div>
@@ -823,6 +852,7 @@
 <script src="/conversa.js"></script>
 <script src="/editor-cartao.js"></script>
 <script src="/social-sala.js"></script>
+<script src="/inicio-na-sala.js"></script>
 <script src="/room-ui.js"></script>
 <!-- Depois de room-ui.js de propósito: ele adota como modal todo [role="dialog"] que existir
      quando roda, e o das novidades cuida de si mesmo (ver o topo de novidades.js). -->

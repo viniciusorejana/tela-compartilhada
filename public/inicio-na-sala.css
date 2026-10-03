@@ -1,0 +1,59 @@
+/* A camada do início dentro da sala (inicio-na-sala.js): o início de quem tem conta, ou a página da
+ * conta, por cima da sala, com a chamada seguindo por baixo.
+ *
+ * É um painel como os outros (`.modal`, docs/interface.md 4.5) que ocupa a janela inteira: a sala
+ * vira `inert` e o Esc e o foco são de room-ui.js. No alto, uma barra com o que a chamada precisa
+ * à mão -- microfone, ouvir, sair e a volta --, porque a barra de controles da sala fica por baixo.
+ * Embaixo, o <iframe> da página. Cor, sempre pelos tokens de tema.css. */
+
+/* Acima dos painéis (80) e abaixo do que precisa aparecer sobre tudo: o aviso de pedido de entrada
+   (110), as novidades (125) e os avisos no canto (130). O que a camada pergunta (entrar noutra
+   sala sai desta) vem acima dela. */
+.modal.camada { display:grid; grid-template-rows:auto minmax(0,1fr); place-items:stretch; padding:0; background:var(--bg); z-index:84; }
+.modal.acima-da-camada { z-index:86; }
+.modal-card.aviso-de-saida-card { width:min(100%,440px); }
+
+/* ---------- A barra da chamada ---------- */
+.camada-barra { display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0; padding:8px 14px; padding-top:calc(8px + env(safe-area-inset-top)); background:var(--bg-1); box-shadow:0 1px 0 var(--line-2); }
+.camada-sala { display:flex; align-items:center; flex:1 1 auto; gap:10px; min-width:0; }
+.camada-ponto { flex:none; width:8px; height:8px; border-radius:50%; background:var(--online); box-shadow:0 0 0 3px color-mix(in srgb, var(--online) 22%, transparent); transition:background-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.camada-barra.instavel .camada-ponto { background:var(--aviso); box-shadow:0 0 0 3px color-mix(in srgb, var(--aviso) 22%, transparent); }
+.camada-sala-textos { display:flex; flex-direction:column; min-width:0; line-height:1.2; }
+.camada-sala-textos strong { overflow:hidden; font-size:var(--fs-md); text-overflow:ellipsis; white-space:nowrap; }
+.camada-sala-textos small { overflow:hidden; color:var(--faint); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; text-overflow:ellipsis; white-space:nowrap; }
+.camada-acoes { display:flex; align-items:center; flex:none; gap:8px; }
+
+/* Os mesmos botões da barra de controles da sala, no tamanho de uma barra de cima: o estado está no
+   desenho cortado e na cor, e o rótulo é o nome fixo da coisa (docs/interface.md 4.1). */
+.camada-btn { display:inline-flex; align-items:center; gap:7px; min-height:var(--ctl-m); padding:0 13px; font-size:var(--fs-md); white-space:nowrap; }
+.camada-btn .ico { width:17px; height:17px; }
+.camada-btn .ico-cortado { display:none; }
+#camadaMic[aria-pressed="false"] .ico-ligado,#camadaOuvir[aria-pressed="true"] .ico-ligado { display:none; }
+#camadaMic[aria-pressed="false"] .ico-cortado,#camadaOuvir[aria-pressed="true"] .ico-cortado { display:inline-block; }
+#camadaMic[aria-pressed="true"] { background:color-mix(in srgb, var(--accent) 25.1%, transparent); color:var(--accent-texto); }
+#camadaMic[aria-pressed="false"],#camadaOuvir[aria-pressed="true"] { background:color-mix(in srgb, var(--danger) 8.6%, transparent); color:var(--danger-texto); }
+.camada-rotulo-curto { display:none; }
+
+/* ---------- A página ---------- */
+.camada-corpo { position:relative; min-height:0; background:var(--bg); }
+.camada-quadro { position:absolute; inset:0; width:100%; height:100%; border:0; background:var(--bg); opacity:0; transition:opacity var(--dur) var(--curva); }
+.camada-quadro.pronto { opacity:1; }
+.camada-espera { position:absolute; inset:0; display:grid; align-content:center; justify-items:center; gap:4px; padding:24px; text-align:center; color:var(--muted); }
+.camada-espera .waiting-spinner { margin-bottom:10px; }
+.camada-espera.falhou .waiting-spinner { display:none; }
+.camada-espera p { margin:0 0 10px; font-size:var(--fs-md); }
+
+/* ---------- Celular ---------- */
+/* Abaixo de 760 (a fronteira do celular) só os desenhos: o nome de cada botão continua para o
+   leitor de tela, e a meta da sala (quantas pessoas, há quanto tempo) cede o lugar. */
+@media (max-width:760px) {
+  .camada-barra { gap:8px; padding:6px 10px; padding-top:calc(6px + env(safe-area-inset-top)); }
+  .camada-acoes { gap:6px; }
+  .camada-btn { padding:0 10px; }
+  .camada-rotulo { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .camada-sala-textos small { display:none; }
+}
+@media (max-width:430px) {
+  .camada-rotulo-longo { display:none; }
+  .camada-rotulo-curto { display:inline; }
+}

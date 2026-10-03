@@ -748,6 +748,10 @@
     atualizarBotoes();
     const decisao = decidir({ edicoes: EDICOES, lida, automatico });
     if (!decisao.abrir) return;
+    // O início aberto por cima da sala (camada.js) é uma segunda cópia desta página dentro de uma
+    // chamada: a apresentação já teve a sua vez na porta de entrada da sala, e abrir de novo, ali
+    // dentro, seria um vídeo tocando por cima da voz dos amigos.
+    if (root.NexoCamada?.embutida) return;
     // Na sala, só enquanto a pessoa está na tela de entrada. Quem já entrou (clicou antes de a
     // conta responder) está na conversa: fica o ponto no botão, e a próxima visita mostra.
     const podeAbrir = () => contexto !== 'sala' || !doc.getElementById('nameGate').classList.contains('hidden');

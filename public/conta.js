@@ -15,6 +15,11 @@
     const valor = parametros.get('voltar') || '';
     return /^\/(?!\/)[\w\-/]*$/.test(valor) ? valor : '';
   })();
+  // Dentro de uma chamada, esta página abre por cima da sala (camada.js, a camada de
+  // inicio-na-sala.js) para quem tem conta: senha, código de recuperação e dados sem sair dela.
+  // Aqui dentro, "voltar" é fechar a camada, e o que muda quem a pessoa é (sair da conta, apagá-la)
+  // tira a pessoa da sala também.
+  const camada = window.NexoCamada?.embutida ? window.NexoCamada : null;
   if (parametros.get('motivo') === 'criar-sala') {
     $('motivoDaVisita').textContent = 'Para abrir uma sala, entre ou crie uma conta grátis. Quem recebe o seu convite entra sem conta nenhuma.';
   }
@@ -314,8 +319,27 @@
     vestirIdentidade();
     pintarFoto();
     preencherPerfil();
-    $('voltarParaSala').hidden = !voltar;
+    $('voltarParaSala').hidden = !voltar && !camada;
     if (voltar) $('voltarParaSala').href = voltar;
+  }
+  if (camada) {
+    $('voltarParaSala').href = '#';
+    $('voltarParaSala').addEventListener('click', evento => { evento.preventDefault(); camada.avisar('fechar'); });
+    $('sair').textContent = 'Sair da conta e da sala';
+    $('apagarNaSala').hidden = false;
+    // O cabeçalho leva ao início, mas dentro do quadro: trocar de página sem acrescentar histórico.
+    for (const link of document.querySelectorAll('.home-nav a')) {
+      link.href = camada.link('/');
+      link.addEventListener('click', evento => { evento.preventDefault(); camada.irPara('/'); });
+    }
+    document.addEventListener('keydown', evento => {
+      const foco = document.activeElement;
+      // Um campo com texto (a senha que se digita) não perde o que tem com um Esc. Só campo de
+      // texto de verdade: a caixa "Entendo que não dá para desfazer" tem `value` sem ninguém escrever.
+      const escrevendo = foco?.matches?.('textarea,input:not([type]),input[type="text"],input[type="search"],input[type="password"],input[type="url"],input[type="tel"]') && foco.value;
+      if (evento.key !== 'Escape' || evento.isComposing || escrevendo) return;
+      camada.avisar('fechar');
+    });
   }
 
   // Quem veio de uma sala volta para ela: é para isso que entrou. Quem entrou pela porta da frente
@@ -324,6 +348,8 @@
   function concluir(novaConta, novoPerfil) {
     conta = novaConta;
     if (novoPerfil) perfil = novoPerfil;
+    // Dentro da camada a pessoa já está na sala: o que sobra a fazer é voltar para ela.
+    if (camada) { camada.avisar('fechar'); return; }
     location.assign(voltar || '/');
   }
 
@@ -354,6 +380,8 @@
     formulario.reset();
     conta = null;
     csrf = '';
+    // A conta que abriu a chamada não existe mais: a sala sai junto (inicio-na-sala.js).
+    if (camada) { camada.avisar('conta-encerrada'); return; }
     $('motivoDaVisita').textContent = 'Sua conta foi apagada, com o perfil e as sessões. Para entrar numa sala você não precisa de conta.';
     mostrar('semConta');
     abrirAba('abaEntrar', false);
@@ -379,6 +407,7 @@
     await api('/api/conta/sair', { metodo: 'POST' });
     conta = null;
     csrf = '';
+    if (camada) { camada.avisar('conta-encerrada'); return; }
     mostrar('semConta');
     abrirAba('abaEntrar');
   };
@@ -391,7 +420,9 @@
     const c = r.ok ? r.dados.conta : null;
     const premium = c?.plano === 'premium' && (!c.planoAte || c.planoAte > Date.now());
     if (window.NexoTema) { NexoTema.definirPermissao(r.dados?.planosLigados === false || premium); NexoTema.aplicar(); }
-    if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; cartao = r.dados.cartao || null; pintarConta(); mostrar('comConta'); return; }
+    if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; cartao = r.dados.cartao || null; pintarConta(); mostrar('comConta'); camada?.avisar('pronto', { pagina: 'conta' }); return; }
+    // A camada só abre para quem tem conta: sem ela aqui, a sessão terminou no meio da chamada.
+    if (camada) { camada.avisar('sem-conta'); return; }
     mostrar('semConta');
   })();
 })();

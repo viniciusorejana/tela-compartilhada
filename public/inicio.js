@@ -12,6 +12,11 @@
   const V = window.NexoVitrine;
   const app = $('inicioApp');
   const CODIGO_DE_SALA = /^[a-z0-9_-]{4,32}$/;
+  // Dentro de uma chamada, esta mesma página abre por cima da sala (public/camada.js, a camada de
+  // inicio-na-sala.js): a chamada segue conectada por baixo. Aqui, "entrar" numa sala é pedir à sala
+  // -- que pergunta, porque entrar sai da chamada --, e nada navega a página para fora do quadro.
+  const camada = window.NexoCamada?.embutida ? window.NexoCamada : null;
+  const ehMinhaSala = codigo => Boolean(camada) && String(codigo || '').toLowerCase() === camada.sala;
 
   let conta = null;
   let secao = 'amigos';
@@ -79,7 +84,10 @@
     const partes = codigo.split(/[-_]+/).filter(Boolean);
     return (partes.length > 1 ? partes[0][0] + partes[1][0] : codigo.replace(/[-_]/g, '').slice(0, 2)).toUpperCase();
   };
-  const irParaSala = codigo => { window.location.href = `/${encodeURIComponent(codigo)}/sala`; };
+  const irParaSala = codigo => {
+    if (camada) { camada.avisar('entrar', { sala: codigo }); return; }
+    window.location.href = `/${encodeURIComponent(codigo)}/sala`;
+  };
   // Quem dos meus amigos está em cada sala agora.
   function amigosPorSala() {
     const mapa = new Map();
@@ -113,18 +121,28 @@
   function pintarTrilho() {
     const lugar = $('trilhoSalas');
     const porSala = amigosPorSala();
-    lugar.replaceChildren(...salasRecentes().map(codigo => {
+    const salas = salasRecentes();
+    // A sala da chamada vem primeiro e marcada, mesmo que o navegador não a tenha guardado.
+    if (camada) salas.splice(0, salas.length, camada.sala, ...salas.filter(codigo => !ehMinhaSala(codigo)));
+    lugar.replaceChildren(...salas.map(codigo => {
       const link = elemento('a', 'ini-sala nx-social', siglaDaSala(codigo));
       link.href = `/${encodeURIComponent(codigo)}/sala`;
       link.style.setProperty('--cor-sala', NexoPerfil.corDoNome(codigo));
       const aqui = porSala.get(codigo)?.pessoas || [];
-      link.setAttribute('aria-label', `Sala #${codigo}${aqui.length ? `, com ${nomesJuntos(aqui)}` : ''}`);
+      link.setAttribute('aria-label', `Sala #${codigo}${ehMinhaSala(codigo) ? ', a sua sala agora' : ''}${aqui.length ? `, com ${nomesJuntos(aqui)}` : ''}`);
+      if (camada) {
+        // Nenhum clique navega o quadro: a sala decide (e pergunta, se for outra).
+        link.addEventListener('click', evento => { evento.preventDefault(); irParaSala(codigo); });
+        if (ehMinhaSala(codigo)) { link.classList.add('aqui'); link.setAttribute('aria-current', 'true'); }
+      }
       if (aqui.length) {
         const marca = elemento('span', 'ini-sala-amigos', String(aqui.length));
         marca.setAttribute('aria-hidden', 'true');
         link.append(marca);
       }
-      const detalhe = aqui.length ? `${nomesJuntos(aqui)} ${aqui.length === 1 ? 'está' : 'estão'} aqui agora` : 'Sala recente';
+      const detalhe = ehMinhaSala(codigo)
+        ? (aqui.length ? `Sua sala agora, com ${nomesJuntos(aqui)}` : 'Sua sala agora')
+        : aqui.length ? `${nomesJuntos(aqui)} ${aqui.length === 1 ? 'está' : 'estão'} aqui agora` : 'Sala recente';
       link.addEventListener('mouseenter', () => mostrarDica(link, `#${codigo}`, detalhe));
       link.addEventListener('focus', () => mostrarDica(link, `#${codigo}`, detalhe));
       link.addEventListener('mouseleave', esconderDica);
@@ -132,6 +150,7 @@
       link.addEventListener('contextmenu', evento => {
         evento.preventDefault();
         esconderDica();
+        if (ehMinhaSala(codigo)) { abrirMenu(link, [{ titulo: `#${codigo}` }, { rotulo: 'Voltar para a sala', ico: 'porta', fazer: () => irParaSala(codigo) }]); return; }
         abrirMenu(link, [{ titulo: `#${codigo}` }, { rotulo: 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(codigo) }, { rotulo: 'Tirar das recentes', ico: 'lixo', perigo: true, fazer: () => esquecerSala(codigo) }]);
       });
       return link;
@@ -319,7 +338,7 @@
     const presenca = S.presencaDe(p.codigo);
     const linha = elemento('span', 'nx-amigo-detalhe');
     if (presenca.status !== 'offline' && presenca.sala) {
-      const sala = elemento('span', 'sala', `Na sala #${presenca.sala.codigo}`);
+      const sala = elemento('span', 'sala', ehMinhaSala(presenca.sala.codigo) ? 'Na sua sala' : `Na sala #${presenca.sala.codigo}`);
       linha.append(sala);
     } else {
       linha.append(elemento('span', '', C.NOMES_DOS_STATUS[presenca.status] || 'Desconectado'));
@@ -342,7 +361,7 @@
       { titulo: p.apelidoMeu || p.apelido },
       { rotulo: 'Ver o perfil', ico: 'perfil', fazer: () => abrirCartao(p.codigo) },
       { rotulo: 'Mandar mensagem', ico: 'mensagem', fazer: () => abrirConversa(p.codigo) },
-      ...(presenca.sala ? [{ rotulo: presenca.sala.trancada ? `Pedir para entrar em #${presenca.sala.codigo}` : `Entrar em #${presenca.sala.codigo}`, ico: 'porta', fazer: () => irParaSala(presenca.sala.codigo) }] : []),
+      ...(presenca.sala && !ehMinhaSala(presenca.sala.codigo) ? [{ rotulo: presenca.sala.trancada ? `Pedir para entrar em #${presenca.sala.codigo}` : `Entrar em #${presenca.sala.codigo}`, ico: 'porta', fazer: () => irParaSala(presenca.sala.codigo) }] : []),
       { rotulo: 'Chamar para uma sala', ico: 'chamar', fazer: () => chamarParaSala(p.codigo, ancora) },
       { rotulo: p.apelidoMeu ? 'Trocar o apelido' : 'Dar um apelido', ico: 'lapis', fazer: () => apelidar(p, ancora) },
       'separador',
@@ -388,7 +407,7 @@
     linha.append(textos);
     const acoes = elemento('span', 'nx-amigo-acoes');
     if (tipo === 'amigo') {
-      if (presenca.sala) acoes.append(botao({ classe: 'nx-botao pequeno sucesso', rotulo: presenca.sala.trancada ? 'Pedir' : 'Entrar', ico: 'porta', titulo: presenca.sala.trancada ? `Pedir para entrar em #${presenca.sala.codigo}` : `Entrar em #${presenca.sala.codigo}`, fazer: () => irParaSala(presenca.sala.codigo) }));
+      if (presenca.sala && !ehMinhaSala(presenca.sala.codigo)) acoes.append(botao({ classe: 'nx-botao pequeno sucesso', rotulo: presenca.sala.trancada ? 'Pedir' : 'Entrar', ico: 'porta', titulo: presenca.sala.trancada ? `Pedir para entrar em #${presenca.sala.codigo}` : `Entrar em #${presenca.sala.codigo}`, fazer: () => irParaSala(presenca.sala.codigo) }));
       acoes.append(botao({ classe: 'nx-icone cheio', titulo: 'Mandar mensagem', ico: 'mensagem', fazer: () => abrirConversa(p.codigo) }));
       acoes.append(botao({ classe: 'nx-icone cheio', titulo: 'Mais opções', ico: 'mais', fazer: evento => menuDoAmigo(p, evento.currentTarget) }));
     } else if (tipo === 'recebido') {
@@ -474,7 +493,9 @@
     const rostos = elemento('div', 'ini-rostos');
     for (const p of pessoas.slice(0, 5)) rostos.append(C.avatar({ nome: p.apelido, perfil: p.perfil, vitrine: p.vitrine, tamanho: 'pequeno' }));
     rostos.append(elemento('span', 'ini-rostos-nomes', nomesJuntos(pessoas)));
-    caixa.append(topo, rostos, botao({ classe: `nx-botao pequeno${sala.trancada ? ' secundario' : ''}`, rotulo: sala.trancada ? 'Pedir para entrar' : 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(sala.codigo) }));
+    // A sala da chamada não tem "entrar": a pessoa já está nela, e o botão a leva de volta.
+    const minha = ehMinhaSala(sala.codigo);
+    caixa.append(topo, rostos, botao({ classe: `nx-botao pequeno${sala.trancada && !minha ? ' secundario' : ''}`, rotulo: minha ? 'Voltar para a sala' : sala.trancada ? 'Pedir para entrar' : 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(sala.codigo) }));
     return caixa;
   }
   function pintarAgora() {
@@ -561,17 +582,22 @@
   // ---------- Chamar para uma sala ----------
   function chamarParaSala(codigo, ancora) {
     const nome = S.nomeDe(codigo);
-    const recentes = salasRecentes().slice(0, 6);
+    // Dentro de uma chamada, a primeira opção é a sala em que a pessoa está: chamar um amigo para
+    // ela é o que quase sempre se quer daqui.
+    const recentes = (camada ? [camada.sala, ...salasRecentes().filter(sala => !ehMinhaSala(sala))] : salasRecentes()).slice(0, 6);
     const convidar = async (sala, entrar) => {
       const r = await S.convidar(codigo, sala);
       if (!r.ok) { aviso({ tom: 'erro', icone: 'erro', titulo: 'O convite não saiu', detalhe: r.error }); return; }
       if (entrar) { irParaSala(sala); return; }
-      aviso({ tom: 'ok', icone: 'convite', titulo: `Convite enviado para ${nome}`, detalhe: `#${sala}`, fecharEm: 3500, acoes: [{ rotulo: 'Entrar na sala', principal: true, fazer: () => irParaSala(sala) }] });
+      aviso({ tom: 'ok', icone: 'convite', titulo: `Convite enviado para ${nome}`, detalhe: `#${sala}`, fecharEm: 3500, acoes: ehMinhaSala(sala) ? [] : [{ rotulo: 'Entrar na sala', principal: true, fazer: () => irParaSala(sala) }] });
     };
     abrirMenu(ancora, [
       { titulo: `Chamar ${nome} para` },
-      { rotulo: 'Uma sala nova (e entrar nela)', ico: 'nova', fazer: () => convidar(novoCodigo(), true) },
-      ...recentes.map(sala => ({ rotulo: `#${sala}`, ico: 'sala', fazer: () => convidar(sala, false) }))
+      // "Uma sala nova (e entrar nela)" tira a pessoa da chamada, e o convite sairia antes da
+      // pergunta da sala: cancelar deixaria o amigo chamado para uma sala vazia. De dentro de uma
+      // chamada, o convite é para a sala dela ou para uma que já exista.
+      ...(camada ? [] : [{ rotulo: 'Uma sala nova (e entrar nela)', ico: 'nova', fazer: () => convidar(novoCodigo(), true) }]),
+      ...recentes.map(sala => ({ rotulo: ehMinhaSala(sala) ? `#${sala} (esta sala)` : `#${sala}`, ico: 'sala', fazer: () => convidar(sala, false) }))
     ]);
   }
 
@@ -597,7 +623,7 @@
     const amigo = S.pessoa(codigo) || p;
     if (p.relacao === 'amigos') {
       acoes.append(botao({ classe: 'nx-botao pequeno', rotulo: 'Mensagem', ico: 'mensagem', fazer: () => { fecharCartao(); abrirConversa(codigo); } }));
-      if (presenca?.sala) acoes.append(botao({ classe: 'nx-botao pequeno sucesso', rotulo: presenca.sala.trancada ? 'Pedir para entrar' : 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(presenca.sala.codigo) }));
+      if (presenca?.sala && !ehMinhaSala(presenca.sala.codigo)) acoes.append(botao({ classe: 'nx-botao pequeno sucesso', rotulo: presenca.sala.trancada ? 'Pedir para entrar' : 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(presenca.sala.codigo) }));
       acoes.append(botao({ classe: 'nx-icone cheio', titulo: 'Mais opções', ico: 'mais', fazer: evento => menuDoAmigo(amigo, evento.currentTarget) }));
     } else if (p.relacao === 'recebido') {
       acoes.append(botao({ classe: 'nx-botao pequeno', rotulo: 'Aceitar pedido', ico: 'certo', fazer: async () => { await S.aceitar(codigo); fecharCartao(); } }));
@@ -698,9 +724,17 @@
       { rotulo: 'Definir uma frase', ico: 'lapis', fazer: () => { irPara('perfil'); editor.focarFrase(); } },
       { rotulo: `Copiar meu código (${conta.codigo})`, ico: 'copiar', fazer: () => navigator.clipboard?.writeText(conta.codigo).catch(() => {}) },
       'separador',
-      { rotulo: 'Sair da conta', ico: 'sair', perigo: true, fazer: async () => { await fetch('/api/conta/sair', { method: 'POST', credentials: 'same-origin' }).catch(() => {}); window.location.href = '/'; } }
+      // Dentro de uma chamada, sair da conta tira a pessoa da sala também (inicio-na-sala.js): a
+      // conta é quem a abriu, e a pergunta vem antes.
+      camada
+        ? { rotulo: 'Sair da conta e da sala', ico: 'sair', perigo: true, confirmar: { texto: 'Sair da conta também tira você desta sala: a chamada acaba para você.', rotulo: 'Sair da conta e da sala', fazer: sairDaConta } }
+        : { rotulo: 'Sair da conta', ico: 'sair', perigo: true, fazer: sairDaConta }
     ]);
   };
+  async function sairDaConta() {
+    await fetch('/api/conta/sair', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    if (camada) camada.avisar('conta-encerrada'); else window.location.href = '/';
+  }
 
 
 
@@ -824,16 +858,49 @@
   // sugestão, num navegador que não foca botão) não fecha: a lista sumiria antes do clique.
   document.addEventListener('pointerdown', evento => { if (!buscaLista.hidden && !buscaLugar.contains(evento.target)) fecharBusca(); });
   buscaLugar.addEventListener('focusout', evento => { if (evento.relatedTarget && !buscaLugar.contains(evento.relatedTarget)) fecharBusca(); });
+  function focarBusca() {
+    if (window.matchMedia('(max-width:760px)').matches) abrirGaveta();
+    busca.focus();
+    if (buscaLista.hidden) sugerir();
+  }
   document.addEventListener('keydown', evento => {
     // Ctrl K continua levando à busca; só não aparece mais escrito no campo.
     if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === 'k') {
       evento.preventDefault();
-      if (window.matchMedia('(max-width:760px)').matches) abrirGaveta();
-      busca.focus();
-      if (buscaLista.hidden) sugerir();
+      focarBusca();
     }
     if (evento.key === 'Escape' && app.classList.contains('menu-aberto')) fecharGaveta();
   });
+
+  // ---------- Dentro de uma chamada ----------
+  // O Esc volta para a sala -- mas só quando não há nada aberto aqui para ele fechar antes (o
+  // menu, o cartão, a gaveta, a lista da busca, o visor de imagem, as novidades) e a pessoa não está
+  // no meio de um texto: um rascunho de mensagem não some com um Esc. A conferência é na captura,
+  // antes dos outros ouvintes: eles fecham o que estiver aberto, e depois do Esc já não estaria.
+  if (camada) {
+    // Só campo de texto de verdade: um interruptor ou uma régua têm `value` mesmo sem ninguém escrever.
+    const escrevendo = () => {
+      const foco = document.activeElement;
+      return Boolean(foco?.matches?.('textarea,input:not([type]),input[type="text"],input[type="search"],input[type="password"],input[type="url"],input[type="tel"]') && foco.value);
+    };
+    const algoAberto = () => !menu.hidden || !modal.hidden || app.classList.contains('menu-aberto') || !buscaLista.hidden
+      || Boolean(document.querySelector('.nx-dm-visor')) || Boolean(window.NexoNovidades?.estado().aberto)
+      || !$('atualizarAppMenu').classList.contains('hidden');
+    document.addEventListener('keydown', evento => {
+      if (evento.key !== 'Escape' || evento.isComposing || algoAberto() || escrevendo()) return;
+      camada.avisar('fechar');
+    }, true);
+    camada.ao('buscar', focarBusca);
+    camada.ao('abrir-conversa', ({ com }) => { if (S.relacao(com) === 'amigos') abrirConversa(com); });
+    camada.ao('secao', ({ nome }) => {
+      if (['perfil', 'conquistas', 'adicionar'].includes(nome)) irPara(nome);
+      else if (nome === 'pedidos') escolherAba('pedidos');
+    });
+    // A marca da trilha é "Início" aqui dentro: leva aos amigos, e não recarrega o quadro.
+    document.querySelector('.ini-trilho-marca').addEventListener('click', evento => { evento.preventDefault(); irPara('amigos'); });
+    // A engrenagem abre a conta no mesmo quadro (a camada mostra a conta, e não a navegação).
+    document.querySelector('.ini-eu-conta').addEventListener('click', evento => { evento.preventDefault(); camada.irPara('/conta'); });
+  }
 
   // ---------- Avisos ----------
   // "Não incomodar" segura os avisos de mensagem no canto; a contagem continua.
@@ -852,7 +919,9 @@
   });
   S.on('convite', ({ de, apelido, sala }) => {
     pintarConversas();
-    aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: `Para a sala #${sala}`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar na sala', principal: true, fazer: () => irParaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirConversa(de) }] });
+    // Chamado para a sala em que já está: a conversa mostra o convite, e o aviso não tem o que pedir.
+    if (ehMinhaSala(sala)) return;
+    aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: camada ? `Para a sala #${sala}. Entrar sai desta chamada.` : `Para a sala #${sala}`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar na sala', principal: true, fazer: () => irParaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirConversa(de) }] });
   });
   S.on('conquista', c => {
     aviso({ tom: 'ok', icone: 'conquista', titulo: `Conquista: ${c.nome}`, detalhe: c.descricao, fecharEm: 8000, acoes: [{ rotulo: 'Ver conquistas', fazer: () => irPara('conquistas') }] });
@@ -870,7 +939,7 @@
   S.on('presenca', repintar);
   S.on('pronto', repintar);
   S.on('minha', () => { pintarEu(); if (secao === 'perfil') editor.pintarStatus(); });
-  S.on('sem-conta', () => { window.location.href = '/'; });
+  S.on('sem-conta', () => { if (camada) camada.avisar('sem-conta'); else window.location.href = '/'; });
 
   function repintar() {
     pintarAmigos();
@@ -883,7 +952,7 @@
   // ---------- Começo ----------
   NexoConta.pronto.then(async dados => {
     // A sessão terminou entre o servidor escolher esta página e a conta responder: a apresentação.
-    if (!dados?.conta) { window.location.href = '/'; return; }
+    if (!dados?.conta) { if (camada) camada.avisar('sem-conta'); else window.location.href = '/'; return; }
     conta = dados.conta;
     $('copiarUsuario').textContent = `@${conta.usuario}`;
     $('copiarCodigo').textContent = conta.codigo;
@@ -905,7 +974,16 @@
     const comQuem = parametros.get('conversa');
     if (comQuem && S.relacao(comQuem) === 'amigos') abrirConversa(comQuem);
     if (pedida || comQuem) history.replaceState(null, '', window.location.pathname);
+    avisarPronto();
   });
+  // A camada espera o "pronto" para mostrar a página (inicio-na-sala.js). Ele vem quando a lista de
+  // amigos já está pintada -- antes disso a página mostraria "Seus amigos aparecem aqui" por um
+  // instante --, mas não espera para sempre: um servidor lento não pode deixar a camada girando.
+  const avisarPronto = (() => {
+    let avisado = false;
+    return () => { if (avisado) return; avisado = true; camada?.avisar('pronto', { pagina: 'inicio' }); };
+  })();
+  if (camada) setTimeout(avisarPronto, 4000);
   // A notificação tocada com a página aberta (app-android.js): sem recarregar nada.
   window.NexoAndroid?.ao('aviso-tocado', ({ acao, com, sala, codigo }) => {
     if (acao === 'abrir' && S.relacao(com) === 'amigos') abrirConversa(com);

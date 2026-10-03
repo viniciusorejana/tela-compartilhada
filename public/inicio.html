@@ -129,6 +129,9 @@
   <div class="nx-menu nx-social ini-atualizar-menu hidden" id="atualizarAppMenu" role="group" aria-labelledby="atualizarAppTitulo"><strong id="atualizarAppTitulo">Nova versão disponível</strong><p id="atualizarAppTexto"></p><div class="ini-atualizar-acoes"><a class="nx-botao pequeno" id="atualizarAppBaixar" href="#" target="_blank" rel="noopener">Baixar agora</a><button type="button" class="nx-botao secundario pequeno" id="atualizarAppDepois">Depois</button></div></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <!-- Dentro da sala (a camada do início, inicio-na-sala.js) esta mesma página roda num quadro; este
+       arquivo é o que ela precisa para saber disso e falar com a sala. Fora dela, não faz nada. -->
+  <script src="/camada.js"></script>
   <!-- A ponte do aplicativo Android (só faz algo dentro dele): as notificações de amigos. -->
   <script src="/app-android.js"></script>
   <script src="/perfil.js"></script>

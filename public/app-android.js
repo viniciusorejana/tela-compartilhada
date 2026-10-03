@@ -25,6 +25,12 @@
 (() => {
   const versao = /\bNexoAndroid\/(\d{1,4}\.\d{1,4}\.\d{1,4})\b/.exec(navigator.userAgent)?.[1] || null;
   if (!versao) return;
+  // A ponte é da página de cima. O aplicativo põe `nexoAndroid` em todo quadro da origem dele, e o
+  // início, quando abre por cima da sala (inicio-na-sala.js), é um quadro. O aplicativo só ouve o
+  // quadro principal (MainActivity.aoMensagemDaSala descarta o resto), então a ponte ligada ali
+  // falaria sozinha -- e a página de dentro, que tem o mesmo socket de amigos da de cima, montaria
+  // notificações que ninguém recebe. A sala cuida de tudo isso por ela.
+  try { if (window.parent !== window) return; } catch (_) { return; }
   const ponte = window.nexoAndroid || null;
   const ouvintes = new Map();
 
@@ -52,6 +58,13 @@
   function mandar(dados) {
     if (!ponte) return;
     try { ponte.postMessage(JSON.stringify(dados)); } catch (_) { /* o aplicativo saiu de cena */ }
+  }
+
+  // O início aberto por cima da sala (inicio-na-sala.js): com ele aberto, o "voltar" do aparelho o
+  // fecha -- 'voltar-camada' --, em vez de mandar a chamada para o fundo. Só do APK que entende
+  // este pedido; um mais velho ignora o tipo desconhecido e segue guardando o Nexo.
+  function camada(aberta) {
+    mandar({ tipo: 'camada', aberta: Boolean(aberta) });
   }
 
   // ---------- O atualizador (android/…/Atualizador.java) ----------
@@ -100,9 +113,11 @@
   window.NexoAndroid = Object.freeze({
     versao,
     chamada,
+    camada,
     atualizacao,
     // 'alternar-microfone' e 'sair', dos botões da notificação da chamada; 'aviso-tocado', das
-    // notificações ({ acao: 'abrir' | 'entrar' | 'aceitar' | 'pedidos' | 'atualizar', com, sala, codigo }).
+    // notificações ({ acao: 'abrir' | 'entrar' | 'aceitar' | 'pedidos' | 'atualizar', com, sala, codigo });
+    // 'voltar-camada', do gesto de voltar do aparelho com a camada do início aberta.
     ao(tipo, ouvir) {
       if (!ouvintes.has(tipo)) ouvintes.set(tipo, []);
       ouvintes.get(tipo).push(ouvir);

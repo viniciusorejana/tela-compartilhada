@@ -198,18 +198,30 @@
   // Na sala o canto de baixo é do chat e da barra: os avisos descem do topo (toast.js). "Não
   // incomodar" segura os de mensagem; os convites passam, porque pedem uma decisão.
   const naoIncomodar = () => S.estado.minha?.escolhido === 'ocupado';
+  // Com o início aberto por cima da sala (inicio-na-sala.js), a página dentro dele ouve o mesmo
+  // socket de amigos e avisa por conta própria -- com os botões dela, que abrem a conversa ali
+  // mesmo. A sala calada evita o aviso em dobro, um por cima do outro.
+  const camadaAberta = () => Boolean(window.NexoInicioNaSala?.aberta());
+  // Entrar noutra sala sai desta: por `sairDaSala`, que avisa a sala e desliga a mídia direito.
+  // Trocar a página direto deixava a sala acreditando que a pessoa ainda estava lá, por alguns
+  // segundos, com a imagem congelada.
+  function entrarNaSala(sala) {
+    const destino = `/${encodeURIComponent(sala)}/sala`;
+    if (typeof sairDaSala === 'function') sairDaSala(destino); else window.location.href = destino;
+  }
   S.on('mensagem', ({ com, mensagem }) => {
     pintarContagem();
     if (!$('mensagensPanel').classList.contains('hidden')) pintarConversas();
-    if (mensagem.de === S.estado.eu || mensagem.tipo === 'convite' || naoIncomodar()) return;
+    if (mensagem.de === S.estado.eu || mensagem.tipo === 'convite' || naoIncomodar() || camadaAberta()) return;
     if (conversa?.codigo === com && !$('mensagensPanel').classList.contains('hidden')) return;
     aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: (mensagem.texto || 'Mandou uma imagem').slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
   });
   S.on('convite', ({ de, apelido, sala }) => {
-    if (sala === roomCode) return;
-    aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: `Para a sala #${sala}. Entrar sai desta chamada.`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar', principal: true, fazer: () => { window.location.href = `/${encodeURIComponent(sala)}/sala`; } }, { rotulo: 'Responder', fazer: () => abrirMensagens(de) }] });
+    if (sala === roomCode || camadaAberta()) return;
+    aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: `Para a sala #${sala}. Entrar sai desta chamada.`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar', principal: true, fazer: () => entrarNaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirMensagens(de) }] });
   });
   S.on('conquista', c => {
+    if (camadaAberta()) { editor?.carregar(); return; }
     aviso({ tom: 'ok', icone: 'conquista', titulo: `Conquista: ${c.nome}`, detalhe: c.descricao, fecharEm: 8000, acoes: [{ rotulo: 'Ver no cartão', fazer: () => abrirEditor('sobre') }] });
     // Uma conquista pode liberar peças do cartão: o editor, se aberto de novo, já sabe.
     editor?.carregar();
@@ -234,11 +246,11 @@
   // conversa abre no painel, sem sair da sala; entrar noutra sala sai desta pelo caminho de sempre.
   window.NexoAndroid?.ao('aviso-tocado', ({ acao, com, sala, codigo }) => {
     if (!comConta) return;
-    if (acao === 'abrir' && S.relacao(com) === 'amigos') abrirMensagens(com);
-    else if (acao === 'entrar' && /^[a-z0-9_-]{4,32}$/.test(sala || '') && sala !== roomCode) {
-      const destino = `/${encodeURIComponent(sala)}/sala`;
-      if (typeof sairDaSala === 'function') sairDaSala(destino); else window.location.href = destino;
-    } else if (acao === 'aceitar' && S.relacao(codigo) === 'recebido') {
+    if (acao === 'abrir' && S.relacao(com) === 'amigos') {
+      // Com o início aberto por cima, a conversa abre nele; senão, no painel de mensagens da sala.
+      if (camadaAberta()) window.NexoInicioNaSala.abrirConversa(com); else abrirMensagens(com);
+    } else if (acao === 'entrar' && /^[a-z0-9_-]{4,32}$/.test(sala || '') && sala !== roomCode) entrarNaSala(sala);
+    else if (acao === 'aceitar' && S.relacao(codigo) === 'recebido') {
       S.aceitar(codigo).then(r => { if (r.ok) aviso({ tom: 'ok', icone: 'amigo', titulo: `Você e ${S.nomeDe(codigo)} agora são amigos`, fecharEm: 3500 }); });
     }
   });

@@ -26,7 +26,7 @@ const origem = `http://localhost:${porta}`;
 const LARGURAS = [320, 360, 390, 430, 480, 540, 600, 640, 700, 761, 800, 860, 920, 1000, 1101, 1180, 1251, 1320, 1440, 1600, 1920, 2560];
 const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'config:aplicativo', 'musica',
   'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca',
-  'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta'];
+  'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta', 'camada', 'camada:conta', 'camada-sair'];
 // Os painéis não mudam a cada 20 px: uma amostra das larguras basta, com os extremos.
 const LARGURAS_DE_PAINEL = [320, 360, 600, 760, 900, 1000, 1300, 1600, 2560];
 // O Estúdio também em janela baixa: é o painel mais alto da sala.
@@ -45,7 +45,7 @@ function detectar() {
   const visivel = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.05; };
   const nome = el => (el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].slice(0, 2).join('.') : ''}`);
   const problemas = [];
-  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela'];
+  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela', '.modal.camada:not(.hidden) .camada-barra'];
   const vistos = new Set();
   for (const seletor of raizes) for (const raiz of document.querySelectorAll(seletor)) {
     if (!visivel(raiz)) continue;
@@ -143,12 +143,19 @@ async function prepararEstado(pagina, estado) {
     // O cartão completo, num painel da sala, e o aviso antes de sair para a página da conta.
     if (e === 'editor-cartao') NexoSalaSocial.abrirEditor();
     if (e === 'ir-para-conta') NexoPerfilSala.confirmarIrParaConta();
+    // O início (e a conta) por cima da sala, com a barra da chamada; e a pergunta de trocar de sala,
+    // com um código do tamanho máximo.
+    if (e === 'camada') NexoInicioNaSala.abrir();
+    if (e === 'camada:conta') NexoInicioNaSala.abrir({ pagina: 'conta' });
+    if (e === 'camada-sair') { NexoInicioNaSala.abrir(); NexoInicioNaSala.pedirEntrada('squad-da-madrugada-de-nome-muito-comprido'); }
     if (e.startsWith('novidades')) NexoNovidades.abrir({ aba: e === 'novidades' ? 'novidades' : 'conheca' });
   }, estado);
   // O Estúdio pede a sala ao servidor ao abrir: o desenho só vale depois da resposta.
   if (estado.startsWith('estudio')) await pagina.waitForFunction(() => document.querySelectorAll('#estudioLista .estudio-pessoa').length >= 2, null, { timeout: 5000 });
   // O editor pede a vitrine ao servidor na primeira vez: o desenho só vale com a prévia na tela.
   if (estado === 'editor-cartao') await pagina.waitForSelector('#editorCartaoSala .ed-previa-cartao .nx-cartao', { timeout: 5000 });
+  // A página dentro da camada leva um instante para dizer que está pronta.
+  if (estado.startsWith('camada') && estado !== 'camada-sair') await pagina.waitForSelector('.camada-quadro.pronto', { timeout: 15000 });
 }
 
 // Uma segunda pessoa, com nome longo e som de tela, para o quadradinho dela, a pílula de volume
@@ -199,6 +206,13 @@ async function criarSegundaPessoa(pagina) {
     await pagina.waitForFunction(() => !document.querySelector('.app').getAnimations().length, null, { timeout: 2000 }).catch(() => {});
     await pagina.waitForTimeout(60);
     for (const problema of await pagina.evaluate(detectar)) achados.push(`[${estado} ${largura}×${altura}] ${problema}`);
+    // A página dentro da camada é a de sempre, mas num quadro da largura da janela: ela também não
+    // pode rolar de lado (a sala por baixo, `inert`, não conta).
+    if (estado.startsWith('camada') && estado !== 'camada-sair') {
+      const quadro = pagina.frames().find(f => f !== pagina.mainFrame());
+      const sobra = await quadro?.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      if (!quadro || sobra > 1) achados.push(`[${estado} ${largura}×${altura}] a página dentro da camada ${quadro ? `rola ${sobra}px para o lado` : 'não abriu'}`);
+    }
   };
   for (const estado of ESTADOS) {
     const larguras = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat'].includes(estado) ? LARGURAS : LARGURAS_DE_PAINEL;
