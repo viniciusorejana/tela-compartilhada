@@ -247,6 +247,58 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   assert.equal(await appNovo.locator('#atualizarAppBtn span').textContent(), 'Reiniciar');
   console.log('PASS: o aplicativo novo baixa a atualização com o progresso num aviso, e oferece reiniciar no fim');
 
+  // ---------- O aplicativo instalado se atualiza sozinho ----------
+  //
+  // A ponte do instalado (simulada): o processo principal procura e baixa em silêncio, e a sala
+  // só fica sabendo no fim -- um aviso, uma vez, e o botão "Reiniciar". As opções do aplicativo
+  // moram nas configurações, na seção "Aplicativo de mesa".
+  const contextoDoInstalado = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  await contextoDoInstalado.addInitScript(() => {
+    const nada = async () => ({});
+    const ouvintes = [];
+    window.avisarDoPrincipal = dados => ouvintes.forEach(ouvir => ouvir(dados));
+    window.chamadasDaPonte = [];
+    let opcoes = { tipo: 'instalador', atualizaSozinho: true, atualizarSozinho: true, podeAbrirAoEntrar: true, abrirAoEntrar: false };
+    window.appNativo = { pid: 0, versao: '1.2.0', plataforma: 'win32', instalacao: 'instalador', estadoDoAgente: nada, iniciarAgente: async () => ({ rodando: false }),
+      prepararCaptura: async () => false, capturaSelecionada: async () => null, encerreiCaptura: nada, aoEncerrarCaptura: () => {}, definirEndereco: nada, trocarServidor: nada,
+      aoProgressoDaAtualizacao: ouvir => ouvintes.push(ouvir),
+      estadoDaAtualizacao: async () => null,
+      cancelarAtualizacao: async () => true,
+      mostrarAtualizacao: async () => false,
+      abrirAtualizacao: async () => { chamadasDaPonte.push('abrir'); return true; },
+      baixarAtualizacao: async versao => { chamadasDaPonte.push(`baixar ${versao}`); return { ok: true, jaEstava: true }; },
+      procurarAtualizacao: async () => { chamadasDaPonte.push('procurar'); return { ok: true, nova: false, versao: '' }; },
+      opcoesDoAplicativo: async () => ({ ...opcoes }),
+      definirOpcaoDoAplicativo: async (nome, valor) => { chamadasDaPonte.push(`${nome}=${valor}`); opcoes = { ...opcoes, [nome]: valor }; return { ...opcoes }; } };
+  });
+  const instalado = await entrar(contextoDoInstalado, 'Edu');
+  await instalado.evaluate(() => NexoAtualizacao.conferir());
+  await instalado.evaluate(() => avisarDoPrincipal({ estado: 'baixando', versao: '1.3.0', recebidos: 10 * 1048576, total: 100 * 1048576, silenciosa: true }));
+  await instalado.waitForTimeout(300);
+  assert.equal(await instalado.locator('.nexo-toast').count(), 0, 'a versão que desce sozinha não aparece no meio da chamada');
+  assert.equal(await instalado.locator('#atualizarAppBtn').isHidden(), true, 'nem o botão');
+  await instalado.evaluate(() => avisarDoPrincipal({ estado: 'pronto', versao: '1.3.0', recebidos: 100 * 1048576, total: 100 * 1048576, silenciosa: true }));
+  await instalado.locator('.nexo-toast', { hasText: 'Nexo 1.3.0 pronto' }).waitFor({ timeout: 5000 });
+  assert.match(await instalado.locator('.nexo-toast').textContent(), /se instala quando você fechar o Nexo/);
+  assert.equal(await instalado.locator('.nexo-toast').getByRole('button', { name: 'Mostrar na pasta' }).count(), 0, 'o instalado não tem arquivo para mostrar');
+  assert.equal(await instalado.locator('#atualizarAppBtn span').textContent(), 'Reiniciar');
+  await instalado.screenshot({ path: path.join(saida, 'atualizacao-instalado-pronta.png') });
+  await instalado.locator('.nexo-toast').getByRole('button', { name: 'Reiniciar agora' }).click();
+  assert.deepEqual(await instalado.evaluate(() => chamadasDaPonte), ['abrir']);
+
+  await instalado.locator('#devicesBtn').click();
+  await instalado.locator('#abaAplicativo').click();
+  await instalado.locator('#painelAplicativo').waitFor();
+  assert.equal(await instalado.locator('#appVersao').textContent(), 'Nexo 1.2.0');
+  assert.match(await instalado.locator('#appVersaoEstado').textContent(), /instalado · a 1\.3\.0 está pronta/);
+  assert.equal(await instalado.locator('#appAtualizarSozinho').isChecked(), true, '"Atualizar sozinho" vem ligado');
+  assert.equal(await instalado.locator('#appAbrirAoEntrar').isChecked(), false, '"Abrir ao entrar no computador" vem desligado');
+  await instalado.locator('#appLinhaAbrir').click();
+  await esperarAte(async () => (await instalado.evaluate(() => chamadasDaPonte)).includes('abrirAoEntrar=true'), 'ligar "abrir ao entrar" não chegou ao aplicativo');
+  assert.equal(await instalado.locator('#appAbrirAoEntrar').isChecked(), true);
+  await instalado.locator('#painelAplicativo').screenshot({ path: path.join(saida, 'aplicativo-de-mesa.png') });
+  console.log('PASS: o instalado baixa calado, avisa uma vez que está pronto, e as opções dele ficam em "Aplicativo de mesa"');
+
   // ---------- A mesma conta em outro aparelho ----------
   //
   // A Ana abre a mesma conta em outro navegador e entra na sala: a aba antiga sai, com o

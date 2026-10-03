@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const path = require('node:path');
 const { ipDoPedido } = require('./telemetria/origem');
 const { valida } = require('./public/versao-app');
 
@@ -13,11 +14,25 @@ const { valida } = require('./public/versao-app');
 // As chaves são fechadas, e os nomes de arquivo também. Um mapa aberto -- "sirva o que a
 // pessoa pedir dentro desta pasta" -- transformaria este módulo num leitor de arquivos
 // arbitrários, que é exatamente o que uma rota de download não pode ser.
+//
+// `familia` agrupa as formas do mesmo sistema na página (o instalador e o portátil são os dois
+// "Windows"); `atualizaSozinho` diz quais se atualizam pelo electron-updater, pela pasta de
+// atualizações abaixo. A ordem é a da página quando ela não sabe qual é o sistema de quem vê.
 const SISTEMAS = Object.freeze({
-  windows: { arquivo: 'SalaCompartilhada.exe', nome: 'Windows x64', tipo: '.exe portátil' },
-  linux: { arquivo: 'Nexo.AppImage', nome: 'Linux x64', tipo: '.AppImage' },
-  mac: { arquivo: 'Nexo.dmg', nome: 'macOS', tipo: '.dmg' }
+  'windows-instalador': { arquivo: 'Nexo-Setup.exe', nome: 'Windows x64', tipo: 'instalador .exe', familia: 'windows', atualizaSozinho: true },
+  windows: { arquivo: 'SalaCompartilhada.exe', nome: 'Windows x64', tipo: '.exe portátil', familia: 'windows', atualizaSozinho: false },
+  linux: { arquivo: 'Nexo.AppImage', nome: 'Linux x64', tipo: '.AppImage', familia: 'linux', atualizaSozinho: true },
+  'linux-deb': { arquivo: 'Nexo.deb', nome: 'Linux x64 (Debian, Ubuntu)', tipo: 'instalador .deb', familia: 'linux', atualizaSozinho: true },
+  mac: { arquivo: 'Nexo.dmg', nome: 'macOS', tipo: '.dmg', familia: 'mac', atualizaSozinho: false },
+  android: { arquivo: 'Nexo.apk', nome: 'Android', tipo: '.apk', familia: 'android', atualizaSozinho: false }
 });
+
+// O que o aplicativo instalado lê para se atualizar (electron-updater, provedor "generic"): a
+// ficha da versão de cada sistema, que o electron-builder escreve ao empacotar, e o mapa de
+// blocos do instalador, que faz a atualização baixar só o que mudou. Os executáveis que as
+// fichas citam são os mesmos dos downloads, com as mesmas regras.
+const FICHAS_DE_ATUALIZACAO = Object.freeze(['latest.yml', 'latest-linux.yml']);
+const MAPAS_DE_BLOCOS = Object.freeze({ 'Nexo-Setup.exe.blockmap': 'windows-instalador' });
 
 // Quantos downloads a MESMA pessoa pode ter em curso. Um navegador as vezes abre duas
 // conexoes para o mesmo arquivo; mais do que isso e alguem tentando espremer banda com
@@ -83,10 +98,11 @@ async function lerVersoes(arquivo) {
   } catch (_) { return {}; }
 }
 
-// `arquivos` é o caminho do executável do Windows (forma antiga, mantida) ou um mapa
-// `{ windows, linux, mac }` com os caminhos de cada build. Cada sistema é opcional: quem
-// compila só o Windows continua servindo só o Windows, e a página mostra o que existe.
-module.exports = function desktopDownload(app, arquivos, { permitir = () => true, identificar = quemEsta, versoes = null } = {}) {
+// `arquivos` é o caminho do executável do Windows (forma antiga, mantida) ou um mapa com os
+// caminhos de cada build, pelas chaves de SISTEMAS. Cada sistema é opcional: quem compila só o
+// Windows continua servindo só o Windows, e a página mostra o que existe. `atualizacoes` é a
+// pasta das fichas do electron-updater (normalmente a mesma dos builds).
+module.exports = function desktopDownload(app, arquivos, { permitir = () => true, identificar = quemEsta, versoes = null, atualizacoes = null } = {}) {
   const caminhos = typeof arquivos === 'string' ? { windows: arquivos } : (arquivos || {});
   const url = chave => `/downloads/${SISTEMAS[chave].arquivo}`;
   const faxina = setInterval(esquecerAntigos, MINUTOS_DA_JANELA * 60_000);
@@ -122,6 +138,32 @@ module.exports = function desktopDownload(app, arquivos, { permitir = () => true
     } catch (error) { next(error); }
   });
   for (const chave of Object.keys(SISTEMAS)) app.get(url(chave), (req, res, next) => servir(chave, req, res, next));
+
+  // A pasta que o aplicativo instalado consulta. As fichas são pequenas e mudam a cada build:
+  // sem cache nenhum, para ninguém ficar preso numa versão velha. O resto é a lista fechada.
+  app.get('/downloads/atualizacoes/:arquivo', async (req, res, next) => {
+    const pedido = String(req.params.arquivo || '');
+    try {
+      if (FICHAS_DE_ATUALIZACAO.includes(pedido) || Object.hasOwn(MAPAS_DE_BLOCOS, pedido)) {
+        if (!permitir(req)) return res.status(429).set('Retry-After', '60').end();
+        const caminho = FICHAS_DE_ATUALIZACAO.includes(pedido)
+          ? (atualizacoes && path.join(atualizacoes, pedido))
+          : (caminhos[MAPAS_DE_BLOCOS[pedido]] && `${caminhos[MAPAS_DE_BLOCOS[pedido]]}.blockmap`);
+        if (!caminho || !await existe(caminho)) return res.status(404).type('text').send('Este servidor ainda não distribui atualizações automáticas.');
+        res.set({ 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+        if (pedido.endsWith('.yml')) res.type('text/yaml; charset=utf-8');
+        return res.sendFile(caminho, { cacheControl: false, dotfiles: 'deny' });
+      }
+      // O executável que a ficha cita, pelo nome: só os que se atualizam sozinhos.
+      const chave = Object.keys(SISTEMAS).find(c => SISTEMAS[c].atualizaSozinho && SISTEMAS[c].arquivo === pedido);
+      if (chave) return servir(chave, req, res, next);
+      res.status(404).end();
+    } catch (error) { next(error); }
+  });
+
+  async function existe(caminho) {
+    try { return (await fs.stat(caminho)).isFile(); } catch (_) { return false; }
+  }
 
   async function servir(chave, req, res, next) {
     const { arquivo, nome } = SISTEMAS[chave];

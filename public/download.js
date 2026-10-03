@@ -9,19 +9,42 @@
   const acao = document.querySelector('.download-action');
   const label = document.getElementById('desktopBuild');
   if (!acao || !label) return;
+  // Dentro do aplicativo Android, oferecer o aplicativo é oferecer o que a pessoa já tem.
+  if (/\bNexoAndroid\//.test(navigator.userAgent)) {
+    const secao = acao.closest('.desktop-download');
+    if (secao) secao.hidden = true;
+    return;
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
 
   // Qual botão vem primeiro. `userAgentData.platform` é o caminho novo; `navigator.platform`
   // ainda responde em todo lugar e basta para uma ordenação -- errar aqui não esconde nada de
   // ninguém, só põe o botão provável em segundo lugar.
-  function sistemaProvavel() {
+  //
+  // O Android vem antes do Linux de propósito: o celular também diz "Linux", e oferecer um
+  // AppImage a quem está no celular era oferecer um arquivo que ele não abre. O iPhone não tem
+  // aplicativo -- o navegador faz tudo --, e aí a ordem fica a padrão.
+  function familiaProvavel() {
     const texto = `${navigator.userAgentData?.platform || ''} ${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
-    if (/mac|iphone|ipad/.test(texto)) return 'mac';
-    if (/linux|android|x11/.test(texto)) return 'linux';
+    if (/android/.test(texto)) return 'android';
+    if (/iphone|ipad|ipod/.test(texto)) return null;
+    if (/mac/.test(texto)) return 'mac';
+    if (/linux|x11|cros/.test(texto)) return 'linux';
     if (/win/.test(texto)) return 'windows';
     return null;
   }
+  const familiaDe = sistema => sistema.familia || sistema.chave;
+  const NOME_DA_FAMILIA = { windows: 'Windows', linux: 'Linux', mac: 'macOS', android: 'Android' };
+  // O que fazer com o arquivo depois de baixar, dito no aviso de "concluído".
+  const DEPOIS_DE_BAIXAR = {
+    'windows-instalador': 'Abra o instalador; no primeiro uso, informe o endereço deste site.',
+    windows: 'Abra o arquivo e informe o endereço deste site.',
+    linux: 'Dê permissão de execução ao arquivo, abra e informe o endereço deste site.',
+    'linux-deb': 'Instale pelo gerenciador de pacotes (ou “sudo apt install ./Nexo.deb”) e informe o endereço deste site.',
+    mac: 'Abra o .dmg, arraste o Nexo para Aplicativos e informe o endereço deste site.',
+    android: 'Abra o arquivo para instalar — o Android pede para permitir esta fonte — e informe o endereço deste site.'
+  };
 
   const megabytes = bytes => (bytes / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
@@ -65,7 +88,7 @@
       emCurso.toast.elemento.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.03)' }, { transform: 'scale(1)' }], { duration: 260 });
       return;
     }
-    const nomeDoSistema = sistema.nome.replace(' x64', '');
+    const nomeDoSistema = NOME_DA_FAMILIA[familiaDe(sistema)] || sistema.nome.replace(' x64', '');
     const controle = new AbortController();
     const toast = NexoToast.mostrar({
       titulo: `Baixando o Nexo para ${nomeDoSistema}`, detalhe: 'Conectando ao servidor…', icone: 'download', progresso: null,
@@ -105,7 +128,7 @@
       entregarAoNavegador(new Blob(pedacos, { type: 'application/octet-stream' }), nome);
       toast.atualizar({
         titulo: 'Download concluído', icone: 'ok', tom: 'ok', progresso: 1, aoCancelar: null,
-        detalhe: `${nome} · ${megabytes(recebidos)} MB. Abra o arquivo e informe o endereço deste site.`,
+        detalhe: `${nome} · ${megabytes(recebidos)} MB. ${DEPOIS_DE_BAIXAR[sistema.chave] || 'Abra o arquivo e informe o endereço deste site.'}`,
         fecharEm: 12000
       });
     } catch (erro) {
@@ -124,41 +147,68 @@
     }
   }
 
-  function desenhar(sistemas) {
-    const provavel = sistemaProvavel();
-    const ordenados = [...sistemas].sort((a, b) => (b.chave === provavel) - (a.chave === provavel));
-    acao.textContent = '';
-    ordenados.forEach((sistema, indice) => {
-      const link = document.createElement('a');
-      // O primeiro é o botão cheio; os outros ficam discretos. Três botões iguais fariam a
-      // pessoa ler os três para achar o dela.
-      link.className = indice === 0 ? 'download-button' : 'download-button secundario';
-      // O id fica no botão principal, onde ele sempre esteve: é por ele que o teste de
-      // navegador e qualquer link externo alcançam "o download deste sistema".
-      if (indice === 0) link.id = 'desktopDownload';
-      link.href = sistema.url;
-      link.setAttribute('download', '');
-      link.textContent = `Baixar para ${sistema.nome.replace(' x64', '')} `;
-      const extensao = document.createElement('span');
-      extensao.textContent = sistema.tipo;
-      link.append(extensao);
-      link.addEventListener('click', evento => {
-        // Ctrl/Shift/clique do meio continuam sendo do navegador: quem pediu "abrir em outra
-        // aba" ou "salvar como" escolheu o caminho dele.
-        if (evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
-        if (!podeAcompanhar()) return;
-        evento.preventDefault();
-        baixarComProgresso(sistema);
-      });
-      acao.append(link);
+  function ligarDownload(link, sistema) {
+    link.href = sistema.url;
+    link.setAttribute('download', '');
+    link.addEventListener('click', evento => {
+      // Ctrl/Shift/clique do meio continuam sendo do navegador: quem pediu "abrir em outra
+      // aba" ou "salvar como" escolheu o caminho dele.
+      if (evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
+      if (!podeAcompanhar()) return;
+      evento.preventDefault();
+      baixarComProgresso(sistema);
     });
-    acao.append(label);
-    const primeiro = ordenados[0];
-    const outros = ordenados.length - 1;
+  }
+
+  // O sistema de quem vê ganha o botão cheio, na forma que se instala (o instalador antes do
+  // portátil, que a lista do servidor já traz nessa ordem). Todo o resto -- os outros sistemas e
+  // a outra forma do mesmo -- vira uma pílula embaixo, dizendo sistema e formato.
+  function desenhar(sistemas) {
+    const provavel = familiaProvavel();
+    const ordenados = [...sistemas].sort((a, b) => (familiaDe(b) === provavel) - (familiaDe(a) === provavel));
+    const [primeiro, ...outros] = ordenados;
+    acao.textContent = '';
+
+    const principal = document.createElement('a');
+    principal.className = 'download-button';
+    // O id fica no botão principal, onde ele sempre esteve: é por ele que o teste de
+    // navegador e qualquer link externo alcançam "o download deste sistema".
+    principal.id = 'desktopDownload';
+    principal.textContent = `Baixar para ${NOME_DA_FAMILIA[familiaDe(primeiro)] || primeiro.nome.replace(' x64', '')} `;
+    const extensao = document.createElement('span');
+    extensao.textContent = primeiro.tipo;
+    principal.append(extensao);
+    ligarDownload(principal, primeiro);
+    acao.append(principal, label);
     // A versão aparece quando o build a anotou (app/escrever-versao.js): é o número que o
     // aplicativo aberto compara para dizer que existe um mais novo.
     label.textContent = `${primeiro.nome}${primeiro.versao ? ` · versão ${primeiro.versao}` : ''} · ${megabytes(primeiro.size)} MB · build de ${new Date(primeiro.builtAt).toLocaleDateString('pt-BR')}`
-      + (outros === 1 ? ' · e mais um sistema abaixo' : outros > 1 ? ` · e mais ${outros} sistemas abaixo` : '');
+      + (primeiro.atualizaSozinho ? ' · se atualiza sozinho' : '');
+
+    if (!outros.length) return;
+    const caixa = document.createElement('div');
+    caixa.className = 'download-outros';
+    const rotulo = document.createElement('small');
+    rotulo.id = 'downloadOutrosRotulo';
+    rotulo.textContent = 'Outros sistemas e formatos';
+    const lista = document.createElement('div');
+    lista.className = 'download-outros-lista';
+    lista.setAttribute('role', 'group');
+    lista.setAttribute('aria-labelledby', rotulo.id);
+    for (const sistema of outros) {
+      const link = document.createElement('a');
+      link.className = 'download-outro';
+      link.dataset.chave = sistema.chave;
+      link.textContent = `${NOME_DA_FAMILIA[familiaDe(sistema)] || sistema.nome} `;
+      const tipo = document.createElement('span');
+      tipo.textContent = sistema.tipo;
+      link.append(tipo);
+      link.title = `${sistema.nome}${sistema.versao ? ` · versão ${sistema.versao}` : ''} · ${megabytes(sistema.size)} MB${sistema.atualizaSozinho ? ' · se atualiza sozinho' : ''}`;
+      ligarDownload(link, sistema);
+      lista.append(link);
+    }
+    caixa.append(rotulo, lista);
+    acao.append(caixa);
   }
 
   fetch('/api/desktop-app', { cache: 'no-store', signal: controller.signal })

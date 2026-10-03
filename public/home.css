@@ -103,7 +103,7 @@ footer b { color:var(--aviso-texto); margin-left:8px; }
 .download-copy h2 { margin:5px 0; font-size:22px; }
 .download-copy p { font-size:var(--fs-sm); color:var(--text-3); margin:0 0 4px; }
 .download-copy small,.download-action small { display:block; color:var(--muted); font-size:var(--fs-meta); }
-.download-action { flex:0 1 260px; text-align:center; }
+.download-action { flex:0 1 300px; text-align:center; }
 .download-button { display:flex; align-items:center; justify-content:center; gap:9px; min-height:var(--ctl-g); background:var(--accent-forte); color:#fff; padding:0 16px; border-radius:var(--r-md); font-size:var(--fs-md); font-weight:650; margin-bottom:9px; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
 .download-button svg { width:19px; height:19px; flex:none; }
 .download-button>span { opacity:.75; }
@@ -115,6 +115,14 @@ footer b { color:var(--aviso-texto); margin-left:8px; }
 .download-button.secundario:hover { background:rgb(var(--tinta) / 11%); }
 .download-button[aria-disabled="true"] { opacity:.5; pointer-events:none; }
 .download-button[aria-disabled="true"] { opacity:.5; cursor:default; }
+/* Os outros sistemas e formatos: pílulas pequenas embaixo do botão principal. Seis botões do
+   mesmo tamanho fariam a pessoa ler os seis para achar o dela. */
+.download-outros { margin-top:14px; }
+.download-outros>small { margin-bottom:7px; }
+.download-outros-lista { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+.download-outro { display:inline-flex; align-items:center; gap:5px; min-height:32px; padding:0 12px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 5.9%); color:var(--accent-texto); font-size:var(--fs-sm); font-weight:600; transition:background-color var(--dur) var(--curva); }
+.download-outro>span { color:var(--muted); font-weight:500; }
+.download-outro:hover { background:rgb(var(--tinta) / 11%); }
 /* O vídeo de lançamento: o Nexo em meio minuto, para quem chegou aqui sem convite. O vídeo é
    escuro nos dois temas, então a moldura dele também. */
 .lancamento { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); align-items:center; gap:44px; padding:36px 0 44px; border-top:1px solid rgb(var(--tinta) / 7.1%); }

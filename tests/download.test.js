@@ -167,3 +167,92 @@ test('cada sistema tem rota própria, e a lista traz só as builds que existem',
   assert.equal(windows.status, 503);
   assert.match(await windows.text(), /Windows/);
 });
+
+// O instalador, o .deb e o APK entram na mesma lista, com a família que agrupa as formas do
+// mesmo sistema na página -- e o APK sai com o tipo que faz o Android oferecer instalar.
+test('instalador, .deb e .apk: família, "se atualiza sozinho" e o tipo de cada arquivo', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexo-download-formas-'));
+  const caminhos = {
+    'windows-instalador': path.join(dir, 'Nexo-Setup.exe'),
+    windows: path.join(dir, 'SalaCompartilhada.exe'),
+    'linux-deb': path.join(dir, 'Nexo.deb'),
+    android: path.join(dir, 'Nexo.apk')
+  };
+  for (const [chave, caminho] of Object.entries(caminhos)) await fs.writeFile(caminho, `fixture-${chave}`);
+  await fs.writeFile(path.join(dir, 'versao.json'), JSON.stringify({ sistemas: { 'windows-instalador': { versao: '1.2.0' }, android: { versao: '1.0.3' } } }));
+
+  const app = express();
+  require('../desktop-download')(app, caminhos, { versoes: path.join(dir, 'versao.json') });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(async () => {
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+
+  const info = await (await fetch(origin + '/api/desktop-app')).json();
+  const porChave = Object.fromEntries(info.sistemas.map(s => [s.chave, s]));
+  assert.deepEqual(info.sistemas.map(s => s.chave), ['windows-instalador', 'windows', 'linux-deb', 'android'], 'o instalador vem antes do portátil');
+  assert.equal(porChave['windows-instalador'].familia, 'windows');
+  assert.equal(porChave.windows.familia, 'windows', 'as duas formas do Windows são a mesma família');
+  assert.equal(porChave['windows-instalador'].atualizaSozinho, true);
+  assert.equal(porChave.windows.atualizaSozinho, false, 'o portátil não se atualiza sozinho');
+  assert.equal(porChave['windows-instalador'].versao, '1.2.0');
+  assert.equal(porChave.android.versao, '1.0.3', 'o Android tem a versão dele');
+  // Os campos soltos continuam sendo os do portátil: é o que o aplicativo antigo e a página em
+  // cache leem para "o download do Windows".
+  assert.equal(info.url, '/downloads/SalaCompartilhada.exe');
+
+  const apk = await fetch(origin + '/downloads/Nexo.apk');
+  assert.equal(apk.status, 200);
+  assert.equal(apk.headers.get('content-type'), 'application/vnd.android.package-archive');
+  assert.match(apk.headers.get('content-disposition'), /filename="Nexo.apk"/);
+  assert.equal(await apk.text(), 'fixture-android');
+  assert.equal(await (await fetch(origin + '/downloads/Nexo-Setup.exe')).text(), 'fixture-windows-instalador');
+});
+
+// O aplicativo instalado procura a versão nova no servidor que a pessoa escolheu, numa pasta
+// de lista fechada: as fichas do electron-builder, o mapa de blocos e os executáveis que se
+// atualizam sozinhos. Nada além disso sai dali -- nem o portátil, nem o APK, nem um nome
+// inventado.
+test('a pasta de atualizações entrega só as fichas e os instaladores, sem cache nas fichas', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexo-atualizacoes-'));
+  const caminhos = {
+    'windows-instalador': path.join(dir, 'Nexo-Setup.exe'),
+    windows: path.join(dir, 'SalaCompartilhada.exe'),
+    linux: path.join(dir, 'Nexo.AppImage'),
+    android: path.join(dir, 'Nexo.apk')
+  };
+  for (const caminho of Object.values(caminhos)) await fs.writeFile(caminho, 'binario');
+  await fs.writeFile(path.join(dir, 'Nexo-Setup.exe.blockmap'), 'blocos');
+  await fs.writeFile(path.join(dir, 'latest.yml'), 'version: 1.2.0\npath: Nexo-Setup.exe\n');
+  await fs.writeFile(path.join(dir, 'segredo.txt'), 'não sai');
+
+  const app = express();
+  require('../desktop-download')(app, caminhos, { atualizacoes: dir });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(async () => {
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const pegar = arquivo => fetch(`${origin}/downloads/atualizacoes/${arquivo}`);
+
+  const ficha = await pegar('latest.yml?noCache=1abc');
+  assert.equal(ficha.status, 200);
+  assert.match(ficha.headers.get('content-type'), /yaml/);
+  assert.equal(ficha.headers.get('cache-control'), 'no-cache', 'uma ficha em cache prenderia todo mundo na versão velha');
+  assert.match(await ficha.text(), /version: 1\.2\.0/);
+  assert.equal(await (await pegar('Nexo-Setup.exe.blockmap')).text(), 'blocos');
+  assert.equal(await (await pegar('Nexo-Setup.exe')).text(), 'binario');
+  assert.equal((await pegar('Nexo.AppImage')).status, 200);
+
+  // A ficha do Linux não foi escrita: "ainda não distribui", e não um erro.
+  assert.equal((await pegar('latest-linux.yml')).status, 404);
+  // Fora da lista: o portátil e o APK não se atualizam por aqui, e o resto da pasta não existe.
+  for (const fora of ['SalaCompartilhada.exe', 'Nexo.apk', 'segredo.txt', '..%2Fsegredo.txt', 'versao.json']) {
+    assert.equal((await pegar(fora)).status, 404, `${fora} não deveria sair pela pasta de atualizações`);
+  }
+});

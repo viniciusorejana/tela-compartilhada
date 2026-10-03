@@ -216,15 +216,20 @@ const MENSAGEM_SALA_FECHADA = 'A sala ainda não foi aberta. Assim que alguém c
 // A regra 4 do banimento: quem é barrado por um nome que também pode ser de outra pessoa
 // recebe a saída, e não só a parede.
 const MENSAGEM_NOME_BARRADO = 'Esse nome foi barrado nesta sala. Se não é você quem foi removido, entre com a sua conta.';
-// Um build por sistema, todos opcionais: o Windows é compilado aqui, e os outros dois vêm de
-// onde houver macOS e Linux para compilá-los (o electron-builder não gera .dmg no Windows).
-// Quem só tem o .exe na pasta continua servindo só o .exe, e a página mostra o que existe.
+// Um build por sistema, todos opcionais: o Windows é compilado aqui, e os outros vêm de onde
+// houver macOS e Linux para compilá-los (o electron-builder não gera .dmg no Windows) -- e o
+// Android de onde houver o SDK (android/, docs/android.md). Quem só tem o .exe na pasta continua
+// servindo só o .exe, e a página mostra o que existe. As fichas de atualização (latest.yml) que o
+// electron-builder escreve ao lado dos instaladores saem pela mesma pasta.
 const pastaDosBuilds = path.join(__dirname, 'app', 'dist');
 require('./desktop-download')(app, {
+  'windows-instalador': path.join(pastaDosBuilds, 'Nexo-Setup.exe'),
   windows: path.join(pastaDosBuilds, 'SalaCompartilhada.exe'),
   linux: path.join(pastaDosBuilds, 'Nexo.AppImage'),
-  mac: path.join(pastaDosBuilds, 'Nexo.dmg')
-}, { permitir: req => telemetria.limitarOrigem(req), versoes: path.join(pastaDosBuilds, 'versao.json') });
+  'linux-deb': path.join(pastaDosBuilds, 'Nexo.deb'),
+  mac: path.join(pastaDosBuilds, 'Nexo.dmg'),
+  android: path.join(pastaDosBuilds, 'Nexo.apk')
+}, { permitir: req => telemetria.limitarOrigem(req), versoes: path.join(pastaDosBuilds, 'versao.json'), atualizacoes: pastaDosBuilds });
 app.use('/api/soundboard', telemetria.soundboardHttp);
 
 app.get('/vendor/livekit-client.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js')));

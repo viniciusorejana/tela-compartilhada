@@ -4347,16 +4347,18 @@ function montarAbas(caixa) {
   const chave = caixa.dataset.lembrarAba;
   if (chave) {
     const guardada = abas.find(a => a.id === Preferencias.ler(chave, ''));
-    if (guardada) mostrar(guardada);
+    if (guardada && !guardada.hidden) mostrar(guardada);
     abas.forEach(aba => aba.addEventListener('click', () => Preferencias.gravar(chave, aba.id)));
   }
-  abas.forEach((aba, indice) => {
+  abas.forEach(aba => {
     aba.addEventListener('click', () => mostrar(aba));
     aba.addEventListener('keydown', evento => {
       const passo = evento.key === seguinte ? 1 : evento.key === anterior ? -1 : 0;
       if (!passo) return;
       evento.preventDefault();
-      const alvo = abas[(indice + passo + abas.length) % abas.length];
+      // Uma aba escondida (a do aplicativo de mesa, no navegador) fica fora da volta das setas.
+      const visiveis = abas.filter(a => !a.hidden);
+      const alvo = visiveis[(visiveis.indexOf(aba) + passo + visiveis.length) % visiveis.length];
       mostrar(alvo);
       alvo.focus();
     });

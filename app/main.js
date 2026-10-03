@@ -20,6 +20,8 @@ const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
 const { pathToFileURL } = require('url');
+const { criarAtualizador } = require('./atualizacao-automatica');
+const inicializacao = require('./iniciar-com-o-sistema');
 const executar = promisify(execFile);
 
 const ARQUIVO_DE_CONFIG = () => path.join(app.getPath('userData'), 'config.json');
@@ -96,16 +98,24 @@ function criarJanela() {
       // inclusive o processo de áudio, que é quem realmente toca o som.
       // A versão vai pelo mesmo caminho: é com ela que a sala diz, sem insistir, que existe um
       // aplicativo mais novo (public/versao-app.js).
-      additionalArguments: [`--pid-do-app=${process.pid}`, `--versao-do-app=${app.getVersion()}`]
+      // E o tipo de instalação, que decide se a página espera a atualização sozinha (instalador,
+      // AppImage, .deb) ou oferece o download do arquivo novo (portátil).
+      additionalArguments: [`--pid-do-app=${process.pid}`, `--versao-do-app=${app.getVersion()}`, `--instalacao=${atualizador.tipo}`]
     }
   });
+
+  // Aberto pelo sistema, ao entrar no computador: começa minimizado (iniciar-com-o-sistema.js).
+  if (inicializacao.abertoPeloSistema()) janela.minimize();
 
   // Um endereço só é guardado depois de carregar de verdade. Guardar antes prendia a pessoa
   // numa página quebrada -- e, sem tela de endereço, sem forma de corrigir: foi o que
   // aconteceu quando o servidor estava fora do ar no momento em que o endereço foi digitado.
   janela.webContents.on('did-finish-load', () => {
+    // A sala abriu: é dela que vêm as atualizações do aplicativo instalado.
+    if (origemDaSala && origemHttp(janela.webContents.getURL()) === origemDaSala) atualizador.definirOrigem(origemDaSala);
     if (!enderecoPendente) return;
-    salvarConfig({ endereco: enderecoPendente });
+    // O resto da configuração (atualizar sozinho, por exemplo) sobrevive à troca de servidor.
+    salvarConfig({ ...lerConfig(), endereco: enderecoPendente });
     enderecoPendente = null;
   });
 
@@ -410,8 +420,16 @@ ipcMain.handle('endereco:esquecer', evento => {
 // origem da sala e num caminho fixo por sistema; o arquivo vai para Downloads com um nome
 // montado aqui; e abrir o que foi baixado passa por uma pergunta nativa, que página nenhuma
 // consegue responder sozinha.
+//
+// Isso é o PORTÁTIL. O aplicativo instalado (o instalador do Windows, o AppImage, o .deb) se
+// atualiza sozinho pelo electron-updater, em atualizacao-automatica.js; os canais abaixo são os
+// mesmos para os dois, e cada um passa adiante para quem cuida daquele tipo.
+const atualizador = criarAtualizador({
+  lerConfig, salvarConfig,
+  avisar: dados => { if (janela && !janela.isDestroyed()) janela.webContents.send('atualizacao:progresso', dados); }
+});
 const BUILD_DO_SISTEMA = { win32: 'SalaCompartilhada.exe', linux: 'Nexo.AppImage', darwin: 'Nexo.dmg' };
-const ESTADOS_DA_ATUALIZACAO = new Set(['pedido', 'baixando', 'pronto', 'cancelado', 'falhou']);
+const ESTADOS_DA_ATUALIZACAO = new Set(['disponivel', 'pedido', 'baixando', 'pronto', 'cancelado', 'falhou']);
 let atualizacao = null; // { url, versao, estado, item, caminho, recebidos, total }
 
 function avisarAtualizacao() {
@@ -469,6 +487,8 @@ function instalarDownloadDaAtualizacao() {
 
 ipcMain.handle('atualizacao:baixar', (evento, versao) => {
   if (!remetenteDaSala(evento)) return { ok: false, motivo: 'outro-servidor' };
+  // Instalado: quem sabe qual é a versão nova é a ficha do servidor, e não a página.
+  if (atualizador.ativo) return atualizador.baixar();
   const arquivo = BUILD_DO_SISTEMA[process.platform];
   if (!arquivo || !/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(versao))) return { ok: false, motivo: 'versao-invalida' };
   if (atualizacao && ['pedido', 'baixando'].includes(atualizacao.estado)) return { ok: true, jaEstava: true };
@@ -483,22 +503,47 @@ ipcMain.handle('atualizacao:baixar', (evento, versao) => {
   return { ok: true };
 });
 ipcMain.handle('atualizacao:cancelar', evento => {
-  if (!remetenteDaSala(evento) || !atualizacao?.item) return false;
+  if (!remetenteDaSala(evento)) return false;
+  if (atualizador.ativo) return atualizador.cancelar();
+  if (!atualizacao?.item) return false;
   atualizacao.item.cancel();
   return true;
 });
 // A página recarregada no meio do download volta a mostrar a barra de onde ela estava.
 ipcMain.handle('atualizacao:estado', evento => {
-  if (!remetenteDaSala(evento) || !atualizacao || !ESTADOS_DA_ATUALIZACAO.has(atualizacao.estado)) return null;
+  if (!remetenteDaSala(evento)) return null;
+  if (atualizador.ativo) return atualizador.estado();
+  if (!atualizacao || !ESTADOS_DA_ATUALIZACAO.has(atualizacao.estado)) return null;
   return { estado: atualizacao.estado, versao: atualizacao.versao, recebidos: atualizacao.recebidos || 0, total: atualizacao.total || 0 };
 });
+// "Procurar agora", das configurações: sem esperar a volta das quatro horas.
+ipcMain.handle('atualizacao:procurar', async evento => {
+  if (!remetenteDaSala(evento) || !atualizador.ativo) return { ok: false };
+  // Já achada (descendo ou pronta): não há o que procurar, e a resposta é a que já se tem.
+  const atual = atualizador.estado();
+  if (atual && ['disponivel', 'pedido', 'baixando', 'pronto'].includes(atual.estado)) return { ok: true, nova: true, versao: atual.versao };
+  const resultado = await atualizador.procurar();
+  // Sem resultado é falha de procura: o servidor fora, ou sem a pasta de atualizações.
+  return { ok: Boolean(resultado), nova: Boolean(resultado?.isUpdateAvailable), versao: resultado?.updateInfo?.version || '' };
+});
 ipcMain.handle('atualizacao:mostrar', evento => {
-  if (!remetenteDaSala(evento) || atualizacao?.estado !== 'pronto') return false;
+  if (!remetenteDaSala(evento) || atualizador.ativo || atualizacao?.estado !== 'pronto') return false;
   shell.showItemInFolder(atualizacao.caminho);
   return true;
 });
 ipcMain.handle('atualizacao:abrir', async evento => {
-  if (!remetenteDaSala(evento) || atualizacao?.estado !== 'pronto' || !fs.existsSync(atualizacao.caminho)) return false;
+  if (!remetenteDaSala(evento)) return false;
+  if (atualizador.ativo) {
+    const pronta = atualizador.estado();
+    if (pronta?.estado !== 'pronto') return false;
+    const { response } = await dialog.showMessageBox(janela, {
+      type: 'question', buttons: ['Reiniciar agora', 'Depois'], defaultId: 0, cancelId: 1, noLink: true,
+      title: 'Atualizar o Nexo', message: `Instalar o Nexo ${pronta.versao} agora?`,
+      detail: 'O Nexo fecha, instala a versão nova e abre de novo. Uma chamada em andamento cai por alguns segundos. "Depois" instala quando você fechar o Nexo.'
+    });
+    return response === 0 ? atualizador.instalar() : false;
+  }
+  if (atualizacao?.estado !== 'pronto' || !fs.existsSync(atualizacao.caminho)) return false;
   // O .dmg não é o aplicativo: é o instalador do macOS, que a pessoa arrasta para Aplicativos.
   if (process.platform === 'darwin') { shell.openPath(atualizacao.caminho); return true; }
   const { response } = await dialog.showMessageBox(janela, {
@@ -512,6 +557,34 @@ ipcMain.handle('atualizacao:abrir', async evento => {
   app.relaunch({ execPath: atualizacao.caminho, args: [] });
   app.quit();
   return true;
+});
+
+// ---------------------------------------------------------------- opções do aplicativo
+// O que o aplicativo instalado faz e o navegador não: atualizar sozinho e abrir ao entrar no
+// computador. Ficam nas configurações da sala (public/atualizacao-app.js) e no menu. A página
+// só lê e liga, por nome de uma lista fechada -- nunca escreve na configuração direto.
+const podeAbrirAoEntrar = () => atualizador.ativo || (app.isPackaged && process.platform === 'darwin');
+function opcoesDoAplicativo() {
+  return {
+    tipo: atualizador.tipo,
+    atualizaSozinho: atualizador.ativo,
+    atualizarSozinho: atualizador.ativo ? atualizador.sozinho() : false,
+    podeAbrirAoEntrar: podeAbrirAoEntrar(),
+    abrirAoEntrar: podeAbrirAoEntrar() ? inicializacao.ligado() : false
+  };
+}
+function definirOpcao(nome, valor) {
+  if (nome === 'atualizarSozinho' && atualizador.ativo) atualizador.definirSozinho(Boolean(valor));
+  else if (nome === 'abrirAoEntrar' && podeAbrirAoEntrar()) inicializacao.definir(Boolean(valor));
+  else return false;
+  instalarMenu();
+  return true;
+}
+ipcMain.handle('app:opcoes', evento => (remetenteDaSala(evento) ? opcoesDoAplicativo() : null));
+ipcMain.handle('app:opcao', (evento, nome, valor) => {
+  if (!remetenteDaSala(evento)) return null;
+  try { definirOpcao(String(nome), valor === true); } catch (erro) { console.error('Opção do aplicativo:', erro.message); }
+  return opcoesDoAplicativo();
 });
 
 // ---------------------------------------------------------------- permissões
@@ -530,6 +603,20 @@ function instalarPermissoes() {
 // A barra fica escondida (Alt mostra), mas os atalhos valem sempre. Sem isto, um endereço
 // que parou de funcionar não teria como ser trocado de dentro do aplicativo.
 function instalarMenu() {
+  // As opções do aplicativo instalado também moram nas configurações da sala; aqui elas são o
+  // caminho de quem está na tela de endereço, sem sala nenhuma aberta.
+  const opcoes = opcoesDoAplicativo();
+  const doAplicativo = [
+    opcoes.atualizaSozinho && {
+      label: 'Atualizar sozinho', type: 'checkbox', checked: opcoes.atualizarSozinho,
+      click: item => definirOpcao('atualizarSozinho', item.checked)
+    },
+    opcoes.atualizaSozinho && { label: 'Procurar atualização agora', click: () => atualizador.procurar() },
+    opcoes.podeAbrirAoEntrar && {
+      label: 'Abrir ao entrar no computador', type: 'checkbox', checked: opcoes.abrirAoEntrar,
+      click: item => definirOpcao('abrirAoEntrar', item.checked)
+    }
+  ].filter(Boolean);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
       label: 'Sala',
@@ -540,6 +627,7 @@ function instalarMenu() {
           click: () => mostrarTelaDeEndereco('', lerConfig().endereco || '')
         },
         { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => janela?.reload() },
+        ...(doAplicativo.length ? [{ type: 'separator' }, ...doAplicativo] : []),
         { type: 'separator' },
         {
           label: 'Ferramentas de desenvolvedor',

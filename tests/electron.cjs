@@ -2,7 +2,10 @@
 // capture, no existing user profile, and no running audio agent is touched.
 const { _electron } = require('playwright');
 const { iniciarServidor } = require('./helpers/servidor-telemetria.cjs');
+const crypto = require('node:crypto');
+const express = require('express');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const output = path.join(__dirname, '../test-results/electron');
@@ -56,6 +59,23 @@ let server, electron;
       ipcMain.removeHandler('agente:iniciar');
       ipcMain.handle('agente:iniciar', () => ({ rodando: false, motivo: 'test-fixture' }));
     });
+    // A atualização sozinha do aplicativo instalado, com o electron-updater de verdade. O aplicativo
+    // daqui roda sem empacotar; o módulo recebe o tipo "instalador" e a configuração do teste.
+    global.testarAtualizacaoAutomatica = async ({ configDoTeste, origem }) => {
+      const { autoUpdater } = require(${JSON.stringify(path.join(__dirname, '../app/node_modules/electron-updater'))});
+      autoUpdater.forceDevUpdateConfig = true;
+      autoUpdater.updateConfigPath = configDoTeste;
+      const { criarAtualizador } = require(${JSON.stringify(path.join(__dirname, '../app/atualizacao-automatica.js'))});
+      const avisos = [];
+      let config = { atualizarSozinho: true };
+      const atualizador = criarAtualizador({ tipo: 'instalador', lerConfig: () => config, salvarConfig: novo => { config = novo; }, avisar: dados => avisos.push(dados) });
+      atualizador.definirOrigem(origem);
+      const resposta = await atualizador.baixar();
+      for (let n = 0; n < 300 && !avisos.some(a => ['pronto', 'falhou'].includes(a.estado)); n++) await new Promise(r => setTimeout(r, 100));
+      // O "instalador" do teste são bytes quaisquer: fechar o aplicativo não pode tentar rodá-lo.
+      autoUpdater.autoInstallOnAppQuit = false;
+      return { resposta, avisos, estado: atualizador.estado(), arquivo: autoUpdater.installerPath, ativo: atualizador.ativo };
+    };
   `);
   // Pelo ajudante, e não com `node server.js`: ele isola as contas, o painel e a medição numa
   // pasta temporária e usa uma cópia do servidor de mídia -- o binário instalado faria o
@@ -183,6 +203,46 @@ let server, electron;
     fs.rmSync(baixado, { force: true });
     console.log('PASS: o aplicativo baixa a própria atualização com progresso, salva com o nome da versão em Downloads e só reinicia com a resposta nativa');
   } else console.log('SKIP: sem app/dist/SalaCompartilhada.exe, o download da atualização não foi testado');
+
+  // ---------- A atualização sozinha do aplicativo instalado ----------
+  //
+  // O electron-updater de verdade contra a pasta de atualizações de verdade (desktop-download.js,
+  // num servidor de fixtures): a ficha latest.yml com o sha512 do instalador, o download conferido
+  // por ele, e o estado atravessando para quem avisa a sala. Instalar fica de fora -- o
+  // "instalador" daqui são bytes quaisquer, e o teste não pode se reinstalar.
+  const pastaDaFicha = fs.mkdtempSync(path.join(output, 'atualizacoes-'));
+  const cacheDoAtualizador = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'nexo-teste-atualizacao');
+  const instalador = path.join(pastaDaFicha, 'Nexo-Setup.exe');
+  const bytes = crypto.randomBytes(512 * 1024);
+  fs.writeFileSync(instalador, bytes);
+  const sha512 = crypto.createHash('sha512').update(bytes).digest('base64');
+  fs.writeFileSync(path.join(pastaDaFicha, 'latest.yml'), ['version: 99.0.0', 'files:', '  - url: Nexo-Setup.exe', `    sha512: ${sha512}`, `    size: ${bytes.length}`,
+    'path: Nexo-Setup.exe', `sha512: ${sha512}`, `releaseDate: '${new Date().toISOString()}'`, ''].join('\n'));
+  const fixtures = express();
+  require('../desktop-download')(fixtures, { 'windows-instalador': instalador }, { atualizacoes: pastaDaFicha });
+  const servidorDeFixtures = fixtures.listen(0, '127.0.0.1');
+  await new Promise(resolve => servidorDeFixtures.once('listening', resolve));
+  const origemDasFixtures = `http://127.0.0.1:${servidorDeFixtures.address().port}`;
+  // O endereço daqui é o lugar-reservado do build; o módulo troca pela origem antes de procurar.
+  const configDoTeste = path.join(pastaDaFicha, 'dev-app-update.yml');
+  fs.writeFileSync(configDoTeste, 'provider: generic\nurl: https://nexo.invalid/downloads/atualizacoes\nupdaterCacheDirName: nexo-teste-atualizacao\n');
+  try {
+    const resultado = await electron.evaluate((_electron, dados) => global.testarAtualizacaoAutomatica(dados), { configDoTeste, origem: origemDasFixtures });
+    assert.equal(resultado.ativo, true);
+    assert.deepEqual(resultado.resposta, { ok: true }, JSON.stringify(resultado));
+    const estados = resultado.avisos.map(a => a.estado);
+    assert.equal(estados[0], 'pedido', 'o clique aparece na hora, antes de a ficha chegar');
+    assert.ok(estados.includes('baixando'), `o progresso atravessa: ${estados.join(' → ')}`);
+    assert.equal(resultado.estado.estado, 'pronto', `a versão nova tinha de ficar pronta: ${estados.join(' → ')}`);
+    assert.equal(resultado.estado.versao, '99.0.0');
+    assert.equal(resultado.estado.silenciosa, false, 'quem clicou vê o progresso');
+    assert.deepEqual(fs.readFileSync(resultado.arquivo), bytes, 'o instalador chega inteiro, conferido pelo sha512 da ficha');
+    console.log('PASS: o aplicativo instalado acha a versão nova no servidor escolhido, baixa o instalador conferido e fica pronto para instalar');
+  } finally {
+    await new Promise(resolve => servidorDeFixtures.close(resolve));
+    fs.rmSync(pastaDaFicha, { recursive: true, force: true });
+    fs.rmSync(cacheDoAtualizador, { recursive: true, force: true });
+  }
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   await electron?.close();
   await server?.encerrar();

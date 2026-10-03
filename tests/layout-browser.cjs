@@ -24,7 +24,7 @@ const assert = require('node:assert/strict');
 const porta = 3233;
 const origem = `http://localhost:${porta}`;
 const LARGURAS = [320, 360, 390, 430, 480, 540, 600, 640, 700, 761, 800, 860, 920, 1000, 1101, 1180, 1251, 1320, 1440, 1600, 1920, 2560];
-const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'musica',
+const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'config:aplicativo', 'musica',
   'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca',
   'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta'];
 // Os painéis não mudam a cada 20 px: uma amostra das larguras basta, com os extremos.
@@ -102,6 +102,15 @@ async function prepararEstado(pagina, estado) {
     if (e === 'semchat') fecharChat();
     if (e === 'recolhida') app.classList.add('barra-recolhida');
     if (e === 'focochat') definirFocoChat(true);
+    // A seção do aplicativo de mesa só existe dentro dele: aqui ela aparece no pior caso, com a
+    // versão, a frase mais longa e as duas opções.
+    if (e === 'config:aplicativo') {
+      document.getElementById('abaAplicativo').hidden = false;
+      document.getElementById('appOpcoes').hidden = false;
+      document.getElementById('appVersao').textContent = 'Nexo 1.12.10';
+      document.getElementById('appVersaoEstado').textContent = 'instalado pelo .deb · a 1.13.0 está pronta: reinicie para usar';
+      document.getElementById('appDica').textContent = 'As atualizações vêm deste servidor, o mesmo das suas salas. Uma chamada em andamento nunca é interrompida para instalar.';
+    }
     if (e.startsWith('config:')) NexoConfig.abrir(e.slice(7));
     if (e === 'musica') document.querySelector('[data-action="musica"]').click();
     if (e.startsWith('estudio')) {

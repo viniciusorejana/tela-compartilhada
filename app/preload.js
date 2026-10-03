@@ -9,6 +9,9 @@ const pid = argumento ? Number(argumento.split('=')[1]) : 0;
 // Só o formato de versão atravessa: o argumento vem do processo principal, mas a página é
 // conteúdo remoto, e nada solto passa pela ponte.
 const versao = (process.argv.find(a => a.startsWith('--versao-do-app=')) || '').split('=')[1] || '';
+// Instalado (atualiza sozinho), portátil (baixa o arquivo novo) ou desenvolvimento. Lista fechada.
+const instalacao = (process.argv.find(a => a.startsWith('--instalacao=')) || '').split('=')[1] || '';
+const OPCOES = ['atualizarSozinho', 'abrirAoEntrar'];
 
 contextBridge.exposeInMainWorld('appNativo', {
   // O PID da raiz da árvore deste aplicativo. É o que a sala manda para o agente para que
@@ -17,6 +20,11 @@ contextBridge.exposeInMainWorld('appNativo', {
   // Qual aplicativo é este, para a sala comparar com o que o servidor distribui.
   versao: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(versao) ? versao : '',
   plataforma: ['win32', 'linux', 'darwin'].includes(process.platform) ? process.platform : '',
+  instalacao: ['instalador', 'appimage', 'deb', 'portatil', 'desenvolvimento', 'outro'].includes(instalacao) ? instalacao : '',
+  // Atualizar sozinho e abrir ao entrar no computador. Na volta, só booleanos e o tipo.
+  opcoesDoAplicativo: () => ipcRenderer.invoke('app:opcoes').then(limparOpcoes),
+  definirOpcaoDoAplicativo: (nome, valor) => (OPCOES.includes(nome) ? ipcRenderer.invoke('app:opcao', nome, valor === true).then(limparOpcoes) : Promise.resolve(null)),
+  procurarAtualizacao: () => ipcRenderer.invoke('atualizacao:procurar').then(r => ({ ok: r?.ok === true, nova: r?.nova === true, versao: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(r?.versao || '')) ? String(r.versao) : '' })),
   iniciarAgente: (url) => ipcRenderer.invoke('agente:iniciar', url),
   prepararCaptura: tipo => ipcRenderer.invoke('captura:preparar', tipo),
   capturaSelecionada: () => ipcRenderer.invoke('captura:selecionada'),
@@ -46,13 +54,26 @@ contextBridge.exposeInMainWorld('appNativo', {
 });
 
 function limparAtualizacao(dados) {
-  if (!dados || !['pedido', 'baixando', 'pronto', 'cancelado', 'falhou'].includes(dados.estado)) return null;
+  if (!dados || !['disponivel', 'pedido', 'baixando', 'pronto', 'cancelado', 'falhou'].includes(dados.estado)) return null;
   const numero = valor => (Number.isFinite(Number(valor)) && Number(valor) >= 0 ? Number(valor) : 0);
   return {
     estado: dados.estado,
     versao: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(dados.versao || '')) ? String(dados.versao) : '',
     recebidos: numero(dados.recebidos),
     total: numero(dados.total),
-    arquivo: String(dados.arquivo || '').slice(0, 120)
+    arquivo: String(dados.arquivo || '').slice(0, 120),
+    // Descendo sozinha, sem ninguém ter pedido: a sala não mostra o progresso.
+    silenciosa: dados.silenciosa === true
+  };
+}
+
+function limparOpcoes(dados) {
+  if (!dados) return null;
+  return {
+    tipo: String(dados.tipo || ''),
+    atualizaSozinho: dados.atualizaSozinho === true,
+    atualizarSozinho: dados.atualizarSozinho === true,
+    podeAbrirAoEntrar: dados.podeAbrirAoEntrar === true,
+    abrirAoEntrar: dados.abrirAoEntrar === true
   };
 }

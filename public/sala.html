@@ -235,6 +235,8 @@
           <button type="button" class="aba" role="tab" id="abaSons" aria-controls="painelSons" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Sons</button>
           <button type="button" class="aba" role="tab" id="abaAparencia" aria-controls="painelAparencia" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.5 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Aparência</button>
           <button type="button" class="aba" role="tab" id="abaAtalhos" aria-controls="painelAtalhos" aria-selected="false" tabindex="-1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Atalhos</button>
+          <!-- Só no aplicativo de mesa (atualizacao-app.js mostra): no navegador não há o que instalar. -->
+          <button type="button" class="aba" role="tab" id="abaAplicativo" aria-controls="painelAplicativo" aria-selected="false" tabindex="-1" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M12 6.5v6M9 9.5l3 3 3-3"/></svg>Aplicativo de mesa</button>
         </div>
       </nav>
 
@@ -476,6 +478,19 @@
           <div><dt>Pedir para tocar a seguir</dt><dd><kbd>Ctrl</kbd><kbd>Enter</kbd></dd></div>
           <div><dt>Fechar painel, menu ou resposta</dt><dd><kbd>Esc</kbd></dd></div>
         </dl>
+      </div>
+
+      <div class="aba-painel" role="tabpanel" id="painelAplicativo" aria-labelledby="abaAplicativo" hidden>
+        <header class="config-cabeca"><h3>Aplicativo de mesa</h3><p>O que o Nexo faz sozinho neste computador.</p></header>
+        <div class="config-bloco app-versao">
+          <div class="app-versao-texto"><strong id="appVersao">Nexo</strong><small id="appVersaoEstado" role="status"></small></div>
+          <button type="button" class="secondary" id="appProcurar">Procurar atualização</button>
+        </div>
+        <div class="config-bloco" id="appOpcoes" hidden>
+          <label class="toggle-line" for="appAtualizarSozinho" id="appLinhaAtualizar"><span><strong>Atualizar sozinho</strong><small>A versão nova desce em silêncio e se instala quando você fecha o Nexo.</small></span><input id="appAtualizarSozinho" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="appAbrirAoEntrar" id="appLinhaAbrir"><span><strong>Abrir ao entrar no computador</strong><small>O Nexo abre minimizado quando você liga o computador.</small></span><input id="appAbrirAoEntrar" type="checkbox" role="switch"></label>
+        </div>
+        <p class="config-dica" id="appDica"></p>
       </div>
 
     <div class="modal-actions">

@@ -1355,6 +1355,13 @@ html.menos-movimento :is(.room-reaction-emoji,.room-reaction-nome) { animation:n
 .config-bloco { display:grid; gap:14px; margin-bottom:20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
 .config-bloco .toggle-line strong { font-size:var(--fs-md); font-weight:600; }
 .config-bloco .toggle-line small { font-size:var(--fs-meta); line-height:1.5; }
+/* A versão do aplicativo de mesa e o "Procurar atualização" ao lado; no celular não existe. */
+.config-bloco.app-versao { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.app-versao-texto { flex:1 1 180px; min-width:0; display:grid; gap:3px; }
+.app-versao-texto strong { font-size:var(--fs-lg); font-weight:650; }
+.app-versao-texto small { font-size:var(--fs-meta); color:var(--muted); line-height:1.5; }
+.app-versao-texto small.tem-novidade { color:var(--accent-texto); }
+.app-versao button { min-height:var(--ctl-m); }
 .config-volume label { display:block; margin-bottom:6px; color:var(--text-3); font-size:var(--fs-meta); font-weight:600; }
 .config-volume .volume-row { gap:10px; color:var(--muted); }
 .config-volume .volume-slider { height:4px; }

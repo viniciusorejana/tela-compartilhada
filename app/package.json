@@ -1,23 +1,30 @@
 {
   "name": "sala-compartilhada-app",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Aplicativo de mesa do Nexo: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
   "author": "Nexo",
   "main": "main.js",
   "_comentario_desktopName": "Nível raiz de propósito: é daqui que o electron-builder lê o nome do arquivo .desktop quando linux.syncDesktopName está ligado. Sem ele, os ambientes de mesa do Linux não ligam a janela aberta ao ícone do aplicativo, e o Nexo aparece na barra de tarefas como um genérico sem nome.",
   "desktopName": "nexo.desktop",
+  "_comentario_build": "Comentários do build ficam aqui fora: dentro de \"build\" o electron-builder recusa qualquer chave que não conheça.",
+  "_comentario_publish": "build.publish: o endereço é só um lugar-reservado. O electron-builder precisa de um para gerar latest.yml e latest-linux.yml, mas cada Nexo se atualiza pelo servidor que a PESSOA escolheu -- atualizacao-automatica.js troca o endereço na hora de procurar, para a origem da sala. 'never' nos scripts: os arquivos ficam em dist/ e o servidor os entrega em /downloads/atualizacoes.",
+  "_comentario_nsis": "build.nsis: o instalador assistido. Pergunta a pasta, instala só para quem está usando (sem pedir administrador; dá para escolher todos os usuários), põe atalho no menu Iniciar e na área de trabalho, e deixa um desinstalador. O nome é fixo, sem a versão: é o que deixa o servidor ter uma lista fechada de arquivos (desktop-download.js) e o latest.yml apontar sempre para o mesmo caminho.",
+  "_comentario_deb": "build.deb: o .deb instala o Nexo no sistema (menu de aplicativos, /opt/Nexo) e se atualiza pelo mesmo caminho do AppImage; para trocar o pacote, o atualizador pede a senha de administrador (pkexec), como todo .deb.",
   "scripts": {
     "start": "node lancar.js",
-    "empacotar": "electron-builder --win portable && node escrever-versao.js windows",
-    "empacotar:linux": "electron-builder --linux AppImage && node escrever-versao.js linux",
-    "empacotar:mac": "electron-builder --mac dmg && node escrever-versao.js mac"
+    "empacotar": "electron-builder --win nsis portable --publish never && node escrever-versao.js windows windows-instalador",
+    "empacotar:portatil": "electron-builder --win portable --publish never && node escrever-versao.js windows",
+    "empacotar:linux": "electron-builder --linux AppImage deb --publish never && node escrever-versao.js linux linux-deb",
+    "empacotar:mac": "electron-builder --mac dmg --publish never && node escrever-versao.js mac"
   },
   "build": {
     "appId": "com.telacompartilhada.app",
     "productName": "Nexo",
     "files": [
       "main.js",
+      "atualizacao-automatica.js",
+      "iniciar-com-o-sistema.js",
       "preload.js",
       "preload-escolher.js",
       "endereco.html",
@@ -27,9 +34,17 @@
       "icon.ico",
       "icon.png"
     ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://nexo.invalid/downloads/atualizacoes",
+        "channel": "latest"
+      }
+    ],
     "win": {
       "icon": "icon.ico",
       "target": [
+        "nsis",
         "portable"
       ],
       "extraResources": [
@@ -42,15 +57,45 @@
     "portable": {
       "artifactName": "SalaCompartilhada.exe"
     },
+    "nsis": {
+      "artifactName": "Nexo-Setup.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nexo",
+      "uninstallDisplayName": "Nexo",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerLanguages": [
+        "pt_BR"
+      ],
+      "language": "1046",
+      "differentialPackage": true
+    },
     "linux": {
       "icon": "icon.png",
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "Network",
-      "artifactName": "Nexo.AppImage",
+      "executableName": "nexo",
+      "maintainer": "Nexo",
       "syncDesktopName": true,
       "synopsis": "Sala de voz, câmera e tela com o seu squad"
+    },
+    "appImage": {
+      "artifactName": "Nexo.AppImage"
+    },
+    "deb": {
+      "artifactName": "Nexo.deb",
+      "packageCategory": "net",
+      "priority": "optional"
     },
     "mac": {
       "icon": "icon.png",
@@ -67,5 +112,8 @@
   "devDependencies": {
     "electron": "^44.2.0",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.10"
   }
 }
