@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nexo · Aplicativo</title>
+<!-- A mesma tela de app/endereco.html, a do aplicativo de mesa, com o texto do celular. Cores
+     fixas: ela abre antes de qualquer servidor, e portanto antes de tema.css existir. -->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    background: #161720 radial-gradient(ellipse at 50% 30%, #38304e66, transparent 65%);
+    color: #eeeaf6; font: 14px/1.6 "Segoe UI", system-ui, sans-serif;
+  }
+  .cartao {
+    width: 100%; max-width: 460px; background: #24222f; border: 1px solid #b8a3d525;
+    border-radius: 22px; padding: 28px 22px;
+  }
+  h1 { font-size: 26px; letter-spacing: -.04em; line-height: 1.2; margin: 15px 0 9px; }
+  p { color: #b1a3bf; font-size: 13px; margin: 0 0 22px; }
+  .marca { color: #c3b1ed; font-size: 11px; font-weight: 750; letter-spacing: .13em; }
+  label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  /* 16 px no campo: abaixo disso o teclado do celular aproxima a página ao focar. */
+  input {
+    width: 100%; min-height: 48px; padding: 12px; border-radius: 10px; border: 1px solid #b8a3d52a;
+    background: #181721; color: inherit; font: 16px "Segoe UI", system-ui, sans-serif;
+  }
+  input:focus { outline: none; border-color: #8879f6; box-shadow: 0 0 0 3px #8879f633; }
+  button {
+    width: 100%; min-height: 48px; margin-top: 14px; padding: 0 16px; border: 0; border-radius: 10px;
+    background: #6c5ce7; color: #fff; font: 600 14px "Segoe UI", system-ui, sans-serif; cursor: pointer;
+    transition: background-color .17s, transform .11s;
+  }
+  button:active { transform: scale(.985); background: #7b6cf0; }
+  button:focus-visible { outline: 2px solid #b6abff; outline-offset: 3px; }
+  .versao { color: #8f8ea6; font-weight: 600; letter-spacing: .06em; }
+  .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
+  .falha {
+    background: #3a1410; border: 1px solid #7c2d20; color: #ffb4a4;
+    border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 16px; overflow-wrap: anywhere;
+  }
+  .falha[hidden] { display: none; }
+  .dica { margin-top: 18px; padding-top: 16px; border-top: 1px solid #b8a3d516; font-size: 12px; color: #a99ab6; }
+  code { background: #181721; padding: 2px 6px; border-radius: 5px; font-size: 11px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+  <main class="cartao">
+    <span class="marca">NEXO / ANDROID<span class="versao" id="versao"></span></span>
+    <h1>Seu squad, no bolso.</h1>
+    <p>Conecte ao servidor da sua galera. O endereço fica guardado para o próximo encontro, e a chamada continua com a tela apagada.</p>
+
+    <div class="falha" id="falha" role="alert" hidden></div>
+
+    <label for="endereco">Endereço</label>
+    <input id="endereco" type="url" inputmode="url" placeholder="https://seu-servidor.ts.net" autocomplete="url" autocapitalize="none" spellcheck="false">
+    <button id="entrar" type="button">Conectar ao Nexo</button>
+    <div class="erro" id="erro" role="alert"></div>
+
+    <div class="dica">
+      É o mesmo endereço que você abre no navegador para entrar nas salas.
+      Use um endereço <code>https://</code>: o Android só libera microfone e câmera em conexão segura.
+      Num <code>http://192.168…</code> da sua rede a sala abre, mas sem voz nem câmera.
+      <br><br>
+      Para voltar aqui depois: segure o ícone do Nexo e toque em “Trocar de servidor”.
+    </div>
+  </main>
+
+<script>
+  const campo = document.getElementById('endereco');
+  const erro = document.getElementById('erro');
+  // Qual aplicativo é este: a primeira coisa a perguntar quando algo não funciona.
+  const versao = /\bNexoAndroid\/(\d{1,4}\.\d{1,4}\.\d{1,4})\b/.exec(navigator.userAgent)?.[1];
+  if (versao) document.getElementById('versao').textContent = ` · ${versao}`;
+
+  // Quando a página anterior não carregou, o motivo vem junto -- e o endereço tentado volta
+  // preenchido, porque quase sempre ele está certo e o servidor é que estava fora do ar.
+  const parametros = new URLSearchParams(location.search);
+  const anterior = parametros.get('anterior') || '';
+  const falhou = parametros.get('erro') || '';
+  if (anterior) campo.value = anterior;
+  if (falhou) {
+    const faixa = document.getElementById('falha');
+    faixa.hidden = false;
+    faixa.textContent = `Não foi possível abrir o endereço anterior: ${falhou}. Confira se o servidor está no ar e se o celular está na internet, e tente de novo.`;
+  }
+
+  // A ponte com o aplicativo (MainActivity) só existe nesta página e só aceita um endereço.
+  const ponte = window.nexoEndereco;
+  ponte?.addEventListener('message', evento => {
+    try { if (JSON.parse(evento.data)?.ok === false) erro.textContent = 'Endereço inválido. Use algo como https://seu-servidor.ts.net'; } catch (_) { /* nada a fazer */ }
+  });
+
+  function abrir() {
+    let valor = campo.value.trim();
+    if (!valor) { erro.textContent = 'Digite o endereço.'; return; }
+    // Quem digita "nexo.minhacasa.com" quer dizer https://; completar é mais gentil que recusar.
+    if (!/^https?:\/\//i.test(valor)) valor = `https://${valor}`;
+    erro.textContent = '';
+    if (!ponte) { erro.textContent = 'Este Android não tem a WebView atualizada. Atualize o “Android System WebView” na Play Store.'; return; }
+    ponte.postMessage(JSON.stringify({ tipo: 'endereco', valor }));
+  }
+
+  document.getElementById('entrar').onclick = abrir;
+  campo.addEventListener('keydown', evento => { if (evento.key === 'Enter') abrir(); });
+  if (!anterior) campo.focus();
+</script>
+</body>
+</html>

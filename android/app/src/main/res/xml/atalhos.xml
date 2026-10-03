@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Segurar o ícone do Nexo mostra "Trocar de servidor": o mesmo Ctrl+Shift+S do aplicativo de
+     mesa. Sem ele, um endereço que parou de funcionar só se corrigia apagando os dados do app. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:shortcutId="trocar-servidor"
+        android:shortcutLongLabel="@string/atalho_servidor"
+        android:shortcutShortLabel="@string/atalho_servidor_curto">
+        <intent
+            android:action="com.telacompartilhada.nexo.TROCAR_SERVIDOR"
+            android:targetClass="com.telacompartilhada.nexo.MainActivity"
+            android:targetPackage="com.telacompartilhada.nexo" />
+    </shortcut>
+</shortcuts>

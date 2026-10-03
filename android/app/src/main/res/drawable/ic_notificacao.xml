@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O ícone pequeno da notificação: só o N da marca, em branco, como o Android pede na barra de
+     status. A janela de 36 unidades recorta o N (28 por 26) com folga igual dos lados. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <group
+        android:translateX="-14"
+        android:translateY="-14">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M18,45V19h7l14,17V19h7v26h-7L25,28v17z" />
+    </group>
+</vector>

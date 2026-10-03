@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+// A assinatura do APK de distribuição. Fica FORA do Git: quem tem a chave publica atualizações,
+// e o Android só instala uma versão nova por cima da antiga se as duas tiverem a mesma
+// assinatura -- perder a chave é obrigar todo mundo a desinstalar e instalar de novo.
+//
+// Lida de android/keystore.properties (storeFile, storePassword, keyAlias, keyPassword) ou das
+// variáveis NEXO_ANDROID_KEYSTORE, NEXO_ANDROID_KEYSTORE_SENHA, NEXO_ANDROID_CHAVE e
+// NEXO_ANDROID_CHAVE_SENHA. Sem nenhuma das duas, o build de distribuição sai sem assinatura e
+// scripts/empacotar-android.cjs recusa copiá-lo. Como criar a chave: docs/android.md.
+def propriedadesDaChave = new Properties()
+def arquivoDaChave = rootProject.file('keystore.properties')
+if (arquivoDaChave.exists()) arquivoDaChave.withInputStream { propriedadesDaChave.load(it) }
+def daChave = { String nome, String variavel -> propriedadesDaChave.getProperty(nome) ?: System.getenv(variavel) }
+def caminhoDaChave = daChave('storeFile', 'NEXO_ANDROID_KEYSTORE')
+
+android {
+    namespace = 'com.telacompartilhada.nexo'
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = 'com.telacompartilhada.nexo'
+        // Android 8: o primeiro com prioridade do processo da WebView (ela segue viva com o
+        // aplicativo fora da tela) e com canais de notificação.
+        minSdk = 26
+        targetSdk = 36
+        // Sobe a cada APK distribuído. O servidor anuncia versionName (app/dist/versao.json),
+        // e é ele que a sala compara para dizer que existe um Nexo mais novo.
+        versionCode = 1
+        versionName = '1.0.0'
+    }
+
+    signingConfigs {
+        if (caminhoDaChave) {
+            distribuicao {
+                storeFile = rootProject.file(caminhoDaChave)
+                storePassword = daChave('storePassword', 'NEXO_ANDROID_KEYSTORE_SENHA')
+                keyAlias = daChave('keyAlias', 'NEXO_ANDROID_CHAVE')
+                keyPassword = daChave('keyPassword', 'NEXO_ANDROID_CHAVE_SENHA')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            if (caminhoDaChave) signingConfig = signingConfigs.distribuicao
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+dependencies {
+    // NotificationCompat e ServiceCompat: o serviço da chamada em todas as versões do Android.
+    // A 1.18 em diante pede compileSdk 37 e um AGP mais novo; a 1.17 é a última do SDK 36.
+    implementation 'androidx.core:core:1.17.0'
+    // A ponte com a sala presa a uma origem (addWebMessageListener) e a tela de endereço servida
+    // como https (WebViewAssetLoader), em vez de file://.
+    implementation 'androidx.webkit:webkit:1.17.1'
+}

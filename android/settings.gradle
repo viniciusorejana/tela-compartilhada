@@ -1,0 +1,20 @@
+// O Nexo para Android: a mesma sala do navegador numa WebView, como o aplicativo de mesa é a
+// mesma sala numa janela do Electron. Ver docs/android.md.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'Nexo'
+include ':app'

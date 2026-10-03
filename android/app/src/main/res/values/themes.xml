@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Escuro, sem barra de título: a sala desenha tudo. As barras do sistema na cor do fundo para
+         não aparecer uma faixa clara em volta da página. -->
+    <style name="Tema.Nexo" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@color/fundo</item>
+        <item name="android:navigationBarColor">@color/fundo</item>
+        <item name="android:colorAccent">@color/destaque</item>
+    </style>
+</resources>

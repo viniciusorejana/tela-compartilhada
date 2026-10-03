@@ -18,3 +18,14 @@ native/dev/
 .env
 .env.*
 !.env.example
+
+# O aplicativo Android: o que o Gradle gera, o caminho do SDK desta máquina e, acima de tudo, a
+# chave que assina o APK -- quem a tem publica atualizações (docs/android.md).
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+*.jks
+*.keystore

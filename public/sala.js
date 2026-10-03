@@ -2462,6 +2462,8 @@ function alternarEnsurdecimento() {
   deafenBtn.classList.toggle('secondary', !ensurdecido);
   deafenBtn.title = ensurdecido ? 'Voltar a ouvir a sala' : 'Ensurdecer: silenciar toda a sala';
   deafenBtn.setAttribute('aria-label', deafenBtn.title);
+  // A notificação do aplicativo Android diz "Ensurdecido" também.
+  atualizarModoSegundoPlano();
 }
 deafenBtn.onclick = alternarEnsurdecimento;
 
@@ -5101,6 +5103,9 @@ function atualizarModoSegundoPlano() {
   const ativo = precisaDeSegundoPlano();
   atualizarMediaSession(ativo);
   if (ativo) garantirAudioDeFundo(); else pararAudioDeFundo();
+  // No aplicativo Android, a mesma pergunta liga o serviço que segura a chamada com a tela
+  // apagada -- e o que a notificação dele mostra (app-android.js).
+  window.NexoAndroid?.chamada({ ativa: ativo && !saindoDaSala, sala: roomCode, microfone: Boolean(micStream && !micMuted), ensurdecido });
   // Separado do de cima de propósito: manter a aba viva e manter o monitor aceso são
   // decisões diferentes, com custos diferentes, e amarrá-las foi o que fez o silêncio de
   // alguém virar desconexão.
@@ -5117,6 +5122,7 @@ function encerrarMidiasDaSala() {
   pararAudioDeFundo();
   liberarTravaDeTela();
   atualizarMediaSession(false);
+  window.NexoAndroid?.chamada({ ativa: false });
   Array.from(peers.keys()).forEach(removerPar);
   // Sem isto o servidor de midia so notaria a saida pelo tempo limite, e por alguns
   // segundos os outros continuariam vendo uma imagem congelada de quem ja foi embora.
@@ -5137,6 +5143,9 @@ async function sairDaSala(destino = '/') {
   window.location.assign(destino);
 }
 leaveBtn.onclick = () => sairDaSala();
+// Os botões da notificação do aplicativo Android, com a sala fora da tela.
+window.NexoAndroid?.ao('alternar-microfone', () => alternarMicPorGesto());
+window.NexoAndroid?.ao('sair', () => sairDaSala());
 document.querySelectorAll('a[href="/"]').forEach(link => link.addEventListener('click', event => {
   if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();

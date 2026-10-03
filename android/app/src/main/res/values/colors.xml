@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- As mesmas da sala no tema escuro (public/tema.css): o fundo por trás das barras do sistema
+         e enquanto a página carrega, e o violeta do Nexo. -->
+    <color name="fundo">#FF161720</color>
+    <color name="destaque">#FF8174FA</color>
+    <color name="icone_fundo">#FF8174FA</color>
+</resources>

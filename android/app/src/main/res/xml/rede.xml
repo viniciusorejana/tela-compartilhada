@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O servidor do Nexo é de quem hospeda, e muitas vezes é um computador da casa num endereço
+     http://192.168…. Recusar http deixaria esse caso sem aplicativo nenhum. A sala abre, o chat e a
+     música funcionam; microfone e câmera, não: o Android só os libera em https (docs/android.md). -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

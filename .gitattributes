@@ -3,3 +3,6 @@
 # found"), e um Caddyfile ou unit do systemd com CRLF falha de jeitos menos óbvios.
 *.sh text eol=lf
 deploy/** text eol=lf
+# O gradlew do Android é um script de shell sem extensão; o .jar do wrapper é binário.
+android/gradlew text eol=lf
+*.jar binary

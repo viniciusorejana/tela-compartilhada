@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nexo</string>
+
+    <string name="canal_chamada">Chamada em andamento</string>
+    <string name="canal_chamada_descricao">Mantém a voz da sala com a tela apagada ou com outro aplicativo na frente.</string>
+    <string name="chamada_titulo_sala">Na sala #%1$s</string>
+    <string name="chamada_titulo">Em chamada no Nexo</string>
+    <string name="chamada_microfone_ligado">Microfone ligado</string>
+    <string name="chamada_microfone_desligado">Microfone desligado</string>
+    <string name="chamada_ensurdecido">Ensurdecido: a sala está em silêncio para você</string>
+    <string name="chamada_ligar_microfone">Ligar microfone</string>
+    <string name="chamada_desligar_microfone">Desligar microfone</string>
+    <string name="chamada_sair">Sair da sala</string>
+
+    <string name="atalho_servidor">Trocar de servidor</string>
+    <string name="atalho_servidor_curto">Servidor</string>
+
+    <string name="link_nao_abre">Este link não abre fora do Nexo.</string>
+    <string name="link_sem_aplicativo">Nenhum aplicativo deste celular abre este link.</string>
+</resources>
