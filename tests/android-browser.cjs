@@ -186,6 +186,39 @@ async function esperarAte(condicao, mensagem, prazo = 10000) {
   assert.equal(new URL(inicio.url()).search, '', 'o endereço volta a ser o do início');
   console.log('PASS: aberta pelo endereço da notificação, a página vai direto para a conversa');
 
+  // ---------- O início por cima da sala (a camada) ----------
+  // A WebView injeta `nexoAndroid` em todo quadro da origem, e o init script acima faz o mesmo aqui:
+  // o quadro da camada TEM a ponte, e não pode falar por ela. O aplicativo só precisa saber de uma
+  // coisa -- que a camada está aberta --, para o gesto de voltar fechá-la em vez de guardar o Nexo.
+  const naSala = await contextoAna.newPage();
+  naSala.on('pageerror', erro => { throw new Error(`erro na sala da camada: ${erro.message}`); });
+  await naSala.addInitScript(() => { window.visivel = true; });
+  await naSala.goto(`${origin}/sala-da-camada-android/sala`);
+  await naSala.evaluate(() => window.NexoConta?.pronto);
+  await naSala.locator('#nameConfirmBtn').click();
+  await naSala.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
+  await esperarAte(() => doApp.some(m => m.tipo === 'chamada' && m.ativa === true && m.sala === 'sala-da-camada-android'), 'a sala não contou a chamada');
+  const antesDaCamada = doApp.length;
+  await naSala.evaluate(() => NexoInicioNaSala.abrir());
+  await esperarAte(() => doApp.some((m, i) => i >= antesDaCamada && m.tipo === 'camada' && m.aberta === true), `a camada aberta não foi contada ao aplicativo: ${JSON.stringify(doApp.slice(antesDaCamada))}`);
+  await naSala.locator('.camada-quadro.pronto').waitFor({ timeout: 15000 });
+  const quadroDoAndroid = naSala.frames().find(f => f !== naSala.mainFrame());
+  assert.equal(await quadroDoAndroid.evaluate(() => typeof window.NexoAndroid), 'undefined', 'a ponte do aplicativo não é ligada dentro do quadro');
+  await naSala.waitForTimeout(1500);
+  assert.deepEqual(doApp.slice(antesDaCamada).filter(m => m.tipo !== 'camada').map(m => m.tipo), [], 'o quadro da camada não fala com o aplicativo por conta própria');
+  // Tocar na notificação de uma conversa, com a camada aberta: a conversa abre nela, e não no painel
+  // de mensagens da sala, que ficaria por baixo.
+  await naSala.evaluate(codigo => doAplicativo({ tipo: 'aviso-tocado', acao: 'abrir', com: codigo }), bia.conta.codigo);
+  await quadroDoAndroid.locator('#vistaConversa:not([hidden])').waitFor({ timeout: 5000 });
+  assert.equal(await naSala.locator('#mensagensPanel').evaluate(el => el.classList.contains('hidden')), true, 'o painel de mensagens da sala continua fechado');
+  // O gesto de voltar do aparelho (MainActivity.voltar) chega como 'voltar-camada'.
+  await naSala.evaluate(() => doAplicativo({ tipo: 'voltar-camada' }));
+  await naSala.locator('#camadaPanel.hidden').waitFor({ state: 'attached', timeout: 5000 });
+  await esperarAte(() => doApp.filter((m, i) => i >= antesDaCamada && m.tipo === 'camada').at(-1)?.aberta === false, 'fechar a camada não foi contado ao aplicativo');
+  assert.equal(await naSala.evaluate(() => Boolean(tiles.has('self') && socket?.connected)), true, 'voltar fechou a camada, e não a chamada');
+  await naSala.close();
+  console.log('PASS: no Android, a camada do início avisa o aplicativo, o quadro dela não fala pela ponte, a notificação abre a conversa nela e o voltar do aparelho a fecha');
+
   // ---------- O atualizador do APK 1.1.0 ----------
   // Fora da sala (no início), o mesmo botão "Atualizar"; quem baixa e instala é o aplicativo
   // (Atualizador.java), e a página só pede e mostra o estado que volta pela ponte.

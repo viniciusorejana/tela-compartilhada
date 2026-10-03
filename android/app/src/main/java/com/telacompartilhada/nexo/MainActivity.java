@@ -88,6 +88,9 @@ public class MainActivity extends Activity {
     private PermissionRequest pedidoDeMidia;
     private ValueCallback<Uri[]> escolhaDeArquivo;
     private boolean emChamada;
+    // O início aberto por cima da sala (public/inicio-na-sala.js): com ele à vista, o gesto de voltar
+    // o fecha, em vez de guardar o Nexo. A página avisa quando abre e quando fecha.
+    private boolean camadaAberta;
     private boolean chamadaConfirmada;
     private boolean pedindoAvisos;
     private final Handler relogio = new Handler(Looper.getMainLooper());
@@ -278,6 +281,9 @@ public class MainActivity extends Activity {
                 case "chamada":
                     if (pedido.optBoolean("ativa")) iniciarChamada(pedido.optString("sala"), pedido.optBoolean("microfone"), pedido.optBoolean("ensurdecido"));
                     else pararChamada();
+                    break;
+                case "camada":
+                    camadaAberta = pedido.optBoolean("aberta");
                     break;
                 case "avisos":
                     ligarAvisos(pedido.optBoolean("ligado"));
@@ -532,6 +538,16 @@ public class MainActivity extends Activity {
     // Numa chamada, voltar guarda o Nexo como o botão de início: sair da sala é o botão Sair, e
     // um gesto de voltar no lugar errado não pode derrubar a conversa de todo mundo.
     private void voltar() {
+        // Com o início aberto por cima da sala, voltar o fecha: é o que o gesto quer dizer ali. Sem o
+        // canal de volta da página (ela recomeçou), não há quem feche, e o voltar segue como sempre.
+        if (camadaAberta && respostaDaSala != null) {
+            try {
+                mandarParaASala(new JSONObject().put("tipo", "voltar-camada"));
+                return;
+            } catch (JSONException ignorada) {
+                // Sem a mensagem, o voltar segue o caminho de sempre.
+            }
+        }
         if (emChamada) {
             moveTaskToBack(true);
             return;
@@ -584,6 +600,8 @@ public class MainActivity extends Activity {
         @Override
         public void onPageStarted(WebView vista, String url, Bitmap icone) {
             respostaDaSala = null;
+            // A camada era da página que saiu de cena; a nova avisa se abrir uma.
+            camadaAberta = false;
             // A página que tinha a chamada saiu de cena. Se a nova for a sala de novo (um F5), ela
             // confirma; se não confirmar, o serviço sai.
             chamadaConfirmada = false;
