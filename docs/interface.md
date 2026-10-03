@@ -23,6 +23,7 @@ a 2560 px**.
 | O cartão de perfil personalizável (vitrine), o avatar com borda e status, os efeitos | `public/cartao.css` + `cartao.js`; o catálogo em `public/vitrine.js` |
 | Amigos e conversa direta, as mesmas peças no início e na sala | `public/social.css`, `conversa.js`, `social.js` (+ `social-sala.js` na sala) |
 | Avatar de qualquer pessoa, em qualquer página | `NexoPerfil.pintar` (`public/perfil.js`) |
+| A foto de perfil ampliada (o visor e o avatar que abre) | `public/foto-grande.js` + o fim de `public/cartao.css` |
 | Avisos no canto | `public/toast.js` |
 | Sons | `public/sons.js` |
 
@@ -251,7 +252,7 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | modal, o cartão de um amigo no início, e o portão de entrada | 80 / 80 / 90 | |
 | a camada do início por cima da sala / o que ela pergunta (entrar noutra sala) | 84 / 86 | acima dos painéis, abaixo do aviso de pedido de entrada (110) e das novidades (125) |
 | visualizador de imagem, reações que voam | 95–96 | |
-| o visor da imagem da conversa direta | 97 | nasce de dentro de um painel |
+| o visor da imagem da conversa direta, e o da foto de perfil ampliada | 97 | nascem de dentro de um painel |
 | menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
 | aviso de pedido de entrada | 110 | |
 | botão de sair do compacto | 120 | |
@@ -375,7 +376,8 @@ Todo painel é a mesma peça (`.modal` > `.modal-card`):
   lugar de começar (no editor do cartão ele é o seletor de cor), `data-foco-inicial` marca o que
   recebe o foco.
 
-**Painel sobre painel** é permitido quando o segundo nasce do primeiro (a foto grande sobre o
+**Painel sobre painel** é permitido quando o segundo nasce do primeiro (a foto grande — que é o visor
+de `foto-grande.js`, por cima de qualquer painel, e não um `.modal` — sobre o
 cartão de perfil, o aviso de sair para a conta sobre "Meu perfil"): o de cima vem depois no HTML, e
 fechá-lo volta ao de baixo.
 
@@ -470,6 +472,19 @@ ensurdece troca esse ícone pelo fone cortado (o mesmo do botão Ouvir), no mesm
 quadradinho, o quadradinho de quem não tem câmera — também quando a pessoa compartilha a tela,
 que tem o quadradinho dela ao lado para ir ao palco —, e o nome e o avatar do autor no chat
 (`abrirPerfil`). Nomes clicáveis sublinham ao passar o mouse.
+
+**A foto abre grande onde ela é o assunto** (`public/foto-grande.js`, o visor de `cartao.css`): o
+avatar do cartão de perfil — no início, na sala e na prévia do editor, porque quem liga é o
+próprio `NexoCartao.montar` —, o do topo da página da conta, a prévia do "Meu perfil" e o resumo
+das configurações. Com foto, o avatar vira botão (`.nx-ampliavel`: cursor de lupa, cresce 3% ao
+passar o mouse, anel de foco, `role="button"`, "Ver a foto de Fulano maior"); sem foto, continua
+sendo só um desenho, porque a cor e as iniciais são as mesmas em qualquer tamanho. O visor é a
+caixa quadrada do tamanho da foto (até 440 px, nunca mais alta que a janela), com a moldura, o fundo
+do cartão e o estilo do nome da pessoa, o X em cima da foto e o código embaixo. **Esc fecha só a
+foto** (o Esc é ouvido na janela, antes de qualquer outro) e o foco volta ao avatar; clicar fora
+também fecha. Avatar de linha de lista, de mensagem e de quadradinho não amplia: ele abre o cartão,
+e é o cartão que amplia. Tela nova com foto de pessoa liga o avatar com
+`NexoFoto.ampliavel(el, { foto, nome, codigo, vitrine })` e desliga com `null`.
 
 Nome repetido na sala ganha um trecho do código ao lado (`rotuloDe`) — só quando se repete.
 

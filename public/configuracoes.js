@@ -188,6 +188,8 @@
     const nome = (typeof myName === 'string' && myName) || window.NexoConta?.atual()?.conta?.apelido || $('nameInput')?.value || 'Você';
     const aparenciaDoPerfil = NexoPerfil.aparencia(nome, perfil);
     pintarAvatar($('configAvatar'), nome, perfil);
+    // Com foto, o avatar do resumo abre a foto grande (foto-grande.js).
+    window.NexoFoto?.ampliavel($('configAvatar'), perfil?.avatar ? { foto: NexoPerfil.enderecoDaImagem(perfil.avatar), nome, codigo: perfil.conta ? perfil.codigo : '', vitrine: perfil.cartao?.vitrine || null } : null);
     $('configFaixa').style.background = `linear-gradient(120deg, ${aparenciaDoPerfil.cor}, ${aparenciaDoPerfil.cor}66)`;
     $('configNome').textContent = nome;
     window.NexoCartao?.estilizarNome($('configNome'), perfil?.cartao?.vitrine || null);

@@ -670,24 +670,8 @@ html.menos-movimento .som-btn.meu-tocando::after { display:none; }
 .perfil-topo h2 { margin:0; word-break:break-word; }
 .perfil-topo .modal-sub { margin:4px 0 0; font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
 .perfil-avatar { flex:none; display:grid; place-items:center; width:54px; height:54px; border-radius:50%; color:#15121f; font-size:21px; font-weight:700; transition:background-color var(--dur) var(--curva); }
-/* No cartão de perfil, a foto é maior e se abre: o cursor de lupa e um anel ao passar o mouse
-   dizem isso sem mais um botão. */
-.perfil-topo .perfil-avatar.ampliavel { width:64px; height:64px; cursor:zoom-in; transition:box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
-.perfil-topo .perfil-avatar.ampliavel:hover { box-shadow:0 0 0 3px var(--bg-2),0 0 0 5px var(--accent-hi); }
-.perfil-topo .perfil-avatar.ampliavel:active { transform:scale(.96); }
-.perfil-topo .perfil-avatar.ampliavel:focus-visible { outline:none; box-shadow:var(--anel-foco); }
-/* ---------- A foto grande ----------
-   O cartão é do tamanho da foto: quadrada, o maior possível até 440 px, e nunca mais alta que a
-   janela (celular deitado). A foto aparece inteira, sem o recorte redondo do avatar. */
-.modal-card.foto-card { --pad-cartao:10px; width:min(100%,440px,calc(88vh - 64px)); width:min(100%,440px,calc(88dvh - 64px)); overflow:hidden; }
-.foto-grande { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:var(--r-lg); background:var(--bg-1); }
-.foto-legenda { display:grid; gap:2px; min-width:0; padding:10px 6px 4px; }
-.foto-legenda strong { overflow:hidden; color:var(--text); font-size:var(--fs-lg); font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
-.foto-legenda small { color:var(--faint); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
-.foto-legenda small:empty { display:none; }
-/* O X fica sobre a foto: com fundo escuro próprio, legível sobre qualquer imagem. */
-.foto-card .modal-fechar { top:18px; right:18px; border-radius:50%; background:#0d0d16b3; color:#fff; }
-.foto-card .modal-fechar:hover:not(:disabled) { background:#0d0d16e6; color:#fff; }
+/* A foto de perfil que se abre grande (avatar com `.nx-ampliavel`, o visor e o cursor de lupa) é de
+   cartao.css e foto-grande.js: a mesma em toda página, e não mais só no cartão da sala. */
 /* O editor de perfil de dentro da sala. A prévia no topo muda a cada escolha, antes de salvar. */
 .meu-perfil-card { width:min(100%,520px); }
 .meu-perfil-previa { display:flex; align-items:center; gap:14px; padding:14px; margin:0 0 18px; border-radius:var(--r-lg); background:linear-gradient(120deg,color-mix(in srgb, var(--accent) 10%, var(--bg-cartao)),var(--bg-cartao)); border:1px solid color-mix(in srgb, var(--accent-hi) 10.2%, transparent); }
@@ -1760,9 +1744,6 @@ h1#roomTitle { min-width:3ch; }
 /* O X do painel fica por cima da arte, que pode ser clara: um fundo escuro fixo o mantém legível. */
 .perfil-card > .modal-fechar { z-index:8; background:#0d0d16b3; color:#fff; border-radius:50%; }
 .perfil-card > .modal-fechar:hover:not(:disabled) { background:#0d0d16e6; color:#fff; }
-.perfil-card .nx-av-img.ampliavel { cursor:zoom-in; transition:box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
-.perfil-card .nx-av-img.ampliavel:hover { transform:scale(1.03); }
-.perfil-card .nx-av-img.ampliavel:focus-visible { outline:2px solid var(--anel-cor); outline-offset:3px; }
 .perfil-social { margin:0 0 14px; padding:12px; border-radius:var(--r-md); background:var(--accent-suave); }
 
 /* ---------- A personalização de cada pessoa, onde ela aparece (cartao.js) ----------
@@ -1778,7 +1759,6 @@ h1#roomTitle { min-width:3ch; }
 /* Na pilha de rostos de quem assiste, um rosto entra por baixo do outro: anéis ali virariam
    um emaranhado. A borda fica para a lista aberta. */
 .espectadores-rostos .nx-com-borda::before { display:none; }
-.modal-card.foto-card.nx-moldurado { --moldura:3px; }
 /* No chat, a borda e o nome aparecem parados, e animam quando o mouse passa pela mensagem: são
    centenas de mensagens, e cada borda que gira é uma pintura por quadro na sala -- que é onde a
    tela compartilhada precisa do computador. */

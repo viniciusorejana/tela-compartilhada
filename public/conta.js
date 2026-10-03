@@ -230,6 +230,8 @@
   function pintarAvatar(el, nome, dados) {
     NexoPerfil.pintar(el, nome, dados);
     window.NexoCartao?.decorarAvatar(el, cartao?.vitrine || null);
+    // Com foto, o avatar do topo da conta abre a foto grande (foto-grande.js). Sem ela, é só um desenho.
+    window.NexoFoto?.ampliavel(el, dados?.avatar ? { foto: NexoPerfil.enderecoDaImagem(dados.avatar), nome, codigo: conta?.codigo || '', vitrine: cartao?.vitrine || null } : null);
   }
 
   // O topo da conta veste o cartão da pessoa: o fundo atrás, a moldura em volta, o nome no estilo

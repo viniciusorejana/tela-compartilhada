@@ -5674,23 +5674,8 @@ function abrirPerfil(id, reserva = null) {
   pararEfeitoDoCartao();
   const avatar = document.getElementById('perfilAvatar');
   pintarAvatar(avatar, nome, perfil);
-  // Com foto, o avatar do cartão abre a foto grande. Sem foto não há o que ampliar: a cor e as
-  // iniciais são as mesmas em qualquer tamanho, e o avatar continua sendo só um desenho.
-  const foto = NexoPerfil.enderecoDaImagem(perfil?.avatar);
-  avatar.classList.toggle('ampliavel', Boolean(foto));
-  if (foto) {
-    Object.assign(avatar, { tabIndex: 0, title: 'Ver a foto maior' });
-    avatar.setAttribute('role', 'button');
-    avatar.setAttribute('aria-label', `Ver a foto de ${nome} maior`);
-    avatar.removeAttribute('aria-hidden');
-  } else {
-    avatar.removeAttribute('tabindex');
-    avatar.removeAttribute('role');
-    avatar.removeAttribute('aria-label');
-    avatar.removeAttribute('title');
-    avatar.setAttribute('aria-hidden', 'true');
-  }
-  fotoDoPerfil = foto ? { foto, nome, codigo: perfil?.codigo || '', vitrine: perfil?.cartao?.vitrine || null } : null;
+  // Com foto, o avatar do cartão abre a foto grande: quem liga é o próprio cartão (cartao.js, em toda
+  // página), e o visor é o de foto-grande.js.
   // O apelido que eu dei a um amigo vale aqui também; o nome dele aparece embaixo (cartao.js).
   if (ehEu) document.getElementById('perfilNome').textContent = `${nome} (você)`;
   document.getElementById('perfilCodigo').textContent = perfil?.conta ? `Código ${perfil.codigo}` : 'Sem conta';
@@ -5719,38 +5704,10 @@ function abrirPerfil(id, reserva = null) {
   const vitrine = perfil?.cartao?.vitrine;
   requestAnimationFrame(() => { pararEfeitoDoCartao = NexoCartao.efeito(montado.el, vitrine?.efeito, vitrine); });
 }
-// A foto grande, por cima do cartão. A imagem é a mesma do avatar: o navegador já a tem, e ela
-// aparece na hora. Fotos enviadas desde esta versão têm 512 px (imagem-envio.js), nítidas até o
-// tamanho do visor; as antigas, de 256, ficam um pouco mais macias ampliadas.
-let fotoDoPerfil = null;
-function abrirFoto() {
-  if (!fotoDoPerfil) return;
-  const imagem = document.getElementById('fotoGrande');
-  imagem.src = fotoDoPerfil.foto;
-  imagem.alt = `Foto de ${fotoDoPerfil.nome}`;
-  document.getElementById('fotoNome').textContent = fotoDoPerfil.nome;
-  document.getElementById('fotoCodigo').textContent = fotoDoPerfil.codigo;
-  // A foto grande é emoldurada como o cartão da pessoa: a moldura dela em volta, o fundo do cartão
-  // atrás, o nome no estilo dela. Com fundo próprio, o visor fica escuro também no tema claro --
-  // o texto da legenda vai sobre a arte da pessoa, como no cartão.
-  const vitrine = fotoDoPerfil.vitrine || null;
-  const visor = document.querySelector('#fotoPanel .foto-card');
-  window.NexoCartao?.moldurar(visor, vitrine);
-  window.NexoCartao?.vestirFundo(visor, vitrine);
-  window.NexoCartao?.estilizarNome(document.getElementById('fotoNome'), vitrine);
-  visor.classList.toggle('contexto-escuro', Boolean(vitrine));
-  document.getElementById('fotoPanel').classList.remove('hidden');
-}
-// O avatar nasce de novo a cada cartão (cartao.js monta a vitrine inteira): o ouvinte fica no
-// painel, e não nele.
-document.getElementById('perfilPanel').addEventListener('click', evento => {
-  if (evento.target.closest('#perfilAvatar')) abrirFoto();
-});
-document.getElementById('perfilPanel').addEventListener('keydown', evento => {
-  if (!evento.target.closest('#perfilAvatar') || !fotoDoPerfil || !['Enter', ' '].includes(evento.key)) return;
-  evento.preventDefault();
-  abrirFoto();
-});
+// A foto grande, por cima do cartão, é a de foto-grande.js: a imagem é a mesma do avatar (o
+// navegador já a tem, e ela aparece na hora). Fotos enviadas desde a versão que as sobe com 512 px
+// (imagem-envio.js) ficam nítidas até o tamanho do visor; as antigas, de 256, ficam um pouco mais
+// macias ampliadas. O cartão liga o próprio avatar (cartao.js), então não há ouvinte aqui.
 // O nome embaixo de cada quadradinho -- de pessoa ou de tela -- abre o perfil de quem ele é, como
 // a lista ao lado. Fica fora do retângulo do vídeo, então não briga com o clique que destaca no
 // palco. Um ouvinte só, no contêiner: os quadradinhos nascem e morrem com as pessoas.

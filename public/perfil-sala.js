@@ -35,6 +35,8 @@
     const atual = naTela();
     const nome = atual.apelido || salvo.apelido;
     pintarAvatar($('meuPerfilAvatar'), nome, { cor: atual.cor, marca: atual.marca, avatar: fotoAtual() });
+    // Com foto, a prévia abre a foto grande: é onde a pessoa troca a foto e quer ver como ela ficou.
+    window.NexoFoto?.ampliavel($('meuPerfilAvatar'), fotoAtual() ? { foto: NexoPerfil.enderecoDaImagem(fotoAtual()), nome, codigo: window.NexoConta?.atual()?.conta?.codigo || '', vitrine: vitrineDe('self') } : null);
     $('meuPerfilNome').textContent = nome;
     $('meuPerfilFotoTirar').hidden = !fotoAtual();
     salvar.disabled = !atual.apelido || !mudou(atual);
@@ -88,6 +90,7 @@
     dizer('');
     if (!comConta) {
       pintarAvatar($('meuPerfilAvatar'), myName || '?', null);
+      window.NexoFoto?.ampliavel($('meuPerfilAvatar'), null);
       $('meuPerfilNome').textContent = myName || 'Você';
       $('meuPerfilCodigo').textContent = 'Sem conta';
       painel.classList.remove('hidden');

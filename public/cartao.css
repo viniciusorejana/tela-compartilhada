@@ -203,6 +203,29 @@
 /* O efeito ao abrir o cartão: um canvas transparente por cima de tudo, que não recebe clique. */
 .nx-cartao-efeito { position:absolute; inset:0; z-index:6; width:100%; height:100%; pointer-events:none; }
 
+/* ---------- A foto ampliada (foto-grande.js) ----------
+   O mesmo visor em toda página. Um avatar com foto vira botão (`.nx-ampliavel`): o cursor de lupa,
+   um leve crescer ao passar o mouse e o anel de foco do teclado. O visor é a caixa quadrada do
+   tamanho da foto -- o maior possível até 440 px, e nunca mais alta que a janela (celular deitado)
+   --, por cima de qualquer painel (camada 97, como o visor das imagens da conversa). A foto aparece
+   inteira, sem o recorte redondo do avatar. */
+.nx-ampliavel { cursor:zoom-in; transition:box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.nx-ampliavel:hover { transform:scale(1.03); }
+.nx-ampliavel:focus-visible { outline:2px solid var(--anel-cor); outline-offset:3px; }
+/* O fundo escurecido é o mesmo dos painéis: cor fixa, igual nos dois temas. */
+.nx-foto-visor { position:fixed; inset:0; z-index:97; display:grid; place-items:center; padding:22px; background:#0d0d16ed; animation:nexo-aparecer var(--dur) var(--curva); }
+.nx-foto-visor[hidden] { display:none!important; }
+.nx-foto-caixa { --moldura:3px; position:relative; width:min(100%,440px,calc(88vh - 64px)); width:min(100%,440px,calc(88dvh - 64px)); padding:10px; overflow:hidden; border:1px solid color-mix(in srgb, var(--accent-hi) 14.1%, transparent); border-radius:var(--r-xl); background:var(--bg-2); color:var(--text); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
+.nx-foto-imagem { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:var(--r-lg); background:var(--bg-1); }
+.nx-foto-legenda { display:grid; gap:2px; min-width:0; padding:10px 6px 4px; }
+.nx-foto-legenda strong { overflow:hidden; color:var(--text); font-size:var(--fs-lg); font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
+.nx-foto-legenda small { color:var(--faint); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
+.nx-foto-legenda small:empty { display:none; }
+/* O X fica sobre a foto: com fundo escuro próprio, legível sobre qualquer imagem. O seletor é mais
+   longo que o da base de botão de social.css de propósito -- a base vem depois deste arquivo. */
+.nx-foto-visor .nx-foto-fechar { --nx-fundo:#0d0d16b3; --nx-fundo-hover:#0d0d16e6; --nx-cor:#fff; --nx-cor-hover:#fff; position:absolute; top:18px; right:18px; z-index:5; width:var(--ctl-p); height:var(--ctl-p); border-radius:50%; }
+.nx-foto-fechar svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
 /* As ações (a página põe as dela): os botões ficam embaixo, dentro do véu. */
 .nx-cartao-acoes { display:flex; flex-wrap:wrap; gap:6px; }
 .nx-cartao-acoes:empty { display:none; }

@@ -635,9 +635,8 @@
 <!-- O cartão de perfil: a vitrine da pessoa (cartao.js monta, com o banner, a borda, a bolha e o
      efeito de abrir), e embaixo o que só a sala sabe -- o tempo aqui, os amigos, o OBS. -->
 <div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-vitrine" id="perfilVitrine"></div><div class="perfil-resto"><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><div class="perfil-social nx-social" id="perfilSocial" hidden></div><section class="perfil-obs" id="perfilObs" aria-labelledby="perfilObsTitulo" hidden><div class="perfil-obs-topo"><strong id="perfilObsTitulo">Levar para o OBS</strong><label class="toggle-line perfil-obs-som" for="perfilObsSom"><span>Com som</span><input type="checkbox" id="perfilObsSom" role="switch" checked></label></div><div class="perfil-obs-botoes" id="perfilObsBotoes"><button type="button" class="estudio-link" data-fonte-obs="camera">Câmera</button><button type="button" class="estudio-link" data-fonte-obs="tela">Tela</button><button type="button" class="estudio-link" data-fonte-obs="voz">Voz</button><button type="button" class="estudio-link" data-fonte-obs="somDaTela">Som da tela</button><button type="button" class="estudio-link" data-fonte-obs="reativo">Rosto que reage</button></div><p class="perfil-obs-status" id="perfilObsStatus" role="status"></p></section><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><button type="button" class="secondary" id="perfilPersonalizar" hidden>Personalizar o cartão</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div></div>
-<!-- A foto de perfil grande: o avatar do cartão de perfil abre aqui, por cima dele, e fechar volta
-     ao cartão. Só existe para quem tem foto (sala.js, abrirPerfil). -->
-<div class="modal hidden foto-visor" id="fotoPanel" role="dialog" aria-modal="true" aria-labelledby="fotoNome"><div class="modal-card foto-card"><img class="foto-grande" id="fotoGrande" alt="" decoding="async"><div class="foto-legenda"><strong id="fotoNome"></strong><small id="fotoCodigo"></small></div></div></div>
+<!-- A foto de perfil grande não mora aqui: foto-grande.js cria o visor na primeira vez que alguém o
+     pede (o cartão, o "Meu perfil", as configurações), por cima de qualquer painel. -->
 <!-- A folha de volume (volume-folha.js): no toque, o controle de cada pessoa é uma pílula que
      abre esta folha, com um deslizante do tamanho do dedo. Mexe no mesmo volume de sempre. -->
 <div class="modal hidden" id="volumePanel" role="dialog" aria-modal="true" aria-labelledby="volumeTitulo">
@@ -815,6 +814,7 @@
 <script src="/perfil.js"></script>
 <script src="/vitrine.js"></script>
 <script src="/cartao.js"></script>
+<script src="/foto-grande.js"></script>
 <script src="/imagem-envio.js"></script>
 <script src="/preferencias.js"></script>
 <script src="/conta-cliente.js"></script>

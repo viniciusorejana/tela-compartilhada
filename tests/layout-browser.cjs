@@ -45,7 +45,7 @@ function detectar() {
   const visivel = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.05; };
   const nome = el => (el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].slice(0, 2).join('.') : ''}`);
   const problemas = [];
-  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela', '.modal.camada:not(.hidden) .camada-barra'];
+  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela', '.modal.camada:not(.hidden) .camada-barra', '.nx-foto-visor:not([hidden]) .nx-foto-caixa'];
   const vistos = new Set();
   for (const seletor of raizes) for (const raiz of document.querySelectorAll(seletor)) {
     if (!visivel(raiz)) continue;
@@ -87,6 +87,7 @@ async function prepararEstado(pagina, estado) {
   await pagina.evaluate(e => {
     const app = document.querySelector('.app');
     document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+    window.NexoFoto?.fechar();
     window.NexoNovidades?.fechar();
     app.classList.remove('barra-recolhida');
     if (app.classList.contains('foco-chat')) definirFocoChat(false);
@@ -126,8 +127,7 @@ async function prepararEstado(pagina, estado) {
       abrirPerfil('self');
       const canvas = Object.assign(document.createElement('canvas'), { width: 512, height: 512 });
       canvas.getContext('2d').fillRect(0, 0, 512, 512);
-      fotoDoPerfil = { foto: canvas.toDataURL(), nome: 'Maria Eduarda dos Santos Albuquerque', codigo: 'K7M2-PQ4X' };
-      abrirFoto();
+      NexoFoto.abrir({ foto: canvas.toDataURL(), nome: 'Maria Eduarda dos Santos Albuquerque', codigo: 'K7M2-PQ4X' });
     }
     if (e === 'meuperfil') NexoPerfilSala.abrir();
     if (e === 'moderacao') document.getElementById('moderarPanel').classList.remove('hidden');

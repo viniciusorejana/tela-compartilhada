@@ -188,7 +188,8 @@
   }
 
   // O cartão inteiro. Devolve as peças que a página completa: `acoes` (os botões dela), `corpo`
-  // (para o que só a sala tem, como o tempo na sala) e `avatar` (a foto que abre grande).
+  // (para o que só a sala tem, como o tempo na sala) e `avatar` (que, com foto, já abre a foto
+  // grande sozinho).
   //   nome, perfil         como em NexoPerfil.pintar
   //   cartao               { vitrine, frase, conquistas, desde } -- o cartão público (servidor)
   //   presenca             { status, sala } -- só para amigos e para si; sem ela, sem ponto
@@ -215,6 +216,11 @@
     const status = presenca ? (presenca.status === 'invisivel' ? 'offline' : presenca.status || 'offline') : null;
     const caixa = avatar({ nome, perfil, vitrine, status, id: ids.avatar || '' });
     topo.append(caixa);
+    // Com foto, o avatar de TODO cartão abre a foto grande (foto-grande.js): o do início, o da
+    // prévia do editor e o da sala. Sem foto não há o que ampliar -- a cor e as iniciais são as
+    // mesmas em qualquer tamanho --, e o avatar continua sendo só um desenho.
+    const foto = root.NexoPerfil.enderecoDaImagem(perfil?.avatar);
+    if (foto) root.NexoFoto?.ampliavel(caixa.querySelector('.nx-av-img'), { foto, nome: apelidoMeu || nome, codigo: codigo || perfil?.codigo || '', vitrine: cartao?.vitrine || null });
     if (vitrine.pensamento?.texto) {
       const bolha = elemento('p', 'nx-pensamento', vitrine.pensamento.texto);
       bolha.title = 'Pensamento do dia';

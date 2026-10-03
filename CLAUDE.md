@@ -31,6 +31,7 @@ npm run test:download
 npm run test:fila     # fila de música, perfil na sala, aviso de atualização
 npm run test:inicio   # a busca do início (campo com sugestões), os balões que aguentam o teclado do celular, e a versão nova do app fora da sala
 npm run test:camada   # o início e a conta por cima da sala, sem sair da chamada: a chamada de pé por baixo, a barra, atalhos, Esc, Ctrl K, o "voltar", aviso único, trocar de sala
+npm run test:foto     # a foto de perfil ampliada: cartão do início, prévia do editor, conta, "Meu perfil", configurações, a camada; Esc, teclado, sem foto, celular
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
 npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
@@ -124,7 +125,7 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | "Criar conta grátis" de dentro da chamada (criar conta muda quem entrou na sala; "Senha e conta" de quem já tem conta é a camada) | um aviso (`irParaContaPanel`; `perfil-sala.js` intercepta todo link para `/conta`) e a saída por `sairDaSala(destino)` (`sala.js`) para `/conta?voltar=` na mesma janela: no aplicativo, outra aba é o navegador |
 | Amigos dentro da sala (cartão, convidar, mensagens, avisos) | `public/social-sala.js`; o cartão de perfil é `abrirPerfil` (`sala.js`) |
 | Digitar o valor de qualquer régua (clicar no número ao lado) | `public/valor-digitado.js`, na sala e na inicial; o número é `.volume-valor`, `<output for>` ou `[data-valor-de]`, e a régua tem passo 1 para o valor digitado valer exato |
-| Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js`; a foto grande abre do cartão de perfil (`abrirFoto`, `sala.js`) |
+| Foto de perfil e imagens do Estúdio | `contas/imagens.js` + migração `0002`; toda página pinta avatar por `NexoPerfil.pintar` (`public/perfil.js`); preparo no navegador em `public/imagem-envio.js`; a foto grande é o visor de `public/foto-grande.js` (`NexoFoto.abrir`/`ampliavel`; CSS no fim de `cartao.css`), e abre do avatar de todo cartão (`NexoCartao.montar` liga sozinho: início, prévia do editor, sala), da página da conta, do "Meu perfil" e das configurações |
 | O rosto que cada conta escolhe para o Estúdio dos outros | `perfil.rosto` (migração `0003`, `contas/banco.js` `trocarRosto`, rotas `/api/conta/rosto/:estado`); quem monta a cena escolhe a origem por pessoa (`usar`: pessoa, minhas, nenhuma), com a mesma regra em `estudio.js` e `public/reativo.js` (`origemDasImagens`) |
 | Abrir o perfil de alguém | `abrirPerfil` (`sala.js`): a lista, o nome embaixo do quadradinho, o quadradinho sem câmera (mesmo compartilhando a tela, que tem o quadradinho dela), e o autor no chat (`abrirPerfilDoAutor`, que abre também para quem já saiu) |
 | Ensurdecido à vista da sala (e do OBS) | o som é cortado só em `sala.js` (`alternarEnsurdecimento`); o aviso vai pelo evento `ensurdecer` e volta junto com a presença (`presenca-atualizada`, `server.js`), chega em `guardarPresenca` e vira o fone cortado no quadradinho e na lista |

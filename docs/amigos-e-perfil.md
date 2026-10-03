@@ -160,6 +160,11 @@ lugar onde ela aparece (`public/cartao.js`: `decorarAvatar`, `estilizarNome`, `m
 | A conversa direta (no início e na sala), as listas de amigos e de conversas | sim | sim | | |
 | A página da conta, no topo | sim | sim | sim | sim |
 
+**A foto abre grande** a partir do avatar de todo cartão (o do início, o da prévia do editor e o da
+sala), do topo da página da conta, do "Meu perfil" e do resumo das configurações — com a moldura, o
+fundo e o estilo do nome da pessoa (`public/foto-grande.js`, `docs/interface.md` 4.9). Sem foto, o
+avatar é só um desenho.
+
 O chat, o canal de música e a conversa mostram a borda e o nome **parados**, animando quando o mouse passa pela
 mensagem: são centenas de mensagens, e cada borda que gira é uma pintura por quadro. Fora da
 sala, o que a pessoa vê de si mesma (as mensagens dela na conversa, o "eu" do início, a conta) é o
