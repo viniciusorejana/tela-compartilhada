@@ -21,6 +21,20 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 5,
+      data: '2026-10-02',
+      titulo: 'Repetir, parar o som e o Nexo no celular',
+      resumo: 'O bot de música repete a faixa ou a fila, o som da mesa para no meio, e o Nexo ganhou um aplicativo para Android e um instalador que se atualiza sozinho.',
+      // Só o ponto no botão: os aplicativos dependem de cada servidor publicar os arquivos novos.
+      aparecer: false,
+      itens: [
+        { icone: 'repetir', titulo: 'Repetir a faixa ou a fila', texto: 'Um toque repete a fila inteira (o que acaba volta para o fim), outro repete só a faixa que está tocando, e o terceiro desliga. Pular continua pulando. O canal diz quem mexeu.', onde: 'Canal de música → o botão ao lado da barra, ou !repetir' },
+        { icone: 'som', titulo: 'Parar o som que você tocou', texto: 'Enquanto o seu som da mesa toca, o botão dele vira “Parar”, com uma barra mostrando quanto falta. Parar corta o som para todo mundo — só o seu, nunca o dos outros.', onde: 'Mesa de sons' },
+        { icone: 'celular', titulo: 'Nexo para Android', texto: 'A mesma sala, num aplicativo: a chamada continua com a tela apagada e com outro aplicativo na frente, e a notificação liga e desliga o microfone ou tira você da sala.', onde: 'Página inicial do Nexo → Baixar, no celular' },
+        { icone: 'atualizar', titulo: 'Um instalador que se atualiza sozinho', texto: 'No Windows e no Linux (.deb ou AppImage), o Nexo instalado baixa a versão nova em silêncio e a instala quando você fecha — nada interrompe uma chamada. Também dá para abrir o Nexo ao entrar no computador.', onde: 'Configurações → Aplicativo de mesa, no aplicativo' }
+      ]
+    },
+    {
       id: 4,
       data: '2026-10-01',
       titulo: 'Amigos, conversas e um perfil só seu',
