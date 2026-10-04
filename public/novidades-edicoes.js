@@ -21,6 +21,22 @@
 (function (root) {
   const EDICOES = Object.freeze([
     {
+      id: 7,
+      data: '2026-10-03',
+      titulo: 'Emojis em todo lugar, status na sala e cores do seu jeito',
+      resumo: 'Um seletor com todos os emojis, o seu status aparecendo na lista da sala, o “não incomodar” que de fato cala, e a foto e as cores do cartão no mesmo editor.',
+      // Só o ponto no botão: nada aqui muda o que alguém já fazia, e abrir por cima de uma chamada em
+      // andamento interromperia quem está nela.
+      aparecer: false,
+      itens: [
+        { icone: 'rosto', titulo: 'Todos os emojis', texto: 'Um seletor com busca em português, categorias, tons de pele e os usados por último. Está no chat da sala, nas mensagens diretas, na frase do status e nos campos do perfil — e qualquer emoji vale como reação, na mensagem e na plateia.', onde: 'A carinha ao lado do campo do chat, ou o “+” das reações' },
+        { icone: 'pulso', titulo: 'O seu status aparece na sala', texto: 'O ponto ao lado do seu nome na lista da sala é o status da sua conta: verde, âmbar com a lua, vermelho com o traço ou o anel vazio. Muda na hora para todo mundo, e “Volto já” também vira a lua.', onde: 'A carinha ao lado do seu nome, na lateral da sala → Seu status' },
+        { icone: 'som', titulo: '“Não incomodar” de verdade', texto: 'Sem som de mensagem no chat da sala (nem a menção), sem aviso no canto e sem notificação no Android. Convites e pedidos de amizade ainda chegam, e o som da chamada continua.', onde: 'Seu status → Não incomodar' },
+        { icone: 'foto', titulo: 'A foto no editor do cartão', texto: 'Troque ou tire a foto de perfil sem sair do “Personalizar perfil”: ela vale na hora, sem precisar salvar o cartão.', onde: 'Personalizar perfil → Visual' },
+        { icone: 'tema', titulo: 'Cores exatas num seletor de verdade', texto: 'As duas cores do tema do cartão ganharam um seletor próprio — área de cor, matiz, código, conta-gotas e as cores dos temas —, com trocar de lugar e um dado que sorteia um par que combina.', onde: 'Personalizar perfil → Visual → Cores exatas' }
+      ]
+    },
+    {
       id: 6,
       data: '2026-10-03',
       titulo: 'O início e a conta sem sair da chamada',

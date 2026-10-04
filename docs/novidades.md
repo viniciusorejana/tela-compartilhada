@@ -57,6 +57,7 @@ testes de navegador usam isso por padrão, porque todo navegador de teste é "pr
 
 | edição | data | título |
 |---|---|---|
+| 7 | 03/10/2026 | Emojis em todo lugar, status na sala e cores do seu jeito |
 | 6 | 03/10/2026 | O início e a conta sem sair da chamada |
 | 5 | 02/10/2026 | Repetir, parar o som e o Nexo no celular |
 | 4 | 01/10/2026 | Amigos, conversas e um perfil só seu |
