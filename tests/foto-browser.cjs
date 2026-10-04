@@ -234,6 +234,75 @@ const fecharComEsc = async pagina => {
   await salaDaAna.locator('#camadaPanel').waitFor({ state: 'hidden' });
   console.log('PASS: dentro do início aberto por cima da sala, o cartão de um amigo abre a foto, e o Esc fecha só a foto');
 
+  // ---------- O editor do cartão: trocar a foto ----------
+  // "Personalizar perfil" não tinha como trocar a foto (só a página da conta e o "Meu perfil" da sala tinham).
+  // Agora o grupo "Foto de perfil" abre o editor, no início e no painel da sala; ela vale ao ser escolhida,
+  // sem o "Salvar o cartão", e o "eu" do início e a sala a recebem na hora.
+  const fotoDaConta = async quem => (await (await fetch(`${origem}/api/conta/eu`, { headers: { Cookie: quem.cookie } })).json()).perfil.avatar;
+  const desenharPng = pagina => pagina.evaluate(() => {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 400, height: 300 });
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#2a9d8f'; ctx.fillRect(0, 0, 400, 300);
+    ctx.fillStyle = '#f4a261'; ctx.beginPath(); ctx.arc(200, 150, 90, 0, Math.PI * 2); ctx.fill();
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await inicioDaAna.bringToFront();
+  await inicioDaAna.locator('.ini-secao[data-secao="perfil"]').click();
+  const grupoDaFoto = inicioDaAna.locator('#editorCartao .ed-foto');
+  await grupoDaFoto.waitFor();
+  // O título não se repete: a barra de cima já diz onde a pessoa está.
+  assert.equal(await inicioDaAna.locator('#tituloSecao').textContent(), 'Personalizar perfil');
+  // (O nome da pessoa no cartão da prévia também é um h2: o que se procura é o título do cabeçalho do editor.)
+  assert.equal(await inicioDaAna.locator('#vistaPerfil .ed-cabeca h2').count(), 0, 'o título não se repete dentro de "Personalizar perfil"');
+  assert.equal(await grupoDaFoto.locator('.nx-av-img').getAttribute('role'), null, 'sem foto, o avatar do grupo é só um desenho');
+  assert.equal(await grupoDaFoto.locator('[data-ed="fotoRotulo"]').textContent(), 'Enviar uma foto');
+  assert.equal(await grupoDaFoto.locator('[data-ed="fotoTirar"]').isHidden(), true, 'sem foto, não há o que tirar');
+  assert.equal(await fotoDaConta(ana), null);
+  await grupoDaFoto.locator('[data-ed="fotoArquivo"]').setInputFiles({ name: 'minha-foto.png', mimeType: 'image/png', buffer: Buffer.from(await desenharPng(inicioDaAna), 'base64') });
+  await esperarAte(async () => (await grupoDaFoto.locator('.nx-av-img.com-foto').count()) === 1, 'a foto não apareceu no editor');
+  const novaFoto = await fotoDaConta(ana);
+  assert.ok(novaFoto, 'a foto chegou à conta, sem salvar o cartão');
+  assert.match(await grupoDaFoto.locator('[data-ed="fotoRetorno"]').textContent(), /Foto trocada/);
+  assert.equal(await grupoDaFoto.locator('[data-ed="fotoRotulo"]').textContent(), 'Trocar a foto');
+  assert.equal(await grupoDaFoto.locator('[data-ed="fotoTirar"]').isVisible(), true);
+  assert.equal(await inicioDaAna.locator('#editorCartao .ed-previa-cartao .nx-av-img.com-foto').count(), 1, 'a prévia do cartão já mostra a foto');
+  assert.equal(await inicioDaAna.locator('#euAvatar .nx-av-img.com-foto').count(), 1, 'e o "eu" da lateral também');
+  assert.equal(await inicioDaAna.locator('[data-ed="salvar"]').isDisabled(), true, 'a foto não é do cartão: não deixou nada para salvar');
+  // O avatar do grupo abre a foto grande, como o da prévia.
+  await grupoDaFoto.locator('.nx-av-img').click();
+  await conferirVisor(inicioDaAna, { foto: novaFoto, nome: 'Ana', onde: 'foto do editor' });
+  await fecharComEsc(inicioDaAna);
+  // Tirar volta ao desenho (a cor e as iniciais).
+  await grupoDaFoto.locator('[data-ed="fotoTirar"]').click();
+  await esperarAte(async () => (await fotoDaConta(ana)) === null, 'tirar a foto não chegou à conta');
+  await esperarAte(async () => (await grupoDaFoto.locator('.nx-av-img.com-foto').count()) === 0, 'a foto continuou no editor depois de tirada');
+  assert.equal(await grupoDaFoto.locator('[data-ed="fotoRotulo"]').textContent(), 'Enviar uma foto');
+  assert.equal(await inicioDaAna.locator('#euAvatar .nx-av-img.com-foto').count(), 0);
+  // Um arquivo que não é imagem é dito, e nada muda.
+  await grupoDaFoto.locator('[data-ed="fotoArquivo"]').setInputFiles({ name: 'texto.txt', mimeType: 'text/plain', buffer: Buffer.from('não sou uma imagem') });
+  await esperarAte(async () => /PNG, JPEG, GIF ou WebP/.test(await grupoDaFoto.locator('[data-ed="fotoRetorno"]').textContent()), 'um arquivo que não é imagem não foi recusado');
+  assert.equal(await fotoDaConta(ana), null);
+  await inicioDaAna.screenshot({ path: path.join(saida, 'editor-foto.png') });
+  // "Conquistas" também não repete o título.
+  await inicioDaAna.locator('.ini-secao[data-secao="conquistas"]').click();
+  await inicioDaAna.locator('#vistaConquistas:not([hidden]) #gradeConquistas .ini-conquista').first().waitFor();
+  assert.equal(await inicioDaAna.locator('#tituloSecao').textContent(), 'Conquistas');
+  assert.equal(await inicioDaAna.locator('#vistaConquistas h2').count(), 0, 'o título não se repete dentro de "Conquistas"');
+  assert.match(await inicioDaAna.locator('#conquistasResumo').textContent(), /conquistas\. Algumas liberam/, 'o resumo e a barra de progresso continuam');
+  // No painel da sala o título fica: ali não há barra de cima que o diga.
+  await salaDaAna.bringToFront();
+  await salaDaAna.evaluate(() => NexoSalaSocial.abrirEditor());
+  await salaDaAna.locator('#editorCartaoSala .ed-foto').waitFor();
+  assert.equal(await salaDaAna.locator('#editorCartaoSala .ed-cabeca h2').textContent(), 'Personalizar perfil', 'no painel da sala o título fica');
+  await salaDaAna.locator('#editorCartaoSala [data-ed="fotoArquivo"]').setInputFiles({ name: 'da-sala.png', mimeType: 'image/png', buffer: Buffer.from(await desenharPng(salaDaAna), 'base64') });
+  await esperarAte(async () => Boolean(await salaDaAna.evaluate(() => meuPerfil?.avatar)), 'a sala não recebeu a foto trocada pelo editor');
+  await esperarAte(async () => (await salaDaAna.locator('#selfAvatar.com-foto').count()) === 1, 'o "eu" da sala não mostrou a foto nova');
+  assert.ok(await fotoDaConta(ana));
+  await salaDaAna.locator('#editorCartaoSala [data-ed="fotoTirar"]').click();
+  await esperarAte(async () => (await fotoDaConta(ana)) === null, 'tirar a foto, na sala, não chegou à conta');
+  await salaDaAna.locator('#editorCartaoPanel .modal-fechar').click();
+  console.log('PASS: "Personalizar perfil" troca e tira a foto (no início e no painel da sala), sem salvar o cartão; a prévia, o "eu" e a sala acompanham; e o título não se repete');
+
   // ---------- No celular ----------
   const contextoDoTel = await comConta(bia, {
     viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true,

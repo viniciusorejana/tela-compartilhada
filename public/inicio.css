@@ -186,9 +186,9 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
    seção não rola nem tem folga, porque o editor rola por dentro e tem as dele. */
 .ini-editor { padding:0; overflow:hidden; }
 
-/* ---------- Conquistas ---------- */
+/* ---------- Conquistas ----------
+   Sem título aqui dentro: a barra de cima já diz "Conquistas", e o resumo e a barra de progresso vêm direto. */
 .ini-conquistas-cabeca { display:grid; gap:8px; margin-bottom:18px; }
-.ini-conquistas-cabeca h2 { font-size:var(--fs-xl); font-weight:750; letter-spacing:-.02em; }
 .ini-barra { height:8px; max-width:420px; border-radius:var(--r-pilula); background:var(--bg-fundo); overflow:hidden; }
 .ini-barra i { display:block; height:100%; width:0; border-radius:inherit; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .6s var(--curva); }
 .ini-conquistas-grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin-bottom:16px; }

@@ -6,9 +6,13 @@
  * no aplicativo, a outra aba era o navegador. Quem o usa dá a raiz e recebe as ações; o resto
  * (o que se pode escolher, o que vale) é de public/vitrine.js e do servidor.
  *
- *   const editor = NexoEditorCartao.criar(raiz, { aviso, aoMudar });
+ *   const editor = NexoEditorCartao.criar(raiz, { aviso, aoMudar, semTitulo });
  *   editor.abrir();               // carrega a vitrine (se preciso) e desenha
  *   editor.parte('status', true); // Visual, Sobre você ou Status
+ *
+ * `semTitulo`: sem o "Personalizar perfil" do alto -- para quem já tem um título em cima (o início).
+ * `aoMudar` recebe `{ dados }` quando o cartão muda, `{ social }` quando o status muda e `{ perfil }`
+ * quando a foto muda. A foto é da conta, e não do cartão: sobe ao ser escolhida, como na página da conta.
  *
  * O desenho é de editor-cartao.css. Texto de quem usa entra sempre por `textContent` ou `value`.
  */
@@ -25,7 +29,10 @@
   }
   const DESENHOS = {
     imagem: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
-    tocar: '<path d="M8 5v14l11-7Z"/>'
+    tocar: '<path d="M8 5v14l11-7Z"/>',
+    // As duas setas de trocar de lugar, e o dado do "sortear" (os pontos cheios).
+    trocar: '<path d="M7 7h13M16 3l4 4-4 4M17 17H4M8 13l-4 4 4 4"/>',
+    dado: '<rect x="3" y="3" width="18" height="18" rx="4.5"/><g fill="currentColor" stroke="none"><circle cx="8.5" cy="8.5" r="1.3"/><circle cx="15.5" cy="8.5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="8.5" cy="15.5" r="1.3"/><circle cx="15.5" cy="15.5" r="1.3"/></g>'
   };
   const icone = nome => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${DESENHOS[nome] || ''}</svg>`;
   const copia = valor => JSON.parse(JSON.stringify(valor));
@@ -37,10 +44,14 @@
 
   // O molde é fixo (nada de quem usa entra aqui). Os ids levam o prefixo de quem cria, para os
   // rótulos (`for`) e as abas (`aria-controls`) apontarem para o lugar certo.
-  const molde = p => `
+  //
+  // O título só existe onde nada diz o que a pessoa está vendo: o painel da sala, que não tem barra de cima.
+  // No início a barra de cima já diz "Personalizar perfil", e repetir o título logo abaixo era ruído
+  // (`semTitulo`).
+  const molde = (p, { semTitulo = false } = {}) => `
     <div class="ed-colunas">
       <header class="ed-cabeca">
-        <h2 id="${p}-titulo">Personalizar perfil</h2>
+        ${semTitulo ? '' : `<h2 id="${p}-titulo">Personalizar perfil</h2>`}
         <p class="ed-explica">O cartão que aparece quando alguém clica em você, numa sala ou na lista de amigos. As peças com <span class="ed-selo-premium">Premium</span> ou com uma conquista ficam guardadas mesmo antes de valer, e aparecem para os outros quando você tiver o que elas pedem.</p>
         <div class="ed-abas" role="tablist" aria-label="Partes do perfil">
           <button type="button" role="tab" id="${p}-aba-visual" data-parte="visual" aria-controls="${p}-parte-visual" aria-selected="true" data-foco-inicial>Visual</button>
@@ -57,8 +68,29 @@
       </aside>
       <form class="ed-form" data-ed="form" id="${p}-form" novalidate>
         <div class="ed-parte" data-parte="visual" id="${p}-parte-visual" role="tabpanel" aria-labelledby="${p}-aba-visual">
+          <fieldset class="ed-grupo ed-foto"><legend>Foto de perfil</legend>
+            <div class="ed-foto-linha">
+              <span class="ed-foto-avatar" data-ed="fotoAvatar"></span>
+              <div class="ed-foto-acoes">
+                <label class="nx-botao secundario pequeno" for="${p}-foto-arquivo" tabindex="0">${icone('imagem')}<span data-ed="fotoRotulo">Enviar uma foto</span></label>
+                <input id="${p}-foto-arquivo" data-ed="fotoArquivo" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="nx-botao fantasma pequeno" data-ed="fotoTirar" hidden>Tirar a foto</button>
+              </div>
+            </div>
+            <small class="ed-dica">PNG, JPEG, WebP ou GIF animado. O Nexo usa o quadrado do meio da imagem. A foto vale assim que você a escolhe: não precisa salvar o cartão. Sem foto, aparecem a cor e as iniciais do seu perfil.</small>
+            <p class="ed-retorno" data-ed="fotoRetorno" role="status"></p>
+          </fieldset>
           <fieldset class="ed-grupo"><legend>Tema do cartão</legend><div class="ed-temas" data-ed="tema" role="radiogroup" aria-label="Tema do cartão"></div>
-            <div class="ed-cores-exatas"><label class="ed-cor"><input type="color" data-ed="corA" value="#8879f6"><span>Cor 1</span></label><label class="ed-cor"><input type="color" data-ed="corB" value="#2b2456"><span>Cor 2</span></label><span class="ed-selo-premium" data-ed="seloCores">Premium</span><button type="button" class="nx-botao fantasma pequeno" data-ed="coresDoTema">Usar as do tema</button></div>
+            <div class="ed-cores" data-ed="cores">
+              <div class="ed-cores-cabeca"><span>Cores exatas</span><span class="ed-selo-premium" data-ed="seloCores">Premium</span></div>
+              <div class="ed-cores-linha">
+                <button type="button" class="ed-slot" data-ed="corA" aria-haspopup="true" aria-expanded="false" aria-label="Cor 1: escolher"><span class="ed-slot-gema" aria-hidden="true"></span><span class="ed-slot-textos"><strong>Cor 1</strong><small>#8879F6</small></span></button>
+                <button type="button" class="nx-icone cheio ed-trocar" data-ed="trocarCores" title="Trocar as duas cores de lugar" aria-label="Trocar as duas cores de lugar">${icone('trocar')}</button>
+                <button type="button" class="ed-slot" data-ed="corB" aria-haspopup="true" aria-expanded="false" aria-label="Cor 2: escolher"><span class="ed-slot-gema" aria-hidden="true"></span><span class="ed-slot-textos"><strong>Cor 2</strong><small>#2B2456</small></span></button>
+              </div>
+              <div class="ed-cores-barra" data-ed="barraDeCores" aria-hidden="true"></div>
+              <div class="ed-cores-acoes"><button type="button" class="nx-botao secundario pequeno" data-ed="sortearCores">${icone('dado')}<span>Sortear</span></button><button type="button" class="nx-botao fantasma pequeno" data-ed="coresDoTema">Usar as do tema</button></div>
+            </div>
           </fieldset>
           <fieldset class="ed-grupo"><legend>Banner</legend><div class="ed-opcoes" data-ed="banner" role="radiogroup" aria-label="Banner"></div><div class="ed-imagem" data-ed="imagemBanner"></div></fieldset>
           <fieldset class="ed-grupo"><legend>Fundo do cartão</legend><div class="ed-opcoes" data-ed="fundo" role="radiogroup" aria-label="Fundo do cartão"></div><div class="ed-imagem" data-ed="imagemFundo"></div></fieldset>
@@ -110,9 +142,9 @@
       <button class="nx-botao" type="submit" form="${p}-form" data-ed="salvar" disabled>Salvar o cartão</button>
     </div>`;
 
-  function criar(raiz, { prefixo = 'editor', aviso = () => {}, aoMudar = () => {} } = {}) {
+  function criar(raiz, { prefixo = 'editor', aviso = () => {}, aoMudar = () => {}, semTitulo = false } = {}) {
     raiz.classList.add('ed', 'nx-social');
-    raiz.innerHTML = molde(prefixo);
+    raiz.innerHTML = molde(prefixo, { semTitulo });
     const q = nome => raiz.querySelector(`[data-ed="${nome}"]`);
 
     let conta = null;
@@ -176,6 +208,22 @@
     }
 
     // ---------- As escolhas do catálogo ----------
+    // As amostras que desenham as cores do cartão (banner, fundo, borda, moldura e estilo do nome) ficam
+    // registradas aqui: ao mudar as cores exatas, `recolorir` as repinta na hora, sem refazê-las. Uma troca de
+    // tema refaz tudo (`montar`), mas arrastar na área do seletor dispara dezenas de mudanças por segundo, e
+    // refazer cada amostra a cada quadro pesaria -- e tiraria o foco de quem escolhe pelo teclado. A cor de
+    // todas elas é só um par de variáveis (`--v1` e `--v2`, cartao.css).
+    const coloridas = new Set();
+    const comCores = (el, [a, b] = V.coresDe(rascunho)) => {
+      el.style.setProperty('--v1', a);
+      el.style.setProperty('--v2', b);
+      coloridas.add(el);
+    };
+    const recolorir = () => {
+      const cores = V.coresDe(rascunho);
+      coloridas.forEach(el => comCores(el, cores));
+    };
+
     // Cada uma é um rádio de verdade (setas no teclado), com a amostra desenhada.
     function grupoDeOpcoes(lugar, grupo, lista, desenhar) {
       const el = q(lugar);
@@ -218,15 +266,22 @@
         q(grupo).querySelectorAll('[role="radio"]').forEach(b => { const sim = b.dataset.valor === rascunho[grupo]; b.setAttribute('aria-checked', String(sim)); b.tabIndex = sim ? 0 : -1; });
       }
       q('tema').querySelectorAll('[role="radio"]').forEach(b => { const sim = !rascunho.cores && b.dataset.valor === rascunho.tema; b.setAttribute('aria-checked', String(sim)); b.tabIndex = sim || (rascunho.cores && b.dataset.valor === rascunho.tema) ? 0 : -1; });
-      const cores = V.coresDe(rascunho);
-      q('corA').value = cores[0];
-      q('corB').value = cores[1];
+      pintarCores(V.coresDe(rascunho));
       q('coresDoTema').hidden = !rascunho.cores;
+    }
+    // As duas "gemas" e o degradê entre elas: o que o cartão está usando agora, do tema ou das cores exatas.
+    function pintarCores([a, b]) {
+      q('corA').style.setProperty('--gema', a);
+      q('corA').querySelector('small').textContent = a.toUpperCase();
+      q('corB').style.setProperty('--gema', b);
+      q('corB').querySelector('small').textContent = b.toUpperCase();
+      q('barraDeCores').style.setProperty('--ca', a);
+      q('barraDeCores').style.setProperty('--cb', b);
     }
 
     function montar() {
-      const cores = V.coresDe(rascunho);
-      const comCores = (el, a = cores[0], b = cores[1]) => { el.style.setProperty('--v1', a); el.style.setProperty('--v2', b); };
+      // As amostras antigas saem da página junto com o que as continha: o registro recomeça.
+      coloridas.clear();
       // O tema: bolinhas com as duas cores de cada um.
       q('tema').replaceChildren(...V.TEMAS.map(tema => {
         const b = elemento('button', 'ed-tema');
@@ -259,11 +314,14 @@
         comCores(amostra);
         if (item.id === 'liso') { amostra.style.background = '#17171f'; return; }
         if (item.id === 'imagem') { amostraDeImagem(amostra, guardada.imagens?.fundo); return; }
-        if (item.id === 'tema') { amostra.style.background = `linear-gradient(180deg,color-mix(in srgb,${cores[0]} 22%,#14141c),color-mix(in srgb,${cores[1]} 40%,#101016))`; return; }
+        // Pelas variáveis da própria amostra (e não pelos valores de agora): as cores exatas a repintam sozinhas.
+        if (item.id === 'tema') { amostra.style.background = 'linear-gradient(180deg,color-mix(in srgb,var(--v1) 22%,#14141c),color-mix(in srgb,var(--v2) 40%,#101016))'; return; }
         const anim = elemento('div', 'nx-anim'); anim.dataset.anim = item.id; anim.style.opacity = '.7'; amostra.append(anim);
       });
       grupoDeOpcoes('borda', 'borda', V.BORDAS, (amostra, item) => {
-        amostra.append(C.avatar({ nome: conta.apelido, perfil: { conta: true, ...perfil }, vitrine: { ...rascunho, borda: item.id }, tamanho: 'pequeno' }));
+        const avatar = C.avatar({ nome: conta.apelido, perfil: { conta: true, ...perfil }, vitrine: { ...rascunho, borda: item.id }, tamanho: 'pequeno' });
+        comCores(avatar);
+        amostra.append(avatar);
       });
       grupoDeOpcoes('moldura', 'moldura', V.MOLDURAS, (amostra, item) => {
         comCores(amostra);
@@ -387,6 +445,57 @@
       pintarPrevia(false);
     }
 
+    // ---------- A foto de perfil ----------
+    // É da conta, e não do cartão: sobe ao ser escolhida -- como na página da conta e no "Meu perfil" da
+    // sala --, sem esperar o "Salvar o cartão". Uma escolha que já está na tela e ainda não vale faria a
+    // pessoa achar que salvou. O servidor leva a foto nova à sala inteira (`peer-perfil`), e quem criou o
+    // editor repinta o que é dele (`aoMudar`: o "eu" do início).
+    function pintarFoto() {
+      if (!conta || !rascunho) return;
+      const vitrine = vitrineDaPrevia();
+      const caixa = C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine });
+      caixa.style.setProperty('--av', '64px');
+      q('fotoAvatar').replaceChildren(caixa);
+      const foto = window.NexoPerfil.enderecoDaImagem(perfil?.avatar);
+      // Com foto, o avatar daqui também abre a foto grande, como o da prévia do cartão ao lado.
+      window.NexoFoto?.ampliavel(caixa.querySelector('.nx-av-img'), foto ? { foto, nome: conta.apelido, codigo: conta.codigo, vitrine } : null);
+      q('fotoRotulo').textContent = foto ? 'Trocar a foto' : 'Enviar uma foto';
+      q('fotoTirar').hidden = !foto;
+    }
+    const dizerDaFoto = (texto, tom = '') => dizer('fotoRetorno', texto, tom);
+    function depoisDaFoto(r, textoDeSucesso) {
+      if (!r.ok) { dizerDaFoto(r.dados?.error || 'Não foi possível trocar a foto.', 'erro'); return; }
+      perfil = { ...r.dados.perfil };
+      window.NexoConta?.atualizar({ conta: r.dados.conta, perfil: r.dados.perfil });
+      pintarPrevia(false);
+      dizerDaFoto(textoDeSucesso);
+      aoMudar({ perfil: r.dados.perfil });
+    }
+    q('fotoArquivo').addEventListener('change', async () => {
+      const arquivo = q('fotoArquivo').files?.[0];
+      q('fotoArquivo').value = '';
+      if (!arquivo) return;
+      dizerDaFoto('Preparando a foto…');
+      let blob;
+      try { blob = await NexoImagem.prepararAvatar(arquivo); }
+      catch (erro) { dizerDaFoto(erro.message || 'Não foi possível abrir esta imagem.', 'erro'); return; }
+      dizerDaFoto('Enviando…');
+      depoisDaFoto(await NexoImagem.enviar('/api/conta/avatar', blob, { csrf: csrf() }), 'Foto trocada. Quem está numa sala com você já vê a nova.');
+    });
+    // O rótulo faz as vezes de botão: pelo teclado, Enter e espaço abrem a escolha do arquivo também.
+    raiz.querySelector(`label[for="${prefixo}-foto-arquivo"]`).addEventListener('keydown', evento => {
+      if (evento.key !== 'Enter' && evento.key !== ' ') return;
+      evento.preventDefault();
+      q('fotoArquivo').click();
+    });
+    q('fotoTirar').addEventListener('click', async () => {
+      dizerDaFoto('Tirando…');
+      const r = await fetch('/api/conta/avatar', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Nexo-CSRF': csrf() } })
+        .then(async resposta => ({ ok: resposta.ok, dados: await resposta.json().catch(() => ({})) }))
+        .catch(() => ({ ok: false, dados: { error: 'Sem conexão com o servidor. Tente de novo.' } }));
+      depoisDaFoto(r, 'Sem foto: a sala volta a mostrar a cor e as iniciais do seu perfil.');
+    });
+
     // ---------- A prévia ----------
     function vitrineDaPrevia() {
       return { ...rascunho, imagens: { banner: rascunho.banner === 'imagem' ? guardada.imagens?.banner : null, fundo: rascunho.fundo === 'imagem' ? guardada.imagens?.fundo : null }, pensamento: rascunho.pensamento?.texto ? { texto: rascunho.pensamento.texto, em: Date.now() } : null };
@@ -398,6 +507,8 @@
       const status = escolhido() === 'invisivel' ? 'offline' : escolhido();
       const montado = C.montar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, cartao: { vitrine, frase: perfil?.social?.frase || null, conquistas: [...conquistasGanhas()], desde: conta.criadaEm }, presenca: { status } });
       q('previa').replaceChildren(montado.el);
+      // A foto do grupo de cima acompanha a borda escolhida: é o avatar da pessoa, como o do cartão.
+      pintarFoto();
       // O efeito toca depois de o cartão ter tamanho.
       if (tocarEfeito) requestAnimationFrame(() => { pararEfeito = C.efeito(montado.el, vitrine.efeito, vitrine); });
       const alterado = mudou();
@@ -406,9 +517,53 @@
     }
     q('verEfeito').onclick = () => pintarPrevia(true);
 
-    const lerCores = () => { rascunho.cores = { a: q('corA').value, b: q('corB').value }; marcar(); pintarPrevia(false); };
-    q('corA').addEventListener('input', lerCores);
-    q('corB').addEventListener('input', lerCores);
+    // ---------- As cores exatas ----------
+    // Cada gema abre o seletor de cor (seletor-cor.js), e o cartão acompanha enquanto a pessoa arrasta. A
+    // prévia é refeita no máximo uma vez por quadro: arrastar dispara dezenas de mudanças por segundo.
+    // As amostras do catálogo (banner, fundo, borda, moldura, nome) vão junto, no mesmo quadro: o que a pessoa
+    // vê nelas é o cartão dela com as cores de agora, e não com as do tema até salvar.
+    let previaAgendada = 0;
+    const agendarPrevia = () => {
+      if (previaAgendada) return;
+      previaAgendada = requestAnimationFrame(() => { previaAgendada = 0; recolorir(); pintarPrevia(false); });
+    };
+    const mudarCores = (a, b) => { rascunho.cores = { a, b }; marcar(); agendarPrevia(); };
+    // A paleta de cada gema: as cores dos temas do cartão -- as vivas para a primeira, as fundas para a segunda.
+    const paletaDa = indice => V.TEMAS.map(t => t.cores[indice]);
+    const tocar = (el, classe) => { el.classList.remove(classe); void el.offsetWidth; el.classList.add(classe); };
+    for (const [nome, indice] of [['corA', 0], ['corB', 1]]) {
+      q(nome).addEventListener('click', () => {
+        NexoCor.abrir(q(nome), {
+          valor: V.coresDe(rascunho)[indice], rotulo: `Cor ${indice + 1}`, paleta: paletaDa(indice),
+          aoMudar: cor => { const par = [...V.coresDe(rascunho)]; par[indice] = cor; mudarCores(par[0], par[1]); tocar(q(nome), 'pop'); }
+        });
+      });
+    }
+    q('trocarCores').addEventListener('click', () => {
+      const [a, b] = V.coresDe(rascunho);
+      mudarCores(b, a);
+      tocar(q('trocarCores'), 'gira');
+      tocar(q('corA'), 'pop');
+      tocar(q('corB'), 'pop');
+    });
+    // O dado: as gemas passam por algumas combinações antes de parar numa -- o gesto vira um pequeno sorteio.
+    // Com menos movimento (do sistema ou da Aparência), cai direto na que saiu.
+    let rolando = null;
+    q('sortearCores').addEventListener('click', () => {
+      const { a, b } = NexoCor.sortear();
+      clearInterval(rolando);
+      const reduzido = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('menos-movimento');
+      tocar(q('sortearCores'), 'gira');
+      if (reduzido) { mudarCores(a, b); return; }
+      let giros = 0;
+      rolando = setInterval(() => {
+        if (++giros < 6) { const falsa = NexoCor.sortear(); pintarCores([falsa.a, falsa.b]); return; }
+        clearInterval(rolando);
+        mudarCores(a, b);
+        tocar(q('corA'), 'pop');
+        tocar(q('corB'), 'pop');
+      }, 65);
+    });
     q('coresDoTema').onclick = () => { rascunho.cores = null; montar(); pintarPrevia(false); };
     // Um emoji onde o cursor está, na descrição e na bolha: o seletor insere e dispara o `input`, que refaz a prévia.
     if (window.NexoEmojis) {
@@ -550,8 +705,9 @@
       // A presença mudou em outro lugar (outra aba, o menu do status): o editor acompanha.
       pintarStatus: () => { if (!conta) return; pintarStatus(); pintarPrevia(false); },
       focarFrase: () => { parte('status'); setTimeout(() => q('fraseTexto').focus(), 60); },
-      // Fechado o painel, o efeito da prévia para: ele desenha num canvas a cada quadro.
-      parar: () => { pararEfeito(); pararEfeito = () => {}; }
+      // Fechado o painel, o efeito da prévia para: ele desenha num canvas a cada quadro. O seletor de cor
+      // aberto fecha junto: ele mora fora do painel, e ficaria boiando sozinho.
+      parar: () => { pararEfeito(); pararEfeito = () => {}; window.NexoPopover?.fechar(); clearInterval(rolando); }
     };
   }
 

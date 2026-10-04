@@ -47,9 +47,44 @@
 .ed-tema { --nx-fundo:linear-gradient(135deg,var(--a),var(--b)); position:relative; width:42px; height:42px; border-radius:50%; box-shadow:0 0 0 2px var(--ed-fundo),0 0 0 3px transparent; transition:transform var(--dur) var(--curva-mola),box-shadow var(--dur) var(--curva); }
 .ed-tema:hover { transform:scale(1.08); }
 .ed-tema[aria-checked="true"] { box-shadow:0 0 0 2px var(--ed-fundo),0 0 0 4px var(--accent); }
-.ed-cores-exatas { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-top:12px; }
-.ed-cor { display:inline-flex; align-items:center; gap:8px; color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; }
-.ed-cor input { width:36px; height:28px; padding:0; border:0; border-radius:var(--r-sm); background:none; cursor:pointer; }
+/* ---------- A foto de perfil: o avatar com a borda escolhida, e o que fazer com ele ---------- */
+.ed-foto-linha { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; }
+.ed-foto-avatar { flex:none; display:inline-grid; padding:6px; }
+.ed-foto-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.ed-foto label.nx-botao { cursor:pointer; }
+.ed-foto .ed-retorno:empty { display:none; }
+
+/* ---------- As cores exatas: duas gemas e o degradê entre elas ----------
+   Cada gema é um botão que abre o seletor de cor (seletor-cor.js); a barra mostra o degradê que o cartão
+   está usando, com o brilho das duas cores por baixo. Trocar de lugar e sortear completam a peça, e os
+   três têm um pequeno movimento (a gema que estoura, as setas que giram, o dado). A borda e o fundo são os
+   do bloco "Cores exatas" das configurações de aparência (sala.css, `.cores-exatas`). */
+/* `minmax(0,1fr)`: a coluna é a largura do bloco, e não a do conteúdo mais largo -- as duas gemas somavam
+   mais que o editor em 320 px e empurravam o bloco para fora dele. */
+.ed-cores { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; margin-top:14px; padding:12px; border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); box-shadow:inset 0 0 0 1px var(--line); }
+.ed-cores-cabeca { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.ed-cores-cabeca > span:first-child { color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+/* As duas gemas lado a lado, com o botão de trocar no meio; no editor estreito, uma em cima da outra, com
+   o botão ao lado das duas. */
+.ed-cores-linha { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); grid-template-areas:"a trocar b"; align-items:center; gap:8px; }
+.ed-cores-linha > [data-ed="corA"] { grid-area:a; }
+.ed-cores-linha > [data-ed="corB"] { grid-area:b; }
+.ed-cores-linha > .ed-trocar { grid-area:trocar; }
+.ed-slot { --nx-fundo:var(--bg-cartao); --nx-fundo-hover:var(--bg-3); --nx-cor:var(--text); min-width:0; justify-content:flex-start; gap:10px; min-height:48px; padding:6px 12px 6px 8px; border-radius:var(--r-lg); box-shadow:inset 0 0 0 1px var(--line-2); text-align:left; }
+.ed-slot:hover { box-shadow:inset 0 0 0 1px var(--line-3); }
+.ed-slot[aria-expanded="true"] { box-shadow:inset 0 0 0 2px var(--accent),0 0 0 3px var(--accent-suave-hi); }
+.ed-slot-gema { flex:none; width:32px; height:32px; border-radius:50%; background:var(--gema,var(--accent)); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 20%),0 0 16px -3px var(--gema,var(--accent)); transition:transform var(--dur) var(--curva-mola),box-shadow var(--dur) var(--curva); }
+.ed-slot:hover .ed-slot-gema { transform:scale(1.08) rotate(-8deg); }
+.ed-slot.pop .ed-slot-gema { animation:ed-gema-pop .42s var(--curva-mola); }
+.ed-slot-textos { display:grid; gap:1px; min-width:0; line-height:1.2; }
+.ed-slot-textos strong { color:var(--text); font-size:var(--fs-sm); font-weight:650; }
+.ed-slot-textos small { overflow:hidden; color:var(--faint); font:650 var(--fs-meta)/1.2 ui-monospace,Consolas,monospace; letter-spacing:.07em; white-space:nowrap; text-overflow:ellipsis; }
+.ed-trocar { flex:none; }
+.ed-trocar.gira .ico,.ed-cores-acoes .gira .ico { animation:ed-gira .5s var(--curva-mola); }
+.ed-cores-barra { height:12px; border-radius:var(--r-pilula); background:linear-gradient(90deg,var(--ca,var(--accent)),var(--cb,var(--bg-3))); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 14%),0 6px 18px -8px var(--ca,var(--accent)); }
+.ed-cores-acoes { display:flex; flex-wrap:wrap; gap:8px; }
+@keyframes ed-gema-pop { 0% { transform:scale(.82); } 55% { transform:scale(1.16); } 100% { transform:scale(1); } }
+@keyframes ed-gira { to { transform:rotate(360deg); } }
 .ed-opcoes { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:10px; }
 /* A base de botão (social.css) centraliza o conteúdo; numa grade isso encolhe a coluna até o
    tamanho do conteúdo, e a amostra (vazia) sumia. Aqui a coluna é a largura inteira. */
@@ -65,7 +100,9 @@
 .ed-opcoes-texto { grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); }
 .ed-opcoes-texto .ed-opcao { grid-template-rows:auto; }
 .ed-opcoes-texto .ed-opcao-nome { min-height:var(--ctl-m); padding:0 12px; font-size:var(--fs-sm); }
-.ed-opcao-moldura { position:absolute; inset:10px; border-radius:10px; background:#14141c; }
+/* O miniquadro é um `.nx-cartao`, que tem `width:100%`: sem o `width:auto` ele vencia o `inset` e passava 10 px
+   da amostra, com a moldura cortada na direita. */
+.ed-opcao-amostra .ed-opcao-moldura { position:absolute; inset:10px; width:auto; border-radius:10px; background:#14141c; }
 .ed-imagem { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
 .ed-imagem:empty { display:none; }
 .ed-imagem label.nx-botao { cursor:pointer; }
@@ -129,6 +166,11 @@
 }
 @container editor (min-width:900px) {
   .ed-colunas { grid-template-columns:minmax(0,1fr) 360px; }
+}
+/* As gemas das cores exatas, empilhadas: lado a lado precisam de uns 330 px de bloco para mostrar o código
+   inteiro, e um código cortado ("#8879…") não diz a cor. */
+@container editor (max-width:480px) {
+  .ed-cores-linha { grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"a trocar" "b trocar"; }
 }
 /* Estreito, cada coisa com mais ar e os botões do rodapé do tamanho do polegar. */
 @container editor (max-width:520px) {

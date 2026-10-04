@@ -691,8 +691,10 @@
   // ---------- O editor do cartão (editor-cartao.js) ----------
   // O mesmo que a sala abre num painel. Ele guarda a vitrine carregada; daqui sai a contagem das
   // conquistas e a borda do avatar lá embaixo.
+  // Sem o título do alto: a barra de cima já diz "Personalizar perfil", e repeti-lo logo abaixo era ruído.
   const editor = NexoEditorCartao.criar($('editorCartao'), {
     aviso,
+    semTitulo: true,
     aoMudar: ({ dados }) => {
       if (dados) $('contagemConquistas').textContent = `${dados.lista.filter(c => c.ganhou).length}/${dados.lista.length}`;
       pintarEu();

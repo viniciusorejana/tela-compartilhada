@@ -19,6 +19,7 @@
     "test:camada": "node tests/camada-browser.cjs",
     "test:foto": "node tests/foto-browser.cjs",
     "test:status": "node tests/status-browser.cjs",
+    "test:cor": "node tests/cor-browser.cjs",
     "test:emojis": "node tests/emojis-browser.cjs",
     "test:planos": "node tests/planos-browser.cjs",
     "test:fila": "node tests/fila-e-perfil-browser.cjs",

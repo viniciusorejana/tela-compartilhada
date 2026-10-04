@@ -26,7 +26,7 @@ const origem = `http://localhost:${porta}`;
 const LARGURAS = [320, 360, 390, 430, 480, 540, 600, 640, 700, 761, 800, 860, 920, 1000, 1101, 1180, 1251, 1320, 1440, 1600, 1920, 2560];
 const ESTADOS = ['normal', 'tudo', 'semchat', 'recolhida', 'focochat', 'config:perfil', 'config:estudio', 'config:aparelhos', 'config:qualidade', 'config:sons', 'config:aparencia', 'config:atalhos', 'config:aplicativo', 'musica',
   'estudio', 'estudio:ajuda', 'cartao', 'foto', 'meuperfil', 'moderacao', 'diagnostico', 'volume', 'sons', 'tela', 'convite', 'sugestao', 'novidades', 'novidades:conheca',
-  'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta', 'camada', 'camada:conta', 'camada-sair'];
+  'convidar-amigos', 'mensagens', 'editor-cartao', 'ir-para-conta', 'camada', 'camada:conta', 'camada-sair', 'menu-status', 'emojis', 'cor'];
 // Os painéis não mudam a cada 20 px: uma amostra das larguras basta, com os extremos.
 const LARGURAS_DE_PAINEL = [320, 360, 600, 760, 900, 1000, 1300, 1600, 2560];
 // O Estúdio também em janela baixa: é o painel mais alto da sala.
@@ -45,7 +45,7 @@ function detectar() {
   const visivel = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.05; };
   const nome = el => (el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].slice(0, 2).join('.') : ''}`);
   const problemas = [];
-  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela', '.modal.camada:not(.hidden) .camada-barra', '.nx-foto-visor:not([hidden]) .nx-foto-caixa'];
+  const raizes = ['.topbar', '.control-bar', '.room-sidebar', '#chatPanel', '#musicaPanel', '.palco-area', '.stage-controls', '.participants-heading', '.modal:not(.hidden) .modal-card', '.nx-nov-janela', '.modal.camada:not(.hidden) .camada-barra', '.nx-foto-visor:not([hidden]) .nx-foto-caixa', '#presenceMenu:not(.hidden)', '.nx-pop'];
   const vistos = new Set();
   for (const seletor of raizes) for (const raiz of document.querySelectorAll(seletor)) {
     if (!visivel(raiz)) continue;
@@ -89,6 +89,8 @@ async function prepararEstado(pagina, estado) {
     document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
     window.NexoFoto?.fechar();
     window.NexoNovidades?.fechar();
+    fecharMenuDePresenca();
+    window.NexoPopover?.fechar();
     app.classList.remove('barra-recolhida');
     if (app.classList.contains('foco-chat')) definirFocoChat(false);
     if (app.classList.contains('painel-musica')) document.getElementById('musicaClose').click();
@@ -148,12 +150,31 @@ async function prepararEstado(pagina, estado) {
     if (e === 'camada') NexoInicioNaSala.abrir();
     if (e === 'camada:conta') NexoInicioNaSala.abrir({ pagina: 'conta' });
     if (e === 'camada-sair') { NexoInicioNaSala.abrir(); NexoInicioNaSala.pedirEntrada('squad-da-madrugada-de-nome-muito-comprido'); }
+    // O menu do status: o da conta (ponto e frase do que o escolhido faz), o "agora na sala" e as reações.
+    // É um popover ancorado no botão, e tem de caber na janela, de cima a baixo.
+    if (e === 'menu-status') presenceBtn.click();
+    // Os painelzinhos: o seletor de emojis, aberto pelo botão do chat, e o seletor de cor, aberto por uma
+    // gema do editor do cartão (num painel da sala). Cada um tem de caber na janela, a qualquer largura.
+    if (e === 'cor') { NexoSalaSocial.abrirEditor(); }
     if (e.startsWith('novidades')) NexoNovidades.abrir({ aba: e === 'novidades' ? 'novidades' : 'conheca' });
   }, estado);
   // O Estúdio pede a sala ao servidor ao abrir: o desenho só vale depois da resposta.
   if (estado.startsWith('estudio')) await pagina.waitForFunction(() => document.querySelectorAll('#estudioLista .estudio-pessoa').length >= 2, null, { timeout: 5000 });
   // O editor pede a vitrine ao servidor na primeira vez: o desenho só vale com a prévia na tela.
   if (estado === 'editor-cartao') await pagina.waitForSelector('#editorCartaoSala .ed-previa-cartao .nx-cartao', { timeout: 5000 });
+  // O seletor de emojis pede a lista na primeira vez. O botão é o do chat, que nas larguras estreitas é uma
+  // gaveta: ele só é clicável depois de a gaveta ter entrado na tela, e é isso que se espera aqui.
+  if (estado === 'emojis') {
+    await pagina.waitForFunction(() => { const r = document.getElementById('chatEmojiBtn').getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth; }, null, { timeout: 4000 });
+    await pagina.evaluate(() => document.getElementById('chatEmojiBtn').click());
+    await pagina.waitForSelector('.nx-pop .nx-emo-item', { timeout: 8000 });
+  }
+  if (estado === 'cor') {
+    await pagina.waitForSelector('#editorCartaoSala [data-ed="corA"]', { timeout: 5000 });
+    // A gema que a pessoa clicaria: ela rola até a vista antes (o clique de quem usa só alcança o que se vê).
+    await pagina.evaluate(() => { const gema = document.querySelector('#editorCartaoSala [data-ed="corA"]'); gema.scrollIntoView({ block: 'center' }); gema.click(); });
+    await pagina.waitForSelector('.nx-pop .nx-cor-area', { timeout: 3000 });
+  }
   // A página dentro da camada leva um instante para dizer que está pronta.
   if (estado.startsWith('camada') && estado !== 'camada-sair') await pagina.waitForSelector('.camada-quadro.pronto', { timeout: 15000 });
 }
@@ -204,8 +225,15 @@ async function criarSegundaPessoa(pagina) {
     // deslize, o chat já tem a largura final e a coluna ainda não -- o que é o efeito, e não
     // defeito. O desenho que vale é o de depois.
     await pagina.waitForFunction(() => !document.querySelector('.app').getAnimations().length, null, { timeout: 2000 }).catch(() => {});
+    // Os painelzinhos (cor, emojis) nascem em `body` e entram com movimento: a folha do celular sobe 28 px.
+    await pagina.waitForFunction(() => ![...document.querySelectorAll('.nx-pop,.nx-pop-fundo,#presenceMenu')].some(el => el.getAnimations().length), null, { timeout: 2000 }).catch(() => {});
     await pagina.waitForTimeout(60);
     for (const problema of await pagina.evaluate(detectar)) achados.push(`[${estado} ${largura}×${altura}] ${problema}`);
+    // Um popover ancorado num botão: o menu inteiro tem de estar dentro da janela, nos quatro lados.
+    if (['menu-status', 'emojis', 'cor'].includes(estado)) {
+      const caixa = await pagina.evaluate(() => { const r = (document.querySelector('.nx-pop') || presenceMenu).getBoundingClientRect(); return { cima: r.top, baixo: r.bottom, esquerda: r.left, direita: r.right, largura: innerWidth, altura: innerHeight }; });
+      if (caixa.cima < 0 || caixa.baixo > caixa.altura + 1 || caixa.esquerda < 0 || caixa.direita > caixa.largura + 1) achados.push(`[${estado} ${largura}×${altura}] o menu sai da janela: ${JSON.stringify(caixa)}`);
+    }
     // A página dentro da camada é a de sempre, mas num quadro da largura da janela: ela também não
     // pode rolar de lado (a sala por baixo, `inert`, não conta).
     if (estado.startsWith('camada') && estado !== 'camada-sair') {

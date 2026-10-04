@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/social.css">
   <link rel="stylesheet" href="/editor-cartao.css">
   <link rel="stylesheet" href="/popover.css">
+  <link rel="stylesheet" href="/seletor-cor.css">
   <link rel="stylesheet" href="/emojis.css">
   <link rel="stylesheet" href="/inicio.css">
   <link rel="stylesheet" href="/novidades.css">
@@ -95,10 +96,12 @@
       <section class="ini-vista ini-conversa-vista" id="vistaConversa" hidden aria-label="Conversa"></section>
 
       <!-- O editor do cartão (editor-cartao.js): o mesmo que a sala abre num painel. -->
-      <section class="ini-vista ini-editor" id="vistaPerfil" hidden aria-labelledby="editor-titulo"><div id="editorCartao"></div></section>
+      <!-- As duas seções abaixo são nomeadas pelo título da barra de cima (`tituloSecao`), e não repetem
+           o título dentro delas. -->
+      <section class="ini-vista ini-editor" id="vistaPerfil" hidden aria-labelledby="tituloSecao"><div id="editorCartao"></div></section>
 
-      <section class="ini-vista ini-conquistas" id="vistaConquistas" hidden aria-labelledby="conquistasTitulo">
-        <header class="ini-conquistas-cabeca"><h2 id="conquistasTitulo">Conquistas</h2><p class="ini-explica" id="conquistasResumo"></p><div class="ini-barra" aria-hidden="true"><i id="conquistasBarra"></i></div></header>
+      <section class="ini-vista ini-conquistas" id="vistaConquistas" hidden aria-labelledby="tituloSecao">
+        <header class="ini-conquistas-cabeca"><p class="ini-explica" id="conquistasResumo"></p><div class="ini-barra" aria-hidden="true"><i id="conquistasBarra"></i></div></header>
         <div class="ini-conquistas-grade" id="gradeConquistas"></div>
         <p class="ini-dica">As conquistas saem de somas: quanto tempo você passou em salas, quantas abriu, quantas mensagens e telas. O Nexo não guarda em que sala, com quem nem quando.</p>
       </section>
@@ -148,6 +151,7 @@
   <script src="/conversa.js"></script>
   <script src="/toast.js"></script>
   <script src="/popover.js"></script>
+  <script src="/seletor-cor.js"></script>
   <script src="/emojis.js"></script>
   <script src="/editor-cartao.js"></script>
   <script src="/inicio.js"></script>
