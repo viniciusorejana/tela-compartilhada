@@ -254,6 +254,7 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | visualizador de imagem, reações que voam | 95–96 | |
 | o visor da imagem da conversa direta, e o da foto de perfil ampliada | 97 | nascem de dentro de um painel |
 | menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
+| os painelzinhos de cor e de emojis (`.nx-pop`, 4.17), e o fundo escurecido da folha deles no celular | 106 / 105 | em `body`, fora de qualquer painel |
 | aviso de pedido de entrada | 110 | |
 | botão de sair do compacto | 120 | |
 | apresentação e novidades | 125 | |
@@ -457,7 +458,7 @@ A cor fica por baixo da foto e aparece enquanto ela carrega.
 |---|---|---|
 | menção, placar de quem assiste | 18–24 | círculo |
 | chat | 28 (22 no compacto) | quadrado arredondado |
-| lista lateral | 30, com ponto verde de conectado | quadrado arredondado |
+| lista lateral e o "eu" de baixo | 30–32, com o ponto de status da conta (4.14) | quadrado arredondado |
 | quadradinho sem câmera | 36 | quadrado arredondado |
 | Estúdio, folha de volume | 36–44 | círculo |
 | amigos e conversas (início, convidar, mensagens) | 34 (`.nx-av.pequeno`) ou 44 (`.medio`), com borda e ponto de status | círculo |
@@ -485,6 +486,17 @@ foto** (o Esc é ouvido na janela, antes de qualquer outro) e o foco volta ao av
 também fecha. Avatar de linha de lista, de mensagem e de quadradinho não amplia: ele abre o cartão,
 e é o cartão que amplia. Tela nova com foto de pessoa liga o avatar com
 `NexoFoto.ampliavel(el, { foto, nome, codigo, vitrine })` e desliga com `null`.
+
+**O X do visor traz a base de botão inteira** (`cartao.css`, `.nx-foto-fechar`: círculo de 30 px, fundo
+escuro fixo, X branco), e não herda a de `social.css`: a página da conta não carrega essa folha, e
+ali o `button` global de `home.css` o pintava de roxo, com 100% de largura e 44 px de altura mínima —
+um oval sem X. Peça que nasce em `body` e vive em páginas com folhas diferentes não pode depender de
+uma folha que só algumas carregam (seção 8). A prova é `npm run test:foto`, que mede o X nas três
+páginas.
+
+**A foto troca no editor do cartão** (4.13): o grupo "Foto de perfil", o primeiro da aba Visual, no
+início e no painel da sala. Ela vale ao ser escolhida, sem o "Salvar o cartão" — é da conta, e não do
+cartão —, e a prévia, o "eu" do início e a sala a recebem na hora.
 
 Nome repetido na sala ganha um trecho do código ao lado (`rotuloDe`) — só quando se repete.
 
@@ -561,6 +573,32 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   com a prévia em cima, abaixo disso. As colunas rolam por dentro e o rodapé de salvar fica fixo
   embaixo, fora da rolagem — grudado (`sticky`) dentro do formulário, ele não subia acima do começo
   do formulário, e no celular nascia cortado embaixo da prévia.
+- **O título "Personalizar perfil" só existe onde nada o diz**: o painel da sala, que não tem barra de
+  cima. No início a barra de cima já diz o nome da seção, e o editor nasce `semTitulo` — repetir o
+  título logo abaixo era ruído. A seção "Conquistas" também não repete o seu: o resumo e a barra de
+  progresso vêm direto. A seção é nomeada pelo `h1` da barra (`aria-labelledby="tituloSecao"`).
+- **A aba Visual** abre com a **foto de perfil** (4.9): o avatar de 64 px com a borda escolhida,
+  "Enviar uma foto" / "Trocar a foto" e "Tirar a foto". Segue o **tema**: as dez bolinhas e, embaixo,
+  as **cores exatas** — duas gemas ("Cor 1", "Cor 2", cada uma com a bolinha e o código), o degradê
+  entre elas numa barra com o brilho das duas cores, **trocar de lugar** (as setas giram) e
+  **sortear** (o dado rola por algumas combinações antes de parar numa). Cada gema abre o **seletor
+  de cor** (4.17), no lugar do quadrado nativo do navegador, que cada sistema desenhava de um jeito e
+  destoava do resto; o bloco leva o mesmo desenho do bloco "Cores exatas" das configurações de
+  aparência (borda, fundo de 1,6% de tinta, rótulo em caixa alta).
+- **As amostras do catálogo seguem as cores de agora**: as de banner, fundo, borda, moldura e estilo
+  do nome mostram o cartão da pessoa, e não o do tema salvo. Com um tema elas são refeitas (`montar`);
+  com as **cores exatas** são **repintadas no lugar** (`recolorir`, `editor-cartao.js`), no mesmo
+  quadro da prévia — digitar o código, arrastar na área, uma cor pronta, trocar de lugar, sortear e
+  "Usar as do tema". Para isso toda amostra pinta só com o par `--v1`/`--v2` (nunca com a cor escrita
+  no JS) e fica registrada em `coloridas`: arrastar dispara dezenas de mudanças por segundo, e
+  refazer cada amostra a cada quadro pesaria e tiraria o foco de quem escolhe pelo teclado. Uma
+  amostra nova do catálogo entra nesse registro por `comCores`. As que têm paleta própria (Arco-íris,
+  Fogo, Dourada, Holográfica, Prisma) seguem como são.
+- **A aba Status** tem o **emoji da frase como um botão** que abre o seletor de emojis (4.17) — antes
+  era um campo de texto com um 🎮 de exemplo —, com um X pequeno no canto para tirar o emoji; o valor
+  vai num campo escondido, e o escolhido que ainda não foi salvo não é apagado por um repintar. A
+  descrição ("Sobre mim") e a bolha de pensamento têm o botão da carinha ao lado do rótulo, que insere
+  o emoji onde está o cursor.
 
 ### 4.14 Amigos, conversa direta e convites
 
@@ -570,7 +608,20 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   mensagem e "⋯". A linha inteira abre o cartão.
 - **Status**: verde disponível, âmbar com a lua ausente, vermelho com o traço não incomodar, anel
   vazio desconectado (e invisível, para os outros). Sempre o mesmo desenho, do avatar da lista ao
-  cartão.
+  cartão. **Dentro da sala é o mesmo ponto**: ao lado do nome na lista da sala, no "eu" de baixo e no
+  avatar do cartão de quem está nela. Ele vem no perfil de cada pessoa (`perfil.status`), muda na
+  hora para a sala inteira quando ela troca o status em qualquer lugar (o menu da sala, o início, o
+  editor, outra aba) e vale para quem entra depois; quem entrou sem conta é "disponível". "Volto já"
+  (☕, o "agora na sala") é estar ausente: o ponto vira a lua mesmo para quem está "disponível" —
+  sem mexer no status da conta, e sem desfazer o "não incomodar". Na lista da sala a lua e o traço
+  são pintados na cor do anel (como no Discord); solto, no menu e no editor, são furos (`.nx-ponto`).
+  "Invisível" é o anel vazio para todos — numa sala, quem está nela continua vendo a pessoa.
+- **O menu de status da sala** (`#presenceMenu`, o botão da carinha ao lado do "eu"): de cima para
+  baixo, **"Seu status"** (só com conta: Disponível, Ausente, Não incomodar, Invisível, com o ponto
+  e uma linha embaixo dizendo o que o escolhido faz), **"Agora na sala"** (Nada em especial, Quero
+  falar, Volto já, Em jogo, Sem falar: vale só enquanto a pessoa está ali) e **"Reagir na sala"**
+  (cinco emojis e o "+" do seletor, 4.17). Com o status da conta o menu ficou alto: numa janela
+  baixa (o celular deitado) ele cabe na tela e rola por dentro, em vez de ter o começo cortado.
 - **A conversa** (`conversa.js`): a mesma peça no início e no painel de mensagens da sala. Diz uma
   vez, no topo, que as mensagens ficam só na memória e somem em três dias. Mensagens seguidas da
   mesma pessoa em cinco minutos se agrupam; a própria se apaga para os dois; "Visto" embaixo da
@@ -586,7 +637,11 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   entrar sai dela.
 - **Avisos**: mensagem nova fora da conversa aberta vira aviso no canto com "Responder"; "Não
   incomodar" segura os de mensagem (a contagem continua) e deixa passar os convites, que pedem uma
-  decisão. Pedido de amizade novo e conquista ganha também avisam.
+  decisão. Pedido de amizade novo e conquista ganha também avisam. **"Não incomodar" cala também o
+  som do chat da sala** — a mensagem comum e a menção, que são as duas que tocam — e o aviso do
+  sistema da menção (a aba escondida); a mensagem continua marcada no chat, para quem olhar. O que é
+  da chamada (entrar, sair, tela, o microfone) segue tocando: quem não quer ser incomodado quer
+  continuar ouvindo a sala. No Android, o aplicativo não recebe pedido de notificação de mensagem.
 - **Menus** do início caem do botão que os abriu (4.6) e confirmam no próprio menu o que é de
   perigo ("Remover a Bia dos amigos? A pessoa não é avisada.").
 
@@ -619,6 +674,71 @@ perdeu o "AGORA" pelo mesmo motivo: o ponto pulsando já diz que é agora.
   instala (o instalador antes do portátil; o APK num Android), e as outras formas viram pílulas
   de 32 px embaixo ("Linux .deb"), com tamanho e versão no `title`. Dentro do aplicativo Android a
   seção não aparece: seria oferecer o que a pessoa já tem.
+
+### 4.17 Painelzinhos ancorados: o seletor de cor e o de emojis
+
+Um painelzinho que abre ao lado de um botão, para escolher uma coisa e sumir. A base é uma peça só
+(`popover.{js,css}`, `NexoPopover.abrir(botao, montar, opcoes)`), e o seletor de cor e o de emojis
+moram em cima dela. Primos do menu (4.6), mas com campos dentro.
+
+- **Camada 106** (2.9), em `body`, fora de qualquer painel. **É `role="group"`, e nunca
+  `role="dialog"`**: o `room-ui.js` trata todo dialog como modal e congelaria a sala (seção 8).
+- **Ancorado e preso à janela**: abre para baixo, para cima quando não cabe (o botão do chat fica no
+  pé da janela), nunca sai pelos lados. Acompanha o botão quando a página rola ou a janela muda de
+  tamanho — o chat rola sozinho quando chega uma mensagem, e fechar a cada rolagem era um defeito —
+  e fecha só se o botão sai da janela. **No celular (até 520 px) vira uma folha embaixo**, com o fundo
+  escurecido: o polegar alcança, e o teclado da tela não esconde o campo de busca. **Cabe sempre na
+  janela**: numa janela baixa (o celular deitado tem uns 300 px) o conteúdo rola por dentro, em vez de
+  ficar cortado para fora da tela (o seletor de emojis ajusta a altura; o de cor rola).
+- **Um de cada vez**; o **Esc fecha só ele** (é ouvido na janela, antes de qualquer outro, e o painel
+  de onde veio continua aberto) e o foco volta ao botão; o Tab gira dentro dele. **Clicar fora
+  fecha**, e o clique que fechou não vale para o fundo de um painel (senão o painel fechava junto), para
+  o próprio botão (senão fechar e reabrir era um clique só) nem para o toque no fundo escurecido da
+  folha — esse fecha no `pointerdown`, o fundo sai da página, e o `click` que o navegador sintetiza
+  depois cairia num botão da barra que o dedo nem mirava; em qualquer outro botão ele passa. Fecha
+  também quando o painel de onde veio fecha.
+- **Defende-se das regras globais** (seção 8): a base de botão do painelzinho (`.nx-pop button`,
+  (0,1,1)) lê fundo e cor de `--nx-fundo` e `--nx-cor`, e o passar do mouse (0,3,1) vence o da sala.
+
+**O seletor de cor** (`seletor-cor.{js,css}`, `NexoCor.abrir(botao, { valor, rotulo, paleta,
+aoMudar })`): a área de saturação e brilho com a bolinha (arrastar com o mouse ou o dedo; as setas
+andam, Shift de dez em dez), a régua do matiz, o código da cor (`#rrggbb`; aceita `#abc` e sem o
+`#`; o inválido marca o campo e não muda nada), o conta-gotas onde o navegador tem e uma fileira de
+cores prontas — as dez vivas e as dez fundas dos temas do cartão, conforme a gema. `aoMudar` recebe
+o `#rrggbb` a cada movimento; quem usa refaz a prévia no máximo uma vez por quadro. O servidor só
+guarda `#rrggbb` (`vitrine.js`). `NexoCor.sortear()` devolve duas cores que combinam, uma viva e uma
+funda. **Falta trocar os dois quadrados nativos das cores exatas das configurações de aparência**
+(`.cor-exata`), que seguem o padrão visual de pílula mas ainda abrem o seletor do navegador.
+
+**O seletor de emojis** (`emojis.{js,css}`, `NexoEmojis.abrir(botao, { aoEscolher })`): todos os
+emojis, com o topo da **busca** (o nome e as palavras-chave em português, sem acento, em qualquer
+ordem; "coração" traz o vermelho primeiro), a barra de **categorias** (os usados por último, e as
+nove do Unicode), a grade que rola com o título da categoria grudado no alto, e o **rodapé** com o
+emoji sob o mouse e o nome, e os seis **tons de pele** (o padrão e os cinco). O que a pessoa lembra
+fica no navegador (`localStorage`: os 24 usados por último e o tom) e não vai para o servidor. Teclado:
+a busca recebe o foco (no toque, não: o teclado da tela não sobe sozinho), seta para baixo desce para
+a grade, as setas andam por ela (para baixo e para cima vale o desenho), Enter escolhe — na busca,
+escolhe o primeiro resultado —, **Shift+clique escolhe e deixa aberto**.
+
+- **A lista** é `public/emojis.json`, gerada de uma vez por `npm run emojis:gerar`
+  (`scripts/gerar-emojis.cjs`) a partir da lista oficial do Unicode (`emoji-test.txt`) e dos nomes em
+  português do CLDR; a página a pede na primeira vez que o seletor abre (170 KB que quem nunca o abre
+  nunca baixa). Refazer quando sair um Unicode novo: o script baixa as fontes numa pasta temporária.
+- **Só aparece o que o aparelho sabe desenhar.** A lista é a do Unicode mais novo, e um emoji que a
+  fonte do sistema não tem sai como um quadrado: o seletor desenha, numa tela escondida, um emoji de
+  cada versão (o `testes` do json) e esconde as versões que saem sem cor — nos compostos, as que saem
+  como dois desenhos — e as bandeiras de país, que o Windows não desenha (apareceria "BR"). Quem
+  recebe um emoji que o aparelho dele não tem vê o quadrado: é o limite de usar a fonte do sistema.
+- **Onde ele entrou**: o emoji da frase do status; a descrição e a bolha de pensamento do perfil
+  (inserem onde está o cursor, respeitando o `maxlength`); o campo do chat da sala e o da conversa
+  direta (o botão da carinha entre o campo e o enviar; o foco volta ao campo); as **reações das
+  mensagens** (o "+" do menu rápido e o "+" no fim da fileira de reações) e as **reações da plateia**
+  (o "+" do menu de status). **O canal de música não tem**: ali se pede música, e emoji no pedido só
+  atrapalharia a busca.
+- **A regra no servidor** é a forma, e não uma lista: reação é **um emoji inteiro** (`ehUmEmoji`, em
+  `vitrine.js`) — o composto, a bandeira, o tom de pele —, e nada mais, porque ela é a chave de um
+  mapa guardado com a mensagem e vai para a tela de todo mundo; uma mensagem aceita até **20 emojis
+  diferentes**, e quem tira a última reação de um emoji leva a chave junto. Era uma lista de cinco.
 
 ---
 
@@ -798,7 +918,11 @@ que pesa (0,2,1). Uma peça que vive nas duas páginas (o modal das novidades, o
 de digitar o valor) precisa se defender:
 
 - zerar o que herda com `:where(button)` (peso (0,1,0)), para a classe de cada botão vencer sem
-  `!important`;
+  `!important` — ou, num painelzinho (4.17), com `.nx-pop button` (0,1,1) e o passar do mouse a
+  (0,3,1);
+- **não depender de uma folha que só algumas páginas carregam**: o visor da foto grande nasce em
+  `body` nas três páginas e dependia do `social.css`, que a da conta não tem; o X dele ficou roxo
+  (4.9). A peça que nasce de fora de qualquer página traz tudo o que precisa;
 - ler fundo e cor de variáveis próprias (`--nx-fundo`, `--nx-cor`) quando o passar do mouse
   precisa ganhar da sala;
 - declarar tudo o que precisa (largura, altura, margem, letra) em vez de confiar no padrão;

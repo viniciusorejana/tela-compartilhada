@@ -181,14 +181,23 @@ baixo — os outros nunca veem a pessoa sair. Entrar noutra sala de dentro da ca
   memória e com teto (20 por conversa, 64 MB no servidor).
 - **A personalização aparece em todo lugar**: a borda do avatar e o estilo do nome na lista da sala,
   no chat e na conversa; no quadradinho da plateia e na foto grande, também a moldura e o fundo.
-- **O cartão de perfil** é personalizável: tema, banner e fundo (animados ou imagem), borda do
+- **O cartão de perfil** é personalizável: **foto**, tema (as dez paletas ou duas cores exatas, num
+  seletor de cor próprio, com trocar e sortear), banner e fundo (animados ou imagem), borda do
   avatar, moldura, efeito ao abrir, estilo do nome, bio, pronomes, bolha de pensamento e frase do
-  status com prazo. Algumas peças pedem premium (regra do `NEXO_PLANOS`) ou uma **conquista**,
-  ganha usando o Nexo; as conquistas saem de somas (minutos em sala, salas abertas, mensagens,
-  telas) que não guardam onde, com quem nem quando. O editor é o mesmo no início e num painel da
-  sala, sem sair da chamada.
+  status com prazo e **emoji escolhido num seletor com todos os emojis**. Algumas peças pedem premium
+  (regra do `NEXO_PLANOS`) ou uma **conquista**, ganha usando o Nexo; as conquistas saem de somas
+  (minutos em sala, salas abertas, mensagens, telas) que não guardam onde, com quem nem quando. O
+  editor é o mesmo no início e num painel da sala, sem sair da chamada.
 - **Presença**: disponível, ausente, não incomodar ou invisível, e a escolha de mostrar ou não aos
-  amigos em que sala você está.
+  amigos em que sala você está. **O status chega à sala**: o ponto ao lado de cada nome na lista da
+  sala é o da conta da pessoa (verde, âmbar com a lua, vermelho com o traço, anel vazio), troca na
+  hora para todos e se escolhe no menu da sala. **"Não incomodar" cala o som das mensagens** — o aviso
+  no canto, o som do chat (e da menção) e a notificação do Android —, e deixa passar os convites.
+- **Emojis em todo lugar certo**: o seletor (busca em português, categorias, tons de pele, os usados
+  por último) está no chat da sala, nas mensagens diretas, na frase do status e nos campos do perfil;
+  qualquer emoji vale como **reação** a uma mensagem e na plateia — e o canal de música não tem
+  seletor, porque ali se pede música. A lista (`public/emojis.json`) vem do Unicode e se refaz com
+  `npm run emojis:gerar`.
 
 O desenho inteiro, com o que fica guardado e o que não fica, está em
 [`docs/amigos-e-perfil.md`](docs/amigos-e-perfil.md).

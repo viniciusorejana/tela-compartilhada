@@ -199,9 +199,11 @@ junto sem ninguém lembrar delas.
 | tamanho | 6 MB | 12 MB cada, uma por estado (4 no máximo) | 12 MB cada, 40 por conta, 64 MB no total |
 | preparo | recortado no quadrado do meio e reduzido a 512 px pela página (256 se não couber) | como as do Estúdio | como está (a arte de quem transmite: GIF animado, PNG recortado); parada acima do teto, reduzida a 1024 px |
 
-A foto de perfil também se vê grande: no cartão de perfil da sala, o avatar de quem tem foto se
-abre num visor de até 440 px. É por isso que ela sobe em 512 px — em 256, ampliada, ficava macia.
-As fotos enviadas antes continuam em 256 até a pessoa trocar.
+A foto de perfil também se vê grande: em todo cartão de perfil (o da sala, o do início, a prévia do
+editor), na página da conta e no "Meu perfil", o avatar de quem tem foto se abre num visor de até 440
+px (`docs/interface.md`, 4.9). É por isso que ela sobe em 512 px — em 256, ampliada, ficava macia.
+As fotos enviadas antes continuam em 256 até a pessoa trocar. A foto se troca na conta, no "Meu
+perfil", nas configurações e no editor do cartão, pelas mesmas rotas (`/api/conta/avatar`).
 
 - **O tipo vem dos bytes** (PNG, JPEG, GIF, WebP), nunca do nome nem do cabeçalho. SVG fica de
   fora: é um documento, não uma imagem.

@@ -114,16 +114,29 @@ A conta é identificada para fora pelo **código** — nunca pelo id interno, qu
 
 ## A presença
 
-| status | o que os amigos veem |
-|---|---|
-| Disponível | ponto verde |
-| Ausente | ponto âmbar (lua) |
-| Não incomodar | ponto vermelho; avisos de mensagem não aparecem no canto |
-| Invisível | desconectado |
+| status | o que os amigos veem | o que muda para quem o escolhe |
+|---|---|---|
+| Disponível | ponto verde | nada |
+| Ausente | ponto âmbar (lua) | nada: é informação ("conectado, mas longe") |
+| Não incomodar | ponto vermelho (traço) | **sem som nem aviso de mensagem**: o aviso no canto, o som do chat da sala (a mensagem e a menção), o aviso do sistema da menção e a notificação do Android; a contagem de não lidas e a marca no chat continuam. Convites e pedidos de amizade ainda chegam, porque pedem uma decisão |
+| Invisível | desconectado (e sem a sala em que está) | nada |
 
-O status é escolhido no início ou na sala e segue a conta. Junto vem o **status personalizado**
-(emoji e frase, com prazo: 30 min, 1 h, 4 h, hoje ou sem prazo) e a **bolha de pensamento**, uma
-frase curta que flutua sobre o avatar no cartão por 24 horas.
+O status é escolhido no início, no menu da sala (o botão da carinha, "Seu status") ou no editor do
+cartão, e segue a conta — fica guardado nela, em qualquer aparelho.
+
+**O status também chega à sala.** O ponto ao lado do nome, na lista da sala, é o status da conta de
+cada pessoa (`perfil.status`, que o servidor manda no perfil de quem está na sala, `perfilNaSala`):
+muda na hora para todos quando a pessoa o troca em qualquer lugar, e quem entra depois já o recebe.
+Quem entrou sem conta é "disponível". O que a sala vê é só o status — nunca em que sala a pessoa está,
+nem a frase. "Invisível" é o anel vazio para todos: numa sala, quem está nela continua vendo a pessoa
+(esconder a presença é coisa de quem não está na mesma chamada). O status **da sala** — "Agora na
+sala": Quero falar, Volto já, Em jogo, Sem falar — é outro, e vale só enquanto a pessoa está ali;
+"Volto já" desenha o ponto de ausente (a lua) sem mexer no status da conta. Tudo isso em
+`docs/interface.md`, 4.14.
+
+Junto do status vem o **status personalizado** (emoji e frase, com prazo: 30 min, 1 h, 4 h, hoje ou
+sem prazo) — o emoji se escolhe no seletor de emojis (`docs/interface.md`, 4.17) — e a **bolha de
+pensamento**, uma frase curta que flutua sobre o avatar no cartão por 24 horas.
 
 "Conectado" quer dizer: com o início aberto, ou numa sala.
 
@@ -164,6 +177,12 @@ lugar onde ela aparece (`public/cartao.js`: `decorarAvatar`, `estilizarNome`, `m
 sala), do topo da página da conta, do "Meu perfil" e do resumo das configurações — com a moldura, o
 fundo e o estilo do nome da pessoa (`public/foto-grande.js`, `docs/interface.md` 4.9). Sem foto, o
 avatar é só um desenho.
+
+**A foto troca em quatro lugares**, todos pelas mesmas rotas (`/api/conta/avatar`): a página da
+conta, o "Meu perfil" da sala, as configurações e, desde a edição 7, o **editor do cartão** — o grupo
+"Foto de perfil", o primeiro da aba Visual, no início e no painel da sala. Ela é da conta, e não do
+cartão: vale ao ser escolhida, sem "Salvar o cartão", e a prévia, o "eu" do início e a sala a recebem
+na hora (`peer-perfil`).
 
 O chat, o canal de música e a conversa mostram a borda e o nome **parados**, animando quando o mouse passa pela
 mensagem: são centenas de mensagens, e cada borda que gira é uma pintura por quadro. Fora da

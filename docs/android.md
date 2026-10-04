@@ -117,6 +117,15 @@ conversa — aqui, no computador ou noutra aba — tira a notificação dela; um
 também sai. "Não incomodar" segura as mensagens, como no aviso do canto; convites e amizade
 passam, porque pedem uma decisão. Com o Nexo à vista, nada vai para a gaveta.
 
+**Como "não incomodar" chega ao aparelho**, nos dois caminhos: com a página viva, é ela quem decide
+(`app-android.js`, `avisarMensagem`: em "não incomodar" não pede notificação de mensagem ao
+aplicativo — `tests/android-browser.cjs` prova isso, e que o convite passa); com o aplicativo
+congelado, é o servidor quem diz (`naoIncomodar` na resposta de `/api/social/avisos`, que
+`Avisos.doServidor` lê e `tests/amigos.test.js` confere). A mensagem que chegou calada fica marcada como
+avisada: ao voltar para "disponível", ela não vira notificação de repente. O que já estava na gaveta
+quando o status mudou fica lá — mudar de status não apaga notificação. Não há emulador nesta
+máquina: a leitura em Java só se prova num aparelho, e o resto, nos testes.
+
 Tocar na notificação traz o Nexo para a frente. Com a página viva, ela recebe o toque
 (`aviso-tocado`) e abre a conversa sem recarregar — no início ou no painel de mensagens da sala,
 sem derrubar a chamada. "Entrar na sala" de um convite sai da chamada pelo `sairDaSala`, como o

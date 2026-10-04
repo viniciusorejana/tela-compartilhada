@@ -43,6 +43,9 @@ funcionalidade nova que guarda algo é um lugar novo por onde vazar.
 | Servidor de mídia com versão e SHA-256 fixos no código | `scripts/baixar-livekit.cjs` |
 | Nenhuma vulnerabilidade conhecida nas dependências de produção (`npm audit`, 22/09/2026: 0) | `package-lock.json` |
 | Preferências — inclusive volume por pessoa — só no navegador de cada um | `public/preferencias.js` |
+| **O que a sala vê de quem tem conta** é cor, marca, foto, código, o cartão e o **status** (disponível, ausente, não incomodar ou invisível) — nunca em que sala a pessoa está (isso é só dos amigos), o id da conta, o usuário ou a frase do status. O status é o ponto ao lado do nome: informação de quem já está na mesma chamada | `server.js`, `perfilNaSala`; `docs/amigos-e-perfil.md` |
+| Uma reação (no chat e na plateia) é **um emoji inteiro** e nada mais — a chave de um mapa guardado com a mensagem, mostrada na tela de todos —, com teto de 20 emojis diferentes por mensagem; o que não é emoji é descartado no servidor | `public/vitrine.js` (`ehUmEmoji`), `server.js` |
+| Os usados por último e o tom de pele do seletor de emojis ficam só no `localStorage` de cada navegador | `public/emojis.js` |
 | Aplicativo: a sala roda isolada do Node; a janela, as funções nativas e as permissões ficam presas ao servidor escolhido; só a tela local troca o servidor; o seletor de tela roda isolado | `app/main.js`, `ae0c9db` |
 | Token de pareamento do agente com 128 bits aleatórios | `public/sala.js` |
 
