@@ -229,9 +229,16 @@
 .nx-foto-legenda strong { overflow:hidden; color:var(--text); font-size:var(--fs-lg); font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
 .nx-foto-legenda small { color:var(--faint); font-size:var(--fs-meta); font-family:ui-monospace,Consolas,monospace; letter-spacing:.04em; }
 .nx-foto-legenda small:empty { display:none; }
-/* O X fica sobre a foto: com fundo escuro próprio, legível sobre qualquer imagem. O seletor é mais
-   longo que o da base de botão de social.css de propósito -- a base vem depois deste arquivo. */
-.nx-foto-visor .nx-foto-fechar { --nx-fundo:#0d0d16b3; --nx-fundo-hover:#0d0d16e6; --nx-cor:#fff; --nx-cor-hover:#fff; position:absolute; top:18px; right:18px; z-index:5; width:var(--ctl-p); height:var(--ctl-p); border-radius:50%; }
+/* O X fica sobre a foto: com fundo escuro próprio, legível sobre qualquer imagem.
+   Ele traz a base de botão INTEIRA, e não herda a de social.css (`.nx-social`): a página da conta não
+   carrega esse arquivo, e ali o `button` global de home.css pintava o X de roxo, com 100% de largura,
+   44 px de altura mínima e 18 px de recuo -- um oval sem X, em vez do círculo de 30 px. O seletor
+   (0,2,0) vence o `button` solto e o `button:hover` de qualquer página; o do passar do mouse
+   (0,4,0) vence o `button:hover:not(:disabled)` da sala (0,2,1). */
+.nx-foto-visor .nx-foto-fechar { appearance:none; -webkit-appearance:none; position:absolute; top:18px; right:18px; z-index:5; display:inline-grid; place-items:center; gap:0; width:var(--ctl-p); height:var(--ctl-p); min-width:0; min-height:0; margin:0; padding:0; border:0; border-radius:50%; background:#0d0d16b3; color:#fff; box-shadow:none; font:inherit; opacity:1; cursor:pointer; transform:none; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); -webkit-tap-highlight-color:transparent; }
+.nx-foto-visor .nx-foto-fechar:hover:not(:disabled) { background:#0d0d16e6; color:#fff; transform:none; }
+.nx-foto-visor .nx-foto-fechar:active:not(:disabled) { transform:scale(.94); }
+.nx-foto-visor .nx-foto-fechar:focus-visible { outline:2px solid var(--anel-cor); outline-offset:2px; }
 .nx-foto-fechar svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 
 /* As ações (a página põe as dela): os botões ficam embaixo, dentro do véu. */

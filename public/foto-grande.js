@@ -31,9 +31,9 @@
   };
 
   function criarVisor() {
-    // `nx-social`: é a classe que dá ao X a base de botão das peças sociais, a salvo das regras
-    // globais de `button` da sala (social.css, docs/interface.md seção 8).
-    const raiz = elemento('div', 'nx-foto-visor nx-social');
+    // O X não depende de nenhuma folha além de cartao.css: a página da conta não carrega social.css,
+    // e o `button` global dela pintava o X de roxo (cartao.css, `.nx-foto-fechar`).
+    const raiz = elemento('div', 'nx-foto-visor');
     raiz.id = 'fotoPanel';
     raiz.hidden = true;
     raiz.setAttribute('role', 'dialog');

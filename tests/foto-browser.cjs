@@ -57,6 +57,28 @@ async function conferirVisor(pagina, { foto, nome, onde }) {
   const caixa = await pagina.locator('#fotoGrande').boundingBox();
   assert.ok(caixa.width >= 200 && Math.abs(caixa.width - caixa.height) < 2, `${onde}: a foto aparece grande e quadrada (${Math.round(caixa.width)}×${Math.round(caixa.height)})`);
   assert.equal(await pagina.evaluate(() => document.activeElement?.classList.contains('nx-foto-fechar')), true, `${onde}: o foco vai para o X do visor`);
+  await conferirOX(pagina, onde);
+}
+// O X é um círculo escuro de 30 px com o desenho dentro, em qualquer página -- e não só onde social.css
+// está carregada. Na conta, o `button` global de home.css o pintava de roxo, com 100% de largura e 44 px
+// de altura mínima: um oval sem X. As medidas são as do layout (`offset*`), que a animação de entrada do
+// visor não escala.
+async function conferirOX(pagina, onde) {
+  const x = await pagina.locator('.nx-foto-fechar').evaluate(el => {
+    const css = getComputedStyle(el);
+    return {
+      largura: el.offsetWidth, altura: el.offsetHeight, raio: css.borderTopLeftRadius, fundo: css.backgroundColor, cor: css.color,
+      desenho: getComputedStyle(el.querySelector('svg')).width, traco: getComputedStyle(el.querySelector('svg')).stroke,
+      topo: el.offsetTop, direita: el.offsetParent.clientWidth - el.offsetLeft - el.offsetWidth
+    };
+  });
+  assert.deepEqual([x.largura, x.altura], [30, 30], `${onde}: o X é um círculo de 30 px, e não um oval (${x.largura}×${x.altura})`);
+  assert.equal(x.raio, '50%', `${onde}: o X é redondo`);
+  assert.equal(x.fundo, 'rgba(13, 13, 22, 0.7)', `${onde}: o fundo do X é o escuro fixo, e não o roxo do destaque (${x.fundo})`);
+  assert.equal(x.cor, 'rgb(255, 255, 255)', `${onde}: o X é branco`);
+  assert.equal(x.desenho, '18px', `${onde}: o desenho do X aparece`);
+  assert.notEqual(x.traco, 'none', `${onde}: o desenho do X tem traço`);
+  assert.deepEqual([x.topo, x.direita], [18, 18], `${onde}: o X fica no canto de cima, à direita, sobre a foto`);
 }
 const fecharComEsc = async pagina => {
   await pagina.keyboard.press('Escape');
