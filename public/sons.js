@@ -13,6 +13,11 @@
  *   - ensurdecido, a SALA fica em silêncio -- quem entrou, quem saiu, mensagens. O que é sobre
  *     você continua: o próprio som de ensurdecer, o microfone, a sua conexão caindo. Ensurdecer
  *     sem ouvir o som de ensurdecer seria apertar um botão sem saber se ele pegou.
+ *   - em "não incomodar" (o status da conta), nada de MENSAGEM toca -- nem a mensagem comum, nem a
+ *     menção. É o que o status promete ("sem avisos de mensagem"), e ele já segurava o aviso no canto
+ *     e a notificação do Android, mas o chat da sala seguia tocando. Entrada, saída, tela e os sons
+ *     sobre você continuam: são a chamada, e não a conversa, e quem não quer ser incomodado quer
+ *     continuar ouvindo a sala.
  *
  * Os sons são arquivos em /sons, feitos a partir de timbres gerados no ElevenLabs (ver
  * scripts/sons/compor.cjs): cada um diz a função pela forma -- sobe quando alguém chega, desce
@@ -30,6 +35,10 @@
   // Entrar numa transmissão fica de fora: ensurdecido, a tela chega muda de qualquer jeito, e
   // um toque confirmando que você vai "ouvir" algo seria o único som de uma sala calada.
   const SOBRE_VOCE = new Set(['mic-ligado', 'mic-desligado', 'surdo', 'ouvir', 'caiu', 'voltou']);
+  // O que o "não incomodar" cala: a conversa. O status é o escolhido na conta (social.js); quem entrou
+  // sem conta não tem status, e o som nunca se cala por ele.
+  const DE_MENSAGEM = new Set(['mensagem', 'mencao']);
+  const naoIncomodar = () => Boolean(window.NexoSocial?.naoIncomodar());
   // O mesmo aviso não se repete dentro desta janela. Mensagem espera mais: uma conversa animada
   // manda três por segundo, e o que interessa é saber que ela existe. Os do microfone são
   // curtos de propósito -- quem alterna depressa quer ouvir cada alternância.
@@ -157,6 +166,7 @@
     const grupo = GRUPO[som];
     if (!grupo || !ajustes.ligados || !ajustes[grupo] || !ajustes.volume) return false;
     if (!SOBRE_VOCE.has(som) && typeof ensurdecido !== 'undefined' && ensurdecido) return false;
+    if (DE_MENSAGEM.has(som) && naoIncomodar()) return false;
     if (som === 'mensagem' && ajustes.mensagemSoFora && chatAVista) return false;
     const agora = Date.now();
     if (agora - (ultimos.get(som) || 0) < INTERVALO_MINIMO_MS[som]) return false;

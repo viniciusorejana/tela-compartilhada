@@ -94,7 +94,16 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
 .member { display:flex; align-items:center; gap:9px; padding:7px 9px; min-width:0; border-radius:var(--r-sm); transition:background-color var(--dur) var(--curva); }
 .member:hover { background:rgb(var(--tinta) / 3.1%); }
 .member-avatar,.self-avatar { display:grid; place-items:center; flex:none; position:relative; width:30px; height:30px; border-radius:11px; color:var(--sobre-cor); font-size:var(--fs-meta); font-weight:800; }
-.member-avatar::after,.self-avatar::after { content:''; position:absolute; width:8px; height:8px; background:var(--online); border:2px solid var(--bg-1); border-radius:50%; right:-2px; bottom:-2px; }
+/* O ponto de status: o da conta (`perfil.status`, server.js `perfilNaSala`), no mesmo desenho do cartão --
+   verde, âmbar com a lua, vermelho com o traço, anel vazio. Antes era sempre verde: o status escolhido no
+   perfil não chegava à sala. `data-status` vem de sala.js (`pintarStatusNoAvatar`); sem ele, e para quem
+   entrou sem conta, o ponto é o verde de "está aqui". O anel de `--bg-1` separa o ponto do avatar, e a lua
+   e o traço são PINTADOS com essa mesma cor: o pedaço comido e a barra se juntam ao anel, como no Discord.
+   Um furo (máscara, como no `.nx-ponto` solto) mostraria o avatar de quem está por baixo. */
+.member-avatar::after,.self-avatar::after { content:''; position:absolute; z-index:2; right:-3px; bottom:-3px; width:13px; height:13px; background:var(--online); border:2.5px solid var(--bg-1); border-radius:50%; }
+:is(.member-avatar,.self-avatar)[data-status="ausente"]::after { background:radial-gradient(circle at 30% 30%,var(--bg-1) 0 32%,transparent 34%),var(--aviso); }
+:is(.member-avatar,.self-avatar)[data-status="ocupado"]::after { background:linear-gradient(var(--bg-1),var(--bg-1)) center / 6px 2px no-repeat,var(--danger); }
+:is(.member-avatar,.self-avatar)[data-status="offline"]::after { background:var(--bg-1); box-shadow:inset 0 0 0 2px var(--faint); }
 .member-name { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:var(--fs-sm); color:var(--text-2); }
 .member-state { color:var(--faint); font-size:var(--fs-meta); }
 .member.falando .member-avatar { box-shadow:0 0 0 2px var(--online); }
@@ -1217,11 +1226,19 @@ button[aria-busy="true"] { cursor:progress; }
 @keyframes girar { to { transform:rotate(360deg); } }
 /* Sem `left`/`bottom` fixos: quem posiciona é o JS, ancorando no botão que abriu. A barra
    lateral recolhe, e no celular ela é uma gaveta -- uma distância fixa da quina deixava o
-   menu boiando longe do que o chamou. */
-.presence-menu { position:fixed; z-index:105; width:220px; padding:12px; border:0; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); animation:nexo-surgir var(--dur) var(--curva); }
+   menu boiando longe do que o chamou. O `max-height` acompanha a folga de 10 px que o JS deixa em cima e
+   embaixo: com o status da conta o menu ficou alto, e numa janela baixa (o celular deitado) rola por
+   dentro em vez de ter o começo cortado para fora da tela. */
+.presence-menu { position:fixed; z-index:105; width:248px; max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); padding:12px; border:0; border-radius:var(--r-lg); background:var(--bg-1); box-shadow:var(--sombra-menu); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; animation:nexo-surgir var(--dur) var(--curva); }
 .presence-menu>strong { display:block; margin:3px 4px 7px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
 .presence-options { display:grid; gap:2px; margin-bottom:13px; }
 .presence-options button { padding:8px 10px; text-align:left; background:transparent; color:var(--text); font-size:var(--fs-sm); font-weight:500; }
+/* O status da conta: o ponto do cartão e o nome, e embaixo uma linha que diz o que o escolhido faz --
+   é a promessa dele, escrita onde a pessoa o troca. */
+.presence-status button { display:flex; align-items:center; gap:10px; }
+.presence-dica { display:block; margin:6px 4px 14px; color:var(--faint); font-size:var(--fs-meta); line-height:1.45; }
+.presence-conta[hidden] { display:none; }
+.presence-conta > .presence-options { margin-bottom:0; }
 .presence-options button:hover:not(:disabled) { background:rgb(var(--tinta) / 5.9%); }
 .presence-options button.ativo { background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-texto); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 30.2%, transparent); }
 .presence-reactions { display:flex; gap:4px; margin-bottom:0; }
@@ -1301,7 +1318,7 @@ html.menos-movimento :is(.room-reaction-emoji,.room-reaction-nome) { animation:n
    bolinha continua dizendo como está a conexão. O valor exato fica no diagnóstico. */
 @media(max-width:600px) { .connection-quality b { display:none; } }
 @media(max-width:760px) {
-  .presence-menu { width:min(230px,calc(100vw - 24px)); }
+  .presence-menu { width:min(248px,calc(100vw - 24px)); }
   /* Sem ponteiro não há `:hover`, então as ações precisam estar à vista -- mas apagadas, para
      não transformar cada mensagem da conversa num par de botões disputando a leitura. */
   .msg-actions { opacity:.5; pointer-events:auto; }

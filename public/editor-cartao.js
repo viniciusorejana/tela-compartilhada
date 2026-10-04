@@ -32,7 +32,7 @@
   const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   // A bolha guarda quando foi escrita; para saber se mudou, só o texto importa.
   const semImagens = v => { const { imagens, ...resto } = v || {}; return { ...resto, pensamento: resto.pensamento?.texto || '' }; };
-  const DESCRICAO_DOS_STATUS = { online: 'Aparece conectado', ausente: 'Conectado, mas longe', ocupado: 'Sem avisos de mensagem', invisivel: 'Aparece desconectado' };
+  const DESCRICAO_DOS_STATUS = { online: 'Aparece conectado', ausente: 'Conectado, mas longe', ocupado: 'Sem som nem aviso de mensagem', invisivel: 'Aparece desconectado' };
   const BYTES_DA_IMAGEM = 8 * 1024 * 1024;
 
   // O molde é fixo (nada de quem usa entra aqui). Os ids levam o prefixo de quem cria, para os
@@ -79,7 +79,8 @@
           <fieldset class="ed-grupo ed-grupo-selos"><legend>Conquistas à mostra</legend><div class="ed-selos-escolha" data-ed="selos"></div><small class="ed-dica">Até cinco das que você já tem. Sem escolher, aparecem as mais difíceis.</small></fieldset>
         </div>
         <div class="ed-parte" data-parte="status" id="${p}-parte-status" role="tabpanel" aria-labelledby="${p}-aba-status" hidden>
-          <fieldset class="ed-grupo"><legend>Como você aparece para os amigos</legend><div class="ed-status" data-ed="status" role="radiogroup" aria-label="Status"></div></fieldset>
+          <fieldset class="ed-grupo"><legend>Como você aparece</legend><div class="ed-status" data-ed="status" role="radiogroup" aria-label="Status"></div>
+            <small class="ed-dica">É o ponto ao lado do seu nome: os amigos o veem na lista deles, e quem está na mesma sala que você, na lista da sala. “Invisível” esconde você só dos amigos — numa sala, quem está nela continua te vendo. “Não incomodar” também cala o som do chat.</small></fieldset>
           <fieldset class="ed-grupo"><legend>Frase do status</legend>
             <div class="ed-frase"><input data-ed="fraseEmoji" type="text" maxlength="16" placeholder="🎮" aria-label="Emoji da frase"><input data-ed="fraseTexto" type="text" maxlength="80" placeholder="Ex.: jogando com a turma" aria-label="Frase do status"></div>
             <label class="ed-rotulo-campo" for="${p}-prazo">Some depois de</label>
@@ -459,7 +460,8 @@
         b.type = 'button';
         b.setAttribute('role', 'radio');
         b.setAttribute('aria-checked', String(s.id === atual));
-        const ponto = elemento('span', 'ed-ponto');
+        // O mesmo ponto do avatar (cartao.css, `.nx-ponto`): a lua da ausência e o traço do "não incomodar".
+        const ponto = elemento('span', 'nx-ponto');
         ponto.dataset.status = s.id;
         b.append(ponto, elemento('span', '', s.nome), elemento('small', '', DESCRICAO_DOS_STATUS[s.id]));
         b.onclick = () => definirStatus(s.id);
@@ -472,9 +474,8 @@
       q('receberPedidos').checked = social.pedidos !== false;
     }
     async function definirStatus(status) {
-      const r = await S().definirSocial({ status });
+      const r = await S().definirStatus(status);
       if (!r.ok) { aviso({ tom: 'erro', icone: 'erro', titulo: 'O status não mudou', detalhe: r.dados.error }); return false; }
-      S().estado.minha = { ...(S().estado.minha || {}), escolhido: r.dados.social.status };
       guardarSocial(r.dados.social);
       if (conta) { pintarStatus(); pintarPrevia(false); }
       aoMudar({ social: r.dados.social });

@@ -60,6 +60,14 @@
 .nx-av-status[data-status="ocupado"]::after { content:''; position:absolute; left:22%; right:22%; top:44%; height:12%; border-radius:2px; background:var(--nx-chao,#14141c); }
 .nx-av-status[data-status="offline"] { background:transparent; border:max(2px,calc(var(--av) * .045)) solid var(--faint); }
 .nx-av-status[hidden] { display:none; }
+/* O ponto de status solto -- o das opções do editor e o do menu de status da sala --, no mesmo desenho
+   do avatar: verde disponível, âmbar com a lua ausente, vermelho com o traço não incomodar, anel vazio
+   invisível (ou desconectado). A lua e o traço são FUROS na máscara, e não uma cor de fundo: o ponto fica
+   certo sobre o fundo que o lugar tiver, na opção marcada também. */
+.nx-ponto { position:relative; flex:none; display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--online); }
+.nx-ponto[data-status="ausente"] { background:var(--aviso); -webkit-mask:radial-gradient(circle at 30% 30%,transparent 32%,#000 34%); mask:radial-gradient(circle at 30% 30%,transparent 32%,#000 34%); }
+.nx-ponto[data-status="ocupado"] { background:var(--danger); -webkit-mask:linear-gradient(#000 0 0) center / 6px 2px no-repeat,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) center / 6px 2px no-repeat exclude,linear-gradient(#000 0 0); }
+.nx-ponto:is([data-status="invisivel"],[data-status="offline"]) { background:transparent; box-shadow:inset 0 0 0 2.5px var(--faint); }
 
 /* As bordas: um anel em volta do avatar, desenhado num pseudo-elemento com a máscara de anel. */
 .nx-av::before,.nx-av::after { content:''; position:absolute; pointer-events:none; border-radius:50%; }

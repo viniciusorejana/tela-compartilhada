@@ -316,6 +316,52 @@ function pintarAvatar(el, nome, perfil) {
 }
 // A vitrine que a sala mostra de cada pessoa (a efetiva, mandada pelo servidor), ou null.
 const vitrineDe = id => perfilDe(id)?.cartao?.vitrine || null;
+
+// ---------- O status de cada pessoa na sala ----------
+//
+// O status da conta (disponível, ausente, não incomodar, invisível) chega no perfil de cada pessoa
+// (`perfil.status`, server.js `perfilNaSala`) e muda na hora, para todos: é o ponto ao lado do nome. Quem
+// entrou sem conta não tem status e aparece como "disponível" -- está aqui.
+//
+// "Volto já" (☕, o status DA SALA, que vale só enquanto a pessoa está nela) é o mesmo que estar ausente, e
+// o ponto diz isso mesmo para quem se deixou "disponível": a sala inteira vê os dois, e um ponto verde ao
+// lado de "volto já" seria um aviso contradizendo o outro. Quem escolheu "não incomodar" ou "invisível"
+// continua com a escolha dele -- "volto já" não a desfaz.
+// "Não incomodar", como a conta o escolheu (o socket de amigos, social.js): quem decide o que toca ou
+// avisa pergunta aqui. Quem entrou sem conta nunca está nele.
+const naoIncomodar = () => Boolean(window.NexoSocial?.naoIncomodar());
+function statusDaPessoa(id) {
+  // O meu: o que a sala me mandou, e o do socket de amigos enquanto ela não mandou (a primeira entrada).
+  const status = id === 'self' ? (meuPerfil?.status || window.NexoSocial?.estado.minha?.escolhido) : perfilDe(id)?.status;
+  const valido = ['online', 'ausente', 'ocupado', 'invisivel'].includes(status) ? status : 'online';
+  const momento = id === 'self' ? presencaLocal : peers.get(id)?.state?.presenca;
+  return valido === 'online' && momento === 'brb' ? 'ausente' : valido;
+}
+// O ponto no avatar da lista e no do "eu": `data-status` desenha (sala.css), e o texto diz o mesmo para
+// o leitor de tela e para o mouse. "Invisível" é o anel vazio, o mesmo de "desconectado".
+function pintarStatusNoAvatar(el, id) {
+  if (!el) return;
+  const status = statusDaPessoa(id);
+  const visto = status === 'invisivel' ? 'offline' : status;
+  if (el.dataset.status !== visto) el.dataset.status = visto;
+  const nome = window.NexoCartao?.NOMES_DOS_STATUS[status] || '';
+  if (id !== 'self') { if (el.title !== nome) el.title = nome; return; }
+  // O avatar do "eu" é parte do botão "Editar meu perfil": o status entra no texto do botão, e não num
+  // `title` do avatar, que o esconderia embaixo do mouse.
+  const botao = el.closest('button');
+  const texto = `Editar meu perfil${meuPerfil?.conta ? ` · ${nome}` : ''}`;
+  if (botao && botao.title !== texto) { botao.title = texto; botao.setAttribute('aria-label', texto); }
+}
+// O cartão aberto acompanha o status de quem ele mostra: o ponto do avatar muda ali também, sem fechar e
+// abrir de novo. Chamado a cada desenho da sala (room-ui.js), então só toca no que mudou.
+function atualizarStatusDoCartaoAberto() {
+  if (!perfilAberto || document.getElementById('perfilPanel').classList.contains('hidden')) return;
+  const ponto = document.querySelector('#perfilVitrine .nx-av-status');
+  if (!ponto) return;
+  const status = statusDaPessoa(perfilAberto);
+  const visto = status === 'invisivel' ? 'offline' : status;
+  if (ponto.dataset.status !== visto) window.NexoCartao.trocarStatus(ponto.closest('.nx-av'), visto);
+}
 // O perfil pela identidade de mídia, a que vai nas mensagens do chat e do canal de música.
 const perfilDaIdentidade = identidade => (identidade && identidade === myId ? meuPerfil : perfisPorIdentidade.get(identidade) || null);
 // O autor de uma mensagem, no chat e no canal de música: a foto, a cor e a borda no avatar, e o
@@ -2631,7 +2677,11 @@ presenceBtn.onclick = evento => {
 };
 presenceMenu.addEventListener('click', evento => {
   const botao = evento.target.closest('button');
-  if (!botao || !socket?.connected) return;
+  if (!botao) return;
+  // O status da conta (social-sala.js) é da conta, e não da sala: vale sem o socket da sala, e fecha o menu
+  // como os outros.
+  if (botao.dataset.status) { window.NexoSalaSocial?.definirStatus(botao.dataset.status); fecharMenuDePresenca(); return; }
+  if (!socket?.connected) return;
   if (botao.dataset.presence !== undefined) {
     presencaLocal = botao.dataset.presence;
     socket.emit('sinal-presenca', { presenca: presencaLocal });
@@ -5665,8 +5715,10 @@ function abrirPerfil(id, reserva = null) {
   // como ela escolheu (o servidor já mandou só o que vale). Quem não tem conta ganha o cartão
   // padrão do Nexo. Os ids são os de sempre, para o resto deste cartão continuar igual.
   const codigoDaPessoa = perfil?.conta ? perfil.codigo : '';
+  // O ponto de status no avatar do cartão: o mesmo da lista -- só de quem tem conta e está aqui agora.
   const montado = NexoCartao.montar({
     nome, perfil, cartao: perfil?.cartao || null, compacto: true, codigo: codigoDaPessoa,
+    presenca: presente && perfil?.conta ? { status: statusDaPessoa(id) } : null,
     apelidoMeu: !ehEu && codigoDaPessoa && window.NexoSocial?.relacao(codigoDaPessoa) === 'amigos' ? window.NexoSocial.pessoa(codigoDaPessoa)?.apelidoMeu || null : null,
     ids: { avatar: 'perfilAvatar', nome: 'perfilNome', codigo: 'perfilCodigo' }
   });
@@ -7094,7 +7146,9 @@ function mostrarMensagem(msg) {
     chatBadge.textContent = naoLidas > 99 ? '99+' : String(naoLidas);
     chatBadge.classList.remove('hidden');
   }
-  if (!carregandoHistorico && !msg._atualizandoLocal && mencionou && msg.autorId !== myId && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+  // "Não incomodar" também segura o aviso do sistema da menção (o som já fica calado em sons.js): a
+  // menção continua marcada no chat, para quem olhar.
+  if (!carregandoHistorico && !msg._atualizandoLocal && mencionou && msg.autorId !== myId && document.hidden && !naoIncomodar() && 'Notification' in window && Notification.permission === 'granted') {
     new Notification(`${msg.autor || 'Alguém'} mencionou você no Nexo`, { body: String(msg.texto || '').slice(0, 160), tag: `nexo-${roomCode}` });
   }
   atualizarFixadas();

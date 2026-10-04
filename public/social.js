@@ -143,6 +143,9 @@
       return () => alvo.removeEventListener(nome, ouvinte);
     },
     presencaDe: codigo => estado.presencas[codigo] || { status: 'offline' },
+    // "Não incomodar", como a conta o escolheu: quem decide o que toca ou avisa pergunta aqui (o som do
+    // chat da sala, o aviso do sistema, o aviso no canto, a notificação do Android).
+    naoIncomodar: () => estado.minha?.escolhido === 'ocupado',
     pedirAmizade: alvoTexto => api('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: alvoTexto } }).then(depois),
     aceitar: codigo => api(`/api/conta/amigos/${codigoNaRota(codigo)}/aceitar`, { metodo: 'POST' }).then(depois),
     desfazer: codigo => api(`/api/conta/amigos/${codigoNaRota(codigo)}`, { metodo: 'DELETE' }).then(depois),
@@ -151,6 +154,20 @@
     desbloquear: codigo => api(`/api/conta/amigos/${codigoNaRota(codigo)}/bloqueio`, { metodo: 'DELETE' }).then(depois),
     cartao: codigo => api(`/api/conta/pessoa/${codigoNaRota(codigo)}`),
     definirSocial: dados => api('/api/conta/social', { metodo: 'PUT', corpo: dados }),
+    // Troca o status (online, ausente, ocupado = "não incomodar", invisivel) de onde estiver -- o
+    // início, o editor do cartão, o menu da sala --, e deixa esta página com o status novo antes de o
+    // aviso do servidor voltar: quem decide algo pelo status (os avisos de mensagem, o som do chat)
+    // não pode ficar um instante com o antigo. O servidor leva o resto: os amigos, a sala inteira
+    // (`peer-perfil`) e as outras abas da pessoa.
+    async definirStatus(status) {
+      const r = await api('/api/conta/social', { metodo: 'PUT', corpo: { status } });
+      if (!r.ok) return r;
+      estado.minha = { ...(estado.minha || {}), escolhido: r.dados.social.status };
+      const atual = root.NexoConta?.atual()?.perfil;
+      if (atual) root.NexoConta.atualizar({ perfil: { ...atual, social: r.dados.social } });
+      emitir('minha', estado.minha);
+      return r;
+    },
     // `imagem` é o que NexoImagem.prepararParaConversa devolve ({ dataUrl, largura, altura }).
     enviar: (para, texto, imagem = null) => (imagem
       ? pedirAoSocket('dm-enviar', { para, texto, imagem: imagem.dataUrl, largura: imagem.largura, altura: imagem.altura }, 30000)

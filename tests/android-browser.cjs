@@ -162,6 +162,30 @@ async function esperarAte(condicao, mensagem, prazo = 10000) {
   await esperarAte(() => doApp.some(m => m.tipo === 'pedidos' && m.codigos.includes(caio.conta.codigo)), 'os pedidos pendentes não foram ao aplicativo');
   console.log('PASS: com o aplicativo fora da tela, mensagem, convite e pedido de amizade viram notificação');
 
+  // "Não incomodar" segura a mensagem: a página não pede notificação nenhuma ao aplicativo (a nativa é só o
+  // que a página manda mostrar). O convite passa, porque pede uma decisão. O que o servidor diz ao trabalho
+  // que roda com o aplicativo congelado (`naoIncomodar` em /api/social/avisos) tem o teste dele em
+  // amigos.test.js; a leitura disso em Java (Avisos.doServidor) só se prova num aparelho.
+  const { csrf: csrfDaAna } = await (await fetch(`${origin}/api/conta/eu`, { headers: { Cookie: ana.cookie } })).json();
+  const mudarStatus = valor => fetch(`${origin}/api/conta/social`, { method: 'PUT', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Nexo-CSRF': csrfDaAna, Cookie: ana.cookie }, body: JSON.stringify({ status: valor }) });
+  const notificacoes = categoria => doApp.filter(m => m.tipo === 'aviso' && m.categoria === categoria);
+  assert.equal((await mudarStatus('ocupado')).status, 200);
+  await inicio.waitForFunction(() => NexoSocial.estado.minha?.escolhido === 'ocupado', null, { timeout: 5000 });
+  const mensagensAntes = notificacoes('mensagem').length;
+  await paginaBia.evaluate(codigo => NexoSocial.enviar(codigo, 'mensagem em não incomodar'), ana.conta.codigo);
+  await inicio.waitForFunction(() => NexoSocial.conversas().some(c => c.ultima?.texto === 'mensagem em não incomodar'), null, { timeout: 5000 });
+  await new Promise(resolve => setTimeout(resolve, 900));
+  assert.equal(notificacoes('mensagem').length, mensagensAntes, 'em "não incomodar", a mensagem não vira notificação');
+  const convitesAntes = notificacoes('convite').length;
+  await paginaBia.evaluate(codigo => NexoSocial.convidar(codigo, 'convite-em-nao-incomodar'), ana.conta.codigo);
+  await esperarAte(() => notificacoes('convite').length === convitesAntes + 1, 'o convite devia passar em "não incomodar"');
+  assert.equal((await mudarStatus('online')).status, 200);
+  await inicio.waitForFunction(() => NexoSocial.estado.minha?.escolhido === 'online', null, { timeout: 5000 });
+  await paginaBia.evaluate(codigo => NexoSocial.enviar(codigo, 'mensagem com a Ana disponível de novo'), ana.conta.codigo);
+  await esperarAte(() => notificacoes('mensagem').some(m => m.texto === 'mensagem com a Ana disponível de novo'), 'disponível de novo, a mensagem devia voltar a virar notificação');
+  assert.equal(notificacoes('mensagem').length, mensagensAntes + 1, 'só a mensagem de depois, e não a que chegou calada');
+  console.log('PASS: em "não incomodar" a mensagem não vira notificação no aplicativo (o convite passa), e disponível de novo ela volta');
+
   // Tocar na notificação: o Nexo volta à frente e a conversa abre, sem recarregar a página. Aberta,
   // ela é lida -- e a notificação dela sai da gaveta.
   await inicio.evaluate(() => { window.visivel = true; });

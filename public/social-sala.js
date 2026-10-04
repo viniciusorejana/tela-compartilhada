@@ -226,7 +226,36 @@
     // Uma conquista pode liberar peças do cartão: o editor, se aberto de novo, já sabe.
     editor?.carregar();
   });
-  S.on('minha', () => { if (!$('editorCartaoPanel').classList.contains('hidden')) editor?.pintarStatus(); });
+  // ---------- O status, no menu da sala ----------
+  // O mesmo status do início e do editor, e é da conta: trocá-lo aqui vale para os amigos, para a sala
+  // inteira (o servidor manda o perfil novo e o ponto de todo mundo muda) e para o que toca e avisa. Só com
+  // conta: sem ela não há onde guardar um status, e o menu tem só o "agora na sala" e as reações.
+  // A linha de baixo diz o que o escolhido faz -- a promessa dele, escrita onde a pessoa o troca.
+  const DICA_DO_STATUS = {
+    online: 'Seus amigos veem você conectado.',
+    ausente: 'Conectado, mas longe: o ponto fica âmbar para todos.',
+    ocupado: 'Sem sons nem avisos de mensagem, na sala e no celular. Convites e pedidos de amizade ainda chegam.',
+    invisivel: 'Seus amigos veem você desconectado. Quem está nesta sala continua vendo você aqui.'
+  };
+  function pintarStatusDoMenu() {
+    const atual = S.estado.minha?.escolhido || 'online';
+    document.querySelectorAll('#presenceConta button[data-status]').forEach(b => {
+      const sim = b.dataset.status === atual;
+      b.classList.toggle('ativo', sim);
+      b.setAttribute('aria-pressed', String(sim));
+    });
+    $('presenceStatusDica').textContent = DICA_DO_STATUS[atual] || '';
+  }
+  async function definirStatus(status) {
+    const r = await S.definirStatus(status);
+    if (!r.ok) { aviso({ tom: 'erro', icone: 'erro', titulo: 'O status não mudou', detalhe: r.dados.error }); return; }
+    pintarStatusDoMenu();
+  }
+
+  S.on('minha', () => {
+    pintarStatusDoMenu();
+    if (!$('editorCartaoPanel').classList.contains('hidden')) editor?.pintarStatus();
+  });
   S.on('naoLidas', pintarContagem);
   S.on('lida', pintarContagem);
   S.on('amigos', () => {
@@ -239,7 +268,8 @@
   S.iniciar().then(ok => {
     comConta = Boolean(ok);
     $('mensagensBtn').hidden = !comConta;
-    if (comConta) pintarContagem();
+    $('presenceConta').hidden = !comConta;
+    if (comConta) { pintarContagem(); pintarStatusDoMenu(); }
   });
 
   // A notificação de amigos do aplicativo Android, tocada no meio da chamada (app-android.js). A
@@ -255,5 +285,5 @@
     }
   });
 
-  window.NexoSalaSocial = { pintarCartao, abrirMensagens, abrirConvite, abrirEditor };
+  window.NexoSalaSocial = { pintarCartao, abrirMensagens, abrirConvite, abrirEditor, definirStatus };
 })();

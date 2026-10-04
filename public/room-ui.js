@@ -128,6 +128,8 @@
     $('selfName').textContent = myName || 'Seu perfil';
     // A borda (pintarAvatar) e o estilo do nome do cartão, para a pessoa se ver como a sala a vê.
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));
+    pintarStatusNoAvatar($('selfAvatar'), 'self');
+    atualizarStatusDoCartaoAberto();
     window.NexoCartao?.estilizarNome($('selfName'), vitrineDe('self'));
     // Duas formas da mesma frase: a inteira onde ela cabe (a gaveta do celular) e a curta na lateral
     // do computador, onde "Microfone desligado" quebrava em duas linhas em qualquer largura
@@ -161,6 +163,7 @@
         const avatar = document.createElement('span');
         avatar.className = 'member-avatar';
         pintarAvatar(avatar, person.name, perfilDe(person.id));
+        pintarStatusNoAvatar(avatar, person.id);
         const name = document.createElement('span');
         name.className = 'member-name';
         // `rotuloDe` acrescenta um trecho do código só quando outro nome na sala é igual.
@@ -168,7 +171,9 @@
         window.NexoCartao?.estilizarNome(name, vitrineDe(person.id));
         row.tabIndex = 0;
         row.setAttribute('role', 'button');
-        row.setAttribute('aria-label', `Ver o perfil de ${person.name}`);
+        // O status (o ponto do avatar) entra no texto da linha quando diz algo: "disponível" é o normal.
+        const statusDaLinha = statusDaPessoa(person.id);
+        row.setAttribute('aria-label', `Ver o perfil de ${person.name}${statusDaLinha === 'online' ? '' : ` · ${window.NexoCartao?.NOMES_DOS_STATUS[statusDaLinha] || ''}`}`);
         const state = document.createElement('span');
         // Quem perdeu a conexao ainda aparece, mas dito: some sozinho se nao voltar.
         state.className = person.semConexao ? 'member-state' : person.state.screen ? 'member-live' : 'member-state';

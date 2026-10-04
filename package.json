@@ -18,6 +18,7 @@
     "test:inicio": "node tests/inicio-browser.cjs",
     "test:camada": "node tests/camada-browser.cjs",
     "test:foto": "node tests/foto-browser.cjs",
+    "test:status": "node tests/status-browser.cjs",
     "test:planos": "node tests/planos-browser.cjs",
     "test:fila": "node tests/fila-e-perfil-browser.cjs",
     "test:volume": "node tests/volume-browser.cjs",

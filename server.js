@@ -417,7 +417,13 @@ function perfilNaSala(conta) {
   // painel do Estúdio de quem está na sala e as fontes do OBS o leem. O cartão também (a vitrine
   // efetiva, a frase do status e as conquistas ganhas, public/vitrine.js): é o que a sala mostra
   // quando alguém clica na pessoa.
-  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar, rosto, cartao: contas.cartaoPublico(conta) };
+  //
+  // O `status` (disponível, ausente, não incomodar, invisível) é o ponto ao lado do nome na lista da
+  // sala. Quem está na mesma sala já se vê ali, então ele não revela onde ninguém está: só diz como a
+  // pessoa quer ser tratada (a de "não incomodar" não quer ser chamada). Fora da sala continua sendo
+  // assunto da presença, que só os amigos veem (social.js). Mudar o status chega aqui por
+  // `aplicarPerfilNasSalas`, como a foto: a sala inteira vê na hora, e quem entra depois já o recebe.
+  return { conta: true, codigo: formatarCodigo(conta.codigo), cor, marca, avatar, rosto, status: contas.socialDe(conta.id).status, cartao: contas.cartaoPublico(conta) };
 }
 
 // O endereço público configurado, para os convites e os links do OBS. Sem configuração, cada

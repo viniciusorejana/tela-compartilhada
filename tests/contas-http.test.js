@@ -116,9 +116,10 @@ test('com conta, a sala usa o apelido da conta; a identidade de mídia continua 
   assert.match(config.dados.identidade, /^Ana#[a-f0-9]{16}$/);
   const a = await conectarSocket(servidor.origem, config.dados.credencialSessao); t.after(a.fechar);
   const entradaDela = await a.pedir('join-room', 'squad-teste', 'forjado', 'forjado');
-  // O cartão vai junto (docs/amigos-e-perfil.md): a vitrine que vale, a frase e as conquistas.
+  // O cartão vai junto (docs/amigos-e-perfil.md): a vitrine que vale, a frase e as conquistas. O status da
+  // conta também (`status`): é o ponto ao lado do nome na lista da sala.
   const { cartao: cartaoDela, ...perfilDela } = entradaDela.perfil;
-  assert.deepEqual(perfilDela, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null });
+  assert.deepEqual(perfilDela, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null, status: 'online' });
   assert.equal(cartaoDela.vitrine.tema, 'nexo');
   assert.ok(cartaoDela.conquistas.includes('boas-vindas'));
 
@@ -127,11 +128,29 @@ test('com conta, a sala usa o apelido da conta; a identidade de mídia continua 
   const entrada = await b.pedir('join-room', 'squad-teste', 'Bia', bia.identidade);
   const anaNaLista = entrada.peers.find(p => p.name === 'Ana');
   const { cartao: _cartao, ...perfilNaLista } = anaNaLista.perfil;
-  assert.deepEqual(perfilNaLista, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null });
+  assert.deepEqual(perfilNaLista, { conta: true, codigo, cor: 'menta', marca: 'lua', avatar: null, rosto: null, status: 'online' });
   const texto = JSON.stringify(entrada);
   assert.equal(texto.includes('ana.silva'), false, 'o nome de usuário não é mostrado à sala');
   assert.equal(texto.includes('contaId'), false, 'a conta fica no servidor');
   assert.equal(entrada.perfil, null, 'quem não tem conta não tem perfil');
+
+  // Mudar o status chega à sala inteira na hora (`peer-perfil`, como a foto), inclusive a quem mudou, e quem
+  // entra depois já o recebe. O que a sala vê é só o status -- não a sala em que ela está, nem a frase dele.
+  for (const status of ['ocupado', 'ausente', 'invisivel']) {
+    const mudou = await ana.pedir('/api/conta/social', { metodo: 'PUT', corpo: { status } });
+    assert.equal(mudou.status, 200, JSON.stringify(mudou.dados));
+    const aviso = await b.esperar(t => t.startsWith('42["peer-perfil"') && t.includes(`"status":"${status}"`));
+    assert.equal(JSON.parse(aviso.slice(2))[1].perfil.status, status, `a sala recebeu o status "${status}" de quem está nela`);
+    assert.equal(JSON.stringify(JSON.parse(aviso.slice(2))[1].perfil.cartao).includes(status), false, 'o status não vai dentro do cartão: ele é do perfil');
+  }
+  const caio = await servidor.credencial('Caio');
+  const c = await conectarSocket(servidor.origem, caio.credencialSessao); t.after(c.fechar);
+  const entradaDoCaio = await c.pedir('join-room', 'squad-teste', 'Caio', caio.identidade);
+  assert.equal(entradaDoCaio.peers.find(p => p.name === 'Ana').perfil.status, 'invisivel', 'quem entra depois recebe o status que já valia');
+  // Um status que não existe volta ao padrão na conta, e é o que a sala vê.
+  const invalido = await ana.pedir('/api/conta/social', { metodo: 'PUT', corpo: { status: 'qualquer-coisa' } });
+  assert.equal(invalido.status, 200);
+  assert.equal(invalido.dados.social.status, 'online', 'o servidor só guarda os quatro status do catálogo');
 });
 
 test('baixar meus dados é um anexo JSON, e pede a sessão', async t => {
