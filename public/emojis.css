@@ -1,0 +1,68 @@
+/* O seletor de emojis (emojis.js), dentro do painelzinho de popover.css (que traz a base de botão e de campo,
+ * a salvo das regras globais de cada página). Cor, pelos tokens -- as únicas fixas são as amostras de tom de
+ * pele, que são exatamente o que mostram.
+ *
+ * Camadas do painelzinho: topo (a busca), as categorias, a grade que rola, e o rodapé (o emoji sob o mouse e
+ * os tons). Os títulos das categorias grudam no alto da grade enquanto ela rola. */
+.nx-pop.nx-emo-pop { display:flex; width:352px; height:min(404px,calc(100vh - 24px)); height:min(404px,calc(100dvh - 24px)); }
+.nx-emo { display:flex; flex-direction:column; width:100%; min-width:0; min-height:0; }
+.nx-emo-estado { display:grid; place-content:center; justify-items:center; gap:12px; width:100%; margin:0; color:var(--muted); font-size:var(--fs-sm); text-align:center; }
+.nx-pop .nx-emo-tentar { --nx-fundo:var(--bg-3); --nx-fundo-hover:var(--bg-4); --nx-cor:var(--text); min-height:var(--ctl-p); padding:0 14px; font-size:var(--fs-sm); }
+
+/* O topo: a busca. Um campo de verdade, com a lupa e o X de limpar. */
+.nx-emo-topo { flex:none; padding:10px 10px 6px; }
+.nx-emo-busca { position:relative; display:flex; align-items:center; margin:0; }
+.nx-emo-busca > .ico { position:absolute; left:11px; width:16px; height:16px; color:var(--faint); pointer-events:none; }
+.nx-pop .nx-emo-campo { flex:1; width:100%; height:36px; padding:0 34px 0 34px; border:1px solid rgb(var(--tinta) / 10%); border-radius:var(--r-pilula); background:var(--bg-0); color:var(--text); font:var(--fs-sm)/1 "Segoe UI",system-ui,sans-serif; box-shadow:none; transition:border-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.nx-pop .nx-emo-campo::placeholder { color:var(--faint); }
+.nx-pop .nx-emo-campo:hover { border-color:rgb(var(--tinta) / 16%); }
+.nx-pop .nx-emo-campo:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.nx-pop .nx-emo-limpar { --nx-cor:var(--faint); --nx-cor-hover:var(--text); --nx-fundo-hover:rgb(var(--tinta) / 8%); position:absolute; right:6px; width:24px; height:24px; border-radius:50%; }
+.nx-emo-limpar[hidden] { display:none; }
+.nx-emo-limpar .ico { width:13px; height:13px; }
+
+/* As categorias: uma barra de ícones, com a atual marcada. */
+.nx-emo-abas { flex:none; display:flex; gap:2px; padding:0 8px 6px; border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none; }
+.nx-emo-abas::-webkit-scrollbar { display:none; }
+.nx-pop .nx-emo-aba { --nx-cor:var(--muted); --nx-fundo-hover:rgb(var(--tinta) / 7%); position:relative; flex:1 0 auto; min-width:32px; height:32px; padding:0 4px; border-radius:var(--r-sm); font-size:17px; line-height:1; opacity:.62; transition:opacity var(--dur) var(--curva),background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.nx-pop .nx-emo-aba[hidden] { display:none; }
+.nx-pop .nx-emo-aba:hover:not(:disabled),.nx-pop .nx-emo-aba[aria-current="true"] { opacity:1; }
+.nx-pop .nx-emo-aba[aria-current="true"] { --nx-fundo:var(--accent-suave); }
+.nx-emo-aba .ico { width:17px; height:17px; }
+
+/* A grade. Rola por dentro, sem puxar a página junto quando chega ao fim. */
+.nx-emo-area { position:relative; flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 8px 8px; scrollbar-width:thin; }
+.nx-emo-area:focus-visible { outline:none; }
+.nx-emo-secao[hidden],.nx-emo-secoes[hidden],.nx-emo-resultados[hidden] { display:none; }
+.nx-emo-titulo { position:sticky; top:0; z-index:1; margin:0; padding:10px 4px 6px; background:var(--bg-1); color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+/* Os 3 px dos lados são o respiro do emoji que cresce sob o mouse (1,18×): sem eles, o da última coluna
+   passava da borda da grade. */
+.nx-emo-grade { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:2px; padding:0 3px; }
+.nx-pop .nx-emo-item { --nx-fundo-hover:rgb(var(--tinta) / 9%); aspect-ratio:1; width:100%; border-radius:var(--r-sm); font:24px/1 "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif; font-weight:400; scroll-margin-top:34px; transition:background-color var(--dur-rapida) var(--curva),transform var(--dur) var(--curva-mola); }
+.nx-pop .nx-emo-item:hover:not(:disabled) { transform:scale(1.18); }
+.nx-pop .nx-emo-item:focus-visible { outline-offset:-2px; background:rgb(var(--tinta) / 9%); }
+.nx-emo-vazio { margin:0; padding:34px 12px; color:var(--muted); font-size:var(--fs-sm); text-align:center; overflow-wrap:anywhere; }
+
+/* O rodapé: o emoji sob o mouse, grande, com o nome; à direita, os tons de pele. */
+.nx-emo-rodape { flex:none; display:flex; align-items:center; gap:10px; min-height:50px; padding:6px 12px; border-top:1px solid var(--line); background:var(--bg-0); border-radius:0 0 var(--r-lg) var(--r-lg); }
+.nx-emo-previa { flex:none; width:32px; text-align:center; font:28px/1 "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif; }
+.nx-emo-previa:empty { display:none; }
+.nx-emo-nome { flex:1; min-width:0; overflow:hidden; color:var(--text-2); font-size:var(--fs-sm); font-weight:600; white-space:nowrap; text-overflow:ellipsis; }
+.nx-emo-previa:empty + .nx-emo-nome { color:var(--faint); font-weight:500; }
+.nx-emo-tons { flex:none; display:flex; align-items:center; gap:5px; }
+.nx-pop .nx-emo-tom { width:16px; height:16px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 22%); transition:transform var(--dur) var(--curva-mola),box-shadow var(--dur) var(--curva); }
+.nx-pop .nx-emo-tom:hover:not(:disabled) { background:var(--c); transform:scale(1.2); }
+.nx-pop .nx-emo-tom[aria-checked="true"] { box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 22%),0 0 0 2px var(--bg-0),0 0 0 4px var(--accent); }
+
+/* O botão da carinha ao lado de um campo (botaoDeCampo): a mesma cara dos outros botões de ícone. */
+.nx-emo-botao { flex:none; display:inline-grid; place-items:center; width:var(--ctl-m); height:var(--ctl-m); padding:0; border-radius:var(--r-sm); }
+.nx-emo-botao .ico { width:19px; height:19px; transition:transform var(--dur) var(--curva-mola); }
+.nx-emo-botao:hover:not(:disabled) .ico { transform:scale(1.12) rotate(-6deg); }
+
+@media (max-width:520px) {
+  .nx-pop.nx-emo-pop { width:auto; height:min(72vh,460px); height:min(72dvh,460px); }
+  .nx-pop .nx-emo-campo { font-size:16px; }
+  .nx-emo-grade { grid-template-columns:repeat(auto-fill,minmax(42px,1fr)); }
+  .nx-pop .nx-emo-item { font-size:26px; }
+  .nx-pop .nx-emo-tom { width:20px; height:20px; }
+}

@@ -172,7 +172,9 @@
     arquivo.type = 'file';
     arquivo.accept = 'image/png,image/jpeg,image/gif,image/webp';
     arquivo.hidden = true;
-    compor.append(anexar, arquivo, campo, enviar);
+    // O seletor de emojis (emojis.js), entre o campo e o botão de enviar: o emoji entra onde está o cursor.
+    const emojis = root.NexoEmojis ? root.NexoEmojis.botaoDeCampo(campo, { classe: 'nx-dm-anexar', rotulo: 'Escolher um emoji' }) : null;
+    compor.append(anexar, arquivo, campo, ...(emojis ? [emojis] : []), enviar);
     const previaDoAnexo = elemento('div', 'nx-dm-anexo');
     previaDoAnexo.hidden = true;
     const status = elemento('p', 'nx-dm-status');
@@ -191,6 +193,7 @@
       campo.disabled = !podeEscrever;
       enviar.disabled = !podeEscrever;
       anexar.disabled = !podeEscrever;
+      if (emojis) emojis.disabled = !podeEscrever;
     }
 
     const perto = () => lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;

@@ -463,7 +463,12 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .chat-compose:focus-within { border-color:color-mix(in srgb, var(--accent) 40%, transparent); box-shadow:0 0 0 3px var(--accent-suave); }
 #chatInput,#musicaInput { resize:none; max-height:120px; min-height:36px; background:transparent; border:none; font-size:var(--fs-md); padding:8px 4px; line-height:1.45; }
 #chatInput:focus-visible,#musicaInput:focus-visible { outline:none; box-shadow:none; }
-#chatSend,#musicaSend,#attachImageBtn,#musicaProxima { flex:none; width:var(--ctl-m); height:var(--ctl-m); }
+#chatSend,#musicaSend,#attachImageBtn,#chatEmojiBtn,#musicaProxima { flex:none; width:var(--ctl-m); height:var(--ctl-m); }
+/* O compositor do chat ganhou o botão de emoji: com três botões de 36 px, a coluna estreita (292 px) deixava
+   o campo com 144 px, e o "Converse com o squad…" quebrava em duas linhas. Com 32 px, cabe numa. */
+#chatPanel .chat-compose > button { width:32px; }
+#chatEmojiBtn .ico { width:19px; height:19px; transition:transform var(--dur) var(--curva-mola); }
+#chatEmojiBtn:hover:not(:disabled) .ico { transform:scale(1.12) rotate(-6deg); }
 #chatSend,#musicaSend { background:transparent; color:var(--accent-texto); }
 #chatSend:hover:not(:disabled),#musicaSend:hover:not(:disabled) { background:var(--accent-suave-hi); color:var(--text); }
 .chat-hint { display:block; padding:7px 19px 14px; font-size:var(--fs-meta); color:var(--faint); }
@@ -974,7 +979,7 @@ button[aria-busy="true"] { cursor:progress; }
 @media(max-height:480px) { .participants-section { display:none; } .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
 @container(max-height:360px) { .stage-art { display:none; } .stage-empty h3 { font-size:21px; } .stage-empty p { margin-bottom:14px; } }
 @container(max-height:240px) { .stage-empty p { display:none; } .stage-empty h3 { font-size:18px; margin-bottom:14px; } }
-@media(max-width:760px) { .mute-peer-btn { min-width:32px; min-height:32px; } #chatSend,#attachImageBtn { min-width:36px; min-height:42px; } }
+@media(max-width:760px) { .mute-peer-btn { min-width:32px; min-height:32px; } #chatSend,#attachImageBtn,#chatEmojiBtn { min-width:36px; min-height:42px; } }
 
 .workspace-name { text-decoration:none; color:inherit; gap:9px; transition:background-color var(--dur) var(--curva); }
 .workspace-name:hover { background:rgb(var(--tinta) / 4.5%); }
@@ -1163,6 +1168,9 @@ button[aria-busy="true"] { cursor:progress; }
 .msg-menu-emoji { width:36px; height:36px; display:grid; place-items:center; padding:0; font-size:var(--fs-xl); }
 .msg-menu-emoji:hover:not(:disabled) { background:rgb(var(--tinta) / 7.1%); transform:scale(1.14); }
 .msg-menu-emoji.minha { background:color-mix(in srgb, var(--accent) 20%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 40%, transparent); }
+/* O "+" que abre o seletor de emojis, ao lado dos cinco de sempre. */
+.msg-menu-emoji.mais { color:var(--muted); }
+.msg-menu-emoji.mais .ico { width:18px; height:18px; }
 /* A lista de fixadas: com mais de uma, quem clica no alfinete quer escolher, não percorrer.
    Cada linha mostra autor e trecho, e quem modera solta o alfinete ali mesmo. */
 .pins-menu { flex-direction:column; gap:1px; width:min(310px,calc(100vw - 24px)); max-height:min(60vh,340px); overflow-y:auto; padding:9px; }
@@ -1185,6 +1193,10 @@ button[aria-busy="true"] { cursor:progress; }
 .msg-reactions button { display:flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid rgb(var(--tinta) / 7.8%); border-radius:999px; background:rgb(var(--tinta) / 3.5%); color:var(--text-2); font-size:var(--fs-meta); font-weight:600; line-height:1.7; }
 .msg-reactions button:hover:not(:disabled) { border-color:rgb(var(--tinta) / 18%); background:rgb(var(--tinta) / 7.8%); }
 .msg-reactions button.minha { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 15.7%, transparent); color:var(--accent-texto); }
+/* Acrescentar uma reação, no fim das que a mensagem já tem: abre o seletor de emojis. */
+.msg-reactions button.adicionar { padding:2px 7px; color:var(--faint); }
+.msg-reactions button.adicionar .ico { width:14px; height:14px; }
+.msg-reactions button.adicionar:hover:not(:disabled) { color:var(--text); }
 /* Menção: a faixa dourada vale para a mensagem inteira, avatar incluído, e sem empurrar a
    linha para o lado -- com `margin-inline` ela ficava desalinhada das vizinhas. */
 .msg.mencionou { padding:6px 9px 7px; margin:-6px -9px -7px; border-radius:9px; box-shadow:inset 3px 0 0 var(--aviso); background:color-mix(in srgb, var(--aviso) 4.7%, transparent); }
@@ -1242,6 +1254,8 @@ button[aria-busy="true"] { cursor:progress; }
 .presence-options button:hover:not(:disabled) { background:rgb(var(--tinta) / 5.9%); }
 .presence-options button.ativo { background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-texto); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent-hi) 30.2%, transparent); }
 .presence-reactions { display:flex; gap:4px; margin-bottom:0; }
+.presence-reactions .presence-mais { flex:0 0 34px; padding:8px 0; color:var(--muted); }
+.presence-reactions .presence-mais .ico { width:16px; height:16px; }
 .presence-reactions button { flex:1; padding:8px 3px; border-radius:9px; background:rgb(var(--tinta) / 3.1%); font-size:18px; line-height:1; transition:background .14s,transform .14s; }
 .presence-reactions button:hover:not(:disabled) { background:rgb(var(--tinta) / 8.6%); transform:translateY(-2px) scale(1.06); }
 .presence-badge { position:absolute; right:6px; top:6px; z-index:2; display:grid; place-items:center; min-width:22px; height:22px; padding:0 4px; border:1px solid rgb(var(--tinta) / 10.2%); border-radius:8px; background:#14151dea; font-size:var(--fs-meta); line-height:1; cursor:help; }

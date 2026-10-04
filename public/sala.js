@@ -2681,6 +2681,16 @@ presenceMenu.addEventListener('click', evento => {
   // O status da conta (social-sala.js) é da conta, e não da sala: vale sem o socket da sala, e fecha o menu
   // como os outros.
   if (botao.dataset.status) { window.NexoSalaSocial?.definirStatus(botao.dataset.status); fecharMenuDePresenca(); return; }
+  // O "+" das reações: todos os emojis. O menu fecha, e o seletor se agarra ao botão de status (o "+"
+  // some junto com o menu); a reação sai pelo mesmo evento das cinco.
+  if (botao.id === 'presenceMais') {
+    fecharMenuDePresenca();
+    window.NexoEmojis?.abrir(presenceBtn, {
+      rotulo: 'Reagir na sala',
+      aoEscolher: emoji => { if (socket?.connected) socket.emit('sinal-presenca', { reacao: emoji }); }
+    });
+    return;
+  }
   if (!socket?.connected) return;
   if (botao.dataset.presence !== undefined) {
     presencaLocal = botao.dataset.presence;
@@ -3082,6 +3092,7 @@ const ICONE_REAGIR = '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.0
 const ICONE_RESPONDER = '<path d="m9 14-5-5 5-5"/><path d="M4 9h9.5A6.5 6.5 0 0 1 20 15.5V19"/>';
 const ICONE_MAIS = '<circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.3" fill="currentColor" stroke="none"/>';
 const ICONE_ALFINETE = '<path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/>';
+const ICONE_ACRESCENTAR = '<path d="M12 5v14M5 12h14"/>';
 
 function blocoDeNumero(valor, rotulo) {
   const bloco = elemento('div', 'medicao-numero');
@@ -7129,7 +7140,19 @@ function mostrarMensagem(msg) {
     b.classList.toggle('minha', pessoas.includes(myId));
     reacoes.append(b);
   }
-  if (reacoes.childElementCount) el.append(reacoes);
+  // No fim das reações que a mensagem já tem, um "+" abre o seletor de emojis: qualquer emoji vale como
+  // reação, e acrescentar à fileira é o gesto de quem já está olhando para ela.
+  if (reacoes.childElementCount) {
+    const acrescentar = document.createElement('button');
+    acrescentar.type = 'button';
+    acrescentar.className = 'adicionar';
+    acrescentar.dataset.chatAction = 'abrir-emojis';
+    acrescentar.title = 'Adicionar uma reação';
+    acrescentar.setAttribute('aria-label', 'Adicionar uma reação');
+    acrescentar.append(icone(ICONE_ACRESCENTAR, 14));
+    reacoes.append(acrescentar);
+    el.append(reacoes);
+  }
   chatMsgs.appendChild(el);
   if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
@@ -7463,6 +7486,14 @@ function abrirMenuDaMensagem(botao, mensagem, tipo) {
       if (mensagem.reacoes?.[emoji]?.includes(myId)) b.classList.add('minha');
       chatMsgMenu.append(b);
     }
+    // O "+": todos os emojis (emojis.js). Os cinco ficam, porque reagir com um deles é um clique só.
+    const mais = elemento('button', 'msg-menu-emoji mais');
+    mais.type = 'button';
+    mais.dataset.menuAction = 'mais-emojis';
+    mais.title = 'Mais emojis';
+    mais.setAttribute('aria-label', 'Reagir com outro emoji');
+    mais.append(icone(ICONE_ACRESCENTAR, 18));
+    chatMsgMenu.append(mais);
   } else {
     const opcoes = [];
     if (ehMinha(mensagem)) opcoes.push(['editar', 'Editar mensagem']);
@@ -7480,13 +7511,25 @@ function abrirMenuDaMensagem(botao, mensagem, tipo) {
   ancorarAbaixoDe(chatMsgMenu, botao);
   chatMsgMenu.querySelector('button')?.focus();
 }
+// Reagir a uma mensagem com QUALQUER emoji: o seletor se agarra ao botão da mensagem (que continua lá
+// quando o menu fecha) e a reação sai pelo mesmo caminho das cinco rápidas. Quem reage de novo com o mesmo
+// emoji tira a sua reação, como sempre.
+function abrirSeletorDeReacao(ancora, mensagem) {
+  if (!window.NexoEmojis || !ancora?.isConnected) return;
+  window.NexoEmojis.abrir(ancora, {
+    rotulo: 'Reagir com um emoji',
+    aoEscolher: emoji => { if (socket?.connected) socket.emit('chat-acao', { acao: 'reagir', id: mensagem.id, emoji }, resposta => { if (resposta && !resposta.ok && resposta.error) status.textContent = resposta.error; }); }
+  });
+}
 chatMsgMenu.addEventListener('click', evento => {
   const botao = evento.target.closest('[data-menu-action]');
   if (!botao || !mensagemDoMenu || !socket?.connected) return;
   const mensagem = mensagemDoMenu;
   const acao = botao.dataset.menuAction;
+  const ancora = ancoraDoMenu;
   fecharMenuDaMensagem();
-  if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
+  if (acao === 'mais-emojis') abrirSeletorDeReacao(ancora, mensagem);
+  else if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
   else if (acao === 'editar') definirContextoDoChat('edicao', mensagem);
   else if (acao === 'fixar') socket.emit('chat-acao', { acao, id: mensagem.id }, resposta => { if (!resposta?.ok) status.textContent = resposta?.error || 'Não foi possível fixar.'; });
   else if (acao === 'excluir' && confirm('Excluir esta mensagem para toda a sala?')) socket.emit('chat-acao', { acao, id: mensagem.id });
@@ -7524,6 +7567,7 @@ chatMsgs.addEventListener('click', (e) => {
   fecharMenuDaMensagem();
   if (acao === 'responder') definirContextoDoChat('resposta', mensagem);
   else if (acao === 'reagir') socket.emit('chat-acao', { acao, id: mensagem.id, emoji: botao.dataset.emoji });
+  else if (acao === 'abrir-emojis') abrirSeletorDeReacao(botao, mensagem);
   else if (acao === 'abrir-reacoes' && !(jaAberto && chatMsgMenu.dataset.tipo === 'reacoes')) abrirMenuDaMensagem(botao, mensagem, 'reacoes');
   else if (acao === 'abrir-mais' && !(jaAberto && chatMsgMenu.dataset.tipo === 'mais')) abrirMenuDaMensagem(botao, mensagem, 'mais');
 });

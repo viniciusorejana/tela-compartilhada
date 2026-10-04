@@ -36,6 +36,7 @@ const { criarTempos, chaveDeTempo } = require('./tempos');
 const { criarEspectadores } = require('./espectadores');
 const { criarChaveDeWebCodecs } = require('./chave-webcodecs');
 const planos = require('./public/planos');
+const vitrineComum = require('./public/vitrine');
 const { iniciarTelemetria } = require('./telemetria');
 const { criarContas } = require('./contas');
 const { instalarRotasDeContas } = require('./contas/rotas');
@@ -664,6 +665,8 @@ const HISTORICO_MAXIMO = 80;
 const BYTES_MAXIMOS_DO_HISTORICO = 6 * 1024 * 1024;
 const TAMANHO_MAXIMO_DO_TEXTO = 2000;
 const TAMANHO_MAXIMO_DA_IMAGEM = 820 * 1024;
+// Quantos emojis diferentes uma mensagem do chat aceita como reação.
+const REACOES_DIFERENTES_POR_MENSAGEM = 20;
 const IMAGEM_VALIDA = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
 const historicoPorSala = new Map();
 
@@ -1761,8 +1764,10 @@ io.on('connection', (socket) => {
       membro.state.presenca = presenca;
       anunciarPresenca(roomCode, membro);
     }
-    const reacao = String(dados?.reacao || '');
-    if (['👍', '❤️', '😂', '👏', '🎉'].includes(reacao)) {
+    // Qualquer emoji do seletor (public/emojis.js), e nada além de um emoji: a reação vai para a tela de todo
+    // mundo, então a regra é a forma -- um emoji inteiro --, e não uma lista de cinco (public/vitrine.js).
+    const reacao = typeof dados?.reacao === 'string' ? dados.reacao : '';
+    if (vitrineComum.ehUmEmoji(reacao)) {
       io.to(roomName(roomCode)).emit('reacao-sala', { identidade: membro.identidade, nome: membro.name, reacao });
     }
   });
@@ -1953,12 +1958,21 @@ io.on('connection', (socket) => {
     // sorteia outra identidade. Com conta, é dela sempre -- é a conta que reconhece a autoria.
     const ehAutor = mensagem.autorId === membro.identidade || Boolean(membro.contaId && mensagem.autorConta === membro.contaId);
     if (acao === 'reagir') {
-      const emoji = String(dados?.emoji || '');
-      if (!['👍', '❤️', '😂', '👏', '🎉'].includes(emoji)) return responder({ ok: false });
+      // Qualquer emoji do seletor, e só um emoji inteiro: ele é a chave de um mapa guardado com a mensagem
+      // e vai para a tela de todo mundo (public/vitrine.js, `ehUmEmoji`).
+      const emoji = typeof dados?.emoji === 'string' ? dados.emoji : '';
+      if (!vitrineComum.ehUmEmoji(emoji)) return responder({ ok: false });
       mensagem.reacoes ||= {};
       const pessoas = new Set(mensagem.reacoes[emoji] || []);
+      // Uma mensagem aceita até vinte emojis diferentes: sem teto, qualquer um enchia uma mensagem de
+      // reações até ela virar uma parede, com o servidor guardando tudo.
+      if (!pessoas.size && Object.keys(mensagem.reacoes).length >= REACOES_DIFERENTES_POR_MENSAGEM) {
+        return responder({ ok: false, error: `Esta mensagem já tem ${REACOES_DIFERENTES_POR_MENSAGEM} reações diferentes.` });
+      }
       pessoas.has(membro.identidade) ? pessoas.delete(membro.identidade) : pessoas.add(membro.identidade);
-      mensagem.reacoes[emoji] = Array.from(pessoas);
+      // Quem tirou a última reação daquele emoji leva a chave junto: com a lista de cinco as chaves vazias
+      // não cresciam; com qualquer emoji, elas seriam lixo guardado.
+      if (pessoas.size) mensagem.reacoes[emoji] = Array.from(pessoas); else delete mensagem.reacoes[emoji];
     } else if (acao === 'editar') {
       if (!ehAutor) return responder({ ok: false, error: 'Você só pode editar suas mensagens.' });
       const texto = String(dados?.texto || '').trim().slice(0, TAMANHO_MAXIMO_DO_TEXTO);

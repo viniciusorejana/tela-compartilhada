@@ -172,6 +172,15 @@
     }
     return [...limpo].slice(0, maximo).join('').trim();
   }
+  // O texto INTEIRO é um emoji, e só um: o que o chat da sala e a plateia aceitam como reação. Vale para
+  // qualquer emoji do seletor (public/emojis.js) -- o rosto, o composto (família, profissão, bandeira de
+  // país ou de região, tom de pele) e o número com a moldura -- e para nada mais: uma reação é a chave de
+  // um mapa guardado e vai para a tela de todo mundo, então não pode ser uma letra, uma palavra ou um
+  // texto qualquer. A regra é a forma, e não uma lista do Unicode de hoje: um emoji que sair amanhã já
+  // passa (o Node do servidor pode ser mais velho que o navegador de quem o escolheu).
+  const UM_EMOJI = /^(?:\p{Regional_Indicator}{2}|[#*0-9]️?⃣|\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|[\u{E0020}-\u{E007E}]+\u{E007F})*(?:‍\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})*)*)$/u;
+  const ehUmEmoji = valor => typeof valor === 'string' && valor.length > 0 && valor.length <= 32 && UM_EMOJI.test(valor);
+
   // Um emoji só: o primeiro grafema. Um emoji de família ou de bandeira são vários pontos de
   // código, e cortar no meio deixaria meio desenho.
   function umEmoji(valor) {
@@ -312,7 +321,7 @@
     CONQUISTAS, CONTADORES, STATUS, PRAZOS_DA_FRASE,
     BIO_MAXIMA, PRONOMES_MAXIMO, PENSAMENTO_MAXIMO, FRASE_MAXIMA, SELOS_MAXIMOS, VIDA_DO_PENSAMENTO, BYTES_MAXIMOS_DA_VITRINE,
     conquistasDe, ganhas, limparVitrine, limparImagens, vitrineEfetiva, requisitoDe, liberada, coresDe,
-    limparSocial, socialEfetivo, umEmoji
+    limparSocial, socialEfetivo, umEmoji, ehUmEmoji
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NexoVitrine = api;

@@ -14,6 +14,8 @@
 <link rel="stylesheet" href="/cartao.css">
 <link rel="stylesheet" href="/social.css">
 <link rel="stylesheet" href="/editor-cartao.css">
+<link rel="stylesheet" href="/popover.css">
+<link rel="stylesheet" href="/emojis.css">
 <link rel="stylesheet" href="/novidades.css">
 <link rel="stylesheet" href="/reativo.css">
 <link rel="stylesheet" href="/estudio.css">
@@ -137,6 +139,8 @@
       <button id="attachImageBtn" class="ghost botao-icone" type="button" title="Enviar imagem" aria-label="Enviar imagem"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <input id="chatImageFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
       <textarea id="chatInput" rows="1" maxlength="2000" placeholder="Converse com o squad…" aria-label="Mensagem para a sala"></textarea>
+      <!-- O seletor de emojis (emojis.js): só o chat da sala e as mensagens diretas o têm; o canal de música, não. -->
+      <button id="chatEmojiBtn" class="ghost botao-icone" type="button" title="Escolher um emoji" aria-label="Escolher um emoji" aria-haspopup="true" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button>
       <button id="chatSend" class="botao-icone" type="button" title="Enviar" aria-label="Enviar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
     </div>
     <small class="chat-hint">Enter envia · Shift+Enter quebra linha</small>
@@ -800,7 +804,7 @@
 <!-- O status da conta (só de quem tem conta; social-sala.js mostra) e, abaixo, o "agora na sala": o
      primeiro vale em toda parte e fica guardado na conta; o segundo vale só enquanto a pessoa está aqui.
      Os ids e atributos de cada botão são os de sempre. O ponto é o do cartão (cartao.css, `.nx-ponto`). -->
-<div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><div class="presence-conta" id="presenceConta" hidden><strong>Seu status</strong><div class="presence-options presence-status" role="group" aria-label="Seu status"><button type="button" data-status="online"><i class="nx-ponto" data-status="online" aria-hidden="true"></i>Disponível</button><button type="button" data-status="ausente"><i class="nx-ponto" data-status="ausente" aria-hidden="true"></i>Ausente</button><button type="button" data-status="ocupado"><i class="nx-ponto" data-status="ocupado" aria-hidden="true"></i>Não incomodar</button><button type="button" data-status="invisivel"><i class="nx-ponto" data-status="invisivel" aria-hidden="true"></i>Invisível</button></div><small class="presence-dica" id="presenceStatusDica" aria-live="polite"></small></div><strong>Agora na sala</strong><div class="presence-options"><button type="button" data-presence="">Nada em especial</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button></div></div>
+<div class="presence-menu hidden" id="presenceMenu" role="menu" aria-label="Status e reações"><div class="presence-conta" id="presenceConta" hidden><strong>Seu status</strong><div class="presence-options presence-status" role="group" aria-label="Seu status"><button type="button" data-status="online"><i class="nx-ponto" data-status="online" aria-hidden="true"></i>Disponível</button><button type="button" data-status="ausente"><i class="nx-ponto" data-status="ausente" aria-hidden="true"></i>Ausente</button><button type="button" data-status="ocupado"><i class="nx-ponto" data-status="ocupado" aria-hidden="true"></i>Não incomodar</button><button type="button" data-status="invisivel"><i class="nx-ponto" data-status="invisivel" aria-hidden="true"></i>Invisível</button></div><small class="presence-dica" id="presenceStatusDica" aria-live="polite"></small></div><strong>Agora na sala</strong><div class="presence-options"><button type="button" data-presence="">Nada em especial</button><button type="button" data-presence="hand">✋ Quero falar</button><button type="button" data-presence="brb">☕ Volto já</button><button type="button" data-presence="gaming">🎮 Em jogo</button><button type="button" data-presence="quiet">🔇 Sem falar</button></div><strong>Reagir na sala</strong><div class="presence-reactions"><button type="button" data-reaction="👍">👍</button><button type="button" data-reaction="❤️">❤️</button><button type="button" data-reaction="😂">😂</button><button type="button" data-reaction="👏">👏</button><button type="button" data-reaction="🎉">🎉</button><button type="button" class="presence-mais" id="presenceMais" title="Mais emojis" aria-label="Mais emojis" aria-haspopup="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
 <div id="chatMsgMenu" class="msg-menu hidden" role="menu" aria-label="Ações da mensagem"></div>
 <div id="musicaFilaMenu" class="msg-menu menu-lista hidden" role="menu" aria-label="Ações da faixa"></div>
 <!-- `role="group"`, e não "dialog": room-ui.js trata todo dialog como modal e congela a sala.
@@ -833,6 +837,9 @@
 <script src="/planos.js"></script>
 <!-- Antes de sala.js: a ponte do aplicativo Android tem de existir quando a sala liga os botões da notificação. -->
 <script src="/app-android.js"></script>
+<!-- Os painelzinhos (cor e emojis) antes da sala: o chat e as reações os pedem desde o começo. -->
+<script src="/popover.js"></script>
+<script src="/emojis.js"></script>
 <script src="/sala.js"></script>
 <script src="/sons.js"></script>
 <script src="/tempo-sala.js"></script>

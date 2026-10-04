@@ -111,6 +111,11 @@
     if (file) mandarArquivoDeImagem(file);
     $('chatImageFile').value = '';
   };
+  // O seletor de emojis do chat da sala: o emoji entra onde está o cursor (e o foco volta ao campo). O canal
+  // de música não tem esse botão -- ali se pede música, e emoji no pedido só atrapalharia a busca.
+  $('chatEmojiBtn').addEventListener('click', () => {
+    window.NexoEmojis?.abrir($('chatEmojiBtn'), { rotulo: 'Escolher um emoji', aoEscolher: emoji => window.NexoEmojis.inserir($('chatInput'), emoji) });
+  });
 
   function renderRoom() {
     const joined = tiles.has('self');

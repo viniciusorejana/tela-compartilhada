@@ -68,12 +68,12 @@
           <fieldset class="ed-grupo"><legend>Estilo do nome</legend><div class="ed-opcoes ed-opcoes-texto" data-ed="nome" role="radiogroup" aria-label="Estilo do nome"></div></fieldset>
         </div>
         <div class="ed-parte" data-parte="sobre" id="${p}-parte-sobre" role="tabpanel" aria-labelledby="${p}-aba-sobre" hidden>
-          <label class="ed-rotulo-campo" for="${p}-bio">Sobre mim</label>
+          <div class="ed-campo-cabeca"><label class="ed-rotulo-campo" for="${p}-bio">Sobre mim</label><span data-ed="bioEmoji"></span></div>
           <textarea id="${p}-bio" data-ed="bio" rows="4" maxlength="190" placeholder="Ex.: Jogo de tudo um pouco, mas é no Valorant que eu me acho."></textarea>
           <small class="ed-dica"><span data-ed="contagemBio">0</span>/190 · até quatro linhas</small>
           <label class="ed-rotulo-campo" for="${p}-pronomes">Pronomes</label>
           <input id="${p}-pronomes" data-ed="pronomes" type="text" maxlength="40" placeholder="Ex.: ela/dela">
-          <label class="ed-rotulo-campo" for="${p}-pensamento">Bolha de pensamento</label>
+          <div class="ed-campo-cabeca"><label class="ed-rotulo-campo" for="${p}-pensamento">Bolha de pensamento</label><span data-ed="pensamentoEmoji"></span></div>
           <input id="${p}-pensamento" data-ed="pensamento" type="text" maxlength="70" placeholder="Ex.: quem topa uma partida às 21h?">
           <small class="ed-dica">Flutua ao lado do seu avatar no cartão e some sozinha em 24 horas.</small>
           <fieldset class="ed-grupo ed-grupo-selos"><legend>Conquistas à mostra</legend><div class="ed-selos-escolha" data-ed="selos"></div><small class="ed-dica">Até cinco das que você já tem. Sem escolher, aparecem as mais difíceis.</small></fieldset>
@@ -82,7 +82,14 @@
           <fieldset class="ed-grupo"><legend>Como você aparece</legend><div class="ed-status" data-ed="status" role="radiogroup" aria-label="Status"></div>
             <small class="ed-dica">É o ponto ao lado do seu nome: os amigos o veem na lista deles, e quem está na mesma sala que você, na lista da sala. “Invisível” esconde você só dos amigos — numa sala, quem está nela continua te vendo. “Não incomodar” também cala o som do chat.</small></fieldset>
           <fieldset class="ed-grupo"><legend>Frase do status</legend>
-            <div class="ed-frase"><input data-ed="fraseEmoji" type="text" maxlength="16" placeholder="🎮" aria-label="Emoji da frase"><input data-ed="fraseTexto" type="text" maxlength="80" placeholder="Ex.: jogando com a turma" aria-label="Frase do status"></div>
+            <div class="ed-frase">
+              <span class="ed-frase-emoji">
+                <button type="button" class="ed-emoji-btn" data-ed="fraseEmojiBtn" aria-haspopup="true" aria-expanded="false" aria-label="Escolher o emoji da frase" title="Escolher o emoji da frase"></button>
+                <button type="button" class="ed-emoji-tirar" data-ed="fraseEmojiTirar" aria-label="Tirar o emoji da frase" title="Tirar o emoji" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+              </span>
+              <input data-ed="fraseEmoji" type="hidden">
+              <input data-ed="fraseTexto" type="text" maxlength="80" placeholder="Ex.: jogando com a turma" aria-label="Frase do status">
+            </div>
             <label class="ed-rotulo-campo" for="${p}-prazo">Some depois de</label>
             <select id="${p}-prazo" data-ed="frasePrazo"></select>
             <div class="ed-frase-acoes"><button class="nx-botao pequeno" type="button" data-ed="salvarFrase">Salvar a frase</button><button class="nx-botao fantasma pequeno" type="button" data-ed="limparFrase">Tirar a frase</button></div>
@@ -403,6 +410,11 @@
     q('corA').addEventListener('input', lerCores);
     q('corB').addEventListener('input', lerCores);
     q('coresDoTema').onclick = () => { rascunho.cores = null; montar(); pintarPrevia(false); };
+    // Um emoji onde o cursor está, na descrição e na bolha: o seletor insere e dispara o `input`, que refaz a prévia.
+    if (window.NexoEmojis) {
+      q('bioEmoji').append(NexoEmojis.botaoDeCampo(q('bio'), { classe: 'nx-icone pequeno ed-emoji-campo', rotulo: 'Inserir um emoji na descrição' }));
+      q('pensamentoEmoji').append(NexoEmojis.botaoDeCampo(q('pensamento'), { classe: 'nx-icone pequeno ed-emoji-campo', rotulo: 'Inserir um emoji na bolha de pensamento' }));
+    }
     q('bio').addEventListener('input', () => { rascunho.bio = q('bio').value; q('contagemBio').textContent = String([...rascunho.bio].length); pintarPrevia(false); });
     q('pronomes').addEventListener('input', () => { rascunho.pronomes = q('pronomes').value; pintarPrevia(false); });
     q('pensamento').addEventListener('input', () => { const texto = q('pensamento').value; rascunho.pensamento = texto.trim() ? { texto, em: guardada.pensamento?.em || Date.now() } : null; pintarPrevia(false); });
@@ -469,7 +481,10 @@
       }));
       const social = perfil?.social || {};
       if (document.activeElement !== q('fraseTexto')) q('fraseTexto').value = social.frase?.texto || '';
-      if (document.activeElement !== q('fraseEmoji')) q('fraseEmoji').value = social.frase?.emoji || '';
+      // O emoji escolhido e ainda não salvo não é apagado por um repintar (o status mudou em outra aba, por
+      // exemplo): ele só volta ao que está guardado depois de "Salvar a frase" ou "Tirar a frase".
+      if (!q('fraseEmoji').dataset.sujo) q('fraseEmoji').value = social.frase?.emoji || '';
+      pintarEmojiDaFrase();
       q('mostrarSala').checked = social.mostrarSala !== false;
       q('receberPedidos').checked = social.pedidos !== false;
     }
@@ -481,6 +496,23 @@
       aoMudar({ social: r.dados.social });
       return true;
     }
+    // O emoji da frase vem do seletor de emojis (emojis.js): o botão mostra o escolhido -- ou a carinha, quando
+    // não há -- e o valor fica num campo escondido, que é o que "Salvar a frase" lê.
+    function pintarEmojiDaFrase() {
+      const emoji = q('fraseEmoji').value;
+      const botao = q('fraseEmojiBtn');
+      if (emoji) botao.textContent = emoji; else botao.innerHTML = window.NexoEmojis?.ICONE || '';
+      botao.classList.toggle('com-emoji', Boolean(emoji));
+      botao.title = emoji ? 'Trocar o emoji da frase' : 'Escolher o emoji da frase';
+      q('fraseEmojiTirar').hidden = !emoji;
+    }
+    q('fraseEmojiBtn').addEventListener('click', () => {
+      window.NexoEmojis?.abrir(q('fraseEmojiBtn'), {
+        rotulo: 'Escolher o emoji da frase',
+        aoEscolher: emoji => { q('fraseEmoji').value = emoji; q('fraseEmoji').dataset.sujo = '1'; pintarEmojiDaFrase(); q('fraseTexto').focus(); }
+      });
+    });
+    q('fraseEmojiTirar').addEventListener('click', () => { q('fraseEmoji').value = ''; q('fraseEmoji').dataset.sujo = '1'; pintarEmojiDaFrase(); q('fraseEmojiBtn').focus(); });
     q('frasePrazo').replaceChildren(...V.PRAZOS_DA_FRASE.map(p => { const o = elemento('option', '', p.nome); o.value = p.id; return o; }));
     q('frasePrazo').value = 'hoje';
     function prazoEscolhido() {
@@ -494,6 +526,7 @@
       const r = await S().definirSocial(pedido);
       if (!r.ok) { dizer('statusRetorno', r.dados.error || 'Não foi possível salvar.', 'erro'); return; }
       guardarSocial(r.dados.social);
+      if (Object.prototype.hasOwnProperty.call(pedido, 'frase')) delete q('fraseEmoji').dataset.sujo;
       dizer('statusRetorno', textoDeSucesso);
       pintarStatus();
       pintarPrevia(false);

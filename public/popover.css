@@ -1,0 +1,24 @@
+/* O painelzinho ancorado num botão (popover.js): a base do seletor de cor e do seletor de emojis.
+ *
+ * Camada 106 (docs/interface.md, 2.9): acima dos painéis (80-90), do visor de imagem (97) e do menu de
+ * presença (105), abaixo do aviso de pedido de entrada (110) e do toast (130). Cor, sempre pelos tokens. */
+.nx-pop { position:fixed; z-index:106; box-sizing:border-box; max-width:calc(100vw - 20px); border-radius:var(--r-lg); background:var(--bg-1); box-shadow:0 0 0 1px var(--line-2),var(--sombra-menu); color:var(--text); font:var(--fs-sm)/1.4 "Segoe UI",system-ui,sans-serif; text-align:left; transform-origin:top left; animation:nexo-surgir var(--dur) var(--curva); }
+.nx-pop[data-lado="cima"] { transform-origin:bottom left; }
+.nx-pop-fundo { position:fixed; inset:0; z-index:105; background:#0d0d16a6; animation:nexo-aparecer var(--dur) var(--curva); }
+
+/* O que mora no painelzinho vive no início e na sala, então se defende das regras globais de cada página
+   (docs/interface.md, seção 8): o `button` e o `input` soltos de home.css e sala.css não chegam aqui. A base
+   de botão pesa (0,1,1) e o passar do mouse (0,3,1), acima do `button:hover:not(:disabled)` da sala
+   (0,2,1); fundo e cor vêm de variáveis, como em social.css. */
+.nx-pop button { appearance:none; -webkit-appearance:none; display:inline-flex; align-items:center; justify-content:center; gap:6px; width:auto; min-width:0; min-height:0; margin:0; padding:0; border:0; border-radius:var(--r-sm); background:var(--nx-fundo,transparent); color:var(--nx-cor,inherit); font:inherit; font-weight:600; letter-spacing:normal; text-align:center; box-shadow:none; opacity:1; transform:none; cursor:pointer; transition:background-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); -webkit-tap-highlight-color:transparent; }
+.nx-pop button:hover:not(:disabled) { background:var(--nx-fundo-hover,var(--nx-fundo,transparent)); color:var(--nx-cor-hover,var(--nx-cor,inherit)); }
+.nx-pop button:active:not(:disabled) { transform:scale(.94); }
+.nx-pop button:focus-visible { outline:2px solid var(--anel-cor); outline-offset:2px; }
+.nx-pop input { box-sizing:border-box; min-height:0; margin:0; font:inherit; }
+
+/* No celular vira uma folha embaixo, com o fundo escurecido: o polegar alcança, e é o tamanho que o teclado
+   da tela deixa. O `!important` é do posicionamento por estilo em linha de popover.js, que não roda aqui. */
+@media (max-width:520px) {
+  .nx-pop.folha { left:8px!important; right:8px!important; top:auto!important; bottom:max(8px,env(safe-area-inset-bottom)); width:auto!important; max-width:none; border-radius:var(--r-xl); transform-origin:bottom center; animation:nx-pop-sobe var(--dur-lenta) var(--curva); }
+}
+@keyframes nx-pop-sobe { from { opacity:0; transform:translateY(28px); } to { opacity:1; transform:none; } }
