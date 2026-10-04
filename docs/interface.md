@@ -426,6 +426,13 @@ um campo do menu muda o tamanho da janela: fechar no `resize` levava o campo e o
 "Entrar numa sala pelo código" abria e sumia antes de dar para digitar (`posicionarMenu`, no
 `inicio.js`). A prova é `npm run test:inicio`, que encolhe a janela com o balão aberto.
 
+**Uma escolha entre várias** (o status do "eu" do início, `abrirMenu` em `inicio.js`) leva o ponto do
+cartão no lugar do ícone (`.nx-ponto`, 4.14) — no espaço de um ícone de 16 px, para o rótulo de todos
+os itens começar no mesmo lugar — e a escolhida fica com o destaque do menu de status da sala (o
+fundo e a cor do destaque, com um contorno fino), marcada por `role="menuitemradio"` e
+`aria-checked`, que é o que o leitor de tela lê. Quatro carinhas iguais e um visto não diziam o que
+cada opção era. A prova é `npm run test:status`.
+
 ### 4.7 Avisos no canto (`toast.js`)
 
 Um canto só, a mesma peça em toda página: ícone num quadrado de 34 px, título e linha de meta,

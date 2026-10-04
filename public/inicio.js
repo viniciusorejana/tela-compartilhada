@@ -49,8 +49,7 @@
     sala: '<path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3zM17 19c0 2-2 2-5 2"/>',
     nova: '<path d="M12 5v14M5 12h14"/>',
     lixo: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
-    imagem: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
-    status: '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M8.5 14.5a4.5 4.5 0 0 0 7 0"/>'
+    imagem: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'
   };
   const icone = (nome, classe = 'ico') => `<svg class="${classe}" viewBox="0 0 24 24" aria-hidden="true">${DESENHOS[nome] || ''}</svg>`;
   function botao({ classe = 'nx-botao', rotulo = '', titulo = '', ico = '', fazer }) {
@@ -246,7 +245,17 @@
         fecharMenu();
         item.fazer?.();
       } });
-      b.setAttribute('role', 'menuitem');
+      // Uma escolha entre várias (o status): o ponto do cartão (cartao.css, `.nx-ponto`) no lugar do ícone, e a
+      // escolhida marcada por `aria-checked` -- o destaque vem do CSS (social.css), e quem usa leitor de tela
+      // fica sabendo qual é. Antes eram quatro carinhas iguais e um visto, que não diziam o que cada uma era.
+      if (item.ponto) {
+        const ponto = elemento('i', 'nx-ponto');
+        ponto.dataset.status = item.ponto;
+        ponto.setAttribute('aria-hidden', 'true');
+        b.prepend(ponto);
+        b.setAttribute('role', 'menuitemradio');
+        b.setAttribute('aria-checked', String(Boolean(item.marcado)));
+      } else b.setAttribute('role', 'menuitem');
       menu.append(b);
     }
     menu.hidden = false;
@@ -720,8 +729,9 @@
     const atual = minhaPresencaEscolhida();
     abrirMenu(evento.currentTarget, [
       { titulo: 'Seu status' },
-      // O escolhido leva o visto desenhado no lugar do ícone, e não um "✓" de texto (4.10).
-      ...V.STATUS.map(s => ({ rotulo: s.nome, ico: s.id === atual ? 'certo' : 'status', fazer: () => editor.definirStatus(s.id) })),
+      // O mesmo ponto e o mesmo destaque do menu de status da sala (4.14): cada status é o seu ponto, e o
+      // escolhido fica marcado, em vez de um visto no lugar de uma carinha igual à dos outros.
+      ...V.STATUS.map(s => ({ rotulo: s.nome, ponto: s.id, marcado: s.id === atual, fazer: () => editor.definirStatus(s.id) })),
       'separador',
       { rotulo: 'Definir uma frase', ico: 'lapis', fazer: () => { irPara('perfil'); editor.focarFrase(); } },
       { rotulo: `Copiar meu código (${conta.codigo})`, ico: 'copiar', fazer: () => navigator.clipboard?.writeText(conta.codigo).catch(() => {}) },

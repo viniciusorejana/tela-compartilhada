@@ -148,6 +148,12 @@
 .nx-menu-item .ico { width:16px; height:16px; color:var(--muted); }
 .nx-menu-item.perigo { --nx-cor:var(--danger-texto); --nx-cor-hover:var(--danger-texto); --nx-fundo-hover:var(--danger-suave); }
 .nx-menu-item.perigo .ico { color:currentColor; }
+/* Uma escolha entre várias (o status do "eu" do início): o ponto do cartão no lugar do ícone -- com a mesma
+   largura dele (12 + 2 + 2), para o rótulo de todos os itens começar no mesmo lugar --, e a escolhida com o
+   destaque do menu de status da sala (sala.css, `.presence-options button.ativo`), e não um visto. O
+   `aria-checked` é o que o leitor de tela lê. */
+.nx-menu-item .nx-ponto { margin:0 2px; }
+.nx-menu-item[aria-checked="true"] { --nx-fundo:color-mix(in srgb,var(--accent) 18%,transparent); --nx-fundo-hover:color-mix(in srgb,var(--accent) 24%,transparent); --nx-cor:var(--accent-texto); --nx-cor-hover:var(--accent-texto); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent-hi) 30.2%,transparent); }
 .nx-menu-separador { height:1px; margin:4px 6px; background:var(--line-2); }
 .nx-menu-campo { display:flex; gap:6px; min-width:0; padding:4px; }
 .nx-menu-campo .nx-botao { flex:none; }

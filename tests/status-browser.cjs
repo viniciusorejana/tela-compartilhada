@@ -296,6 +296,46 @@ const dormir = ms => new Promise(resolve => setTimeout(resolve, ms));
   await salaDaAna.setViewportSize({ width: 1360, height: 900 });
   console.log('PASS: numa janela baixa o menu de status cabe na tela e rola por dentro');
 
+  // ---------- O "eu" do início: o mesmo ponto e o mesmo destaque do menu da sala ----------
+  // O menu que sobe do canto de baixo do início tinha quatro carinhas iguais e um visto no escolhido: não dizia
+  // o que cada status era. Agora cada um leva o seu ponto (o do cartão) e o escolhido, o destaque do menu da sala.
+  const inicioDaAna = observar(await contextoDaAna.newPage(), 'Ana no início');
+  await inicioDaAna.goto(`${origem}/`);
+  await inicioDaAna.waitForFunction(() => document.getElementById('euNome')?.textContent, null, { timeout: 15000 });
+  const abrirOMenuDoEu = async () => {
+    await inicioDaAna.locator('#euBtn').click();
+    await inicioDaAna.locator('#menuFlutuante:not([hidden])').waitFor();
+  };
+  const itensDoEu = () => inicioDaAna.locator('#menuFlutuante [role="menuitemradio"]');
+  const IDS = ['online', 'ausente', 'ocupado', 'invisivel'];
+  const atualDaAna = await statusGuardado(ana);
+  await abrirOMenuDoEu();
+  assert.deepEqual(await itensDoEu().evaluateAll(bs => bs.map(b => [b.textContent.trim(), b.querySelector('.nx-ponto')?.dataset.status, b.getAttribute('aria-checked'), Boolean(b.querySelector('svg'))])),
+    IDS.map((id, i) => [['Disponível', 'Ausente', 'Não incomodar', 'Invisível'][i], id, String(id === atualDaAna), false]),
+    'os quatro status levam o seu ponto, sem ícone, e só o escolhido está marcado');
+  // Os quatro pontos são desenhos diferentes (verde, lua, traço, anel), e não quatro carinhas iguais.
+  const pontosDoMenu = await itensDoEu().evaluateAll(bs => bs.map(b => {
+    const e = getComputedStyle(b.querySelector('.nx-ponto'));
+    return [e.backgroundColor, e.maskImage !== 'none' ? e.maskImage : e.webkitMaskImage, e.boxShadow].join('|');
+  }));
+  assert.equal(new Set(pontosDoMenu).size, 4, `os pontos do menu são quatro desenhos diferentes: ${JSON.stringify(pontosDoMenu)}`);
+  // O escolhido leva o destaque (o fundo do destaque), e os outros ficam sem fundo.
+  const fundos = await itensDoEu().evaluateAll(bs => bs.map(b => [b.getAttribute('aria-checked'), getComputedStyle(b).backgroundColor]));
+  for (const [marcado, fundo] of fundos) assert.equal(fundo === 'rgba(0, 0, 0, 0)', marcado === 'false', `o destaque é só do escolhido: ${JSON.stringify(fundos)}`);
+  // O ponto ocupa o lugar de um ícone: o rótulo começa no mesmo lugar dos outros itens do menu.
+  const comecos = await inicioDaAna.locator('#menuFlutuante .nx-menu-item').evaluateAll(bs => bs.map(b => Math.round(b.querySelector('span:not(.ico)').getBoundingClientRect().left)));
+  assert.equal(new Set(comecos).size, 1, `os rótulos do menu começam no mesmo lugar: ${JSON.stringify(comecos)}`);
+  await inicioDaAna.screenshot({ path: path.join(saida, 'menu-do-eu.png'), clip: { x: 0, y: 420, width: 420, height: 460 } });
+  // Escolher um status por ali chega à sala de quem olha, e o destaque acompanha na próxima abertura.
+  await inicioDaAna.locator('#menuFlutuante [role="menuitemradio"]', { hasText: 'Não incomodar' }).click();
+  await inicioDaAna.locator('#menuFlutuante').waitFor({ state: 'hidden' });
+  await esperarPonto(salaDaBia, 'Ana', 'ocupado');
+  await abrirOMenuDoEu();
+  assert.equal(await inicioDaAna.locator('#menuFlutuante [role="menuitemradio"][aria-checked="true"]').textContent().then(t => t.trim()), 'Não incomodar', 'o destaque foi para o status escolhido');
+  await inicioDaAna.locator('#menuFlutuante [role="menuitemradio"]', { hasText: 'Disponível' }).click();
+  await esperarPonto(salaDaBia, 'Ana', 'online');
+  console.log('PASS: o menu do "eu" no início mostra cada status com o seu ponto e marca o escolhido como o menu da sala; escolher ali muda a sala de quem olha');
+
   assert.deepEqual(erros, []);
   console.log('PASS: nenhum erro nas páginas');
 })().then(async () => {
