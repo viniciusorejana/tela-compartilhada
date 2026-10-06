@@ -77,12 +77,18 @@ async function etapaB(contextoA, contextoB, contextoC) {
   await ana.locator('#comConta').waitFor();
   assert.equal(await ana.locator('#contaUsuario').textContent(), '@molejo');
   assert.equal(await ana.locator('#contaAvatar').textContent(), 'M🎮', 'a inicial de um emoji não é meia letra');
-  await ana.locator('#secaoPerfil summary').click();
-  await ana.locator('#perfilCores input[value="menta"]').check({ force: true });
-  await ana.locator('#perfilMarcas input[value="lua"]').check({ force: true });
-  assert.equal(await ana.locator('#contaAvatar').textContent(), '☾', 'a prévia acompanha a escolha antes de salvar');
-  await ana.locator('#formPerfil button[type="submit"]').click();
-  await ana.waitForFunction(() => /Perfil salvo/.test(document.getElementById('contaStatus').textContent));
+  // O perfil não se edita mais aqui: a página da conta leva ao editor do início (o mesmo da sala).
+  assert.equal(await ana.locator('#formPerfil').count(), 0, 'a conta não repete o formulário do perfil');
+  assert.equal(await ana.locator('#irParaPerfil').getAttribute('href'), '/?secao=perfil');
+  await ana.locator('#irParaPerfil').click();
+  await ana.locator('#vistaPerfil .ed').waitFor();
+  await ana.locator('[data-ed="coresAvatar"] label:has(input[value="menta"])').click();
+  await ana.locator('[data-ed="marcasAvatar"] label:has(input[value="lua"])').click();
+  await ana.locator('[data-ed="salvar"]').click();
+  await ana.waitForFunction(() => /Salvo/.test(document.querySelector('[data-ed="retorno"]').textContent));
+  await ana.goto(`${origin}/conta`);
+  await ana.locator('#comConta').waitFor();
+  assert.equal(await ana.locator('#contaAvatar').textContent(), '☾', 'a conta mostra o perfil salvo pelo editor');
   await ana.screenshot({ path: path.join(saida, 'conta-com-perfil.png'), fullPage: true });
 
   // Baixar meus dados: o arquivo é o que a LGPD chama de portabilidade.

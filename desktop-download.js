@@ -50,8 +50,8 @@ const MINUTOS_DA_JANELA = 10;
 const emCurso = new Map();     // cliente -> quantidade
 const historico = new Map();   // cliente -> [instantes]
 
-// Atras do Tailscale Funnel TODA conexao chega de 127.0.0.1, porque quem fala com o Node e
-// o proxy local. Sem olhar o cabecalho, o limite por pessoa viraria um limite para a sala
+// Atras de um proxy ou tunel (Caddy, Cloudflare Tunnel) TODA conexao chega de 127.0.0.1, porque
+// quem fala com o Node e o proxy local. Sem olhar o cabecalho, o limite por pessoa viraria um limite para a sala
 // inteira: o primeiro a baixar gastaria a cota de todos.
 //
 // O cabeçalho só vale quando o proxy consta de NEXO_PROXIES_CONFIAVEIS. Mesmo um túnel

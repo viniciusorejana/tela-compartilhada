@@ -118,7 +118,7 @@ Botão cheio leva **sempre** `--accent-forte` com texto `#fff`. Texto colorido l
 |---|---|---|
 | `--online` (verde) | conectado, no ar, deu certo, falando | ponto de conexão, anel de quem fala, "Copiado", ponto "no ar" |
 | `--danger` (vermelho) | desligado, perigo, erro | microfone mudo, fone cortado, "Sair", apagar, erro |
-| `--aviso` (âmbar) | atenção, acima do normal, premium | volume acima de 100%, menção a você, selo premium |
+| `--aviso` (âmbar) | atenção, acima do normal, nível completo | volume acima de 100%, menção a você, selo do nível completo |
 | `--rosa` | ao vivo | selo "LIVE", telas ao vivo |
 
 Cada uma tem a versão `-texto` (para letra) e, quando precisa, `-suave` (fundo translúcido) e
@@ -271,8 +271,9 @@ Peça nova entra numa dessas faixas, e não num número novo no meio.
   Claro, Céu, Areia, Sakura (claros). Cada um é um matiz de fundo e uma cor de destaque.
 - **Oito destaques de um clique**, livres para todos: violeta, azul, turquesa, verde, âmbar,
   coral, rosa, ameixa.
-- **Cores exatas** (premium, regra do `NEXO_PLANOS`): a pessoa escolhe a cor de destaque e a do
-  fundo. A escolha fica guardada mesmo quando o plano vence, e volta com ele.
+- **Cores exatas** (nível completo, regra do `NEXO_PLANOS`; com os planos desligados, que é como o
+  Nexo roda hoje, são de todo mundo): a pessoa escolhe a cor de destaque e a do fundo. A escolha
+  fica guardada mesmo quando o nível se perde, e volta com ele.
 
 Como funciona: a pessoa escolhe no máximo duas cores, e `derivar()` tira delas a paleta
 inteira com o **contraste conferido** — o botão cheio escurece até 4,6:1 com o branco, o texto
@@ -444,11 +445,23 @@ porque o canto de baixo é do chat e da barra de controles. Texto sempre por `te
 Use para o que demora ou acontece longe do clique (download, atualização). Não use para
 confirmar um clique — isso é o próprio botão (4.1).
 
+**Atividade na sala** (`atividade.js`): quando alguém compartilha a tela ou põe uma música e o palco
+não está à vista de quem recebe — o chat em foco, o início por cima da sala, outra aba ou a janela
+em segundo plano —, sai um aviso com o ícone da atividade, quem foi e **Assistir** (que traz o
+palco). Quem já está olhando o palco não recebe nada: seria repetir o que está na tela. Junto vai um
+ponto no título da aba ("● …") e, com a permissão dada, uma notificação do sistema **sem som**. As
+duas chaves moram em Configurações → Sons ("Avisos na tela"); **Não incomodar** cala só a
+notificação do sistema.
+
+**Um aviso que fica** (`fecharEm` ausente) é para o que a pessoa precisa saber e não pode perder numa
+frase da barra de status: o som da tela que não chegou (docs/audio-da-tela.md) é o exemplo.
+
 ### 4.8 Selos, chips, contagens
 
-- **Selo** (`.estudio-selo`, `.selo-premium`, `.session-badge`, `.dono-selo`): caixa alta
+- **Selo** (`.estudio-selo`, `.selo-completo`, `.session-badge`, `.dono-selo`): caixa alta
   `--fs-rotulo`, peso 700–750, pílula ou raio de 6 px, cor da família (rosa ao vivo, âmbar
-  premium, verde na sala, vermelho recusa).
+  nível completo, verde na sala, vermelho recusa). O selo do nível completo só aparece com os
+  planos ligados e para quem não o tem.
 - **Chip** (`.estudio-link`): pílula `--bg-3`, ícone + rótulo, 28–30 px; o ponto verde no fim
   diz "no ar agora".
 - **Contagem** (`#joinRequestCount`, número de mensagens fixadas): círculo pequeno, cor cheia.
@@ -562,7 +575,14 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   param no primeiro quadro.
 - **Na sala** ele é compacto, ocupa o topo do painel de perfil de borda a borda, e o resto do
   painel (tempo na sala, amizade, OBS, ações) vem embaixo. O X do painel ganha fundo escuro fixo
-  por estar sobre a arte.
+  por estar sobre a arte. **O cartão de cima é sempre inteiro** — é a vitrine da pessoa, e a
+  arte dela não se esconde. O que a sala acrescenta **embaixo** dele nasce minimizado
+  (`.perfil-card.minimizado .perfil-detalhes`): o tempo na sala, a explicação do código ("O código é
+  permanente…") e o "Levar para o OBS" esperam o **"Ver mais"** (`#perfilMais`, que vira "Ver
+  menos"). A linha de amizade (adicionar, mensagem) fica acima do botão e os botões de baixo não se
+  escondem: são o que a pessoa procura de imediato. Quem abre um cartão no meio de uma conversa quer
+  saber quem é e falar com a pessoa; a explicação e as ferramentas do Estúdio são de depois. A
+  escolha é lembrada (`perfilMinimizado`).
 - **Fora do cartão** a pessoa aparece com o que escolheu em todo lugar (docs/amigos-e-perfil.md,
   "Onde a personalização aparece"): a borda em volta do avatar que o lugar já tem — no formato
   dele, `--borda-raio` (os da sala têm cantos arredondados), a um `--borda-anel` de distância —,
@@ -572,9 +592,11 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   própria de cada lugar não apagá-lo. No chat, no canal de música e na conversa, borda e nome
   animam só com o mouse em cima da mensagem.
 - **O editor** é um só (`editor-cartao.{js,css}`), em dois lugares: a seção "Personalizar
-  perfil" do início e um painel na sala (Meu perfil → Personalizar o cartão, o próprio cartão, ou
-  Configurações → Perfil), sem sair da chamada. Tem a prévia ao lado, ao vivo, e cada peça é um
-  rádio de verdade com a amostra desenhada. Peça que pede premium ou conquista mostra o selo e diz
+  perfil" do início e um painel na sala (o "eu" da lateral, o próprio cartão, ou Configurações →
+  Perfil), sem sair da chamada. É **o único lugar do perfil**: o apelido, a cor e a marca do avatar,
+  a foto e o cartão (a seção "Nome e cor" é a primeira da aba Visual, e o "Salvar o perfil" salva o
+  nome e o cartão juntos; a foto vale ao ser escolhida). Tem a prévia ao lado, ao vivo, e cada peça é
+  um rádio de verdade com a amostra desenhada. Peça que pede o nível completo ou uma conquista mostra o selo e diz
   o que falta no título; escolher continua possível — fica guardado e vale quando a pessoa tiver.
   Duas colunas quando **o editor** tem 700 px ou mais (consulta de contêiner `editor`), uma só,
   com a prévia em cima, abaixo disso. As colunas rolam por dentro e o rodapé de salvar fica fixo
@@ -639,6 +661,14 @@ pessoa (`cartao.js` monta, `vitrine.js` decide o que vale, docs/amigos-e-perfil.
   Esc fecha só ele). A que saiu da memória do servidor vira uma linha em itálico dizendo isso. O
   andamento ("Preparando a imagem…", "Enviando a imagem…") sai em `--muted`, e não no vermelho
   dos erros.
+- **As reações na mensagem direta**: ao passar o mouse (ou tocar) numa mensagem aparece uma barrinha
+  com as cinco reações rápidas e o "+" do seletor de emojis (4.17). A reação vira uma pílula embaixo
+  da mensagem (`.nx-dm-reacao`: o emoji e a contagem, destacada quando é a sua), que liga e desliga
+  no clique, e o `title` diz quem reagiu ("Você, Bia"). Só amigos reagem, qualquer emoji inteiro
+  vale (a mesma regra da sala, `ehUmEmoji`), até 20 diferentes por mensagem — e reagir não acende
+  notificação nem a contagem de não lidas.
+- **O painel de mensagens da sala muda de tamanho pelo canto** (seção 5): arrastar, as setas, duplo
+  clique para voltar ao padrão (880 × 640); o tamanho é lembrado.
 - **O convite** é uma mensagem com cartão próprio (ícone de porta, "#sala", botão Entrar na sala) e
   um aviso no canto de quem recebe, onde estiver — inclusive no meio de outra chamada, dizendo que
   entrar sai dela.
@@ -778,6 +808,15 @@ absoluta, e passava sobre a frase.
 relógio, cada um numa linha só) e as ações numa fileira de botões iguais embaixo (mensagens,
 sugestões, diagnóstico), como o painel de voz de um app de chamada. Com os ícones ao lado do texto,
 numa lateral de 200 px, cada texto quebrava em duas linhas.
+
+**O tamanho do chat é de quem conversa** (`redimensionar.js`). Uma alça fina na borda do painel —
+a da esquerda do chat, no mesmo lugar nas duas formas dele (coluna e gaveta) — arrasta o painel,
+anda com as setas (16 px, Shift ×4), vai às pontas com Home/End e volta ao padrão com o duplo clique
+ou Enter. É um `role="separator"` com `aria-valuenow/min/max`, e a largura fica entre 240 e 720 px
+(420 enquanto há uma tela no palco: o palco nunca é espremido além do que se enxerga). A escolha é
+lembrada. No celular, onde o chat é a tela inteira, a alça não existe. O canal de música tem a alça
+dele (`#musicaAlca`) e vale a mesma largura; a janela de mensagens usa a mesma peça num canto de dois
+eixos (`role="button"`, mesmas setas).
 
 **O meu perfil**, no pé da lateral, tem o estado do microfone embaixo do nome, numa linha só. Entre
 o avatar e os dois botões sobram de 56 a 96 px para ele no computador, e "Microfone desligado" pede

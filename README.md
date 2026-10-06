@@ -120,36 +120,39 @@ afirma que uma rajada de 20 logins não segura o laço de eventos por 100 ms.
 - **Nomes que se repetem** ganham um trecho do código na lista (`Ana · K7M2`); clicar na pessoa
   mostra o cartão de perfil com o código inteiro.
 
-### Os três níveis
+### Os níveis (a regra de limites, desligada)
 
-| | sem conta | conta grátis | premium |
+O Nexo roda hoje com `NEXO_PLANOS=0`: **nada fica bloqueado**, e todo mundo transmite com o nível
+completo. A regra de limites continua implementada e testada, desligada, para o dia em que um
+servidor precise limitar o que custa a ele:
+
+| | sem conta | conta grátis | completo |
 |---|:--:|:--:|:--:|
 | Transmitir tela | 720p a 30 quadros | 720p a 60 quadros | 1080p e 1440p a 60 |
 | Assistir telas | na qualidade de quem transmite | igual | igual |
 | Pessoas na sala | 25 | 25 | **leva a sala a 50** |
 
-Cobra-se resolução porque é o que custa no servidor — ele manda uma cópia por espectador — e
-nunca segurança. Quem assiste nunca é limitado: um assinante no grupo faz todo mundo ver a tela
-dele em 1080p, inclusive quem não tem conta. As regras moram em `public/planos.js`, lido igual
-pela página e pelo servidor.
+Limita-se resolução porque é o que custa no servidor — ele manda uma cópia por espectador — e
+nunca segurança. Quem assiste nunca é limitado: alguém de nível completo no grupo faz todo mundo
+ver a tela dele em 1080p, inclusive quem não tem conta. As regras moram em `public/planos.js`,
+lido igual pela página e pelo servidor.
 
-- **O seletor mostra o que o plano não libera, com cadeado**, em vez de esconder. A escolha da
-  pessoa fica guardada mesmo acima do plano: quem deixou o premium vencer transmite em 720p e
-  volta sozinho ao 1440p ao renovar.
+- **Com os planos ligados, o seletor mostra o que o plano não libera, com cadeado**, em vez de
+  esconder. A escolha da pessoa fica guardada mesmo acima do plano: quem perde o nível completo
+  transmite em 720p e volta sozinho ao 1440p quando ele volta.
 - **O teto é conferido no servidor**, contra a resolução que o servidor de mídia registra (a
   webhook de cada publicação e a reconciliação a cada 30 s), com **10% de folga**. Acima dele, o
   servidor avisa pelo socket, espera 5 s para a página republicar menor e só então desliga a
   **tela** com `MutePublishedTrack` — voz, câmera e chat continuam. O limite honesto disto: um
   cliente modificado que declare 720 e mande 1440 não é pego, porque nenhuma API do servidor de
   mídia mede a resolução que chega.
-- **O teto de pessoas** sobe quando há alguém premium presente; quem entra conta a si mesmo, e a
-  saída do assinante não remove ninguém — as novas entradas é que esperam.
-- **Premium à mão, pelo painel** (`/painel`, "Contas e planos"): com prazo em dias ou sem prazo, e
-  também suspender e reativar. É o atalho para receber de apoiadores por PIX direto antes de a
-  integração de pagamento existir; quem está numa sala recebe o plano novo na hora.
-- **Duas janelas de transição**, para o grupo que já usa o Nexo não perder nada no dia em que
-  isto subir: `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo
-  transmite como premium). A alternativa prevista no roteiro é o premium de cortesia pelo painel.
+- **O teto de pessoas** sobe quando há alguém de nível completo presente; quem entra conta a si
+  mesmo, e a saída dele não remove ninguém — as novas entradas é que esperam.
+- **O nível completo à mão, pelo painel** (`/painel`, "Contas e planos"): com prazo em dias ou sem
+  prazo, e também suspender e reativar. Quem está numa sala recebe o plano novo na hora.
+- **Duas chaves de transição**, para o grupo que já usa o Nexo não perder nada no dia em que isto
+  subir: `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo
+  transmite com o nível completo, e nada fica bloqueado).
 
 ### O perfil, os dados e o apagar
 
@@ -184,8 +187,8 @@ baixo — os outros nunca veem a pessoa sair. Entrar noutra sala de dentro da ca
 - **O cartão de perfil** é personalizável: **foto**, tema (as dez paletas ou duas cores exatas, num
   seletor de cor próprio, com trocar e sortear), banner e fundo (animados ou imagem), borda do
   avatar, moldura, efeito ao abrir, estilo do nome, bio, pronomes, bolha de pensamento e frase do
-  status com prazo e **emoji escolhido num seletor com todos os emojis**. Algumas peças pedem premium
-  (regra do `NEXO_PLANOS`) ou uma **conquista**, ganha usando o Nexo; as conquistas saem de somas
+  status com prazo e **emoji escolhido num seletor com todos os emojis**. Algumas peças pedem uma
+  **conquista**, ganha usando o Nexo (e, com os planos ligados, o nível completo); as conquistas saem de somas
   (minutos em sala, salas abertas, mensagens, telas) que não guardam onde, com quem nem quando. O
   editor é o mesmo no início e num painel da sala, sem sair da chamada.
 - **Presença**: disponível, ausente, não incomodar ou invisível, e a escolha de mostrar ou não aos
@@ -239,7 +242,7 @@ Acesse no computador que executa o servidor:
 - Inicio: http://localhost:3000/
 - Sala: http://localhost:3000/sala
 
-Para uma conferência da interface na mesma rede, o IP local do servidor permite abrir a página. Porém, HTTP por IP não é um contexto seguro e pode bloquear câmera/microfone e outras APIs de mídia. Para conversar e compartilhar, use o endereço HTTPS do Funnel descrito abaixo, inclusive no iPhone.
+Para uma conferência da interface na mesma rede, o IP local do servidor permite abrir a página. Porém, HTTP por IP não é um contexto seguro e pode bloquear câmera/microfone e outras APIs de mídia. Para conversar e compartilhar, use um endereço HTTPS (veja "Testando com outras pessoas", mais abaixo), inclusive no iPhone.
 
 ## Como usar
 
@@ -250,7 +253,7 @@ Para uma conferência da interface na mesma rede, o IP local do servidor permite
 5. Na barra lateral, ao lado do chat, ficam os canais **♪ música** (peça uma faixa e o bot toca
    para a sala) e **◎ mesa de sons** (efeitos sonoros que qualquer um envia e dispara). Veja
    [Bot de música](#bot-de-música-canal--música) e [Mesa de sons](#mesa-de-sons-soundboard).
-6. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS do Funnel para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
+6. Compartilhe o link pelo botão **Convidar amigos**. Se o host usa `localhost`, configure `PUBLIC_URL` com o endereço HTTPS público para que o convite use esse endereço. Sem essa configuração, o convite usa a origem aberta no navegador. Links antigos (`/{codigo}/compartilhar` e `/{codigo}/ao-vivo`) continuam funcionando.
 
 A mídia passa pelo servidor de mídia (SFU): cada pessoa envia uma cópia só, e o servidor entrega a cada um a camada que a conexão dele aguenta. Os detalhes estão em [`docs/servidor-de-midia.md`](docs/servidor-de-midia.md).
 
@@ -342,11 +345,9 @@ O `.exe` tem cerca de **95 MB** — um Electron carrega o Chromium inteiro, ent�
 arquivo pequeno que parece. Medido: o servidor entrega os 95 MB em **0,35 s** pelo loopback
 (285 MB/s), então quando o download demora o gargalo não está aqui.
 
-Pelo **Tailscale Funnel** o tráfego público não vai direto: ele atravessa um relay DERP da
-Tailscale (o mais próximo daqui é São Paulo, 35 ms), e esses relays limitam a banda de propósito,
-para ser justo entre todos que os usam. Somando a isso a subida da sua casa — que costuma ser
-uma fração da descida —, 95 MB demoram mesmo. Não há ajuste no Nexo que contorne isso: o limite
-é do caminho, não do servidor.
+Quem hospeda em casa paga a subida da própria conexão — que costuma ser uma fração da descida —,
+então 95 MB demoram mesmo. Não há ajuste no Nexo que contorne isso: o limite é do caminho, não do
+servidor.
 
 O que dá para fazer:
 
@@ -355,8 +356,8 @@ O que dá para fazer:
   velha: quando o `.exe` muda, o `ETag` muda e o arquivo novo desce inteiro.
 - **Retomar funciona** (`Accept-Ranges: bytes`), então uma queda no meio continua de onde parou
   em vez de recomeçar.
-- **Hospedar o arquivo fora** é o único jeito de sair do Funnel. Publicando o `.exe` em algo com
-  CDN própria, o download deixa de passar pela sua conexão.
+- **Hospedar o arquivo fora** é o único jeito de tirar o download da sua conexão. Publicando o
+  `.exe` em algo com CDN própria, ele deixa de passar por ela.
 
 ### Teto de downloads
 
@@ -375,7 +376,7 @@ Os números são generosos de propósito: uma retomada legítima reabre a conex�
 teto apertado transformaria uma rede instável em "o download não funciona". O que ele barra é o
 laço automatizado.
 
-Atrás do Funnel toda conexão chega de `127.0.0.1`, e o endereço real de quem baixa vem no
+Atrás de um proxy (o Caddy, por exemplo) toda conexão chega de `127.0.0.1`, e o endereço real de quem baixa vem no
 cabeçalho `X-Forwarded-For`. O teto lê esse cabeçalho — **e só quando quem o entrega é o proxy
 local**. Sem essa leitura, o teto viraria um teto para a sala inteira, com o primeiro a baixar
 gastando a cota de todos; e sem a checagem de origem, qualquer um escreveria o cabeçalho e
@@ -433,10 +434,10 @@ Em **Configurações → Aparência**:
 - **Temas prontos**: Nexo, Meia-noite, Floresta e Carvão (escuros); Claro, Céu, Areia e Sakura
   (claros). Cada cartão é uma miniatura pintada com as cores que o tema produz de verdade.
 - **Cor de destaque**: oito cores de um clique, ou a do tema.
-- **Cores exatas** (premium): qualquer cor para o destaque e para o fundo, pelo seletor do
-  sistema. Com os planos desligados (`NEXO_PLANOS=0`) vale para todo mundo, como o 1440p; com eles
-  ligados, só para o premium. Quem deixa o plano vencer não perde as cores: ficam guardadas e
-  voltam sozinhas.
+- **Cores exatas**: qualquer cor para o destaque e para o fundo, pelo seletor do sistema. Com os
+  planos desligados (`NEXO_PLANOS=0`, como o Nexo roda hoje) vale para todo mundo, como o 1440p;
+  com eles ligados, só para o nível completo. Quem perde o nível não perde as cores: ficam
+  guardadas e voltam sozinhas.
 
 Uma escolha vira uma paleta inteira em `public/tema.js`: o botão cheio escurece até 4,5:1 com o
 texto branco, o texto em destaque até o contraste que ele pede, e as camadas de superfície têm
@@ -953,8 +954,20 @@ npm install
 npm start
 ```
 
-Na primeira vez ele pergunta o endereco do servidor (`http://localhost:3000` na maquina que o
-hospeda, o IP dela na rede para os outros, ou o endereco publico) e guarda a resposta.
+Na primeira vez ele pergunta o endereco do servidor, **ja preenchido** com o do Nexo: quem so quer
+usar toca em "Conectar". Quem hospeda o proprio servidor troca o texto (`http://localhost:3000` na
+maquina que o hospeda, o IP dela na rede para os outros, ou o endereco publico), e o link "Usar o
+servidor padrao do Nexo" desfaz a troca. A escolha e guardada. Depois, o servidor muda a qualquer
+momento em **Configuracoes → Aplicativo → Servidor** (a sala pede confirmacao antes de sair da
+chamada).
+
+O endereco preenchido e a variavel `NEXO_SERVIDOR_PADRAO` do `.env.prod`, e vale para o aplicativo
+de mesa e para o Android. Como o aplicativo instalado nao le o `.env` de ninguem, o valor e gravado
+no pacote ao empacotar (`npm run empacotar*` dentro de `app`, e `npm run android:empacotar`, que
+rodam `npm run servidor:padrao` sozinhos). Mudou o servidor: troque a variavel e empacote de novo;
+quem ja instalou nao e afetado, porque a escolha dele fica guardada. Sem a variavel, a tela abre
+vazia, como antes. Para desenvolver contra outro servidor, defina `NEXO_SERVIDOR_PADRAO` no terminal
+antes do `npm start` (dentro de `app`): ela vence o que foi gravado.
 
 O endereco so e guardado **depois** de a pagina carregar. Se ele nao abrir -- servidor fora do
 ar, endereco errado --, o aplicativo volta para a tela de endereco dizendo o motivo, com o que
@@ -1164,23 +1177,11 @@ O navegador so libera microfone e captura de tela em **contexto seguro**, ou sej
 `localhost` e a unica excecao, seus amigos nao conseguiriam nem falar entrando por `http://` num
 IP. Por isso e preciso uma entrada HTTPS.
 
-**Tailscale Funnel (recomendado):** da um endereco fixo, de graca, sem dominio e sem abrir porta
-no roteador. Configuracao unica:
-
-```powershell
-winget install --id Tailscale.Tailscale
-tailscale up                       # abre o navegador para autenticar
-tailscale funnel --bg 3000
-```
-
-O endereco aparece no fim (`https://<sua-maquina>.<sua-tailnet>.ts.net`) e **nao muda mais**:
-depois de reiniciar o PC, so `tailscale funnel --bg 3000` de novo, com o mesmo nome de sempre.
-Os amigos baixam o agente uma unica vez.
-
-O video e o audio da conversa nao passam por ai: WebRTC conecta os participantes ponto a ponto.
-Pelo Funnel vao so a sinalizacao, os arquivos da pagina e o WebSocket do agente.
-
-Para desligar: `tailscale funnel --https=443 off`.
+**Servidor na nuvem (recomendado):** da um endereco fixo, com HTTPS de verdade, sem abrir porta no
+roteador de casa. A Oracle Cloud tem uma maquina gratis, e `deploy/oracle/instalar.sh` instala tudo
+(inclusive o Caddy, com HTTPS num endereco `sslip.io`, sem comprar dominio): veja
+[Oracle Cloud gratis](#oracle-cloud-grátis) e `docs/oracle.md`. Os amigos baixam o agente uma
+unica vez.
 
 **Cloudflare Quick Tunnel (alternativa):** nao precisa de conta, mas o endereco e sorteado a cada
 execucao.
@@ -1196,11 +1197,11 @@ cloudflared tunnel --url http://localhost:3000
 
 ### 3. Voce entra na sala
 
-Ponha no `.env.prod` o endereço real informado pelo Funnel —
-`PUBLIC_URL=https://sua-maquina.sua-tailnet.ts.net` — e `NEXO_PROXIES_CONFIAVEIS=127.0.0.1,::1`,
+Ponha no `.env.prod` o endereço público HTTPS —
+`PUBLIC_URL=https://seu-dominio.exemplo` — e `NEXO_PROXIES_CONFIAVEIS=127.0.0.1,::1`,
 e reinicie o servidor. Abra **`http://localhost:3000`** no seu próprio PC.
 Crie a sala e use **Convidar amigos**: com `PUBLIC_URL` configurado, o convite terá o endereço público.
-O aplicativo não descobre o endereço do Funnel automaticamente.
+O aplicativo não descobre o endereço público automaticamente.
 
 Usar `localhost` e o que libera a captura nativa de audio para voce sem precisar do agente. Se
 voce entrar pela URL do tunel, o recurso fica desativado de proposito (senao voce enviaria o
@@ -1277,8 +1278,8 @@ As variáveis principais:
 | `NEXO_FUSO` | fuso da máquina | Fuso das horas do painel; num VPS em UTC, `America/Sao_Paulo` |
 | `NEXO_LIMITES` | vazio | Ajuste dos limites antiabuso em JSON (ver [telemetria](docs/telemetria.md)) |
 | `NEXO_ANONIMO_ABRE_SALA` | `0` | `1` deixa quem não tem conta abrir sala. É a janela de transição do roteiro: o grupo que já usa continua abrindo salas enquanto cria as contas. Desligue quando todos tiverem conta |
-| `NEXO_PLANOS` | `1` | `0` desliga os tetos de resolução e de quadros dos planos: todo mundo transmite como premium. A outra janela de transição; o teto de pessoas continua valendo |
-| `NEXO_PESSOAS_POR_SALA` | `25,50` | Teto de pessoas por sala, sem e com alguém premium presente |
+| `NEXO_PLANOS` | `1` | `0` desliga os tetos de resolução e de quadros dos planos: todo mundo transmite com o nível completo, e nada fica bloqueado. É como o Nexo roda hoje (o `.env.example` já traz `0`); o teto de pessoas continua valendo |
+| `NEXO_PESSOAS_POR_SALA` | `25,50` | Teto de pessoas por sala, sem e com alguém de nível completo presente |
 | `NEXO_ESPERA_TETO_MS` | `5000` | Quanto tempo uma tela acima do plano tem para republicar menor antes de ser desligada |
 | `NEXO_NOVIDADES` | `1` | `0` impede a apresentação e as novidades de abrirem sozinhas; o botão ✦ Novidades continua abrindo (ver [novidades](docs/novidades.md)) |
 | `NEXO_IP_PUBLICO` | descoberto sozinho | IP publico que o servidor de midia anuncia |
@@ -1292,7 +1293,6 @@ As variáveis principais:
 | `NEXO_YTDLP_ARGS` | vazio | Argumentos extras do `yt-dlp` (ex.: `--cookies-from-browser chrome`) |
 | `NEXO_FILTRO_DE_AUDIO` | `loudnorm=I=-16:TP=-1.5:LRA=11` | Filtro do `ffmpeg` aplicado a musica |
 | `NEXO_SOUNDBOARD_MAXIMO_MB` | `256` | Memoria da mesa de sons somando TODAS as salas |
-| `NEXO_ANUNCIAR_TAILSCALE` | `0` | `1` oferece o endereco da tailnet como candidato ICE. So vale a pena se `tailscale status` listar mais de uma maquina: quem chega pelo Funnel nao alcanca um `100.x` e so ganharia espera |
 | `NEXO_LOG_SFU` | vazio | Vazio mostra so ERROR/FATAL/WARN do servidor de midia; `1` mostra tudo (util para ICE, mas traz nome e endereco dos participantes); `arquivo` grava tudo em `native/livekit/sfu.log`; `0` silencia |
 | `NEXO_NIVEL_SFU` | `info` | Nível do registro do servidor de mídia (`debug`, `info`, `warn`, `error`). `debug`, junto de `NEXO_LOG_SFU=arquivo`, mostra o que o servidor decide sobre cada assinatura -- o único lugar em que aparece por que uma faixa pedida não desce |
 | `NEXO_WEBCODECS` | vazio | Chave da tela por WebCodecs para todo mundo: `0` desliga, `1` libera, e as duas travam a escolha do painel. Vazio deixa o painel (seção Mídia) decidir, liberado por padrão. Ver `docs/plano-webcodecs.md` |
@@ -1443,7 +1443,7 @@ O essencial:
 - O IP de quem entra nunca vai para o disco: os limites por origem usam um HMAC com segredo sorteado a cada início do processo.
 - O painel só abre na própria máquina do servidor; acesso remoto só com `NEXO_PAINEL_REMOTO=1` e HTTPS.
 - O aplicativo de mesa fica preso ao servidor escolhido: navegar para fora abre no navegador de verdade, só a tela de endereço troca o servidor, e câmera, microfone e notificações só valem para ele.
-- Um endereço fixo (Tailscale Funnel, domínio próprio) fica exposto na internet enquanto estiver ligado, e é mais fácil de achar do que uma URL sorteada. Como ainda não há contas, desligue o Funnel quando não estiver usando: `tailscale funnel --https=443 off`.
+- Um endereço fixo (domínio próprio) fica exposto na internet enquanto o servidor estiver no ar, e é mais fácil de achar do que uma URL sorteada: o que protege é a conta de quem abre a sala, o firewall e o painel só na máquina do servidor.
 - A captura nativa de áudio só é liberada para quem abre a página em `localhost` na própria máquina do servidor. Atrás de um proxy toda conexão chega como `127.0.0.1`, então a checagem olha também os cabeçalhos de proxy e o `Host` -- e sempre falha para o lado seguro.
 - Não inclua tokens, credenciais TURN, arquivos `.cloudflared` ou certificados no Git.
 - Para produção, defina `PUBLIC_URL`, use firewall, mantenha Node.js/Windows/cloudflared atualizados e monitore os logs. O Socket.IO e as escritas da conta só aceitam a página deste servidor e a origem do `PUBLIC_URL` (e as que `CORS_ORIGIN` acrescentar): a conta viaja num cookie, e sem essa conferência qualquer site aberto por quem tem conta falaria em nome dela. O cookie é `HttpOnly`, `SameSite=Strict` e `Secure` atrás de HTTPS; o `Secure` depende de o `PUBLIC_URL` estar em `https` quando há um túnel no meio.
@@ -1549,7 +1549,7 @@ uma transmitindo: confere o selo de quem está vendo no palco e na grade, o som 
 transmissão e a sugestão de `@` (sem acento, palavra do meio, Esc, `email@dominio`).
 `npm run test:aparencia` (porta `:3231`, sem servidor de mídia, com os planos ligados) troca modo,
 tema pronto e destaque, confere que o palco segue escuro no tema claro, que a cor exata trava sem
-o premium, libera com ele e fica guardada quando ele vence — e que rascunho, chat fechado e a
+o nível completo, libera com ele e fica guardada quando ele vence — e que rascunho, chat fechado e a
 última seção das configurações sobrevivem ao F5.
 `npm run test:novidades` (porta `:3233`, sem servidor de mídia) abre a página inicial e a sala num
 navegador "de primeira vez" e confere a apresentação: abre sozinha, trava, destrava pelo fim e pelo

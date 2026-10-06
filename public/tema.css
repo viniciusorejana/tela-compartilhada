@@ -8,7 +8,7 @@
  *
  * As cores de verdade são poucas e moram aqui. O resto do CSS nunca escreve uma cor de
  * superfície ou de texto: usa estes nomes, e é isso que deixa o tema claro, os temas prontos e
- * as cores exatas do premium trocarem a sala inteira de uma vez (tema.js).
+ * as cores exatas escolhidas trocarem a sala inteira de uma vez (tema.js).
  *
  * As constantes `--e-*` são o Nexo escuro de sempre. Elas não mudam com o tema: servem de
  * padrão e de valor para o que fica escuro mesmo no tema claro -- tudo o que está sobre vídeo

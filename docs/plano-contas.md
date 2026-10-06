@@ -1,5 +1,10 @@
 # Contas, perfis e planos
 
+> **Estado atual (outubro de 2026):** o Nexo roda com `NEXO_PLANOS=0` — **nada fica bloqueado** e
+> ninguém cobra nada de ninguém. Este documento é o planejamento de uma regra de níveis que ficou
+> implementada, testada e **desligada** (hoje o nível maior se chama "completo" no código e na
+> tela); os valores e as contas de custo abaixo são do planejamento, e nunca foram praticados.
+
 Escrito em 20/09/2026, revisado em 22/09/2026 depois das decisões abaixo, e **implementado em
 23/09/2026** — o que a implementação decidiu está no fim. É o degrau 3 do
 `docs/lancamento.md`, aberto inteiro: o que uma conta é, onde ela mora, o que ela sincroniza,
@@ -20,9 +25,9 @@ quem transmite, não a sua conta de banda.
 | Banimento | tem de acertar a pessoa certa, sempre |
 | Criar sala | só quem tem conta |
 | Convite | o link vale enquanto a sala existir, e morre com ela |
-| Premium | começa em **R$ 10/mês**; o valor se ajusta depois |
+| Nível completo | planejado a partir de **R$ 10/mês** (nunca praticado: hoje tudo está liberado) |
 | Teto de resolução | conferido no servidor quando os planos entrarem, a partir do plano guardado na conta |
-| Mesa de sons | enviar e apagar sons exigem conta (grátis ou premium). Até as contas existirem, apaga só quem abriu a sala — já em vigor (`5e81f75`) |
+| Mesa de sons | enviar e apagar sons exigem conta (de qualquer nível). Até as contas existirem, apaga só quem abriu a sala — já em vigor (`5e81f75`) |
 | Pessoas por sala | toda sala tem teto, e ele sobe quando há um assinante na sala |
 | Editar e apagar a própria mensagem | sem conta, vale até recarregar a página, como hoje; com conta, vale sempre |
 | Salas privadas | ficam como estão: tranca + aprovação |
@@ -500,7 +505,7 @@ CREATE TABLE conta (
   email            TEXT,                       -- opcional até o pagamento
   email_chave      TEXT UNIQUE,                -- normalizado; vários NULL convivem nos dois bancos
   email_confirmado INTEGER NOT NULL DEFAULT 0,
-  plano            TEXT NOT NULL DEFAULT 'gratis',   -- 'gratis' | 'premium'
+  plano            TEXT NOT NULL DEFAULT 'gratis',   -- 'gratis' | o nível maior (o texto da migração 0001; o código o chama "completo", ver contas/banco.js)
   plano_ate        INTEGER,                    -- epoch ms; NULL = sem prazo
   criada_em        INTEGER NOT NULL,
   vista_em         INTEGER NOT NULL,
@@ -583,7 +588,7 @@ CREATE TABLE mensagem (
 
 O que já está preparado, e o que ainda mudaria:
 
-- **`expira_em NULL` é onde o premium cresce**: uma sala que é sua e não expira. É cobrável
+- **`expira_em NULL` é onde o nível completo cresce**: uma sala que é sua e não expira. É cobrável
   pelo mesmo motivo da resolução — custa de forma permanente.
 - **`mensagem` já tem a forma da mensagem em memória** de `server.js` (id em uuid, autor,
   texto, instante, resposta, fixada). Muda uma coisa: a imagem sai da linha. Hoje ela é um
@@ -600,7 +605,7 @@ O que já está preparado, e o que ainda mudaria:
 
 A matriz inteira, levantada do que o Nexo oferece hoje no código:
 
-| | sem conta | conta grátis | premium — R$ 10/mês |
+| | sem conta | conta grátis | nível completo — R$ 10/mês |
 |---|:--:|:--:|:--:|
 | **Entrar e abrir** | | | |
 | Entrar por link, com a sala aberta | ✅ | ✅ | ✅ |
@@ -631,7 +636,7 @@ A matriz inteira, levantada do que o Nexo oferece hoje no código:
 | **O que o servidor guarda** | nada ligado à pessoa | conta, perfil, ajustes | + e-mail e pagamento |
 
 Resumindo: **sem conta** é convidado, e participa de tudo o que é essencial. **Conta grátis**
-abre salas, transmite a 60 quadros, cria conteúdo na mesa e tem identidade. **Premium**
+abre salas, transmite a 60 quadros, cria conteúdo na mesa e tem identidade. **Nível completo**
 transmite em resolução alta e aumenta a sala.
 
 **Apagar sons, quando a sala passa a um anônimo:** a regra decidida é "apaga quem tem conta",
@@ -645,7 +650,7 @@ motivo concreto para criar conta.
 **720p60 é de graça**: cabe em software (396 ms de 700 medidos), custa 2,50 Mbps contra 1,77
 do 720p30, e é melhor que o plano gratuito do Discord, que para em 720p30.
 
-**O premium no lançamento é resolução**, e é honesto dizer o que ela entrega: 1080p30 cabe em
+**O nível completo no lançamento é resolução**, e é honesto dizer o que ela entrega: 1080p30 cabe em
 software (350 de 700 ms), sem ressalva; 1080p60 e 1440p cedem resolução para proteger os
 quadros, e isso já está escrito no seletor (degrau 4). Melhora quando a codificação por
 hardware chegar — sem cobrar de novo.
@@ -654,13 +659,13 @@ hardware chegar — sem cobrar de novo.
 das taxas do meio de pagamento): **~9 assinantes pagam o VPS de €14** que atende uns 2.000
 ativos, e **~26 pagam os €40** que atendem uns 3.000.
 
-**Quem assiste não paga — e esse é o melhor argumento do premium.** Quem assiste recebe a tela
+**Quem assiste não paga — e esse é o melhor argumento do nível completo.** Quem assiste recebe a tela
 na qualidade de quem transmite, até o que a própria conexão aguenta. Um assinante no grupo faz
 todo mundo ver a tela dele em 1080p, inclusive quem nem tem conta. Por isso assistir nunca é
 limitado por plano.
 
 O outro lado dessa frase é o custo: um assinante custa o que ele transmite vezes quantos
-assistem. É o motivo de o teto de pessoas, logo abaixo, importar mais para o premium do que
+assistem. É o motivo de o teto de pessoas, logo abaixo, importar mais para o nível completo do que
 para qualquer outro nível.
 
 **O único degrau de quadros é entre sem conta e conta grátis.** Não contraria "nunca se cobra
@@ -762,7 +767,7 @@ Ao fim, dá para criar conta e entrar, e nada mais muda para ninguém.
 - Cadeado no seletor; largura e altura repassadas em `aoEvento`; folga de 10%; avisar, esperar
   e só então desligar; `MutePublishedTrack` na lista de `sfu.js`.
 - O teto de pessoas sobe com um assinante na sala (o teto base já veio da fase 2 do roteiro).
-- Painel: marcar uma conta como premium à mão, com prazo em `plano_ate`. É o atalho que deixa
+- Painel: marcar uma conta de nível completo à mão, com prazo em `plano_ate`. É o atalho que deixa
   receber de apoiadores por PIX direto antes de a etapa E existir.
 - Testes: limites, folga, plano vencido guardando a escolha, um assinante entrando numa sala
   que está no teto base, a saída dele sem remover ninguém, e um caso de navegador em que a
@@ -843,9 +848,8 @@ acima valeu inteiro; o que a implementação precisou decidir, e que o plano nã
 - **O teto base de pessoas entrou na etapa D**, e não na fase 2 do roteiro: o aumento pelo
   assinante dependia dele. Os números (25 e 50) são ajustáveis por `NEXO_PESSOAS_POR_SALA`.
 - **Duas janelas de transição**, para o grupo atual não perder nada no dia em que isto subir:
-  `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo transmite como
-  premium). O premium de cortesia pelo painel continua sendo o caminho previsto; as chaves cobrem
-  o intervalo.
+  `NEXO_ANONIMO_ABRE_SALA=1` (qualquer um abre sala) e `NEXO_PLANOS=0` (todo mundo transmite com o
+  nível completo). `NEXO_PLANOS=0` é como o Nexo roda hoje.
 - **O que o servidor confere é a resolução, e a declarada.** O teto de quadros (30 sem conta) vale
   só na página: a webhook do servidor de mídia não traz a taxa de quadros. E a resolução conferida
   é a que o cliente declara ao publicar — um cliente modificado que declare menos do que manda
@@ -857,6 +861,6 @@ acima valeu inteiro; o que a implementação precisou decidir, e que o plano nã
   trancada sem pedir aprovação: a sala lembra a conta, e não só a identidade.
 - **Banir quem tinha conta e acabou de sair acerta a conta**: a moderação lembra as últimas 256
   identidades que passaram pela sala.
-- **Suspender pelo painel tira a conta da sala na hora**, e o premium marcado lá chega a quem está
+- **Suspender pelo painel tira a conta da sala na hora**, e o nível marcado lá chega a quem está
   transmitindo sem precisar sair e voltar.
 - **A carência guarda também a música e a mesa de sons**: quem apertou F5 sozinho volta com tudo.

@@ -1,4 +1,4 @@
-// Tema claro e escuro, temas prontos, cores exatas do premium e o que a sala lembra entre uma
+// Tema claro e escuro, temas prontos, cores exatas do nível completo e o que a sala lembra entre uma
 // entrada e outra (rascunho, chat fechado, última seção das configurações). Sem servidor de
 // mídia: nada aqui passa por ele.
 //
@@ -30,7 +30,7 @@ async function entrar(pagina) {
 const cor = (pagina, nome) => pagina.evaluate(n => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), nome);
 
 (async () => {
-  // Com os planos ligados: é assim que a cor exata fica só para o premium (com eles desligados,
+  // Com os planos ligados: é assim que a cor exata fica só para o nível completo (com eles desligados,
   // o padrão dos testes, ela é de todo mundo).
   instancia = await iniciarServidor({ ambiente: { PORT: String(porta), NEXO_PLANOS: '1' } });
   await esperarServidor();
@@ -66,21 +66,21 @@ const cor = (pagina, nome) => pagina.evaluate(n => getComputedStyle(document.doc
   assert.equal(await cor(pagina, '--accent'), '#f2735f');
   assert.equal(await pagina.evaluate(() => document.documentElement.dataset.tema), 'floresta', 'o fundo continua o do tema');
 
-  // ---------- Cores exatas: do premium ----------
+  // ---------- Cores exatas: do nível completo ----------
   // O servidor de teste tem os planos ligados, e quem entrou não tem conta.
   assert.equal(await pagina.locator('#corExataDestaque').isDisabled(), true);
   assert.equal(await pagina.locator('#coresExatasSelo').isVisible(), true, 'o selo diz de quem é o recurso');
-  await pagina.evaluate(() => aplicarPlano({ nivel: 'premium' }));
-  assert.equal(await pagina.locator('#corExataDestaque').isDisabled(), false, 'com o premium, libera na hora');
+  await pagina.evaluate(() => aplicarPlano({ nivel: 'completo' }));
+  assert.equal(await pagina.locator('#corExataDestaque').isDisabled(), false, 'com o nível completo, libera na hora');
   assert.equal(await pagina.locator('#coresExatasSelo').isVisible(), false);
   await pagina.locator('#corExataDestaque').evaluate(el => { el.value = '#ff8800'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
   assert.equal(await cor(pagina, '--accent'), '#ff8800', 'a cor exata é a que aparece');
   assert.equal(await pagina.locator('#corExataDestaqueHex').textContent(), '#FF8800');
   // O plano vence: a cor sai da tela, mas fica guardada.
   await pagina.evaluate(() => aplicarPlano({ nivel: 'gratis' }));
-  assert.equal(await cor(pagina, '--accent'), '#f2735f', 'sem o premium, vale a cor de um clique');
+  assert.equal(await cor(pagina, '--accent'), '#f2735f', 'sem o nível completo, vale a cor de um clique');
   assert.match(await pagina.locator('#coresExatasDica').textContent(), /guardadas/);
-  await pagina.evaluate(() => aplicarPlano({ nivel: 'premium' }));
+  await pagina.evaluate(() => aplicarPlano({ nivel: 'completo' }));
   assert.equal(await cor(pagina, '--accent'), '#ff8800', 'e volta sozinha com o plano');
 
   // ---------- O que a sala lembra ----------
@@ -94,7 +94,7 @@ const cor = (pagina, nome) => pagina.evaluate(n => getComputedStyle(document.doc
   await pagina.reload();
   // O tema vale antes da primeira pintura: tema.js roda no <head>.
   assert.equal(await pagina.evaluate(() => document.documentElement.dataset.tema), 'floresta');
-  // O premium acima foi só simulado na página; o servidor diz que esta pessoa não tem conta, e é
+  // O nível completo acima foi só simulado na página; o servidor diz que esta pessoa não tem conta, e é
   // ele quem manda: a cor exata sai da tela -- e continua guardada para quando o plano vier.
   await pagina.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#f2735f');
   assert.equal(await pagina.evaluate(() => JSON.parse(localStorage.getItem('nexo.pref.aparencia')).cores.destaque), '#ff8800');
@@ -146,7 +146,7 @@ const cor = (pagina, nome) => pagina.evaluate(n => getComputedStyle(document.doc
   await entrar(calma);
   conferirReacao(await reagirEAcompanhar(calma), 'com "reduzir movimento" do sistema');
 
-  console.log('PASS: tema claro e escuro, temas prontos, cores exatas do premium, o que a sala lembra e as reações com menos movimento');
+  console.log('PASS: tema claro e escuro, temas prontos, cores exatas do nível completo, o que a sala lembra e as reações com menos movimento');
 })().catch(erro => {
   console.error(erro);
   process.exitCode = 1;

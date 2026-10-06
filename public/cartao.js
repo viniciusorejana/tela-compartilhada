@@ -31,7 +31,7 @@
   const ICONE_DA_CONQUISTA = {
     'boas-vindas': 'brilho', 'primeira-sala': 'porta', anfitriao: 'casa', palco: 'tela', diretor: 'claquete',
     papo: 'chat', cronista: 'pena', maratona: 'relogio', morador: 'lua', turma: 'amigos', popular: 'estrela',
-    pioneiro: 'bandeira', veterano: 'medalha', apoiador: 'coracao'
+    pioneiro: 'bandeira', veterano: 'medalha'
   };
   const svg = (nome, classe = '') => `<svg class="${classe}" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ICONES.trofeu}</svg>`;
   const conquista = id => V.CONQUISTAS.find(c => c.id === id);

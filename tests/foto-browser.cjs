@@ -193,17 +193,19 @@ const fecharComEsc = async pagina => {
   await salaDaBia.evaluate(() => window.NexoConta?.pronto);
   await salaDaBia.locator('#nameConfirmBtn').click();
   await salaDaBia.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
+  // O "eu" da lateral abre o editor do perfil (apelido, cor, marca, foto e cartão num lugar só): a foto dele se abre.
   await salaDaBia.locator('#meuPerfilBtn').click();
-  assert.equal(await salaDaBia.locator('#meuPerfilAvatar').getAttribute('role'), 'button', 'a prévia do "Meu perfil" se abre');
-  await salaDaBia.locator('#meuPerfilAvatar').click();
-  await conferirVisor(salaDaBia, { foto: foto.avatar, nome: 'Bia Souza', onde: 'Meu perfil' });
+  await salaDaBia.locator('#editorCartaoPanel').waitFor({ state: 'visible' });
+  assert.equal(await salaDaBia.locator('#editorCartaoPanel [data-ed="fotoAvatar"] .nx-av-img').getAttribute('role'), 'button', 'a foto do editor do perfil se abre');
+  await salaDaBia.locator('#editorCartaoPanel [data-ed="fotoAvatar"] .nx-av-img').click();
+  await conferirVisor(salaDaBia, { foto: foto.avatar, nome: 'Bia Souza', onde: 'o editor do perfil' });
   assert.equal(await salaDaBia.evaluate(() => document.querySelector('.app').inert), true, 'a sala está inerte sob o painel, mas o visor responde');
   await salaDaBia.waitForTimeout(450);
   await salaDaBia.screenshot({ path: path.join(saida, 'meu-perfil.png') });
   await fecharComEsc(salaDaBia);
-  assert.equal(await salaDaBia.locator('#meuPerfilPanel').evaluate(el => !el.classList.contains('hidden')), true, 'o Esc fecha a foto, e o painel fica');
-  await salaDaBia.locator('#meuPerfilPanel [data-close]').click();
-  await salaDaBia.locator('#meuPerfilPanel').waitFor({ state: 'hidden' });
+  assert.equal(await salaDaBia.locator('#editorCartaoPanel').evaluate(el => !el.classList.contains('hidden')), true, 'o Esc fecha a foto, e o painel fica');
+  await salaDaBia.locator('#editorCartaoPanel .modal-fechar').click();
+  await salaDaBia.locator('#editorCartaoPanel').waitFor({ state: 'hidden' });
   await salaDaBia.evaluate(() => NexoConfig.abrir('perfil'));
   assert.equal(await salaDaBia.locator('#configAvatar').getAttribute('role'), 'button', 'o resumo das configurações se abre');
   await salaDaBia.locator('#configAvatar').click();

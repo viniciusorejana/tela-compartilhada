@@ -139,7 +139,9 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-adicionar-form { margin:16px 0 22px; max-width:640px; }
 .ini-campo { display:flex; align-items:center; gap:6px; padding:5px 5px 5px 14px; border-radius:var(--r-lg); background:var(--bg-0); box-shadow:inset 0 0 0 1px var(--line-2); transition:box-shadow var(--dur) var(--curva); }
 .ini-campo:focus-within { box-shadow:inset 0 0 0 1px var(--accent),0 0 0 3px var(--accent-suave-hi); }
-.ini-campo input { flex:1; min-width:0; min-height:var(--ctl-m); border:0; background:transparent; color:var(--text); outline:none; }
+/* `width:100%` em vez de a largura natural do campo: com ela o mínimo do campo vira zero na conta do
+   `flex`, e o "Entrar" ao lado dele nunca é empurrado para fora da caixa. */
+.ini-campo input { flex:1; width:100%; min-width:0; min-height:var(--ctl-m); border:0; background:transparent; color:var(--text); outline:none; }
 .ini-campo input::placeholder { color:var(--apagado); }
 .ini-adicionar-form .ini-retorno { margin-top:8px; padding-left:4px; }
 .ini-meu-codigo { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; max-width:640px; padding:14px; border-radius:var(--r-lg); background:rgb(var(--tinta) / 2%); box-shadow:inset 0 0 0 1px var(--line); }
@@ -150,7 +152,10 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-meu-codigo button.copiado { --nx-fundo:var(--online-suave); --nx-cor:var(--online-texto); }
 
 /* ---------- Agora no Nexo ---------- */
-.ini-agora { grid-area:agora; display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; padding:16px; border-left:1px solid var(--line); background:var(--bg-1); overflow-y:auto; }
+/* `overflow-y:auto` faz o `overflow-x` valer `auto` também: com a barra de rolagem de verdade do Linux
+   (que ocupa largura, ao contrário da fina do Windows) qualquer sobra de um pixel virava uma barra
+   horizontal. A coluna nunca rola de lado: o que não cabe é culpa do conteúdo, e o conteúdo encolhe. */
+.ini-agora { grid-area:agora; display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; padding:16px; border-left:1px solid var(--line); background:var(--bg-1); overflow-y:auto; overflow-x:hidden; }
 .ini-agora-titulo { font-size:var(--fs-xl); font-weight:750; letter-spacing:-.02em; }
 .ini-agora-lista { display:grid; gap:10px; }
 .ini-agora-centro { display:none; }
@@ -173,7 +178,10 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-disponiveis .ini-rotulo { padding:4px 4px 2px; }
 .ini-agora-vazio { padding:18px 14px; border-radius:var(--r-lg); background:rgb(var(--tinta) / 2%); box-shadow:inset 0 0 0 1px var(--line); color:var(--muted); font-size:var(--fs-sm); line-height:1.6; text-align:center; }
 .ini-agora-vazio strong { display:block; margin-bottom:4px; color:var(--text); font-size:var(--fs-md); }
-.ini-abrir { display:grid; gap:10px; margin-top:auto; padding:14px; border-radius:var(--r-lg); background:linear-gradient(140deg,var(--accent-suave),rgb(var(--tinta) / 2%)); box-shadow:inset 0 0 0 1px var(--accent-suave-hi); }
+/* A única coluna da grade é `minmax(0,1fr)`, e não o `auto` de uma grade solta: o `auto` não encolhe
+   abaixo do tamanho natural do campo (o `size` dele, que muda com a fonte do sistema), e numa fonte
+   mais larga que a do Windows -- a do Linux Mint -- o "Entrar" saía pela borda do cartão. */
+.ini-abrir { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; margin-top:auto; padding:14px; border-radius:var(--r-lg); background:linear-gradient(140deg,var(--accent-suave),rgb(var(--tinta) / 2%)); box-shadow:inset 0 0 0 1px var(--accent-suave-hi); }
 .ini-abrir h3 { font-size:var(--fs-md); font-weight:650; }
 .ini-campo-sala { padding:4px 4px 4px 12px; border-radius:var(--r-md); }
 .ini-campo-sala > span { color:var(--faint); font-size:var(--fs-lg); }

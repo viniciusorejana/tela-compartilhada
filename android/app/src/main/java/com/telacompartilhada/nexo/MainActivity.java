@@ -248,6 +248,8 @@ public class MainActivity extends Activity {
         Uri.Builder pagina = Uri.parse(PAGINA_DE_ENDERECO).buildUpon();
         if (erro != null) pagina.appendQueryParameter("erro", erro);
         if (anterior != null) pagina.appendQueryParameter("anterior", anterior);
+        // O servidor do Nexo, já preenchido na primeira vez (NEXO_SERVIDOR_PADRAO do .env.prod, levado pelo Gradle).
+        if (!BuildConfig.SERVIDOR_PADRAO.isEmpty()) pagina.appendQueryParameter("padrao", BuildConfig.SERVIDOR_PADRAO);
         web.loadUrl(pagina.build().toString());
     }
 
@@ -284,6 +286,12 @@ public class MainActivity extends Activity {
                     break;
                 case "camada":
                     camadaAberta = pedido.optBoolean("aberta");
+                    break;
+                // "Trocar de servidor" das configurações da sala: o mesmo destino do atalho do ícone. A tela de
+                // endereço sai da origem da sala (a ponte desta página deixa de valer) e a chamada acaba junto,
+                // como em mostrarTelaDeEndereco; quem pede é a pessoa, com a confirmação que a página já fez.
+                case "trocar-servidor":
+                    mostrarTelaDeEndereco(null, preferencias.getString("endereco", null));
                     break;
                 case "avisos":
                     ligarAvisos(pedido.optBoolean("ligado"));

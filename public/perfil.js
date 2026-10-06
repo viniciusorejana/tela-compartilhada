@@ -51,7 +51,7 @@
     // o volume dos avisos no computador não quer ouvi-los no máximo no celular.
     sons: grupo({ ligados: booleano, volume: inteiroEntre(0, 100), entrada: booleano, saida: booleano, tela: booleano, assistir: booleano, mensagem: booleano, mensagemSoFora: booleano, mencao: booleano, voce: booleano, pedido: booleano, conexao: booleano }),
     // Tema e cores também: quem escolheu o claro no computador quer o claro no celular. As
-    // cores exatas sobem mesmo sem premium -- é o plano que decide se elas VALEM (tema.js), e
+    // cores exatas sobem mesmo sem o nível completo -- é o plano que decide se elas VALEM (tema.js), e
     // guardá-las é o que as faz voltar quando ele volta.
     aparencia: grupo({
       densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano,

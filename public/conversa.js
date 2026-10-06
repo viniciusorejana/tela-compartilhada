@@ -34,8 +34,13 @@
     chamar: '<path d="M4 14v-3a8 8 0 0 1 16 0v3M4 12H3v7h4v-7H4zm16 0h1v7h-4v-7h3z"/><path d="M12 3v4M10 5h4"/>',
     relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     imagem: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
-    fechar: '<path d="M18 6 6 18M6 6l12 12"/>'
+    fechar: '<path d="M18 6 6 18M6 6l12 12"/>',
+    reagir: '<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/>',
+    mais: '<path d="M12 5v14M5 12h14"/>'
   };
+  // As cinco do chat da sala (sala.js, REACOES_DO_CHAT): reagir com uma delas é um clique só. O resto
+  // dos emojis mora no "+" do mesmo painelzinho.
+  const REACOES_RAPIDAS = ['👍', '❤️', '😂', '👏', '🎉'];
 
   // ---------- O visor da imagem ----------
   // Clicar numa imagem da conversa abre ela grande, por cima de tudo; clicar ou Esc fecha. O Esc é
@@ -241,8 +246,21 @@
           }
           if (m.imagem) linha.append(imagemDaMensagem(m, minha));
         }
+        // As ações da mensagem ficam numa barrinha que aparece com o mouse (ou o foco) em cima dela,
+        // como no chat da sala: reagir, para todas menos o convite, e apagar, só para as minhas.
+        const acoesDaMensagem = elemento('div', 'nx-dm-msg-acoes');
+        if (m.tipo !== 'convite') {
+          const reagir = elemento('button', 'nx-dm-msg-acao');
+          reagir.type = 'button';
+          reagir.title = 'Reagir';
+          reagir.setAttribute('aria-label', 'Reagir a esta mensagem');
+          reagir.setAttribute('aria-haspopup', 'true');
+          reagir.append(icone(DESENHOS.reagir, 'ico ico-p'));
+          reagir.onclick = () => abrirReacoes(reagir, m);
+          acoesDaMensagem.append(reagir);
+        }
         if (minha) {
-          const apagar = elemento('button', 'nx-dm-apagar');
+          const apagar = elemento('button', 'nx-dm-msg-acao perigo');
           apagar.type = 'button';
           apagar.title = 'Apagar para os dois';
           apagar.setAttribute('aria-label', 'Apagar esta mensagem para os dois');
@@ -251,8 +269,10 @@
             const r = await social.apagar(codigo, m.id);
             if (!r.ok) dizer(r.error || 'Não foi possível apagar.');
           };
-          linha.append(apagar);
+          acoesDaMensagem.append(apagar);
         }
+        if (acoesDaMensagem.childElementCount) linha.append(acoesDaMensagem);
+        pintarReacoes(linha, m);
         mensagensEl.append(linha);
         anterior = m;
       }
@@ -263,6 +283,101 @@
         mensagensEl.append(visto);
       }
       if (!mensagens.length) mensagensEl.append(elemento('p', 'nx-dm-vazio', `Diga oi para ${social.nomeDe(codigo)}. A conversa é só de vocês dois.`));
+    }
+
+    // ---------- As reações ----------
+    // Uma fileira embaixo da mensagem: cada emoji com quantos reagiram, o meu destacado. Cada um é um
+    // botão que liga e desliga a MINHA reação (`aria-pressed`). Como na sala, qualquer emoji vale.
+    const descreverReacao = (emoji, quem) => {
+      const eu = social.estado.eu;
+      // "Você" sempre primeiro: quem lê procura a si mesmo antes dos outros.
+      const nomes = [...(quem.includes(eu) ? ['Você'] : []), ...quem.filter(c => c !== eu).map(c => social.nomeDe(c))];
+      const juntos = nomes.length > 1 ? `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}` : nomes[0];
+      return `${juntos} ${nomes.length > 1 ? 'reagiram' : 'reagiu'} com ${emoji}`;
+    };
+    function pintarReacoes(linha, m) {
+      linha.querySelector('.nx-dm-reacoes')?.remove();
+      const eu = social.estado.eu;
+      const entradas = Object.entries(m.reacoes || {}).filter(([, quem]) => quem?.length);
+      if (!entradas.length) return;
+      const fileira = elemento('div', 'nx-dm-reacoes');
+      for (const [emoji, quem] of entradas) {
+        const minha = quem.includes(eu);
+        const b = elemento('button', `nx-dm-reacao${minha ? ' minha' : ''}`);
+        b.type = 'button';
+        b.dataset.emoji = emoji;
+        b.setAttribute('aria-pressed', String(minha));
+        b.title = descreverReacao(emoji, quem);
+        b.setAttribute('aria-label', `${b.title}. ${minha ? 'Tirar a sua reação' : 'Reagir também'}`);
+        b.append(elemento('span', 'nx-dm-reacao-emoji', emoji), elemento('span', 'nx-dm-reacao-n', String(quem.length)));
+        b.onclick = () => reagirCom(m, emoji);
+        fileira.append(b);
+      }
+      // O "+" no fim, para acrescentar outra a quem já está olhando para as que existem.
+      if (root.NexoEmojis) {
+        const mais = elemento('button', 'nx-dm-reacao adicionar');
+        mais.type = 'button';
+        mais.title = 'Adicionar uma reação';
+        mais.setAttribute('aria-label', 'Adicionar uma reação');
+        mais.setAttribute('aria-haspopup', 'true');
+        mais.append(icone(DESENHOS.mais, 'ico ico-p'));
+        mais.onclick = () => abrirSeletorDeEmojis(mais, m);
+        fileira.append(mais);
+      }
+      linha.append(fileira);
+    }
+    // As reações de uma mensagem mudaram (a minha, ou a do outro): refaz só a fileira dela, no lugar.
+    // O foco fica no botão que acabou de ser apertado -- redesenhar a conversa inteira o levaria embora --,
+    // e a lista continua no fim se estava no fim.
+    function aplicarReacoes(id, reacoes) {
+      const m = mensagens.find(x => x.id === id);
+      const linha = [...mensagensEl.children].find(el => el.dataset?.id === id);
+      if (!m) return;
+      m.reacoes = reacoes || {};
+      if (!linha) return;
+      const descia = perto();
+      const ativo = linha.contains(doc.activeElement) ? doc.activeElement : null;
+      const emFoco = ativo?.dataset?.emoji ?? (ativo?.classList.contains('adicionar') ? '+' : null);
+      pintarReacoes(linha, m);
+      if (emFoco !== null) {
+        const botoes = [...linha.querySelectorAll('.nx-dm-reacao')];
+        (botoes.find(b => b.dataset.emoji === emFoco) || botoes.find(b => b.classList.contains('adicionar')) || linha.querySelector('.nx-dm-msg-acao'))?.focus({ preventScroll: true });
+      }
+      if (descia) descer();
+    }
+    async function reagirCom(m, emoji) {
+      const r = await social.reagir(codigo, m.id, emoji);
+      if (!r.ok) { dizer(r.error || 'Não foi possível reagir.'); return; }
+      // A resposta já traz as reações da mensagem: a tela não espera o aviso do socket.
+      aplicarReacoes(m.id, r.reacoes);
+    }
+    function abrirSeletorDeEmojis(botao, m) {
+      root.NexoEmojis?.abrir(botao, { rotulo: 'Reagir com um emoji', aoEscolher: emoji => reagirCom(m, emoji) });
+    }
+    // O botão "Reagir" da mensagem: as cinco rápidas num painelzinho, e o "+" para o resto dos emojis.
+    function abrirReacoes(botao, m) {
+      if (!root.NexoPopover) { abrirSeletorDeEmojis(botao, m); return; }
+      const eu = social.estado.eu;
+      let painel = null;
+      painel = root.NexoPopover.abrir(botao, caixa => {
+        for (const emoji of REACOES_RAPIDAS) {
+          const b = elemento('button', `nx-dm-rapida${(m.reacoes?.[emoji] || []).includes(eu) ? ' minha' : ''}`, emoji);
+          b.type = 'button';
+          b.title = `Reagir com ${emoji}`;
+          b.setAttribute('aria-label', b.title);
+          b.onclick = () => { painel.fechar({ devolverFoco: true }); reagirCom(m, emoji); };
+          caixa.append(b);
+        }
+        if (root.NexoEmojis) {
+          const mais = elemento('button', 'nx-dm-rapida mais');
+          mais.type = 'button';
+          mais.title = 'Mais emojis';
+          mais.setAttribute('aria-label', 'Reagir com outro emoji');
+          mais.append(icone(DESENHOS.mais, 'ico'));
+          mais.onclick = () => { painel.fechar(); abrirSeletorDeEmojis(botao, m); };
+          caixa.append(mais);
+        }
+      }, { rotulo: 'Reagir à mensagem', classe: 'nx-dm-rapidas' });
     }
 
     // A imagem da mensagem, pelo endereço dela (só os dois da conversa abrem). O lugar já nasce do
@@ -403,6 +518,7 @@
     });
     ouvir('lida', ({ com, em, minha }) => { if (com === codigo && !minha) { lidaPeloOutro = em; desenhar(); } });
     ouvir('apagada', ({ com, id }) => { if (com !== codigo) return; mensagens = mensagens.filter(m => m.id !== id); desenhar(); });
+    ouvir('reacoes', ({ com, id, reacoes }) => { if (com === codigo) aplicarReacoes(id, reacoes); });
     ouvir('digitando', ({ com }) => {
       if (com !== codigo) return;
       digitandoEl.textContent = `${social.nomeDe(codigo)} está escrevendo…`;

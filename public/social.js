@@ -12,6 +12,7 @@
  *   mensagem      { com, mensagem, naoLidas } nova numa conversa
  *   lida          { com, em, minha }
  *   apagada       { com, id }
+ *   reacoes       { com, id, reacoes } as reações de uma mensagem mudaram: { emoji: [códigos de quem reagiu] }
  *   digitando     { com }
  *   convite       { de, apelido, sala }
  *   conquista     { id, nome, descricao }
@@ -92,6 +93,7 @@
       emitir('lida', { com, em, minha });
     });
     socket.on('dm-apagada', ({ com, id }) => emitir('apagada', { com, id }));
+    socket.on('dm-reacoes', ({ com, id, reacoes }) => emitir('reacoes', { com, id, reacoes }));
     socket.on('dm-digitando', ({ com }) => emitir('digitando', { com }));
     socket.on('convite', convite => emitir('convite', convite));
     socket.on('conquista', conquista => emitir('conquista', conquista));
@@ -176,6 +178,8 @@
     historico: com => pedirAoSocket('dm-historico', { com }),
     marcarLida: com => { guardarConversa(com, { naoLidas: 0 }); return pedirAoSocket('dm-lida', { com }); },
     apagar: (com, id) => pedirAoSocket('dm-apagar', { com, id }),
+    // Reagir com um emoji; o mesmo de novo tira a reação. A resposta traz as reações da mensagem.
+    reagir: (com, id, emoji) => pedirAoSocket('dm-reagir', { com, id, emoji }),
     digitando: para => { if (socket?.connected) socket.emit('dm-digitando', { para }); },
     conversas: () => [...estado.conversas.values()].sort((a, b) => b.ultimaEm - a.ultimaEm)
   };

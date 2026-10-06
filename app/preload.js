@@ -11,6 +11,8 @@ const pid = argumento ? Number(argumento.split('=')[1]) : 0;
 const versao = (process.argv.find(a => a.startsWith('--versao-do-app=')) || '').split('=')[1] || '';
 // Instalado (atualiza sozinho), portátil (baixa o arquivo novo) ou desenvolvimento. Lista fechada.
 const instalacao = (process.argv.find(a => a.startsWith('--instalacao=')) || '').split('=')[1] || '';
+// O servidor que a tela de endereço traz preenchido. Só uma origem http(s) simples atravessa a ponte.
+const padrao = (process.argv.find(a => a.startsWith('--servidor-padrao=')) || '').slice('--servidor-padrao='.length);
 const OPCOES = ['atualizarSozinho', 'abrirAoEntrar'];
 
 contextBridge.exposeInMainWorld('appNativo', {
@@ -40,6 +42,7 @@ contextBridge.exposeInMainWorld('appNativo', {
   definirEndereco: (endereco) => ipcRenderer.invoke('endereco:definir', endereco),
   estadoDoAgente: () => ipcRenderer.invoke('agente:estado'),
   trocarServidor: () => ipcRenderer.invoke('endereco:esquecer'),
+  servidorPadrao: /^https?:\/\/[^\s/]+$/.test(padrao) ? padrao : '',
   // A versão nova, baixada pelo aplicativo com o progresso na sala. Na ida só atravessa o
   // número da versão; na volta, um estado de uma lista fechada e números -- nunca um caminho.
   baixarAtualizacao: versao => ipcRenderer.invoke('atualizacao:baixar', String(versao || '')),

@@ -316,7 +316,7 @@ por uma hora na Europa, a latência da sala lida por quem vai usar.
 - **Nenhum dado de cartão passa pelo servidor.** O pagamento acontece na página do provedor, e
   o Nexo guarda só o identificador do cliente e o estado da assinatura.
 - A webhook do provedor tem a assinatura conferida, e processar o mesmo aviso duas vezes não
-  pode dar dois meses de premium.
+  pode dar dois meses de nível completo.
 - O registro fiscal tem prazo legal próprio e fica com o provedor: apagar a conta não apaga a
   obrigação fiscal, e a política diz isso.
 

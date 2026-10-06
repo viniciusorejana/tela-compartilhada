@@ -9,13 +9,13 @@
 // cartão de qualquer pessoa que a abrir, e uma chave solta ali seria um lugar para guardar o que
 // ninguém decidiu guardar.
 //
-// ---------- Comum, conquista e premium ----------
+// ---------- Comum, conquista e completo ----------
 //
 // Cada peça tem um `requer`: nada (todo mundo tem), o id de uma CONQUISTA (ganha-se usando o
-// Nexo) ou 'premium' (segue NEXO_PLANOS: com os planos desligados, todo mundo tem). A escolha
-// fica GUARDADA mesmo sem o requisito, como as cores exatas do tema: quem deixou o premium vencer
-// volta a ver o banner animado ao renovar. O que os outros veem é a vitrine EFETIVA
-// (`vitrineEfetiva`), já sem o que não vale agora.
+// Nexo) ou 'completo' (o nível maior do plano; segue NEXO_PLANOS: com os planos desligados, que é
+// como o Nexo roda hoje, todo mundo tem). A escolha fica GUARDADA mesmo sem o requisito, como as
+// cores exatas do tema: quem perde o nível completo volta a ver o banner animado quando ele volta.
+// O que os outros veem é a vitrine EFETIVA (`vitrineEfetiva`), já sem o que não vale agora.
 //
 // ---------- O que NÃO mora aqui ----------
 //
@@ -45,7 +45,7 @@
   const TEMA_PADRAO = 'nexo';
 
   // ---------- O catálogo ----------
-  // `requer`: null (comum), o id de uma conquista, ou 'premium'.
+  // `requer`: null (comum), o id de uma conquista, ou 'completo'.
   const ANIMADOS = Object.freeze([
     { id: 'aurora', nome: 'Aurora', requer: null },
     { id: 'estrelas', nome: 'Céu estrelado', requer: null },
@@ -53,20 +53,20 @@
     { id: 'ondas', nome: 'Ondas', requer: 'papo' },
     { id: 'prisma', nome: 'Prisma', requer: 'primeira-sala' },
     { id: 'chuva', nome: 'Chuva neon', requer: 'maratona' },
-    { id: 'nebulosa', nome: 'Nebulosa', requer: 'premium' },
-    { id: 'grade', nome: 'Grade retrô', requer: 'premium' }
+    { id: 'nebulosa', nome: 'Nebulosa', requer: 'completo' },
+    { id: 'grade', nome: 'Grade retrô', requer: 'completo' }
   ]);
   // O banner é a faixa de cima do cartão; o fundo, o corpo dele. Os dois aceitam os animados.
   const BANNERS = Object.freeze([
     { id: 'tema', nome: 'Cores do tema', requer: null },
     ...ANIMADOS,
-    { id: 'imagem', nome: 'Sua imagem', requer: 'premium' }
+    { id: 'imagem', nome: 'Sua imagem', requer: 'completo' }
   ]);
   const FUNDOS = Object.freeze([
     { id: 'tema', nome: 'Cores do tema', requer: null },
     { id: 'liso', nome: 'Liso', requer: null },
     ...ANIMADOS,
-    { id: 'imagem', nome: 'Sua imagem', requer: 'premium' }
+    { id: 'imagem', nome: 'Sua imagem', requer: 'completo' }
   ]);
   // A borda do avatar: a moldura que acompanha a pessoa no cartão e nas listas de amigos.
   const BORDAS = Object.freeze([
@@ -77,8 +77,8 @@
     { id: 'orbita', nome: 'Órbita', requer: 'turma' },
     { id: 'arco-iris', nome: 'Arco-íris', requer: 'maratona' },
     { id: 'fogo', nome: 'Fogo', requer: 'anfitriao' },
-    { id: 'neon', nome: 'Neon', requer: 'premium' },
-    { id: 'estelar', nome: 'Estelar', requer: 'premium' }
+    { id: 'neon', nome: 'Neon', requer: 'completo' },
+    { id: 'estelar', nome: 'Estelar', requer: 'completo' }
   ]);
   // A moldura do cartão inteiro.
   const MOLDURAS = Object.freeze([
@@ -86,7 +86,7 @@
     { id: 'tema', nome: 'Cores do tema', requer: null },
     { id: 'dourada', nome: 'Dourada', requer: 'pioneiro' },
     { id: 'neon', nome: 'Neon', requer: 'diretor' },
-    { id: 'holografica', nome: 'Holográfica', requer: 'premium' }
+    { id: 'holografica', nome: 'Holográfica', requer: 'completo' }
   ]);
   // O efeito que toca por cima do cartão quando alguém o abre: uma animação curta, com
   // transparência, que não cobre nada que se precise ler (cartao.js).
@@ -99,14 +99,14 @@
     { id: 'coracoes', nome: 'Corações', requer: 'papo' },
     { id: 'petalas', nome: 'Pétalas', requer: 'turma' },
     { id: 'estrelas', nome: 'Estrelas cadentes', requer: 'primeira-sala' },
-    { id: 'fogos', nome: 'Fogos', requer: 'premium' },
-    { id: 'aurora', nome: 'Luz de aurora', requer: 'premium' }
+    { id: 'fogos', nome: 'Fogos', requer: 'completo' },
+    { id: 'aurora', nome: 'Luz de aurora', requer: 'completo' }
   ]);
   const NOMES = Object.freeze([
     { id: 'padrao', nome: 'Padrão', requer: null },
     { id: 'tema', nome: 'Cores do tema', requer: null },
     { id: 'brilho', nome: 'Reflexo', requer: 'maratona' },
-    { id: 'neon', nome: 'Neon', requer: 'premium' }
+    { id: 'neon', nome: 'Neon', requer: 'completo' }
   ]);
   const CATALOGO = Object.freeze({ banner: BANNERS, fundo: FUNDOS, borda: BORDAS, moldura: MOLDURAS, efeito: EFEITOS, nome: NOMES });
   const PADROES = Object.freeze({ tema: TEMA_PADRAO, banner: 'tema', fundo: 'tema', borda: 'nenhuma', moldura: 'nenhuma', efeito: 'nenhum', nome: 'padrao' });
@@ -129,8 +129,7 @@
     { id: 'turma', nome: 'Turma formada', descricao: 'Tem 3 amigos no Nexo.', contador: 'amigos', alvo: 3 },
     { id: 'popular', nome: 'Popular', descricao: 'Tem 15 amigos no Nexo.', contador: 'amigos', alvo: 15 },
     { id: 'pioneiro', nome: 'Pioneiro', descricao: 'Chegou ao Nexo em 2026, no começo de tudo.', regra: ({ criadaEm }) => criadaEm < ANO_DO_PIONEIRO },
-    { id: 'veterano', nome: 'Veterano', descricao: 'Está no Nexo há um ano.', regra: ({ criadaEm, agora }) => agora - criadaEm >= 365 * DIA },
-    { id: 'apoiador', nome: 'Apoiador', descricao: 'Apoia o Nexo com o premium.', regra: ({ premium }) => premium }
+    { id: 'veterano', nome: 'Veterano', descricao: 'Está no Nexo há um ano.', regra: ({ criadaEm, agora }) => agora - criadaEm >= 365 * DIA }
   ]);
   const CONTADORES = Object.freeze(['salas', 'telas', 'mensagens', 'minutos']);
   const IDS_DAS_CONQUISTAS = new Set(CONQUISTAS.map(c => c.id));
@@ -138,11 +137,11 @@
   // Cada conquista com o progresso: `ganhou`, e quanto falta quando ela é de contador.
   // `amigos` vem da tabela de amizades, e não de um contador: desfazer uma amizade tira o número
   // de volta, e a conquista ganha não se perde por isso (`jaGanhas`).
-  function conquistasDe({ contadores = {}, amigos = 0, criadaEm = Date.now(), premium = false, agora = Date.now(), jaGanhas = [] } = {}) {
+  function conquistasDe({ contadores = {}, amigos = 0, criadaEm = Date.now(), agora = Date.now(), jaGanhas = [] } = {}) {
     const valores = { ...contadores, amigos };
     const guardadas = new Set(jaGanhas);
     return CONQUISTAS.map(c => {
-      if (c.regra) return { id: c.id, ganhou: Boolean(c.regra({ criadaEm, premium, agora })) };
+      if (c.regra) return { id: c.id, ganhou: Boolean(c.regra({ criadaEm, agora })) };
       const valor = Math.max(0, Number(valores[c.contador]) || 0);
       return { id: c.id, ganhou: valor >= c.alvo || guardadas.has(c.id), valor: Math.min(valor, c.alvo), alvo: c.alvo };
     });
@@ -240,21 +239,21 @@
   }
 
   const requisitoDe = (grupo, id) => CATALOGO[grupo]?.find(p => p.id === id)?.requer ?? null;
-  // Pode usar esta peça agora? `premium` já vem considerando NEXO_PLANOS (quem chama decide).
-  function liberada(requer, { premium = false, conquistas = new Set() } = {}) {
+  // Pode usar esta peça agora? `completo` já vem considerando NEXO_PLANOS (quem chama decide).
+  function liberada(requer, { completo = false, conquistas = new Set() } = {}) {
     if (!requer) return true;
-    if (requer === 'premium') return Boolean(premium);
+    if (requer === 'completo') return Boolean(completo);
     return conquistas.has(requer);
   }
 
   // O que os outros veem: o que não vale agora volta ao padrão (a escolha continua guardada), o
   // pensamento vencido some, os selos são só os ganhos, e a imagem só vai junto quando é ela que
   // está escolhida -- o id de uma imagem guardada e não usada não sai para ninguém.
-  function vitrineEfetiva(guardada, { premium = false, conquistas = new Set(), imagens = {}, agora = Date.now() } = {}) {
+  function vitrineEfetiva(guardada, { completo = false, conquistas = new Set(), imagens = {}, agora = Date.now() } = {}) {
     const v = limparVitrine(guardada || {}, { agora, anterior: guardada });
-    const pode = { premium, conquistas };
+    const pode = { completo, conquistas };
     for (const grupo of Object.keys(CATALOGO)) if (!liberada(requisitoDe(grupo, v[grupo]), pode)) v[grupo] = PADROES[grupo];
-    if (v.cores && !premium) v.cores = null;
+    if (v.cores && !completo) v.cores = null;
     if (v.pensamento && !(agora - v.pensamento.em < VIDA_DO_PENSAMENTO)) v.pensamento = null;
     v.selos = v.selos.filter(id => conquistas.has(id));
     const ids = limparImagens(imagens);
@@ -264,7 +263,7 @@
     return v;
   }
 
-  // As cores do cartão: as exatas (premium), senão as do tema escolhido.
+  // As cores do cartão: as exatas (do nível completo), senão as do tema escolhido.
   function coresDe(vitrine) {
     if (vitrine?.cores?.a && vitrine?.cores?.b) return [vitrine.cores.a, vitrine.cores.b];
     return (TEMAS.find(t => t.id === vitrine?.tema) || TEMAS[0]).cores;

@@ -109,8 +109,16 @@ A conta é identificada para fora pelo **código** — nunca pelo id interno, qu
   amigo → "Chamar para uma sala", numa sala recente ou numa nova) ou de dentro da sala ("Convidar
   amigos"). Quem recebe vê também um aviso no canto, onde estiver.
 - Apagar uma mensagem própria apaga para os dois.
+- **Reações**: qualquer emoji inteiro (a mesma regra da sala, `ehUmEmoji`), de qualquer um dos dois,
+  em qualquer mensagem — até 20 emojis diferentes por mensagem; reagir de novo com o mesmo emoji
+  tira. Como a mensagem, a reação só mora na memória do servidor e some com ela (em três dias, ou ao
+  apagar a mensagem). Reagir **não** acende notificação, contagem de não lidas nem "Visto": quem
+  reage já está olhando a conversa, e uma carinha não renova os três dias da conversa. O evento é
+  `dm-reagir` (só entre amigos, sem bloqueio, e nunca num convite), e o servidor avisa as duas contas,
+  em todas as abas, com `dm-reacoes`: o mapa emoji → códigos de quem reagiu. É a página que transforma
+  o seu código em "Você".
 - Freios: `dm-enviar` (rajada de 8 em 3 s, 40 por minuto), `dm-imagem` (rajada de 4 em 10 s, 10
-  por minuto), `convidar` (10 por minuto).
+  por minuto), `dm-reagir` (rajada de 12 em 3 s), `convidar` (10 por minuto).
 
 ## A presença
 
@@ -149,9 +157,9 @@ Tudo o que se escolhe mora em `perfil.vitrine`, com forma fechada (`public/vitri
 
 | parte | opções |
 |---|---|
-| Tema (duas cores do cartão) | 10 prontos; **cores exatas** (premium) |
-| Banner | as cores do tema, 8 animados, ou uma imagem/GIF (premium) |
-| Fundo do cartão | o tema, liso, os animados, ou uma imagem/GIF (premium) |
+| Tema (duas cores do cartão) | 10 prontos; **cores exatas** (nível completo) |
+| Banner | as cores do tema, 8 animados, ou uma imagem/GIF (nível completo) |
+| Fundo do cartão | o tema, liso, os animados, ou uma imagem/GIF (nível completo) |
 | Borda do avatar | 9, várias animadas |
 | Moldura do cartão | 5 |
 | Efeito ao abrir o cartão | 10 animações com transparência por cima do cartão |
@@ -189,14 +197,15 @@ mensagem: são centenas de mensagens, e cada borda que gira é uma pintura por q
 sala, o que a pessoa vê de si mesma (as mensagens dela na conversa, o "eu" do início, a conta) é o
 cartão efetivo que `/api/conta/eu` devolve em `cartao`, e o editor o atualiza ao salvar.
 
-### Comum, conquista e premium
+### Comum, conquista e nível completo
 
-Cada peça do catálogo tem um `requer`: nada (comum), uma **conquista**, ou **premium**. É a parte
-"de jogo": algumas peças se ganham usando o Nexo.
+Cada peça do catálogo tem um `requer`: nada (comum), uma **conquista**, ou o **nível completo**. É
+a parte "de jogo": algumas peças se ganham usando o Nexo.
 
-- Premium segue a regra de sempre (`NEXO_PLANOS`): com os planos desligados, todo mundo tem.
-- A escolha fica **guardada** mesmo sem o requisito, como as cores exatas: quem deixou o premium
-  vencer volta a ver o banner animado ao renovar. O que sai para os outros é a **vitrine
+- O nível completo segue a regra de sempre (`NEXO_PLANOS`): com os planos desligados, que é como o
+  Nexo roda hoje, todo mundo tem.
+- A escolha fica **guardada** mesmo sem o requisito, como as cores exatas: quem perde o nível
+  completo volta a ver o banner animado quando ele volta. O que sai para os outros é a **vitrine
   efetiva** (`vitrineEfetiva`), sem o que não vale agora.
 
 ### As conquistas
@@ -218,7 +227,6 @@ Saem de contadores da conta (`contador`), da idade da conta, do plano e do núme
 | Popular | 15 amigos |
 | Pioneiro | conta criada até 31/12/2026 |
 | Veterano | conta com 1 ano |
-| Apoiador | premium agora |
 
 Os contadores são somas, e nada mais: **não** guardam em que sala, com quem nem quando. Os
 minutos entram quando a pessoa sai da sala; as mensagens e as telas são somadas na memória e

@@ -1,5 +1,5 @@
 // Os níveis pelo servidor de verdade: o plano que a entrada devolve, o teto de pessoas que
-// sobe com um assinante, e o atalho do painel que marca premium à mão.
+// sobe com alguém de nível completo, e o atalho do painel que o marca à mão.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { iniciarServidor, conectarSocket } = require('./helpers/servidor-telemetria.cjs');
@@ -38,15 +38,15 @@ test('a entrada devolve o plano de quem entra: sem conta, conta grátis', async 
   assert.deepEqual({ nivel: ana.plano.nivel, ...ana.plano.limites }, { nivel: 'gratis', altura: 720, quadros: 60 });
 });
 
-test('com os planos desligados (a janela de transição), todo mundo transmite como premium', async t => {
+test('com os planos desligados (como o Nexo roda hoje), todo mundo transmite com o nível completo', async t => {
   const servidor = await iniciarServidor({ ambiente: { NEXO_PLANOS: '0' } }); t.after(servidor.encerrar);
   const anonimo = await servidor.credencial('Bia', SALA);
-  assert.equal(anonimo.plano.nivel, 'premium');
+  assert.equal(anonimo.plano.nivel, 'completo');
   assert.equal(anonimo.plano.livre, true);
 });
 
-// O atalho da fase 3: premium à mão, com prazo, para quem pagar por PIX direto.
-test('o painel marca premium com prazo, e quem está na sala recebe o plano novo na hora', async t => {
+// O atalho do painel: o nível completo à mão, com prazo.
+test('o painel marca o nível completo com prazo, e quem está na sala recebe o plano novo na hora', async t => {
   const servidor = await comPlanos(); t.after(servidor.encerrar);
   const ana = await servidor.conta('ana', { apelido: 'Ana', sala: SALA });
   const { socket } = await entrar(servidor, t, ana);
@@ -57,14 +57,14 @@ test('o painel marca premium com prazo, e quem está na sala recebe o plano novo
   assert.equal(JSON.stringify(lista).includes('scrypt'), false, 'nada de hash no painel');
   assert.equal((await p.listar('não existe')).contas.length, 0);
 
-  const r = await p.agir(ana.conta.codigo, { acao: 'premium', dias: 30 });
+  const r = await p.agir(ana.conta.codigo, { acao: 'completo', dias: 30 });
   assert.equal(r.status, 200, JSON.stringify(r.dados));
-  assert.equal(r.dados.conta.nivel, 'premium');
+  assert.equal(r.dados.conta.nivel, 'completo');
   assert.ok(r.dados.conta.planoAte > Date.now() + 29 * 86400000);
-  await socket.esperar(m => m.includes('plano-atualizado') && m.includes('"nivel":"premium"'));
+  await socket.esperar(m => m.includes('plano-atualizado') && m.includes('"nivel":"completo"'));
   const deNovo = await servidor.credencial('Ana', SALA, '', ana.cookie);
-  assert.equal(deNovo.plano.nivel, 'premium');
-  assert.equal((await p.listar()).contagens.premium, 1);
+  assert.equal(deNovo.plano.nivel, 'completo');
+  assert.equal((await p.listar()).contagens.completos, 1);
 
   const volta = await p.agir(ana.conta.codigo, { acao: 'gratis' });
   assert.equal(volta.dados.conta.nivel, 'gratis');
@@ -95,11 +95,11 @@ test('o teto de pessoas sobe com um assinante; quando ele sai, ninguém é remov
 
   const assinante = await servidor.conta('duda', { apelido: 'Duda' });
   const p = await painel(servidor);
-  await p.agir(assinante.conta.codigo, { acao: 'premium' });
+  await p.agir(assinante.conta.codigo, { acao: 'completo' });
   const daDuda = await servidor.credencial('Duda', SALA, '', assinante.cookie);
   assert.ok(daDuda.credencialSessao, 'o assinante entra numa sala no teto base: é a presença dele que o aumenta');
   const duda = await entrar(servidor, t, daDuda);
-  assert.equal(duda.entrada.plano.nivel, 'premium');
+  assert.equal(duda.entrada.plano.nivel, 'completo');
 
   duda.socket.fechar();
   await new Promise(resolve => setTimeout(resolve, 250));

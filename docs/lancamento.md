@@ -350,7 +350,7 @@ exige.
 > salas. O que mudou em relação a esta seção: o banco é **SQLite embutido** (zero dependência,
 > zero processo a mais), o **e-mail é opcional no cadastro** (ele arrastava junto o único
 > custo fixo mensal do lançamento), os **nomes podem se repetir** e quem tem conta ganha um
-> código permanente, e o **premium começa em R$ 10** — a conclusão de custo deste documento,
+> código permanente, e o **nível completo começa em R$ 10** (planejado; nunca praticado) — a conclusão de custo deste documento,
 > feita a R$ 15, passa a ser ~26 assinantes para os €40/mês. O resto desta seção continua de
 > pé.
 
@@ -416,7 +416,7 @@ degrau 1. Como oferta permanente, é uma dívida que cresce.
   banir por 60 minutos, desbanir e transferir. O que as contas mudam nisso está em
   [`plano-contas.md`](plano-contas.md).
 - **Limite de pessoas por sala.** **Feito** na fase 1, etapa D: 25 por sala, e 50 quando há
-  alguém premium presente; o painel mostra quantas salas encostam no teto. Uma sala de 15 em
+  alguém de nível completo presente; o painel mostra quantas salas encostam no teto. Uma sala de 15 em
   1440p é ~90 Mbps sozinha.
 - **Um caminho para relatar abuso**, que reusa a rota dos relatos do degrau 2.
 

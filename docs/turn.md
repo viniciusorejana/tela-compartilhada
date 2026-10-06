@@ -19,8 +19,8 @@ bytes=0               → nenhum pacote de mídia chegou
 (sem linha "Rota:")   → não existe caminho escolhido
 ```
 
-Um servidor TURN resolve isso retransmitindo a mídia. **O Tailscale Funnel e o Cloudflare
-Tunnel não substituem TURN**: eles entregam a página e a sinalização por HTTPS, e o vídeo não
+Um servidor TURN resolve isso retransmitindo a mídia. **O Cloudflare Tunnel (e qualquer
+túnel HTTPS) não substitui TURN**: ele entrega a página e a sinalização por HTTPS, e o vídeo não
 passa por lá.
 
 ---

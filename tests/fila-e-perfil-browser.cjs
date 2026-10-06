@@ -141,17 +141,21 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   console.log('PASS: esvaziar tira tudo o que espera e mantém a que toca');
 
   // ---------- O perfil, sem sair da sala ----------
+  // O "eu" da lateral abre o editor do perfil: apelido, cor, marca, foto e cartão num lugar só.
   await ana.locator('#meuPerfilBtn').click();
-  await ana.locator('#meuPerfilPanel').waitFor();
-  assert.equal(await ana.locator('#meuPerfilSalvar').isDisabled(), true, 'sem mudança, não há o que salvar');
-  await ana.locator('#meuPerfilApelido').fill('Ana Clara');
+  await ana.locator('#editorCartaoPanel').waitFor();
+  const editor = ana.locator('#editorCartaoPanel');
+  assert.equal(await editor.locator('[data-ed="salvar"]').isDisabled(), true, 'sem mudança, não há o que salvar');
+  await editor.locator('[data-ed="apelido"]').fill('Ana Clara');
   // Clica na amostra, como uma pessoa: o rádio em si é invisível, e é o rótulo que se toca.
-  await ana.locator('#meuPerfilCores label:has(input[value="menta"])').click();
-  await ana.locator('#meuPerfilMarcas label:has(input[value="lua"])').click();
-  assert.equal(await ana.locator('#meuPerfilAvatar').textContent(), '☾', 'a prévia acompanha a escolha antes de salvar');
+  await editor.locator('[data-ed="coresAvatar"] label:has(input[value="menta"])').click();
+  await editor.locator('[data-ed="marcasAvatar"] label:has(input[value="lua"])').click();
+  assert.equal(await editor.locator('[data-ed="fotoAvatar"] .nx-av-img').textContent(), '☾', 'a prévia acompanha a escolha antes de salvar');
+  assert.equal(await editor.locator('[data-ed="previa"] .nx-cartao-nome').textContent(), 'Ana Clara', 'e o cartão da prévia já traz o apelido novo');
+  assert.equal(await editor.locator('[data-ed="salvar"]').isEnabled(), true);
   await ana.screenshot({ path: path.join(saida, 'perfil-na-sala.png') });
-  await ana.locator('#meuPerfilSalvar').click();
-  await esperarAte(async () => /Salvo/.test(await ana.locator('#meuPerfilStatus').textContent()), 'o perfil não foi salvo');
+  await editor.locator('[data-ed="salvar"]').click();
+  await esperarAte(async () => /Salvo/.test(await editor.locator('[data-ed="retorno"]').textContent()), 'o perfil não foi salvo');
   // O aviso do servidor chega a quem mudou também: é ele que troca o nome no rodapé.
   await esperarAte(async () => (await ana.locator('#selfName').textContent()) === 'Ana Clara', 'o rodapé da Ana não mostrou o apelido novo');
   assert.equal(await ana.locator('#selfAvatar').textContent(), '☾');

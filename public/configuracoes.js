@@ -19,7 +19,7 @@
   const PADRAO = Object.freeze({ densidade: 'confortavel', texto: 'normal', tempos: false, reacoes: true, menosMovimento: false, tema: Tema.TEMA_PADRAO, modo: '', destaque: '', cores: null });
   let aparencia = { ...PADRAO };
   // Se as cores exatas valem agora. O plano chega depois da página; até lá vale o último que
-  // esta página soube (tema.js guarda), para o tema de um premium não piscar.
+  // esta página soube (tema.js guarda), para o tema com cores exatas não piscar.
   let coresLivres = Tema.lerPermissao();
 
   function limpar(bruto) {
@@ -116,12 +116,12 @@
     $('coresExatasDica').textContent = coresLivres
       ? 'Qualquer cor para o destaque e para o fundo. O Nexo ajusta textos e botões sozinho, para tudo continuar legível.'
       : aparencia.cores
-        ? 'Escolher qualquer cor é do premium. As suas estão guardadas e voltam quando o plano estiver ativo.'
-        : 'Escolher qualquer cor para o destaque e para o fundo é do premium. Os temas e as cores acima são de todo mundo.';
+        ? 'Escolher qualquer cor é do nível completo. As suas estão guardadas e voltam quando ele estiver ativo.'
+        : 'Escolher qualquer cor para o destaque e para o fundo é do nível completo. Os temas e as cores acima são de todo mundo.';
   }
 
   // A bolinha de cada seletor mostra a cor dele -- inclusive a guardada de quem está sem o
-  // premium agora, que não vale na tela mas continua sendo a escolha.
+  // nível completo agora, que não vale na tela mas continua sendo a escolha.
   function pintarAmostras() {
     for (const campo of ['corExataDestaque', 'corExataFundo']) $(campo).nextElementSibling.style.background = $(campo).value;
   }
@@ -180,9 +180,10 @@
   $('aparenciaMovimento').addEventListener('change', evento => definir({ menosMovimento: evento.target.checked }));
 
   // ---------- Perfil ----------
-  // Um resumo de como a sala vê a pessoa, com o caminho para mudar. O editor em si continua
-  // sendo o de perfil-sala.js: dois editores do mesmo perfil acabariam discordando.
-  const NOMES_DOS_PLANOS = { anonimo: 'Sem conta', gratis: 'Conta grátis', premium: 'Premium' };
+  // Um resumo de como a sala vê a pessoa, com o caminho para mudar. O editor em si é o do perfil
+  // (editor-cartao.js, aberto por social-sala.js): dois editores do mesmo perfil acabariam discordando, e já
+  // discordaram -- eram dois botões, "Editar perfil" e "Personalizar o cartão", para o mesmo lugar.
+  const NOMES_DOS_PLANOS = { anonimo: 'Sem conta', gratis: 'Conta grátis', completo: 'Completo' };
   function pintarPerfil() {
     const perfil = typeof perfilDe === 'function' ? perfilDe('self') : null;
     const nome = (typeof myName === 'string' && myName) || window.NexoConta?.atual()?.conta?.apelido || $('nameInput')?.value || 'Você';
@@ -200,19 +201,14 @@
     const desde = window.NexoTempo?.desdeDe('self');
     $('configTempo').textContent = Number.isFinite(desde) ? NexoTempo.extenso(Date.now() - desde) : 'fora de uma sala';
     const temConta = Boolean(perfil?.conta || conta);
-    $('configEditarPerfil').hidden = !temConta;
     $('configCriarConta').hidden = temConta;
     $('configConta').hidden = !temConta;
     $('configCartao').hidden = !temConta || !window.NexoSalaSocial;
     $('configPerfilDica').textContent = temConta
-      ? 'Apelido, cor e marca mudam na hora para todo mundo nesta sala, e valem nas próximas.'
-      : 'Sem conta, o nome vale só nesta entrada. Com uma conta grátis você escolhe apelido, cor e marca, e o perfil segue você em todo aparelho.';
+      ? 'Apelido, cor, marca, foto e o cartão mudam num lugar só, e valem na hora para todo mundo nesta sala e nas próximas.'
+      : 'Sem conta, o nome vale só nesta entrada. Com uma conta grátis você escolhe apelido, cor, marca e foto, monta o cartão, e o perfil segue você em todo aparelho.';
   }
-  $('configEditarPerfil').addEventListener('click', () => {
-    painel.classList.add('hidden');
-    window.NexoPerfilSala?.abrir();
-  });
-  // O cartão completo abre num painel da sala, sem sair da chamada (social-sala.js).
+  // O editor do perfil abre num painel da sala, sem sair da chamada (social-sala.js).
   $('configCartao').addEventListener('click', () => {
     painel.classList.add('hidden');
     window.NexoSalaSocial?.abrirEditor();
@@ -227,7 +223,7 @@
   }
   document.querySelectorAll('[data-abrir-secao]').forEach(botao => botao.addEventListener('click', () => abrir(botao.dataset.abrirSecao)));
 
-  // O perfil muda com a sala (entrar, trocar de apelido, virar premium): ele é repintado sempre
+  // O perfil muda com a sala (entrar, trocar de apelido, mudar de nível): ele é repintado sempre
   // que o painel abre ou que a seção dele aparece.
   new MutationObserver(() => { if (!painel.classList.contains('hidden')) pintarPerfil(); })
     .observe(painel, { attributes: true, attributeFilter: ['class'] });

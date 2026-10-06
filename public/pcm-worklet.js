@@ -395,6 +395,9 @@ class ReprodutorPcm {
 
   estatisticas() {
     return {
+      // Quadros que já chegaram desde o começo: é com ele que a página sabe se o som do agente ainda
+      // anda (sala.js, `vigiarOSomDoAgente`) -- um número que não sobe é uma captura que parou.
+      recebidos: this.recebidoTotal,
       buracos: this.contagem.buracos,
       saltos: this.contagem.saltos,
       silencioMs: Math.round(this.contagem.silencioS * 1000),

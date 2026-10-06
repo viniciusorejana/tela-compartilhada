@@ -170,6 +170,54 @@
   }).observe($('mensagensPanel'), { attributes: true, attributeFilter: ['class'] });
   $('mensagensBtn').addEventListener('click', () => abrirMensagens());
 
+  // ---------- O tamanho do painel de mensagens ----------
+  // O painel nasce com 880 x 640 px, e a alça do canto (redimensionar.js) o muda: quem conversa muito
+  // quer a conversa maior, e quem só responde, menor. O painel é centrado, então cada lado cresce a metade
+  // do que o ponteiro andou (`fator: 2`) e o canto acompanha o mouse. Lembrado neste navegador, como a
+  // largura do chat; guarda-se o que foi ESCOLHIDO, e o que vale é a escolha cabendo na janela de agora.
+  const TAMANHO_DE_FABRICA = { largura: 880, altura: 640 };
+  const LIMITES_DO_TAMANHO = {
+    largura: () => [560, Math.max(560, Math.min(1400, document.documentElement.clientWidth - 32))],
+    // 86% da janela é o teto de altura do próprio painel (sala.css).
+    altura: () => [420, Math.max(420, Math.floor(window.innerHeight * 0.86))]
+  };
+  const VARIAVEL_DO_TAMANHO = { largura: '--msg-largura', altura: '--msg-altura' };
+  const guardado = window.Preferencias?.ler('mensagensTamanho', null);
+  const escolhido = {
+    largura: Number.isFinite(guardado?.largura) ? guardado.largura : null,
+    altura: Number.isFinite(guardado?.altura) ? guardado.altura : null
+  };
+  const cartaoDeMensagens = $('mensagensPanel').querySelector('.mensagens-card');
+  const limitar = (dimensao, valor) => { const [minimo, maximo] = LIMITES_DO_TAMANHO[dimensao](); return Math.min(Math.max(valor, minimo), maximo); };
+  const deFabrica = dimensao => limitar(dimensao, TAMANHO_DE_FABRICA[dimensao]);
+  function aplicarTamanhoDeMensagens() {
+    for (const dimensao of ['largura', 'altura']) {
+      if (escolhido[dimensao] === null) $('mensagensPanel').style.removeProperty(VARIAVEL_DO_TAMANHO[dimensao]);
+      else $('mensagensPanel').style.setProperty(VARIAVEL_DO_TAMANHO[dimensao], `${limitar(dimensao, escolhido[dimensao])}px`);
+    }
+  }
+  aplicarTamanhoDeMensagens();
+  const eixoDoTamanho = (eixo, dimensao, medida) => ({
+    eixo, sentido: 1, fator: 2, passo: 24,
+    ler: () => cartaoDeMensagens[medida],
+    limites: LIMITES_DO_TAMANHO[dimensao],
+    padrao: () => deFabrica(dimensao),
+    aplicar: (valor, { final }) => {
+      // Voltar ao tamanho de fábrica apaga a escolha, em vez de guardar o número de hoje.
+      escolhido[dimensao] = Math.abs(valor - deFabrica(dimensao)) < 1 ? null : valor;
+      aplicarTamanhoDeMensagens();
+      if (!final) return;
+      window.Preferencias?.gravar('mensagensTamanho', escolhido.largura === null && escolhido.altura === null ? null : { ...escolhido });
+    }
+  });
+  if (window.NexoRedimensionar && $('mensagensAlca')) {
+    NexoRedimensionar.ligar($('mensagensAlca'), {
+      rotulo: 'Mudar o tamanho do painel de mensagens',
+      eixos: [eixoDoTamanho('x', 'largura', 'offsetWidth'), eixoDoTamanho('y', 'altura', 'offsetHeight')]
+    });
+  }
+  window.addEventListener('resize', aplicarTamanhoDeMensagens);
+
   // ---------- O cartão completo, sem sair da sala ----------
   // O mesmo editor do início (editor-cartao.js), num painel. Antes, "Personalizar o cartão" abria o
   // início numa aba nova -- e no aplicativo, a aba nova era o navegador. Salvo, o servidor manda o

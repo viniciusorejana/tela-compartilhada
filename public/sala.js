@@ -346,10 +346,10 @@ function pintarStatusNoAvatar(el, id) {
   if (el.dataset.status !== visto) el.dataset.status = visto;
   const nome = window.NexoCartao?.NOMES_DOS_STATUS[status] || '';
   if (id !== 'self') { if (el.title !== nome) el.title = nome; return; }
-  // O avatar do "eu" é parte do botão "Editar meu perfil": o status entra no texto do botão, e não num
+  // O avatar do "eu" é parte do botão "Personalizar perfil": o status entra no texto do botão, e não num
   // `title` do avatar, que o esconderia embaixo do mouse.
   const botao = el.closest('button');
-  const texto = `Editar meu perfil${meuPerfil?.conta ? ` · ${nome}` : ''}`;
+  const texto = `Personalizar perfil${meuPerfil?.conta ? ` · ${nome}` : ''}`;
   if (botao && botao.title !== texto) { botao.title = texto; botao.setAttribute('aria-label', texto); }
 }
 // O cartão aberto acompanha o status de quem ele mostra: o ponto do avatar muda ali também, sem fechar e
@@ -387,7 +387,7 @@ let contaNaSala = null;
 window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
   // O cadeado aparece antes de entrar, pelo plano da conta; a entrada na sala confirma.
   const livre = planosLigados === false;
-  aplicarPlano({ nivel: livre ? 'premium' : conta?.nivel || 'anonimo', livre });
+  aplicarPlano({ nivel: livre ? 'completo' : conta?.nivel || 'anonimo', livre });
   if (!conta) return;
   contaNaSala = conta;
   meuPerfil = { conta: true, codigo: conta.codigo, cor: perfil?.cor || null, marca: perfil?.marca || null };
@@ -479,6 +479,7 @@ function avisarEntrada(par) {
 function avisarSaida(id) {
   // Quem vai embora leva a tela junto; o som de saída já diz isso, e o de "tela saiu" não toca.
   telasNoAr.delete(id);
+  window.NexoAtividade?.encerrar(`tela:${id}`);
   clearTimeout(fimDeTelaParaAvisar.get(id));
   fimDeTelaParaAvisar.delete(id);
   if (String(id).startsWith('nexo-dj#') || !salaAssentada()) return;
@@ -495,6 +496,8 @@ function avisarTela(par) {
   if (!par.state.screen) {
     if (!telasNoAr.delete(par.id)) return;
     telaDesligouEm.set(par.id, Date.now());
+    // A tela saiu do ar: o aviso que esperava um clique para assistir não tem mais o que oferecer.
+    window.NexoAtividade?.encerrar(`tela:${par.id}`);
     // O fim espera um pouco pelo mesmo motivo do começo, ao contrário: numa troca de tela a
     // transmissão sai do ar e volta em instantes, e ela não acabou.
     if (!salaAssentada()) return;
@@ -512,7 +515,12 @@ function avisarTela(par) {
   // Trocar o que se compartilha, ou o codec, despublica e publica de novo em seguida: é a mesma
   // transmissão, e não merece um segundo anúncio.
   if (Date.now() - (telaDesligouEm.get(par.id) || 0) < 8000) return;
-  if (salaAssentada()) window.NexoSons?.tocar('tela');
+  if (salaAssentada()) {
+    window.NexoSons?.tocar('tela');
+    // O par visual do som (atividade.js): quem não está olhando para o palco -- o chat em foco, o início por
+    // cima da sala, a janela em segundo plano -- fica sabendo, com um "Assistir" que já traz o palco.
+    window.NexoAtividade?.anunciar({ tipo: 'tela', chave: `tela:${par.id}`, quem: par.name, sala: roomCode, assistir: () => assistirTela(par.id, true) });
+  }
 }
 
 // ---------- Conexão / sala ----------
@@ -744,7 +752,13 @@ async function iniciarConexao() {
     socket.emit('registrar-agente', tokenDoAgente, () => {
       socket.emit('audio-capabilities', (capabilities) => {
         audioCapabilities = capabilities || audioCapabilities;
+        if (audioCapabilities.agenteConectado) agenteJaConectou = true;
         if (!settingsPanel.classList.contains('hidden')) atualizarExplicacaoDeAudio();
+        // O servidor manda o agente parar quando o socket anterior cai: a queda de uns segundos deste socket
+        // também parava a captura, e a tela seguia no ar muda. Reconectado e registrado, a captura é pedida
+        // de novo.
+        if (voltando) pedirCapturaAoAgente('o servidor reconectou');
+        if (somPendenteDoAgente && audioCapabilities.agenteConectado) acrescentarSomDoSistemaAoVivo();
       });
     });
     ligarAgenteDoAplicativo();
@@ -762,7 +776,21 @@ async function iniciarConexao() {
   socket.on('agente-status', ({ conectado, portaLocal }) => {
     // O agente pode ter conectado depois de nos: repete a escolha para ele.
     if (conectado) setTimeout(enviarEscolhaDeAudio, 0);
+    const voltouDeUmaQueda = Boolean(conectado) && !audioCapabilities.agenteConectado;
     audioCapabilities.agenteConectado = Boolean(conectado);
+    if (conectado) agenteJaConectou = true;
+    if (voltouDeUmaQueda) {
+      // O agente que cai para de capturar e fica esperando ordens: se a tela segue no ar com o som dele, é
+      // preciso pedir a captura de novo, ou o som some calado (ver "O som do sistema não pode morrer calado").
+      if (somDoAgenteAtivo()) setTimeout(() => pedirCapturaAoAgente('o agente reconectou'), 300);
+      // E se a tela subiu ANTES de o agente conectar (o aplicativo acabou de abrir), o som entra agora.
+      else if (somPendenteDoAgente) setTimeout(acrescentarSomDoSistemaAoVivo, 300);
+    } else if (!conectado && somDoAgenteAtivo()) {
+      avisarSomDaTela('O agente de áudio caiu', 'A tela segue no ar sem o som do sistema. Ele volta sozinho assim que o agente reconectar.');
+      // O aplicativo é quem levanta o agente, e se o processo morreu ninguém o levantaria até a próxima
+      // entrada na sala. O processo principal só sobe outro se o antigo de fato morreu.
+      if (aplicativoNativo) setTimeout(() => { if (!audioCapabilities.agenteConectado) ligarAgenteDoAplicativo(); }, 4000);
+    }
     audioCapabilities.portaLocalDoAgente = portaLocal || null;
     // Agente reaberto no meio da transmissão escuta noutra porta, e agente que voltou não
     // precisa esperar a próxima tentativa: a conexão direta é refeita na hora.
@@ -861,7 +889,7 @@ async function iniciarConexao() {
   });
   socket.on('plano-atualizado', plano => {
     aplicarPlano(plano);
-    status.textContent = plano.nivel === 'premium' ? 'Seu plano agora é premium: 1080p e 1440p liberados.' : `Seu plano agora é ${plano.nome}.`;
+    status.textContent = plano.nivel === 'completo' ? 'Seu nível agora é o completo: 1080p e 1440p liberados.' : `Seu plano agora é ${plano.nome}.`;
   });
   socket.on('pedido-entrada', adicionarPedidoDeEntrada);
   socket.on('pedido-entrada-resolvido', ({ identidade }) => removerPedidoDeEntrada(identidade));
@@ -911,7 +939,13 @@ async function iniciarConexao() {
 
   socket.on('audio-data', (data) => receberPcm(data));
 
-  socket.on('audio-error', (message) => { status.textContent = message; });
+  socket.on('audio-error', (message) => {
+    status.textContent = message;
+    if (somDoAgenteAtivo()) {
+      adiantarOPedidoAoAgente();
+      if (!supervisor.jaOuviu) avisarSomDaTela('O som do sistema não começou', `${message} Vou tentar de novo sozinho.`);
+    }
+  });
 
   socket.on('chat-mensagem', (msg) => mostrarMensagem(msg));
   socket.on('chat-atualizada', atualizarMensagemDoChat);
@@ -2964,7 +2998,7 @@ function atualizarRotulosDeQualidade() {
       if (!perfil) return;
       const liberada = NexoPlanos.alturaPermitida(nivelDoPlano, perfil.height);
       opcao.disabled = !liberada;
-      opcao.textContent = liberada ? `${perfil.label} · até ${emMegabits(tetoAnunciado(perfil))}` : `🔒 ${perfil.label} · premium`;
+      opcao.textContent = liberada ? `${perfil.label} · até ${emMegabits(tetoAnunciado(perfil))}` : `🔒 ${perfil.label} · nível completo`;
     });
   });
   seletoresDeQuadros.forEach(select => {
@@ -3894,7 +3928,7 @@ function recarregarAjustes() {
 // ---------- O plano ----------
 //
 // O plano chega de três lugares: da conta (antes de entrar), da entrada na sala (o servidor
-// decide) e do painel, quando alguém marca a conta como premium com a sala aberta. Em todos, o
+// decide) e do painel, quando alguém muda o nível da conta com a sala aberta. Em todos, o
 // que muda é o que VALE; a escolha guardada da pessoa fica onde estava.
 function aplicarPlano(plano) {
   if (!plano?.nivel) return;
@@ -3906,7 +3940,7 @@ function aplicarPlano(plano) {
   seletoresDeQualidade.forEach(select => { select.value = perfilDeQualidade; });
   seletoresDeQuadros.forEach(select => { select.value = String(quadrosDaTela); });
   atualizarBotaoDeQualidade();
-  // Transmitindo acima do plano novo (um premium que venceu no meio da conversa): a tela se
+  // Transmitindo acima do plano novo (um nível completo que venceu no meio da conversa): a tela se
   // encaixa sozinha, em vez de esperar o servidor desligá-la.
   if (antes !== nivelDoPlano && screenStream) encaixarTelaNoPlano();
   // As cores exatas do tema seguem o plano: liberadas, ou guardadas até ele voltar.
@@ -3917,10 +3951,10 @@ function pintarDicaDoPlano() {
   const limites = NexoPlanos.limites(nivelDoPlano);
   const guardadaAcima = RoomQuality.profiles[qualidadeEscolhida] && !NexoPlanos.alturaPermitida(nivelDoPlano, RoomQuality.profiles[qualidadeEscolhida].height);
   const texto = planosLivres ? ''
-    : nivelDoPlano === 'premium' ? 'Premium: 1080p e 1440p a 60 quadros. Quem assiste vê na sua qualidade, com conta ou sem.'
-    : nivelDoPlano === 'gratis' ? `Conta grátis: até ${limites.altura}p a ${limites.quadros} quadros. 1080p e 1440p são do premium.`
-      + (guardadaAcima ? ` Sua escolha de ${RoomQuality.profiles[qualidadeEscolhida].label.split(' · ')[0]} está guardada e volta quando o premium estiver ativo.` : '')
-    : `Sem conta: até ${limites.altura}p a ${limites.quadros} quadros. Com uma conta grátis, 60 quadros; no premium, 1080p e 1440p.`;
+    : nivelDoPlano === 'completo' ? 'Nível completo: 1080p e 1440p a 60 quadros. Quem assiste vê na sua qualidade, com conta ou sem.'
+    : nivelDoPlano === 'gratis' ? `Conta grátis: até ${limites.altura}p a ${limites.quadros} quadros. 1080p e 1440p são do nível completo.`
+      + (guardadaAcima ? ` Sua escolha de ${RoomQuality.profiles[qualidadeEscolhida].label.split(' · ')[0]} está guardada e volta quando o nível completo estiver ativo.` : '')
+    : `Sem conta: até ${limites.altura}p a ${limites.quadros} quadros. Com uma conta grátis, 60 quadros; no nível completo, 1080p e 1440p.`;
   document.querySelectorAll('[data-plano-dica]').forEach(el => {
     el.hidden = !texto;
     el.replaceChildren(document.createTextNode(texto));
@@ -4573,10 +4607,126 @@ function fecharAgenteLocal() {
   encerrarConexaoDireta();
 }
 
+// ---------- O som do sistema não pode morrer calado ----------
+// O som do sistema chega por uma cadeia de elos -- o agente (um programa à parte), o socket da sala, o servidor,
+// a conexão direta e o reprodutor -- e cada um podia cair sem que a transmissão notasse. O agente para de
+// capturar quando a conexão DELE com o servidor cai, e o servidor o manda parar quando o socket da PÁGINA cai:
+// a tela seguia no ar com a faixa de som presente e muda. Quem assiste via o controle de volume e não ouvia
+// nada, e só um compartilhamento novo consertava. Pior: se a tela subia antes de o agente conectar (o aplicativo
+// acabou de abrir), a faixa nem existia, e o controle de volume nem aparecia.
+//
+// Dois remédios. O primeiro é a insistência: o reprodutor conta o que recebeu (`recebidos`), e se nada chega a
+// captura é pedida de novo, com espera crescente, enquanto a tela estiver no ar. O segundo é o encontro tardio:
+// o som entra na transmissão que já está no ar quando o agente finalmente conecta.
+const ESPERAS_PARA_REPEDIR = [5, 10, 30]; // segundos sem receber nada até pedir a captura de novo
+const supervisor = { desde: 0, recebidos: 0, tentativas: 0, jaOuviu: false };
+// A tela subiu antes de o agente conectar: { tipo, selecionada }, o que falta para o som entrar depois.
+let somPendenteDoAgente = null;
+let avisoDoSom = null;
+let agenteJaConectou = false;
+
+function somDoAgenteAtivo() {
+  return Boolean(screenStream) && origemDoAudioDoSistema === 'agente' && Boolean(appAudioNode);
+}
+
+function reiniciarSupervisor() {
+  supervisor.desde = Date.now();
+  supervisor.recebidos = estatisticasDoAudioDoAgente?.recebidos || 0;
+  supervisor.tentativas = 0;
+  supervisor.jaOuviu = false;
+}
+
+// Um aviso só, que se atualiza e some quando o som volta: dois avisos empilhados dizendo a mesma coisa seriam
+// pior que nenhum.
+function avisarSomDaTela(titulo, detalhe) {
+  if (!window.NexoToast) return;
+  if (avisoDoSom && !avisoDoSom.fechado) { avisoDoSom.atualizar({ titulo, detalhe }); return; }
+  avisoDoSom = window.NexoToast.mostrar({ icone: 'erro', tom: 'erro', titulo, detalhe });
+}
+
+function limparAvisoDoSom() {
+  if (avisoDoSom && !avisoDoSom.fechado) avisoDoSom.fechar();
+  avisoDoSom = null;
+}
+
+// Pede a captura ao agente do zero. É seguro repetir: o agente refaz a captura que já tinha.
+function pedirCapturaAoAgente(motivo) {
+  if (!somDoAgenteAtivo() || !socket?.connected) return;
+  registrarDiagnostico('audioAgente.repedir', motivo);
+  if (appAudioContext?.state !== 'running') appAudioContext?.resume().catch(() => {});
+  enviarEscolhaDeAudio();
+  socket.emit('audio-start', { origem: 'agente', familia: familiaDoNavegador(), version: audioCaptureVersion });
+  supervisor.desde = Date.now();
+}
+
+// Chamado a cada contagem do reprodutor (dois segundos).
+function vigiarOSomDoAgente(estatisticas) {
+  if (!somDoAgenteAtivo()) return;
+  const agora = Date.now();
+  if (estatisticas.recebidos > supervisor.recebidos) {
+    supervisor.recebidos = estatisticas.recebidos;
+    supervisor.desde = agora;
+    supervisor.jaOuviu = true;
+    if (supervisor.tentativas) {
+      registrarDiagnostico('audioAgente.recuperou', `depois de ${supervisor.tentativas} pedido(s)`);
+      supervisor.tentativas = 0;
+    }
+    limparAvisoDoSom();
+    return;
+  }
+  // Sem agente não há a quem pedir: quando ele voltar, o `agente-status` pede a captura.
+  if (!audioCapabilities.agenteConectado) return;
+  const espera = ESPERAS_PARA_REPEDIR[Math.min(supervisor.tentativas, ESPERAS_PARA_REPEDIR.length - 1)];
+  if (agora - supervisor.desde < espera * 1000) return;
+  supervisor.tentativas++;
+  pedirCapturaAoAgente(`nada chegou em ${espera} s`);
+}
+
+// Uma recusa do agente com a tela no ar não pode ser só uma frase que o próximo aviso apaga: o pedido é
+// repetido logo, sem esperar o relógio inteiro.
+function adiantarOPedidoAoAgente() {
+  const espera = ESPERAS_PARA_REPEDIR[Math.min(supervisor.tentativas, ESPERAS_PARA_REPEDIR.length - 1)];
+  supervisor.desde = Math.min(supervisor.desde, Date.now() - (espera - 2) * 1000);
+}
+
+// A tela subiu sem som porque o agente ainda não tinha conectado: o som entra na transmissão que já está no ar.
+async function acrescentarSomDoSistemaAoVivo() {
+  const pendente = somPendenteDoAgente;
+  if (!pendente || !screenStream || appAudioNode || planoDeAudio() !== 'agente') return;
+  somPendenteDoAgente = null;
+  try {
+    await ligarSomDoSistema(screenStream, 'agente', pendente.tipo, pendente.selecionada);
+  } catch (erro) {
+    await limparAudioDoAplicativo().catch(() => {});
+    status.textContent = 'O agente conectou, mas o som não entrou na transmissão: ' + erro.message;
+    return;
+  }
+  // A pessoa pode ter parado a tela enquanto o reprodutor subia.
+  if (!screenStream) { await limparAudioDoAplicativo().catch(() => {}); return; }
+  const faixa = screenStream.getAudioTracks().find(t => t.readyState === 'live');
+  if (!faixa) return;
+  definirFaixaEmTodosOsPares('screenAudio', faixa, screenStream);
+  enviarEstado();
+  limparAvisoDoSom();
+  registrarDiagnostico('audioAgente.entrouDepois');
+  status.textContent = 'O agente de áudio conectou: o som do sistema entrou na transmissão.';
+}
+
+// O aplicativo levanta o agente sozinho, mas ele pode ainda estar subindo quando a pessoa clica em compartilhar
+// (a sala acabou de abrir). Esperar um instante vale mais que começar sem som; o limite é curto porque o
+// navegador só deixa pedir a tela logo depois do clique.
+async function esperarOAgenteQueEstaChegando() {
+  if (audioCapabilities.agenteConectado || audioPolicy.value === 'none' || captureMode.value === 'browser') return;
+  if (!(aplicativoNativo && !agenteAusenteNesteSistema) && !agenteJaConectou) return;
+  if (aplicativoNativo) ligarAgenteDoAplicativo();
+  for (let i = 0; i < 15 && !audioCapabilities.agenteConectado; i++) await new Promise(r => setTimeout(r, 100));
+}
+
 // O reprodutor manda a própria contagem a cada dois segundos. Ela vai para o diagnóstico só
 // quando piora, e no máximo a cada trinta segundos: é a resposta para o próximo "chiado".
 function anotarAudioDoAgente(estatisticas) {
   estatisticasDoAudioDoAgente = estatisticas;
+  vigiarOSomDoAgente(estatisticas);
   const falhas = estatisticas.buracos + estatisticas.saltos;
   if (falhas <= ultimoRelatoDoAudio.falhas || Date.now() - ultimoRelatoDoAudio.quando < 30000) return;
   registrarDiagnostico('audioAgente.falhas', resumoDoAudioDoAgente());
@@ -4609,8 +4759,18 @@ async function iniciarAudioDoSistema(targetStream, origem) {
   appAudioNode.connect(destination);
   appAudioTrack = destination.stream.getAudioTracks()[0];
   targetStream.addTrack(appAudioTrack);
+  // Um contexto suspenso não processa nada: a faixa existe, o controle de volume aparece para quem assiste, e
+  // não sai som. O navegador pode suspendê-lo (política de autoplay, aba esquecida, troca de dispositivo), e
+  // um `resume()` único na criação não cobria o que acontece depois.
+  const contexto = appAudioContext;
+  contexto.onstatechange = () => {
+    if (contexto !== appAudioContext || contexto.state === 'running' || contexto.state === 'closed') return;
+    registrarDiagnostico('audioAgente.contexto', contexto.state);
+    contexto.resume().catch(() => {});
+  };
   await appAudioContext.resume();
   origemDoAudioDoSistema = origem;
+  reiniciarSupervisor();
   if (origem === 'agente') conectarAgenteLocal();
   socket.emit('audio-start', { origem, familia: familiaDoNavegador(), version: audioCaptureVersion });
 }
@@ -4619,6 +4779,8 @@ async function limparAudioDoAplicativo() {
   audioDaJanela = null;
   audioCaptureVersion += 1;
   origemDoAudioDoSistema = null;
+  somPendenteDoAgente = null;
+  limparAvisoDoSom();
   fecharAgenteLocal();
   estatisticasDoAudioDoAgente = null;
   ultimoRelatoDoAudio = { falhas: 0, quando: 0 };
@@ -4630,7 +4792,35 @@ async function limparAudioDoAplicativo() {
   appAudioNode = null;
 }
 
+// Liga o som do sistema (agente ou helper) à tela que está subindo -- ou que já está no ar, quando o agente
+// chega depois dela (acrescentarSomDoSistemaAoVivo).
+async function ligarSomDoSistema(stream, plano, tipoPedido, selecionada) {
+  if (plano !== 'agente' && plano !== 'helper') return;
+  if (tipoPedido === 'window' && aplicativoNativo) {
+    if (selecionada?.tipo === 'window' && selecionada.pid > 0) {
+      audioDaJanela = selecionada;
+      // An older agent must acknowledge the exact mode before recording. Never
+      // fall back to its default system-wide capture when inclusion is unsupported.
+      const confirmado = await new Promise(resolve => {
+        const finalizar = ok => { clearTimeout(timer); socket.off('agente-aplicativos', receber); resolve(ok); };
+        const receber = data => { if (data.modo === 'incluir-pid') finalizar(true); };
+        const timer = setTimeout(() => finalizar(false), 2500);
+        socket.on('agente-aplicativos', receber);
+        enviarEscolhaDeAudio();
+      });
+      if (confirmado) await iniciarAudioDoSistema(stream, 'agente');
+      else { audioDaJanela = null; stream.nexoAudioAviso = 'Janela compartilhada sem som: atualize o agente de áudio para esta versão.'; }
+    } else stream.nexoAudioAviso = 'Janela compartilhada sem som: o programa dono dela não foi identificado.';
+  } else {
+    enviarEscolhaDeAudio();
+    await iniciarAudioDoSistema(stream, plano === 'agente' ? 'agente' : 'local');
+  }
+}
+
 async function capturarTela() {
+  // O aplicativo levanta o agente sozinho, e ele pode ainda estar conectando: sem esta espera a tela subia
+  // sem faixa de som nenhuma, e quem assistia ficava sem sequer o controle de volume.
+  await esperarOAgenteQueEstaChegando();
   const plano = planoDeAudio();
   const tipoPedido = captureMode.value;
   if (aplicativoNativo && (!aplicativoNativo.prepararCaptura || !await aplicativoNativo.prepararCaptura(tipoPedido))) {
@@ -4697,40 +4887,27 @@ async function capturarTela() {
 
   try {
     await limparAudioDoAplicativo();
-    if (plano === 'agente' || plano === 'helper') {
-      if (tipoPedido === 'window' && aplicativoNativo) {
-        if (selecionada?.tipo === 'window' && selecionada.pid > 0) {
-          audioDaJanela = selecionada;
-          // An older agent must acknowledge the exact mode before recording. Never
-          // fall back to its default system-wide capture when inclusion is unsupported.
-          const confirmado = await new Promise(resolve => {
-            const finalizar = ok => { clearTimeout(timer); socket.off('agente-aplicativos', receber); resolve(ok); };
-            const receber = data => { if (data.modo === 'incluir-pid') finalizar(true); };
-            const timer = setTimeout(() => finalizar(false), 2500);
-            socket.on('agente-aplicativos', receber);
-            enviarEscolhaDeAudio();
-          });
-          if (confirmado) await iniciarAudioDoSistema(stream, 'agente');
-          else { audioDaJanela = null; stream.nexoAudioAviso = 'Janela compartilhada sem som: atualize o agente de áudio para esta versão.'; }
-        } else stream.nexoAudioAviso = 'Janela compartilhada sem som: o programa dono dela não foi identificado.';
-      } else {
-        enviarEscolhaDeAudio();
-        await iniciarAudioDoSistema(stream, plano === 'agente' ? 'agente' : 'local');
-      }
-    }
+    await ligarSomDoSistema(stream, plano, tipoPedido, selecionada);
   } catch (error) {
     stream.getTracks().forEach(track => track.stop());
     await limparAudioDoAplicativo().catch(() => {});
     throw error;
   }
+  // Sem agente a tela sobe sem som, mas o som não fica perdido: entra sozinho quando ele conectar.
+  if (plano === 'nenhum' && aplicativoNativo && !agenteAusenteNesteSistema && audioPolicy.value !== 'none') {
+    somPendenteDoAgente = { tipo: tipoPedido, selecionada };
+  }
+  stream.nexoPlano = plano;
   return stream;
 }
 
 confirmScreenBtn.onclick = async () => {
   confirmScreenBtn.disabled = true;
   try {
-    const plano = planoDeAudio();
+    let plano = planoDeAudio();
     const novaTela = await capturarTela();
+    // O plano valia antes da espera pelo agente; quem decidiu de verdade foi a captura.
+    plano = novaTela.nexoPlano || plano;
     const telaAntiga = screenStream;
     screenStream = novaTela;
     // Fonte nova, histórico novo: uma janela pequena depois de um monitor inteiro entrega
@@ -4767,6 +4944,10 @@ confirmScreenBtn.onclick = async () => {
     // seletor do Chrome e o motivo mais comum de "compartilhei mas nao sai som".
     const temAudio = screenStream.getAudioTracks().length > 0;
     if (novaTela.nexoAudioAviso) status.textContent = novaTela.nexoAudioAviso;
+    else if (somPendenteDoAgente) {
+      status.textContent = 'Compartilhando tela. O agente de áudio ainda não conectou: o som entra sozinho quando ele conectar.';
+      avisarSomDaTela('A tela subiu sem som por enquanto', 'O agente de áudio ainda não conectou. O som entra na transmissão sozinho assim que ele conectar.');
+    }
     else if (plano === 'nenhum') status.textContent = 'Compartilhando tela (sem áudio).';
     else if (!temAudio) {
       status.textContent = (plano === 'agente' || plano === 'helper')
@@ -5714,6 +5895,22 @@ function atualizarRotulosDosQuadradinhos() {
 // vale para quem está aqui (moderar, levar para o OBS, o tempo na sala).
 let perfilAberto = null;
 let pararEfeitoDoCartao = () => {};
+// O cartão de cima (a vitrine da pessoa) é sempre inteiro. O que a sala acrescenta embaixo dele -- o tempo na
+// sala, a explicação do código e o "Levar para o OBS" -- abre minimizado e espera o "Ver mais". Dentro de uma
+// chamada, quem clica num nome quer saber quem é e falar com a pessoa, e esse resto é leitura (ou ferramenta) de
+// depois: expandido, ele cobria boa parte do palco. A linha de amizade e os botões não se escondem. A escolha é
+// lembrada neste navegador: quem expandiu uma vez continua vendo tudo até minimizar de novo.
+let perfilMinimizado = Preferencias.ler('perfilMinimizado', true) !== false;
+function pintarPerfilMinimizado() {
+  document.querySelector('#perfilPanel .perfil-card').classList.toggle('minimizado', perfilMinimizado);
+  document.getElementById('perfilMais').setAttribute('aria-expanded', String(!perfilMinimizado));
+  document.getElementById('perfilMaisTexto').textContent = perfilMinimizado ? 'Ver mais' : 'Ver menos';
+}
+document.getElementById('perfilMais').onclick = () => {
+  perfilMinimizado = !perfilMinimizado;
+  Preferencias.gravar('perfilMinimizado', perfilMinimizado ? null : false);
+  pintarPerfilMinimizado();
+};
 function abrirPerfil(id, reserva = null) {
   const ehEu = id === 'self';
   const par = ehEu ? null : peers.get(id);
@@ -5757,11 +5954,11 @@ function abrirPerfil(id, reserva = null) {
   criar.href = `/conta?voltar=${encodeURIComponent(location.pathname)}`;
   // O próprio cartão leva aos editores: é ali que a pessoa se vê e pensa em mudar. O do cartão
   // completo abre aqui mesmo, num painel (social-sala.js).
-  document.getElementById('perfilEditar').hidden = !(ehEu && perfil?.conta);
   document.getElementById('perfilPersonalizar').hidden = !(ehEu && perfil?.conta && window.NexoSalaSocial);
   document.getElementById('perfilModerar').hidden = ehEu || !presente || !podeModerar || id === donoDaSala;
   // Amizade (social-sala.js): adicionar, aceitar, mandar mensagem -- só entre contas.
   window.NexoSalaSocial?.pintarCartao(document.getElementById('perfilSocial'), { codigo: codigoDaPessoa, nome, ehEu });
+  pintarPerfilMinimizado();
   document.getElementById('perfilPanel').classList.remove('hidden');
   // O efeito escolhido pela pessoa toca por cima do cartão, depois de ele ter tamanho.
   const vitrine = perfil?.cartao?.vitrine;
@@ -5787,10 +5984,7 @@ document.getElementById('perfilModerar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
   if (perfilAberto && perfilAberto !== 'self') abrirModeracao(perfilAberto);
 };
-document.getElementById('perfilEditar').onclick = () => {
-  document.getElementById('perfilPanel').classList.add('hidden');
-  window.NexoPerfilSala?.abrir();
-};
+// Um botão só para o próprio perfil: o editor tem o apelido, a cor, a marca, a foto e o cartão.
 document.getElementById('perfilPersonalizar').onclick = () => {
   document.getElementById('perfilPanel').classList.add('hidden');
   window.NexoSalaSocial?.abrirEditor();
@@ -6955,6 +7149,75 @@ function fecharChat() {
 }
 chatToggle.onclick = () => (chatVisivel() ? fecharChat() : abrirChat());
 chatClose.onclick = fecharChat;
+
+// ---------- A largura do chat, à escolha de quem usa ----------
+// O chat é uma coluna na tela larga e uma gaveta na estreita, e nas duas a largura é de quem conversa:
+// uns querem uma coluna larga para ler com calma, outros uma fina para só ver o palco. A alça de cada
+// painel (redimensionar.js) arrasta, as setas andam de 16 em 16, o duplo clique volta ao normal.
+//
+// Lembrada só neste navegador, e não na conta: a largura certa depende da janela de cada aparelho.
+// Guarda-se o que a pessoa ESCOLHEU, e o que vale em cada momento é essa escolha cabendo na janela
+// de agora -- encolher a janela não apaga o desejo, e alargá-la o devolve.
+const LARGURA_MINIMA_DO_CHAT = 240;
+const LARGURA_MAXIMA_DO_CHAT = 720;
+// O palco precisa de chão: na coluna, o chat nunca toma o que o deixaria menor que isto.
+const LARGURA_MINIMA_DO_PALCO = 420;
+const LARGURA_DA_LATERAL = 224;
+let larguraEscolhidaDoChat = Preferencias.ler('chatLargura', null);
+if (!Number.isFinite(larguraEscolhidaDoChat)) larguraEscolhidaDoChat = null;
+
+function limitesDoChat() {
+  const janela = document.documentElement.clientWidth;
+  const sobra = chatLargo.matches ? janela - LARGURA_DA_LATERAL - LARGURA_MINIMA_DO_PALCO : janela;
+  return [LARGURA_MINIMA_DO_CHAT, Math.min(LARGURA_MAXIMA_DO_CHAT, Math.max(LARGURA_MINIMA_DO_CHAT, sobra))];
+}
+// O tamanho de fábrica é o que a folha de estilo diz para esta janela (292, 266 ou 320 na coluna, 360
+// na gaveta): lê-se com a escolha tirada, e ela volta em seguida.
+function larguraDeFabricaDoChat() {
+  const app = document.querySelector('.app');
+  const guardada = app.style.getPropertyValue('--col-chat-aberto');
+  app.style.removeProperty('--col-chat-aberto');
+  const coluna = parseFloat(getComputedStyle(app).getPropertyValue('--col-chat-aberto')) || 292;
+  if (guardada) app.style.setProperty('--col-chat-aberto', guardada);
+  return chatLargo.matches ? coluna : Math.min(360, document.documentElement.clientWidth);
+}
+function larguraDoChatAgora() {
+  const [minimo, maximo] = limitesDoChat();
+  return Math.min(Math.max(larguraEscolhidaDoChat ?? larguraDeFabricaDoChat(), minimo), maximo);
+}
+function aplicarLarguraDoChat() {
+  const app = document.querySelector('.app');
+  if (larguraEscolhidaDoChat === null) {
+    app.style.removeProperty('--col-chat-aberto');
+    app.style.removeProperty('--chat-gaveta');
+    return;
+  }
+  // A coluna e a gaveta têm variáveis diferentes porque a coluna é uma faixa da grade, e a gaveta,
+  // uma camada solta; as duas recebem o mesmo número.
+  const px = `${larguraDoChatAgora()}px`;
+  app.style.setProperty('--col-chat-aberto', px);
+  app.style.setProperty('--chat-gaveta', px);
+}
+aplicarLarguraDoChat();
+const alcasDoChat = [...document.querySelectorAll('.chat-alca')].map(alca => NexoRedimensionar.ligar(alca, {
+  eixo: 'x',
+  sentido: -1,
+  ler: larguraDoChatAgora,
+  limites: limitesDoChat,
+  padrao: larguraDeFabricaDoChat,
+  descrever: valor => `${Math.round(valor)} pixels de largura`,
+  aplicar: (valor, { final }) => {
+    // Voltar ao tamanho de fábrica apaga a escolha, em vez de guardar o número de hoje: se a janela
+    // mudar de faixa (de 266 para 320 px), o chat que nunca foi mexido segue a faixa.
+    larguraEscolhidaDoChat = Math.abs(valor - larguraDeFabricaDoChat()) < 1 ? null : valor;
+    aplicarLarguraDoChat();
+    if (!final) return;
+    Preferencias.gravar('chatLargura', larguraEscolhidaDoChat);
+    // O palco mede o próprio tamanho no `resize`; a grade mudou sem a janela mudar.
+    window.dispatchEvent(new Event('resize'));
+  }
+}));
+window.addEventListener('resize', () => { aplicarLarguraDoChat(); alcasDoChat.forEach(alca => alca.atualizar()); });
 
 function horaCurta(ms) {
   return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

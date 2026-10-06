@@ -211,6 +211,28 @@ async function novaPagina(contexto) {
   assert.equal(await navegadorComum.locator('.nexo-toast', { hasText: 'disponível' }).count(), 0);
   assert.deepEqual(erros, []);
   console.log('PASS: na apresentação, o aplicativo sem conta vê a versão nova no canto, "Depois" vale, e o navegador não vê nada');
+
+  // O cartão "Abrir uma sala" estourava a coluna "Agora no Nexo" quando a fonte do sistema é mais larga que a do
+  // Windows (o Linux Mint de quem relatou): o campo tem largura natural pelo `size`, o botão saía do cartão e a
+  // coluna ganhava barra para o lado. Uma monoespaçada grande faz o mesmo papel da fonte larga.
+  const larga = await (await comConta({ viewport: { width: 1360, height: 820 } })).newPage();
+  larga.on('pageerror', e => { erros.push(e.message); console.error('erro na fonte larga:', e.message); });
+  await larga.goto(origem);
+  await larga.locator('#inicioApp').waitFor();
+  await larga.addStyleTag({ content: '.ini { font-family: "Courier New", monospace !important; } .ini input, .ini button { font-family: "Courier New", monospace !important; font-size: 15px !important; }' });
+  const medidas = await larga.evaluate(() => {
+    const agora = document.querySelector('.ini-agora');
+    const abrir = document.querySelector('.ini-abrir');
+    const botao = abrir.querySelector('#abrirForm button').getBoundingClientRect();
+    return {
+      agoraRolaParaLado: agora.scrollWidth - agora.clientWidth,
+      botaoSaiDoCartao: Math.round(botao.right - abrir.getBoundingClientRect().right)
+    };
+  });
+  assert.equal(medidas.agoraRolaParaLado, 0, `a coluna "Agora no Nexo" rola para o lado com fonte larga: ${JSON.stringify(medidas)}`);
+  assert.ok(medidas.botaoSaiDoCartao <= 0, `o botão de "Abrir uma sala" sai do cartão com fonte larga: ${JSON.stringify(medidas)}`);
+  assert.deepEqual(erros, []);
+  console.log('PASS: o cartão "Abrir uma sala" cabe na coluna mesmo com uma fonte do sistema mais larga');
 })().catch(erro => {
   console.error(erro);
   console.error(instancia?.erros());

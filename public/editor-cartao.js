@@ -52,7 +52,7 @@
     <div class="ed-colunas">
       <header class="ed-cabeca">
         ${semTitulo ? '' : `<h2 id="${p}-titulo">Personalizar perfil</h2>`}
-        <p class="ed-explica">O cartão que aparece quando alguém clica em você, numa sala ou na lista de amigos. As peças com <span class="ed-selo-premium">Premium</span> ou com uma conquista ficam guardadas mesmo antes de valer, e aparecem para os outros quando você tiver o que elas pedem.</p>
+        <p class="ed-explica">O seu perfil: o nome, a cor, a foto e o cartão que aparece quando alguém clica em você, numa sala ou na lista de amigos. As peças com um cadeado pedem uma conquista: ficam guardadas mesmo antes de valer, e aparecem para os outros quando você a ganhar.</p>
         <div class="ed-abas" role="tablist" aria-label="Partes do perfil">
           <button type="button" role="tab" id="${p}-aba-visual" data-parte="visual" aria-controls="${p}-parte-visual" aria-selected="true" data-foco-inicial>Visual</button>
           <button type="button" role="tab" id="${p}-aba-sobre" data-parte="sobre" aria-controls="${p}-parte-sobre" aria-selected="false" tabindex="-1">Sobre você</button>
@@ -68,6 +68,15 @@
       </aside>
       <form class="ed-form" data-ed="form" id="${p}-form" novalidate>
         <div class="ed-parte" data-parte="visual" id="${p}-parte-visual" role="tabpanel" aria-labelledby="${p}-aba-visual">
+          <!-- Quem a pessoa é, antes de como o cartão dela parece: o apelido, a cor do avatar e a marca no lugar
+               das iniciais. Eram o "Meu perfil", um painel à parte; agora um perfil só, um lugar só. Salvam junto com o cartão. -->
+          <fieldset class="ed-grupo ed-identidade"><legend>Nome e cor</legend>
+            <label class="ed-rotulo-campo" for="${p}-apelido">Apelido</label>
+            <input id="${p}-apelido" data-ed="apelido" type="text" maxlength="40" autocomplete="nickname" required>
+            <small class="ed-dica">O nome que todo mundo vê, na sala e na lista de amigos. Numa sala com dois nomes iguais, o seu código aparece ao lado dele.</small>
+            <fieldset class="escolhas ed-escolhas" data-ed="coresAvatar"><legend>Cor do avatar</legend></fieldset>
+            <fieldset class="escolhas ed-escolhas" data-ed="marcasAvatar"><legend>Marca no lugar das iniciais</legend></fieldset>
+          </fieldset>
           <fieldset class="ed-grupo ed-foto"><legend>Foto de perfil</legend>
             <div class="ed-foto-linha">
               <span class="ed-foto-avatar" data-ed="fotoAvatar"></span>
@@ -82,7 +91,7 @@
           </fieldset>
           <fieldset class="ed-grupo"><legend>Tema do cartão</legend><div class="ed-temas" data-ed="tema" role="radiogroup" aria-label="Tema do cartão"></div>
             <div class="ed-cores" data-ed="cores">
-              <div class="ed-cores-cabeca"><span>Cores exatas</span><span class="ed-selo-premium" data-ed="seloCores">Premium</span></div>
+              <div class="ed-cores-cabeca"><span>Cores exatas</span><span class="ed-selo-completo" data-ed="seloCores">Nível completo</span></div>
               <div class="ed-cores-linha">
                 <button type="button" class="ed-slot" data-ed="corA" aria-haspopup="true" aria-expanded="false" aria-label="Cor 1: escolher"><span class="ed-slot-gema" aria-hidden="true"></span><span class="ed-slot-textos"><strong>Cor 1</strong><small>#8879F6</small></span></button>
                 <button type="button" class="nx-icone cheio ed-trocar" data-ed="trocarCores" title="Trocar as duas cores de lugar" aria-label="Trocar as duas cores de lugar">${icone('trocar')}</button>
@@ -139,7 +148,7 @@
     <div class="ed-rodape" data-ed="rodape">
       <p class="ed-retorno" data-ed="retorno" role="status"></p>
       <button class="nx-botao secundario" type="button" data-ed="descartar" disabled>Descartar</button>
-      <button class="nx-botao" type="submit" form="${p}-form" data-ed="salvar" disabled>Salvar o cartão</button>
+      <button class="nx-botao" type="submit" form="${p}-form" data-ed="salvar" disabled>Salvar o perfil</button>
     </div>`;
 
   function criar(raiz, { prefixo = 'editor', aviso = () => {}, aoMudar = () => {}, semTitulo = false } = {}) {
@@ -149,9 +158,13 @@
 
     let conta = null;
     let perfil = null;            // o perfil da conta, com o `social` (status, frase, privacidade)
-    let dados = null;             // GET /api/conta/vitrine: guardada, efetiva, conquistas, premium
+    let dados = null;             // GET /api/conta/vitrine: guardada, efetiva, conquistas, completo
     let rascunho = null;          // o que está na tela
     let guardada = null;          // o que está salvo
+    // Quem a pessoa é: apelido, cor do avatar e marca (PUT /api/conta/perfil). É da conta, como a foto, mas
+    // salva com o cartão: um rascunho só, um "Salvar o perfil" só.
+    let idRascunho = null;
+    let idGuardada = null;
     let pararEfeito = () => {};
 
     const escolhido = () => S()?.estado.minha?.escolhido || 'online';
@@ -160,10 +173,16 @@
     const csrf = () => window.NexoConta?.atual()?.csrf || '';
     function requisito(requer) {
       if (!requer) return null;
-      if (requer === 'premium') return dados?.premium ? null : 'Premium';
+      if (requer === 'completo') return dados?.completo ? null : 'Nível completo';
       return conquistasGanhas().has(requer) ? null : `Conquista: ${nomeDaConquista(requer)}`;
     }
-    const mudou = () => Boolean(rascunho && guardada) && !igual(semImagens(rascunho), semImagens(guardada));
+    const cartaoMudou = () => Boolean(rascunho && guardada) && !igual(semImagens(rascunho), semImagens(guardada));
+    const identidadeMudou = () => Boolean(idRascunho && idGuardada) && !igual(idRascunho, idGuardada);
+    const mudou = () => cartaoMudou() || identidadeMudou();
+    // O nome e o perfil que a prévia mostra: os do rascunho, antes de salvar. O apelido vazio (a pessoa apagou
+    // para escrever outro) não vira um avatar sem letra: vale o salvo.
+    const nomeDaPrevia = () => (idRascunho?.apelido || '').replace(/\s+/g, ' ').trim() || conta.apelido;
+    const perfilDaPrevia = () => ({ conta: true, codigo: conta.codigo, ...perfil, ...(idRascunho ? { cor: idRascunho.cor, marca: idRascunho.marca } : {}) });
     function dizer(alvo, texto, tom = '') {
       const el = q(alvo);
       el.dataset.tom = tom;
@@ -199,11 +218,18 @@
       perfil = { ...(atual.perfil || {}), ...(perfil?.social ? { social: perfil.social } : {}) };
       if (!dados) await carregar();
       if (!dados) { dizer('retorno', 'Não foi possível abrir o seu cartão. Tente de novo em instantes.', 'erro'); return; }
-      if (!rascunho || !mudou()) {
+      if (!rascunho || !cartaoMudou()) {
         guardada = copia(dados.guardada);
         rascunho = copia(guardada);
       }
+      // O perfil vale o da conta de agora (a sala pode ter trocado o apelido em outra aba); o que a pessoa já
+      // escreveu e não salvou, não se perde por reabrir.
+      if (!idRascunho || !identidadeMudou()) {
+        idGuardada = { apelido: conta.apelido, cor: perfil?.cor || null, marca: perfil?.marca || null };
+        idRascunho = { ...idGuardada };
+      }
       montar();
+      pintarIdentidade();
       pintarPrevia(true);
     }
 
@@ -244,7 +270,7 @@
         b.append(nome);
         if (falta) {
           const marca = elemento('span', 'ed-opcao-requer');
-          marca.innerHTML = C.svg(item.requer === 'premium' ? 'estrela' : 'cadeado');
+          marca.innerHTML = C.svg(item.requer === 'completo' ? 'estrela' : 'cadeado');
           marca.setAttribute('aria-label', falta);
           b.append(marca);
         }
@@ -304,7 +330,7 @@
         proximo.click();
         q('tema').querySelector(`[data-valor="${proximo.dataset.valor}"]`)?.focus();
       };
-      q('seloCores').hidden = Boolean(dados.premium);
+      q('seloCores').hidden = Boolean(dados.completo);
       grupoDeOpcoes('banner', 'banner', V.BANNERS, (amostra, item) => {
         comCores(amostra);
         if (item.id === 'imagem') { amostraDeImagem(amostra, guardada.imagens?.banner); return; }
@@ -319,7 +345,7 @@
         const anim = elemento('div', 'nx-anim'); anim.dataset.anim = item.id; anim.style.opacity = '.7'; amostra.append(anim);
       });
       grupoDeOpcoes('borda', 'borda', V.BORDAS, (amostra, item) => {
-        const avatar = C.avatar({ nome: conta.apelido, perfil: { conta: true, ...perfil }, vitrine: { ...rascunho, borda: item.id }, tamanho: 'pequeno' });
+        const avatar = C.avatar({ nome: nomeDaPrevia(), perfil: perfilDaPrevia(), vitrine: { ...rascunho, borda: item.id }, tamanho: 'pequeno' });
         comCores(avatar);
         amostra.append(avatar);
       });
@@ -418,8 +444,8 @@
         };
         pecas.push(tirar);
       }
-      const falta = requisito('premium');
-      pecas.push(elemento('small', '', `${campo === 'banner' ? 'A faixa de cima' : 'O corpo do cartão'} · PNG, JPEG, WebP ou GIF animado de até 8 MB${falta ? ' · Premium' : ''}`));
+      const falta = requisito('completo');
+      pecas.push(elemento('small', '', `${campo === 'banner' ? 'A faixa de cima' : 'O corpo do cartão'} · PNG, JPEG, WebP ou GIF animado de até 8 MB${falta ? ' · Nível completo' : ''}`));
       lugar.replaceChildren(...pecas);
       entrada.onchange = async () => {
         const arquivo = entrada.files?.[0];
@@ -445,20 +471,37 @@
       pintarPrevia(false);
     }
 
+    // ---------- Nome e cor ----------
+    // As opções de cor e marca são as de sempre (perfil.js, `montarEscolhas`): rádios de verdade, e a primeira de
+    // cada grupo é "o padrão". O nome do grupo leva o prefixo do editor, porque o início e a sala podem ter um
+    // editor cada um na mesma página.
+    window.NexoPerfil.montarEscolhas(q('coresAvatar'), q('marcasAvatar'), `${prefixo}-`);
+    const radiosDe = grupo => raiz.querySelectorAll(`input[name="${prefixo}-${grupo}"]`);
+    function pintarIdentidade() {
+      if (!idRascunho) return;
+      // Quem está digitando não é interrompido: o campo só é reescrito quando o foco está em outro lugar.
+      if (document.activeElement !== q('apelido')) q('apelido').value = idRascunho.apelido;
+      for (const [grupo, valor] of [['cor', idRascunho.cor], ['marca', idRascunho.marca]]) radiosDe(grupo).forEach(r => { r.checked = r.value === (valor || ''); });
+    }
+    q('apelido').addEventListener('input', () => { if (!idRascunho) return; idRascunho.apelido = q('apelido').value; pintarPrevia(false); });
+    for (const grupo of ['cor', 'marca']) {
+      radiosDe(grupo).forEach(r => r.addEventListener('change', () => { if (!idRascunho) return; idRascunho[grupo] = r.value || null; pintarPrevia(false); }));
+    }
+
     // ---------- A foto de perfil ----------
-    // É da conta, e não do cartão: sobe ao ser escolhida -- como na página da conta e no "Meu perfil" da
-    // sala --, sem esperar o "Salvar o cartão". Uma escolha que já está na tela e ainda não vale faria a
+    // É da conta, e não do cartão: sobe ao ser escolhida -- como na página da conta --, sem esperar o
+    // "Salvar o perfil". Uma escolha que já está na tela e ainda não vale faria a
     // pessoa achar que salvou. O servidor leva a foto nova à sala inteira (`peer-perfil`), e quem criou o
     // editor repinta o que é dele (`aoMudar`: o "eu" do início).
     function pintarFoto() {
       if (!conta || !rascunho) return;
       const vitrine = vitrineDaPrevia();
-      const caixa = C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine });
+      const caixa = C.avatar({ nome: nomeDaPrevia(), perfil: perfilDaPrevia(), vitrine });
       caixa.style.setProperty('--av', '64px');
       q('fotoAvatar').replaceChildren(caixa);
       const foto = window.NexoPerfil.enderecoDaImagem(perfil?.avatar);
       // Com foto, o avatar daqui também abre a foto grande, como o da prévia do cartão ao lado.
-      window.NexoFoto?.ampliavel(caixa.querySelector('.nx-av-img'), foto ? { foto, nome: conta.apelido, codigo: conta.codigo, vitrine } : null);
+      window.NexoFoto?.ampliavel(caixa.querySelector('.nx-av-img'), foto ? { foto, nome: nomeDaPrevia(), codigo: conta.codigo, vitrine } : null);
       q('fotoRotulo').textContent = foto ? 'Trocar a foto' : 'Enviar uma foto';
       q('fotoTirar').hidden = !foto;
     }
@@ -505,7 +548,7 @@
       pararEfeito();
       const vitrine = vitrineDaPrevia();
       const status = escolhido() === 'invisivel' ? 'offline' : escolhido();
-      const montado = C.montar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, cartao: { vitrine, frase: perfil?.social?.frase || null, conquistas: [...conquistasGanhas()], desde: conta.criadaEm }, presenca: { status } });
+      const montado = C.montar({ nome: nomeDaPrevia(), perfil: perfilDaPrevia(), cartao: { vitrine, frase: perfil?.social?.frase || null, conquistas: [...conquistasGanhas()], desde: conta.criadaEm }, presenca: { status } });
       q('previa').replaceChildren(montado.el);
       // A foto do grupo de cima acompanha a borda escolhida: é o avatar da pessoa, como o do cartão.
       pintarFoto();
@@ -573,12 +616,47 @@
     q('bio').addEventListener('input', () => { rascunho.bio = q('bio').value; q('contagemBio').textContent = String([...rascunho.bio].length); pintarPrevia(false); });
     q('pronomes').addEventListener('input', () => { rascunho.pronomes = q('pronomes').value; pintarPrevia(false); });
     q('pensamento').addEventListener('input', () => { const texto = q('pensamento').value; rascunho.pensamento = texto.trim() ? { texto, em: guardada.pensamento?.em || Date.now() } : null; pintarPrevia(false); });
-    q('descartar').onclick = () => { rascunho = copia(guardada); montar(); pintarPrevia(false); dizer('retorno', ''); };
+    q('descartar').onclick = () => {
+      rascunho = copia(guardada);
+      if (idGuardada) idRascunho = { ...idGuardada };
+      montar();
+      pintarIdentidade();
+      pintarPrevia(false);
+      dizer('retorno', '');
+    };
+    const pedidoJson = (caminho, corpo) => fetch(caminho, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Nexo-CSRF': csrf() }, body: JSON.stringify(corpo) })
+      .then(async resposta => ({ ok: resposta.ok, dados: await resposta.json().catch(() => ({})) })).catch(() => ({ ok: false, dados: { error: 'Sem conexão com o servidor. Tente de novo.' } }));
     q('form').addEventListener('submit', async evento => {
       evento.preventDefault();
       if (q('salvar').disabled) return;
       q('salvar').disabled = true;
       dizer('retorno', 'Salvando…');
+      // Primeiro quem a pessoa é (apelido, cor, marca): é a mesma rota da conta, e a sala inteira recebe o perfil
+      // novo (`peer-perfil`) na hora. Se ela recusar -- um apelido que não vale --, o cartão não é salvo pela metade.
+      if (identidadeMudou()) {
+        const apelido = idRascunho.apelido.replace(/\s+/g, ' ').trim();
+        if (!apelido) { dizer('retorno', 'O apelido não pode ficar vazio.', 'erro'); q('apelido').focus(); q('salvar').disabled = false; return; }
+        const ri = await pedidoJson('/api/conta/perfil', { apelido, cor: idRascunho.cor, marca: idRascunho.marca });
+        if (!ri.ok) {
+          dizer('retorno', ri.dados.error || 'Não foi possível salvar. Tente de novo.', 'erro');
+          if (ri.dados.campo === 'apelido') q('apelido').focus();
+          q('salvar').disabled = false;
+          return;
+        }
+        conta = ri.dados.conta;
+        perfil = { ...perfil, ...ri.dados.perfil };
+        window.NexoConta?.atualizar({ conta: ri.dados.conta, perfil: ri.dados.perfil });
+        idGuardada = { apelido: conta.apelido, cor: ri.dados.perfil.cor || null, marca: ri.dados.perfil.marca || null };
+        idRascunho = { ...idGuardada };
+        // O servidor limpa espaços e caracteres de controle: o campo mostra o que ficou valendo.
+        pintarIdentidade();
+        aoMudar({ perfil: ri.dados.perfil });
+        if (!cartaoMudou()) {
+          dizer('retorno', 'Salvo. Quem está numa sala com você já vê o perfil novo.');
+          pintarPrevia(false);
+          return;
+        }
+      }
       const envio = { ...rascunho, pensamento: rascunho.pensamento?.texto || '' };
       delete envio.imagens;
       const r = await fetch('/api/conta/vitrine', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Nexo-CSRF': csrf() }, body: JSON.stringify({ vitrine: envio }) })
@@ -588,9 +666,9 @@
       guardarCartao(dados);
       guardada = copia(r.dados.guardada);
       rascunho = copia(guardada);
-      // O que não valeu (premium ou conquista que falta) é dito, e não escondido.
+      // O que não valeu (o nível completo ou uma conquista que falta) é dito, e não escondido.
       const presas = Object.keys(V.CATALOGO).filter(grupo => guardada[grupo] !== r.dados.vitrine[grupo]);
-      dizer('retorno', presas.length ? 'Salvo. Algumas escolhas ficam guardadas até você ter o que elas pedem.' : 'Salvo. Quem abrir o seu cartão já vê o novo.');
+      dizer('retorno', presas.length ? 'Salvo. Algumas escolhas ficam guardadas até você ter o que elas pedem.' : 'Salvo. Quem abrir o seu perfil já vê o novo.');
       montar();
       pintarPrevia(false);
       aoMudar({ dados });

@@ -23,7 +23,7 @@ no PATH. `telemetria/autenticacao.js` usa caminho absoluto justamente por isso, 
 utilitários do sistema podem cair na mesma armadilha.
 
 ```powershell
-npm test              # unitários (inclui amigos, cartão e mensagens diretas: tests/amigos.test.js; e os emojis, a lista do seletor e as reações com qualquer emoji: tests/emojis.test.js)
+npm test              # unitários (inclui amigos, cartão e mensagens diretas: tests/amigos.test.js; e os emojis, a lista do seletor e as reações com qualquer emoji: tests/emojis.test.js; e o servidor padrão que os aplicativos trazem, vindo do .env.prod: tests/servidor-padrao.test.js)
 npm run test:browser  # Playwright: sala, mídia, ICE
 npm run test:painel   # painel de telemetria
 npm run test:soundboard
@@ -38,13 +38,19 @@ npm run test:emojis   # o seletor de emojis e onde ele entrou: a frase do status
 npm run test:volume   # volume por pessoa até 200% (com servidor de mídia), o número digitado, e a folha de volume no celular
 npm run test:layout   # nada se sobrepõe nem rola para o lado, de 320 a 2560 px, em cada painel da sala
 npm run test:espectadores  # quem está vendo a tela, som de assistir, sugestão de @
-npm run test:aparencia     # tema claro/escuro, cores exatas do premium, o que a sala lembra, reações com menos movimento
+npm run test:aparencia     # tema claro/escuro, cores exatas do nível completo, o que a sala lembra, reações com menos movimento
 npm run test:novidades     # apresentação da primeira vez, trava, "lido" pela conta, edição nova
 npm run test:estudio       # Estúdio: perfil pela plateia e pelo chat, foto grande, link do OBS, selo, rostos (e o rosto de cada um), ensurdecida, permissão
 npm run test:webcodecs     # tela por WebCodecs pela faixa de dados: caminho, perda, camadas, sala mista, chave do painel
 npm run test:webcodecs:placa  # a placa de verdade pelo RTP: combinações, câmera, aba parada (Chrome instalado; pula sem placa)
 npm run test:electron      # o aplicativo de mesa de verdade: seletor de tela, origem presa, atualização do portátil e a sozinha do instalado
 npm run test:android       # o lado da sala do app Android: a chamada ligando o serviço, os botões da notificação, o APK novo, as notificações de amigos, o atualizador
+npm run test:redimensionar # a largura do chat (alça, setas, duplo clique, lembrada no F5; coluna e gaveta; sem alça no celular)
+npm run test:conversa      # reações na mensagem direta (as cinco rápidas, o "+", o outro vendo na hora) e o tamanho do painel de mensagens, pelo canto
+npm run test:cartao-sala   # o cartão de perfil aberto na sala: o de cima sempre inteiro; o tempo na sala, a explicação do código e o "Levar para o OBS" nascem recolhidos, o "Ver mais" expande, e a escolha é lembrada
+npm run test:servidor      # "Trocar de servidor" nas configurações, só dentro dos dois aplicativos (pontes simuladas); o lado nativo é o electron.cjs
+npm run test:atividade     # o aviso visual de tela e música quando o palco não está à vista: balão, ponto no título, notificação sem som; "não incomodar" cala só a do sistema
+npm run test:audio-tela    # o som da tela não morre calado: o agente cai, o socket cai, o agente recusa, a tela sobe antes do agente (agente falso, som medido por quem assiste)
 ```
 
 O Android em si (`android/`) compila com o Gradle do wrapper e um JDK 17 ou 21 (o 25 da máquina
@@ -133,9 +139,16 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Painelzinhos ancorados e os seletores de cor e de emojis | a base é `public/popover.{js,css}` (`NexoPopover.abrir`: ancorado, Esc, clicar fora, folha no celular; `role="group"`, nunca dialog); o de cor, `public/seletor-cor.{js,css}` (`NexoCor`), aberto pelas gemas do editor do cartão; o de emojis, `public/emojis.{js,css}` (`NexoEmojis.abrir`/`botaoDeCampo`/`inserir`) com a lista em `public/emojis.json`, gerada por `npm run emojis:gerar` (`scripts/gerar-emojis.cjs`, do Unicode e do CLDR); a regra "reação é um emoji inteiro" é `ehUmEmoji` em `public/vitrine.js`, aplicada em `server.js` (`chat-acao`, `sinal-presenca`). Entrou na frase do status e nos campos do perfil (`editor-cartao.js`), no chat da sala (`room-ui.js`), nas reações de mensagem e da plateia (`sala.js`) e na conversa direta (`conversa.js`) — e não no canal de música. Tudo em `docs/interface.md` 4.17 |
 | O rosto que cada conta escolhe para o Estúdio dos outros | `perfil.rosto` (migração `0003`, `contas/banco.js` `trocarRosto`, rotas `/api/conta/rosto/:estado`); quem monta a cena escolhe a origem por pessoa (`usar`: pessoa, minhas, nenhuma), com a mesma regra em `estudio.js` e `public/reativo.js` (`origemDasImagens`) |
 | Abrir o perfil de alguém | `abrirPerfil` (`sala.js`): a lista, o nome embaixo do quadradinho, o quadradinho sem câmera (mesmo compartilhando a tela, que tem o quadradinho dela), e o autor no chat (`abrirPerfilDoAutor`, que abre também para quem já saiu) |
+| O som do sistema na tela compartilhada não pode morrer calado | o bloco "O som do sistema não pode morrer calado" de `public/sala.js` (`vigiarOSomDoAgente`: o reprodutor conta o que recebeu e, se nada chega, a captura é pedida de novo com espera crescente; `acrescentarSomDoSistemaAoVivo`: a tela subiu antes do agente e o som entra depois; `esperarOAgenteQueEstaChegando`); `pcm-worklet.js` entrega `recebidos`; no servidor, o `disconnect` só manda o agente parar se aquele socket ainda é o dono do token. Tudo em `docs/audio-da-tela.md` |
+| Largura do chat e tamanho da janela de mensagens, escolhidos por quem usa | `public/redimensionar.js` (`NexoRedimensionar.ligar`: um eixo é `role="separator"`, dois eixos é um botão; ponteiro, setas, Home/End, duplo clique volta ao normal); as alças `#chatAlca`/`#musicaAlca`/`#mensagensAlca` em `sala.html`; a largura do chat em `sala.js` (`chatLargura`, `--col-chat-aberto`/`--chat-gaveta`) e o canto das mensagens em `social-sala.js` (`mensagensTamanho`) |
+| Reagir a uma mensagem direta | `dm-reagir`/`dm-reacoes` em `social.js` (só amigos, emoji inteiro por `ehUmEmoji`, 20 distintos por mensagem; reagir não acende a notificação); a tela em `public/conversa.js` (`abrirReacoes`, `pintarReacoes`) e `public/social.js` (`reagir`) |
+| O que há embaixo do cartão de perfil na sala, minimizado (o tempo na sala, a explicação do código, o "Levar para o OBS"); o cartão de cima fica sempre inteiro | `pintarPerfilMinimizado` (`sala.js`), preferência `perfilMinimizado` (nasce minimizado), o botão `#perfilMais`, o bloco `#perfilDetalhes` em `sala.html` e `.perfil-card.minimizado` em `sala.css` |
+| O servidor do Nexo nos aplicativos (pré-preenchido e "Trocar de servidor") | o padrão é a variável `NEXO_SERVIDOR_PADRAO` do `.env.prod`, gravada em `app/servidor-padrao.json` (gerado, fora do Git) por `scripts/servidor-padrao.cjs` ao empacotar (`npm run servidor:padrao`; os `empacotar*` e o `android:empacotar` já rodam) e lida pelo `app/main.js` (`servidorPadrao()`) e pelo Gradle (`BuildConfig.SERVIDOR_PADRAO`); a tela de endereço (`app/endereco.html`, `android/.../assets/endereco.html`) já vem preenchida; o botão nas configurações é `public/servidor-app.js` (bloco `#appServidor` em `sala.html`), que no Android usa `NexoAndroid.trocarServidor` (APK 1.2.0 em diante) |
+| Aviso visual de atividade na sala (tela, música) fora do palco | `public/atividade.js` (`NexoAtividade.anunciar/encerrar`): balão com "Assistir", ponto no título da aba e notificação do sistema sem som, só quando o palco não está à vista; ligado em `avisarTela` (`sala.js`) e `public/musica.js`; as preferências em "Sons" nas configurações (`avisosVisuais`) |
 | Ensurdecido à vista da sala (e do OBS) | o som é cortado só em `sala.js` (`alternarEnsurdecimento`); o aviso vai pelo evento `ensurdecer` e volta junto com a presença (`presenca-atualizada`, `server.js`), chega em `guardarPresenca` e vira o fone cortado no quadradinho e na lista |
 
-Decisões de banda e escala estão em `docs/banda-e-escala.md`; o painel, em
+Decisões de banda e escala estão em `docs/banda-e-escala.md`; o som do sistema na tela compartilhada (o
+agente, as quedas e como a página se recupera), em `docs/audio-da-tela.md`; o painel, em
 `docs/telemetria.md`; como publicar uma novidade e refazer os vídeos, em `docs/novidades.md`; a
 tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plano-webcodecs.md`; o
 Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`; o aplicativo Android

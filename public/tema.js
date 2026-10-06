@@ -14,7 +14,7 @@
  *   - o botão cheio leva texto branco, então escurece até 4,5:1 com o branco;
  *   - o texto em destaque clareia (no escuro) ou escurece (no claro) até 4,5:1 com o painel;
  *   - as superfícies têm a luminosidade FIXA de cada camada; do fundo escolhido vêm só o matiz
- *     e a saturação -- e, no fundo exato do premium, a luminosidade da camada principal.
+ *     e a saturação -- e, no fundo exato escolhido, a luminosidade da camada principal.
  *
  * O tema padrão (Nexo, escuro) não calcula nada: os valores dele estão em tema.css, e a página
  * sem JavaScript continua igual a sempre.
@@ -24,7 +24,7 @@
 (function (root) {
   const CHAVE = 'nexo.pref.aparencia';
   // O último "pode usar cores exatas" que a página soube. O plano só chega depois da conta, e
-  // o tema precisa ser pintado antes: quem é premium não pode ver o fundo trocar de cor a cada
+  // o tema precisa ser pintado antes: quem escolheu cores exatas não pode ver o fundo trocar de cor a cada
   // carregamento enquanto a conta responde.
   const CHAVE_DA_PERMISSAO = 'nexo.pref.coresLivres';
 
@@ -134,7 +134,7 @@
     const tipo = escuro ? 'escuro' : 'claro';
     const props = {};
     // Saturação das superfícies: a do tema, amortecida no claro (um fundo claro muito saturado
-    // vira cor, não fundo) e com teto nos dois. O fundo exato do premium não passa por isso: a
+    // vira cor, não fundo) e com teto nos dois. O fundo exato escolhido não passa por isso: a
     // cor escolhida é a que aparece.
     const sat = fundo.exato ? fundo.s : Math.min(escuro ? 40 : 45, Math.max(0, fundo.s) * (escuro ? 1 : 0.8));
     // A luminosidade da camada principal pode vir de um fundo exato; as outras andam junto.
@@ -222,7 +222,7 @@
   }
 
   // O que vale de fato. As cores exatas só entram com permissão; sem ela ficam guardadas e
-  // voltam sozinhas quando o plano volta -- como a qualidade de quem deixou o premium vencer.
+  // voltam sozinhas quando o plano volta -- como a qualidade de quem perdeu o nível completo.
   function resolver(escolha = {}, { coresLivres = false } = {}) {
     const tema = temaPorId(escolha.tema);
     const modoEscolhido = MODOS.includes(escolha.modo) ? escolha.modo : tema.modo;

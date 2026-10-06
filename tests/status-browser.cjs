@@ -123,7 +123,7 @@ const dormir = ms => new Promise(resolve => setTimeout(resolve, ms));
     await esperarAte(async () => (await salaDaAna.evaluate(() => document.getElementById('selfAvatar').dataset.status)) === visto, `o ponto do próprio "eu" não virou ${visto}`);
     assert.equal((await pontoDe(salaDaBia, 'Ana')).titulo, nomeDoStatus, 'o ponto diz o status também por escrito');
     assert.equal(await statusGuardado(ana), status, 'o status fica guardado na conta');
-    assert.equal(await salaDaAna.locator('#meuPerfilBtn').getAttribute('title'), `Editar meu perfil · ${nomeDoStatus}`, 'o "eu" diz o status no texto do botão');
+    assert.equal(await salaDaAna.locator('#meuPerfilBtn').getAttribute('title'), `Personalizar perfil · ${nomeDoStatus}`, 'o "eu" diz o status no texto do botão');
     desenhos[visto] = await desenho(salaDaBia, 'Ana');
     await salaDaBia.locator('#memberList').screenshot({ path: path.join(saida, `lista-${status}.png`) });
   }

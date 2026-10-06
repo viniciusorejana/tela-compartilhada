@@ -130,7 +130,7 @@ O servidor de mídia encerrou (código 0).
 
 Duas coisas produziam isso, e as duas foram corrigidas.
 
-**Endereços demais.** Um PC comum tem muito mais endereços do que parece: Tailscale, Radmin,
+**Endereços demais.** Um PC comum tem muito mais endereços do que parece: Radmin,
 Teredo e — o pior — vários IPv6 temporários que o Windows cria por privacidade na mesma
 placa. O servidor tentava abrir a porta de mídia em cada um; dois deles na mesma porta e o
 `bind` falhava, encerrando o processo inteiro. Agora o Node descobre os endereços IPv4 reais

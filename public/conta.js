@@ -246,70 +246,19 @@
     identidade.classList.toggle('contexto-escuro', Boolean(vitrine));
   }
 
-  // As opções vêm do mesmo conjunto que o servidor aceita, montadas por perfil.js -- o mesmo
-  // que monta o editor de dentro da sala.
-  function montarEscolhas() {
-    NexoPerfil.montarEscolhas($('perfilCores'), $('perfilMarcas'));
-    $('formPerfil').addEventListener('input', previa);
-  }
-  const escolhido = grupo => $('formPerfil').querySelector(`input[name="${grupo}"]:checked`)?.value || null;
-  // O avatar do topo acompanha a escolha antes de salvar: é ali que se vê como vai ficar.
-  function previa() {
-    pintarAvatar($('contaAvatar'), $('perfilApelido').value.trim() || conta.apelido, { cor: escolhido('cor'), marca: escolhido('marca'), avatar: perfil.avatar });
-  }
-
-  // ---------- A foto ----------
-  // Sobe ao ser escolhida: a foto não é um campo do formulário do perfil, e esperar o "Salvar"
-  // para uma escolha que já está na tela deixaria a pessoa achando que salvou.
-  function pintarFoto() {
-    $('fotoTirar').hidden = !perfil.avatar;
-  }
-  function dizerDaFoto(texto, problema = false) {
-    $('fotoStatus').textContent = texto;
-    $('fotoStatus').classList.toggle('problema', problema);
-  }
-  function aplicarFoto(r) {
-    if (!r.ok) { dizerDaFoto(r.dados.error || 'Não foi possível trocar a foto.', true); return; }
-    conta = r.dados.conta;
-    perfil = r.dados.perfil;
-    pintarConta();
-  }
-  $('fotoArquivo').addEventListener('change', async evento => {
-    const arquivo = evento.target.files?.[0];
-    evento.target.value = '';
-    if (!arquivo) return;
-    dizerDaFoto('Preparando a foto…');
-    let blob;
-    try { blob = await NexoImagem.prepararAvatar(arquivo); }
-    catch (erro) { dizerDaFoto(erro.message || 'Não foi possível abrir esta imagem.', true); return; }
-    dizerDaFoto('Enviando…');
-    aplicarFoto(await NexoImagem.enviar('/api/conta/avatar', blob, { csrf }));
-    if ($('fotoStatus').classList.contains('problema')) return;
-    dizerDaFoto('Foto trocada. Quem está numa sala com você já vê a nova.');
-  });
-  // O rótulo faz as vezes de botão; pelo teclado, Enter e espaço abrem a escolha também.
-  document.querySelector('label[for="fotoArquivo"]').addEventListener('keydown', evento => {
-    if (evento.key !== 'Enter' && evento.key !== ' ') return;
-    evento.preventDefault();
-    $('fotoArquivo').click();
-  });
-  $('fotoTirar').addEventListener('click', async () => {
-    dizerDaFoto('Tirando…');
-    aplicarFoto(await api('/api/conta/avatar', { metodo: 'DELETE' }));
-    if (!$('fotoStatus').classList.contains('problema')) dizerDaFoto('Sem foto: a sala volta a mostrar a cor e a marca.');
-  });
-  function preencherPerfil() {
-    $('perfilApelido').value = conta.apelido;
-    for (const grupo of ['cor', 'marca']) {
-      const atual = perfil[grupo] || '';
-      $('formPerfil').querySelectorAll(`input[name="${grupo}"]`).forEach(r => { r.checked = r.value === atual; });
-    }
+  // O perfil (foto, apelido, cor, marca e o cartão) se edita num lugar só, o editor do início -- o mesmo que abre
+  // dentro da sala. Esta página mostra quem a pessoa é no topo e leva até ele. Dentro da camada, a ida é para o
+  // início DENTRO do quadro, já na seção do perfil, sem trocar de janela.
+  const irParaPerfil = $('irParaPerfil');
+  if (camada) {
+    irParaPerfil.href = camada.link('/', { secao: 'perfil' });
+    irParaPerfil.addEventListener('click', evento => { evento.preventDefault(); camada.irPara('/', { secao: 'perfil' }); });
   }
 
   function descreverPlano(c) {
-    if (c.plano !== 'premium') return 'plano grátis';
-    if (!c.planoAte) return 'premium';
-    return c.planoAte > Date.now() ? `premium até ${new Date(c.planoAte).toLocaleDateString('pt-BR')}` : 'premium vencido';
+    if (c.plano !== 'completo') return 'plano grátis';
+    if (!c.planoAte) return 'nível completo';
+    return c.planoAte > Date.now() ? `nível completo até ${new Date(c.planoAte).toLocaleDateString('pt-BR')}` : 'nível completo vencido';
   }
 
   function pintarConta() {
@@ -319,8 +268,6 @@
     $('contaPlano').textContent = descreverPlano(conta);
     pintarAvatar($('contaAvatar'), conta.apelido, perfil);
     vestirIdentidade();
-    pintarFoto();
-    preencherPerfil();
     $('voltarParaSala').hidden = !voltar && !camada;
     if (voltar) $('voltarParaSala').href = voltar;
   }
@@ -359,15 +306,6 @@
     $('contaStatus').textContent = texto;
     $('contaStatus').classList.toggle('problema', problema);
   }
-
-  aoEnviar($('formPerfil'), async formulario => {
-    const r = await api('/api/conta/perfil', { metodo: 'PUT', corpo: { apelido: $('perfilApelido').value, cor: escolhido('cor'), marca: escolhido('marca') } });
-    if (!r.ok) { falhou(formulario, r); return; }
-    conta = r.dados.conta;
-    perfil = r.dados.perfil;
-    pintarConta();
-    dizer('Perfil salvo. Quem está numa sala com você já vê o novo.');
-  });
 
   $('apagarCerteza').onchange = () => { $('formApagar').querySelector('button').disabled = !$('apagarCerteza').checked; };
   $('formApagar').addEventListener('submit', async evento => {
@@ -414,14 +352,13 @@
     abrirAba('abaEntrar');
   };
 
-  montarEscolhas();
   (async () => {
     const r = await api('/api/conta/eu');
-    // As cores exatas do tema são do premium (planos.js). Esta página sabe o plano: atualiza o
+    // As cores exatas do tema são do nível completo (planos.js). Esta página sabe o plano: atualiza o
     // que tema.js lembra, para a próxima página já nascer com as cores certas.
     const c = r.ok ? r.dados.conta : null;
-    const premium = c?.plano === 'premium' && (!c.planoAte || c.planoAte > Date.now());
-    if (window.NexoTema) { NexoTema.definirPermissao(r.dados?.planosLigados === false || premium); NexoTema.aplicar(); }
+    const completo = c?.plano === 'completo' && (!c.planoAte || c.planoAte > Date.now());
+    if (window.NexoTema) { NexoTema.definirPermissao(r.dados?.planosLigados === false || completo); NexoTema.aplicar(); }
     if (r.ok && r.dados.conta) { conta = r.dados.conta; perfil = r.dados.perfil || perfil; cartao = r.dados.cartao || null; pintarConta(); mostrar('comConta'); camada?.avisar('pronto', { pagina: 'conta' }); return; }
     // A camada só abre para quem tem conta: sem ela aqui, a sessão terminou no meio da chamada.
     if (camada) { camada.avisar('sem-conta'); return; }

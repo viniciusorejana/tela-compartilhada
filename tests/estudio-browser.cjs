@@ -97,6 +97,8 @@ async function enviarFoto(pagina) {
   await ana.waitForFunction(() => [...peers.values()].some(p => p.name === 'Bia' && p.state.camera && !p.state.micMuted), null, { timeout: 20000 });
   const idDaBia = await ana.evaluate(() => [...peers.values()].find(p => p.name === 'Bia').id);
   await ana.locator(`.member[data-member-id="${idDaBia}"]`).click();
+  // O "Levar para o OBS" mora no que o "Ver mais" abre: o cartão nasce minimizado, e a escolha é lembrada.
+  if (await ana.locator('#perfilMais').getAttribute('aria-expanded') === 'false') await ana.locator('#perfilMais').click();
   await ana.locator('#perfilObs').waitFor({ state: 'visible' });
   const botaoCamera = ana.locator('[data-fonte-obs="camera"]');
   await ana.waitForFunction(() => !document.querySelector('[data-fonte-obs="camera"]').disabled, null, { timeout: 10000 });

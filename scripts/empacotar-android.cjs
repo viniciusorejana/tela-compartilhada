@@ -11,6 +11,7 @@
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { escrever: escreverServidorPadrao } = require('./servidor-padrao.cjs');
 
 const raiz = path.join(__dirname, '..');
 const pastaDoAndroid = path.join(raiz, 'android');
@@ -23,6 +24,16 @@ const gradle = fs.readFileSync(path.join(pastaDoAndroid, 'app', 'build.gradle'),
 const versao = /versionName\s*=?\s*['"](\d{1,4}\.\d{1,4}\.\d{1,4})['"]/.exec(gradle)?.[1];
 if (!versao) {
   console.error('Não achei versionName (no formato 1.2.3) em android/app/build.gradle.');
+  process.exit(1);
+}
+
+// O servidor que a tela de endereço traz preenchido vem do .env.prod (NEXO_SERVIDOR_PADRAO) e entra no APK pelo
+// Gradle, que lê o arquivo que isto escreve.
+try {
+  const servidor = escreverServidorPadrao();
+  console.log(servidor ? `Servidor padrão no APK: ${servidor}` : 'Sem NEXO_SERVIDOR_PADRAO no .env.prod: a tela de endereço abre vazia.');
+} catch (erro) {
+  console.error(erro.message);
   process.exit(1);
 }
 

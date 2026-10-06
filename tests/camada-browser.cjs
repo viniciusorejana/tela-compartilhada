@@ -229,8 +229,8 @@ const quadroPronto = async pagina => {
   console.log('PASS: mensagem nova avisa uma vez só: pela página de dentro com a camada aberta, pela sala com ela fechada');
 
   // ---------- A conta, sem sair da chamada ----------
-  await naSala.locator('#meuPerfilBtn').click();
-  await naSala.locator('#meuPerfilConta').click();
+  await naSala.evaluate(() => NexoConfig.abrir('perfil'));
+  await naSala.locator('#configConta').click();
   await esperarCamada(naSala, true);
   const quadroDaConta = await quadroPronto(naSala);
   await quadroDaConta.locator('#comConta').waitFor();
@@ -257,10 +257,10 @@ const quadroPronto = async pagina => {
   await quadroDaConta.locator('#comConta').waitFor();
   await quadroDaConta.locator('#voltarParaSala').click();
   await esperarCamada(naSala, false);
-  assert.equal(await naSala.locator('#meuPerfilPanel').evaluate(el => el.classList.contains('hidden')), false, 'quem abriu a conta por "Meu perfil" volta a ele');
+  assert.equal(await naSala.locator('#devicesPanel').evaluate(el => el.classList.contains('hidden')), false, 'quem abriu a conta pelas configurações volta a elas');
   assert.equal(await emPe(naSala), true);
-  await naSala.locator('#meuPerfilPanel [data-close]').click();
-  await naSala.locator('#meuPerfilPanel').waitFor({ state: 'hidden' });
+  await naSala.locator('#devicesClose').click();
+  await naSala.locator('#devicesPanel').waitFor({ state: 'hidden' });
   console.log('PASS: a página da conta abre na camada (sem pergunta, sem sair), troca com o início por dentro, e volta para a sala');
 
   // ---------- Entrar noutra sala pergunta, e sai da chamada de verdade ----------

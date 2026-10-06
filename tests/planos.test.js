@@ -1,5 +1,5 @@
-// Os níveis são regra de cobrança: um engano aqui cobra de quem não devia, ou entrega de
-// graça o que custa. Nenhum deles dá erro quando está errado -- daí cada um virar teste.
+// Os níveis são regra de limites: um engano aqui limita quem não devia, ou entrega o que custa ao
+// servidor. Nenhum deles dá erro quando está errado -- daí cada um virar teste.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const planos = require('../public/planos');
@@ -7,32 +7,32 @@ const planos = require('../public/planos');
 const ALTURAS = [720, 1080, 1440];
 const DIA = 86400000;
 
-test('os três níveis: 720p30 sem conta, 720p60 com conta grátis, 1080p e 1440p no premium', () => {
+test('os três níveis: 720p30 sem conta, 720p60 com conta grátis, 1080p e 1440p no nível completo', () => {
   assert.deepEqual({ ...planos.limites('anonimo') }, { altura: 720, quadros: 30 });
   assert.deepEqual({ ...planos.limites('gratis') }, { altura: 720, quadros: 60 });
-  assert.deepEqual({ ...planos.limites('premium') }, { altura: 1440, quadros: 60 });
+  assert.deepEqual({ ...planos.limites('completo') }, { altura: 1440, quadros: 60 });
   assert.equal(planos.quadrosPermitidos('anonimo', 60), false);
   assert.equal(planos.quadrosPermitidos('gratis', 60), true);
   assert.equal(planos.alturaPermitida('gratis', 1080), false);
-  assert.equal(planos.alturaPermitida('premium', 1440), true);
+  assert.equal(planos.alturaPermitida('completo', 1440), true);
   assert.deepEqual({ ...planos.limites('inventado') }, { ...planos.limites('anonimo') }, 'nível desconhecido é o mais restrito');
 });
 
-test('o plano vem da conta, e premium vencido é conta grátis', () => {
+test('o plano vem da conta, e o nível completo vencido é conta grátis', () => {
   const agora = 1_790_000_000_000;
   assert.equal(planos.nivelDaConta(null, agora), 'anonimo');
   assert.equal(planos.nivelDaConta({ plano: 'gratis', planoAte: null }, agora), 'gratis');
-  assert.equal(planos.nivelDaConta({ plano: 'premium', planoAte: null }, agora), 'premium', 'sem prazo, vale');
-  assert.equal(planos.nivelDaConta({ plano: 'premium', planoAte: agora + DIA }, agora), 'premium');
-  assert.equal(planos.nivelDaConta({ plano: 'premium', planoAte: agora - 1 }, agora), 'gratis');
+  assert.equal(planos.nivelDaConta({ plano: 'completo', planoAte: null }, agora), 'completo', 'sem prazo, vale');
+  assert.equal(planos.nivelDaConta({ plano: 'completo', planoAte: agora + DIA }, agora), 'completo');
+  assert.equal(planos.nivelDaConta({ plano: 'completo', planoAte: agora - 1 }, agora), 'gratis');
 });
 
-// Quem assinou, escolheu 1440p e deixou vencer continua com 1440p guardado e recebe 720p; ao
-// renovar, volta sozinho ao que tinha.
+// Quem tinha o nível completo, escolheu 1440p e o deixou vencer continua com 1440p guardado e recebe 720p;
+// quando o nível volta, volta sozinho ao que tinha.
 test('a escolha fica guardada acima do plano, e o que vale é o maior degrau que ele libera', () => {
   assert.equal(planos.alturaEfetiva('gratis', 1440, ALTURAS), 720);
-  assert.equal(planos.alturaEfetiva('premium', 1440, ALTURAS), 1440);
-  assert.equal(planos.alturaEfetiva('premium', 720, ALTURAS), 720, 'o plano é teto, não escolha forçada');
+  assert.equal(planos.alturaEfetiva('completo', 1440, ALTURAS), 1440);
+  assert.equal(planos.alturaEfetiva('completo', 720, ALTURAS), 720, 'o plano é teto, não escolha forçada');
   assert.equal(planos.quadrosEfetivos('anonimo', 60), 30);
   assert.equal(planos.quadrosEfetivos('gratis', 60), 60);
 });
@@ -45,8 +45,8 @@ test('o teto tem folga de 10%, e é medido pelo lado menor', () => {
   assert.equal(planos.excedeTeto('gratis', 1920, 1080), true);
   assert.equal(planos.excedeTeto('gratis', 720, 1280), false, 'um celular em pé tem 720 de lado menor');
   assert.equal(planos.excedeTeto('gratis', 2560, 720), true, 'uma faixa larga demais também passa');
-  assert.equal(planos.excedeTeto('premium', 2560, 1440), false);
-  assert.equal(planos.excedeTeto('premium', 3840, 2160), true);
+  assert.equal(planos.excedeTeto('completo', 2560, 1440), false);
+  assert.equal(planos.excedeTeto('completo', 3840, 2160), true);
 });
 
 test('toda sala tem teto de pessoas, e ele sobe com um assinante presente', () => {

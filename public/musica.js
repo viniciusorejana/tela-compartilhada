@@ -753,6 +753,17 @@
     $('musicaVolumeValor').textContent = `${estadoAtual.volume}%`;
   }
 
+  // Uma música que começa num canal parado é uma atividade nova na sala: quem não está com o canal à vista
+  // fica sabendo (atividade.js). Só o COMEÇO -- a faixa seguinte da fila é a mesma atividade --, só o que
+  // chega pelo socket (o estado da entrada na sala é o que já estava tocando, e não um começo), e só a dos
+  // outros: quem pediu sabe que pediu.
+  function anunciarComeco(novo) {
+    if (!novo?.tocando || estadoAtual.tocando) return;
+    const quem = String(novo.tocando.pedidoPor || '').trim();
+    if (quem && quem === (typeof myName === 'string' ? myName : '')) return;
+    window.NexoAtividade?.anunciar({ tipo: 'musica', chave: 'musica', quem: quem || 'Alguém', detalhe: String(novo.tocando.titulo || '').slice(0, 90), assistir: () => abrirMusica() });
+  }
+
   function aplicarEstado(novo) {
     if (!novo) return;
     const trocouDeFaixa = novo.tocando?.id !== estadoAtual.tocando?.id;
@@ -851,7 +862,7 @@
     ligar(soquete) {
       soquete.on('musica-mensagem', mostrarMensagemDeMusica);
       soquete.on('musica-busca', acompanharBusca);
-      soquete.on('musica-estado', aplicarEstado);
+      soquete.on('musica-estado', novo => { anunciarComeco(novo); aplicarEstado(novo); });
     },
     // Chamado pelo `join-room`: o estado inteiro do canal chega de uma vez, junto com o
     // resto da sala, em vez de custar duas idas e voltas so para descobrir se ha musica.

@@ -60,8 +60,8 @@ test('as cores exatas só valem com permissão, e ficam guardadas sem ela', () =
   assert.equal(Tema.derivar(com)['--bg'], '#102030');
 });
 
-test('quem pode escolher a cor exata: premium, ou todo mundo com os planos desligados', () => {
-  assert.equal(podeUsarCoresExatas('premium'), true);
+test('quem pode escolher a cor exata: o nível completo, ou todo mundo com os planos desligados', () => {
+  assert.equal(podeUsarCoresExatas('completo'), true);
   assert.equal(podeUsarCoresExatas('gratis'), false);
   assert.equal(podeUsarCoresExatas('anonimo'), false);
   assert.equal(podeUsarCoresExatas('anonimo', true), true, 'NEXO_PLANOS=0 libera, como o 1440p');

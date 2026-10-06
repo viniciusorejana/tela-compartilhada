@@ -33,7 +33,7 @@ Algumas trocas de faixa exigem renegociação, conforme a
 ## Outros defeitos corrigidos
 
 - **Injeção de HTML nos nomes:** nomes e iniciais agora entram como texto, inclusive nas listas e avatares novos.
-- **Convites locais:** `PUBLIC_URL` passa a fornecer a origem pública aos clientes. Sem ela, permanece a origem atual; nenhum domínio do Funnel é adivinhado.
+- **Convites locais:** `PUBLIC_URL` passa a fornecer a origem pública aos clientes. Sem ela, permanece a origem atual; nenhum domínio é adivinhado.
 - **Áudio do agente:** o servidor descartava o campo `modo` na resposta de aplicativos, fazendo um agente atualizado parecer antigo. O campo validado é preservado.
 - **Cancelamento da troca de tela:** o seletor abre antes de encerrar a captura de áudio existente. Cancelar mantém a transmissão atual.
 - **Limpeza e recuperação:** timer de início é encerrado ao remover um par; falhas definitivas de mídia não removem silenciosamente a pessoa da lista da sala.
@@ -73,7 +73,7 @@ o Electron foi empacotado em `app/dist/SalaCompartilhada.exe`.
 
 ## Validacao em um iPhone real
 
-1. No host, inicie esta branch e mantenha o Funnel ativo. Defina `PUBLIC_URL` para o endereço
+1. No host, inicie esta branch e mantenha o túnel HTTPS ativo. Defina `PUBLIC_URL` para o endereço
    HTTPS real antes de iniciar o Node. Atualize/reabra a página nos dois participantes para
    evitar misturar uma página antiga em memória com os scripts novos.
 2. Compartilhe uma tela pelo Windows **antes** do iPhone entrar. No Safari, abra o convite,
@@ -95,7 +95,7 @@ o Electron foi empacotado em `app/dist/SalaCompartilhada.exe`.
 | Quadros decodificados, palco pausado ou aviso de reprodução | Autoplay/visibilidade; retomar pelo botão e comparar após voltar à página. |
 | Câmera aparece, tela anunciada mas sem faixa identificada | Conferir MIDs no relatório e se todos recarregaram a versão nova. |
 
-HTTPS do Tailscale Funnel entrega o site e a sinalização. **Ele não retransmite a mídia
+O HTTPS do túnel entrega o site e a sinalização. **Ele não retransmite a mídia
 WebRTC nem substitui TURN.** Sem TURN configurado, algumas redes continuam sem conseguir
 estabelecer mídia direta. Esta revisão não instala um relay nem inventa credenciais.
 
@@ -238,7 +238,7 @@ fluxo morre, e descarta codec como causa:
 Sem relay, a mídia depende de furar o NAT dos dois lados. Basta **um** ser NAT simétrico ou
 CGNAT — o normal em fibra residencial e em rede móvel no Brasil — para todos os *connectivity
 checks* falharem. Na rede do host funciona porque os candidatos *host* da LAN se alcançam.
-O Tailscale Funnel entrega a página e a sinalização; ele não carrega a mídia.
+O túnel HTTPS entrega a página e a sinalização; ele não carrega a mídia.
 
 O relatório veio de um simulador de iPhone hospedado em datacenter, ambiente naturalmente
 restritivo para UDP. Ele prova que o Safari negocia corretamente e que o transporte não fecha;

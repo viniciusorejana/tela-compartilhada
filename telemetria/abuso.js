@@ -72,6 +72,10 @@ const REGRAS = Object.freeze({
   // por minuto bastam para mostrar um print, e uma pasta inteira colada de uma vez não passa.
   'dm-imagem': { sessao: 10, rajada: [4, 10000], longa: [120, 60 * MINUTO] },
   'dm-acao': { sessao: 90 },
+  // Reagir é um clique e costuma vir em sequência (uma carinha em cada mensagem de uma conversa); o
+  // balde é o dele para uma enxurrada de reações nunca gastar o das ações que a conversa precisa
+  // (marcar como lida, abrir o histórico).
+  'dm-reagir': { sessao: 150, rajada: [12, 3000] },
   'dm-digitando': { sessao: 40 },
   'convidar': { sessao: 10, longa: [80, 60 * MINUTO] },
   'social-total': { sessao: 300, rajada: [60, 5000] },

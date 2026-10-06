@@ -58,6 +58,14 @@ function migrar(db, migracoes = lerMigracoes()) {
   return db.prepare('PRAGMA user_version').get().user_version;
 }
 
+// O nível maior do plano, como o banco o guarda: o CHECK da coluna `plano` (migração 0001, que não se
+// reescreve) só aceita este texto. O código inteiro fala "completo" (public/planos.js), e a tradução
+// acontece só aqui, na fronteira, nos dois sentidos -- trocar o valor guardado pediria uma migração que
+// refizesse a tabela das contas, e um nome de coluna não vale esse risco.
+const PLANO_COMPLETO_GUARDADO = 'premium';
+const planoDoBanco = guardado => (guardado === PLANO_COMPLETO_GUARDADO ? 'completo' : guardado);
+const planoParaOBanco = plano => (plano === 'completo' ? PLANO_COMPLETO_GUARDADO : plano);
+
 // A linha do banco vira objeto do código aqui, uma vez. `plano_ate` e companhia não vazam
 // para o resto do servidor com nome de coluna.
 function conta(linha) {
@@ -65,7 +73,7 @@ function conta(linha) {
   return {
     id: linha.id, codigo: linha.codigo, usuario: linha.usuario, apelido: linha.apelido,
     senha: linha.senha ?? null, recuperacao: linha.recuperacao ?? null,
-    email: linha.email ?? null, plano: linha.plano, planoAte: linha.plano_ate ?? null,
+    email: linha.email ?? null, plano: planoDoBanco(linha.plano), planoAte: linha.plano_ate ?? null,
     faixaEtaria: linha.faixa_etaria ?? null,
     criadaEm: linha.criada_em, vistaEm: linha.vista_em, suspensaAte: linha.suspensa_ate ?? null
   };
@@ -181,7 +189,7 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     listarContas: sql(`SELECT ${COLUNAS_DA_CONTA} FROM conta c
       WHERE (c.criada_em < ? OR (c.criada_em = ? AND c.id < ?)) ORDER BY c.criada_em DESC, c.id DESC LIMIT ?`),
     contarContas: sql('SELECT COUNT(*) AS total FROM conta'),
-    contarPremium: sql("SELECT COUNT(*) AS total FROM conta WHERE plano = 'premium' AND (plano_ate IS NULL OR plano_ate > ?)"),
+    contarCompletos: sql('SELECT COUNT(*) AS total FROM conta WHERE plano = ? AND (plano_ate IS NULL OR plano_ate > ?)'),
     contarSuspensas: sql('SELECT COUNT(*) AS total FROM conta WHERE suspensa_ate IS NOT NULL AND suspensa_ate > ?'),
     criadasDesde: sql('SELECT criada_em FROM conta WHERE criada_em >= ? ORDER BY criada_em')
   };
@@ -283,7 +291,7 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     amizadesDe(contaId) {
       return q.amizadesDe.all(contaId, contaId, contaId, contaId).map(l => ({
         outro: l.outro, pediu: l.de_conta === contaId, estado: l.estado, criadaEm: l.criada_em, aceitaEm: l.aceita_em ?? null,
-        conta: { id: l.outro, codigo: l.codigo, apelido: l.apelido, plano: l.plano, planoAte: l.plano_ate ?? null, criadaEm: l.conta_criada_em, suspensaAte: l.suspensa_ate ?? null },
+        conta: { id: l.outro, codigo: l.codigo, apelido: l.apelido, plano: planoDoBanco(l.plano), planoAte: l.plano_ate ?? null, criadaEm: l.conta_criada_em, suspensaAte: l.suspensa_ate ?? null },
         perfil: { cor: l.cor ?? null, marca: l.marca ?? null, avatar: l.avatar ?? null, vitrine: lerAjustes(l.vitrine), social: lerAjustes(l.social) },
         apelidoMeu: l.apelido_meu ?? null
       }));
@@ -364,7 +372,7 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     },
     salvarAparencia: (contaId, { cor, marca }) => q.salvarAparencia.run(cor ?? null, marca ?? null, contaId).changes,
     salvarAjustes: (contaId, ajustes) => q.salvarAjustes.run(JSON.stringify(ajustes), contaId).changes,
-    definirPlano: (contaId, plano, ate) => q.definirPlano.run(plano, ate ?? null, contaId).changes,
+    definirPlano: (contaId, plano, ate) => q.definirPlano.run(planoParaOBanco(plano), ate ?? null, contaId).changes,
     definirSuspensao: (contaId, ate) => q.definirSuspensao.run(ate ?? null, contaId).changes,
     listarContas({ antesDe = null, limite = 25 } = {}) {
       const [criadaEm, id] = antesDe ? [antesDe.criadaEm, antesDe.id] : [Number.MAX_SAFE_INTEGER, ''];
@@ -373,7 +381,7 @@ function abrirBanco({ arquivo = ARQUIVO } = {}) {
     contagens(agora, desde) {
       return {
         total: q.contarContas.get().total,
-        premium: q.contarPremium.get(agora).total,
+        completos: q.contarCompletos.get(PLANO_COMPLETO_GUARDADO, agora).total,
         suspensas: q.contarSuspensas.get(agora).total,
         criadas: q.criadasDesde.all(desde).map(l => l.criada_em)
       };

@@ -151,6 +151,14 @@ conteúdo remoto.
   no aplicativo de mesa. `window.open` e `target=_blank` também.
 - **Sem backup** (`allowBackup="false"` e `sem_backup.xml`): a sessão da conta mora nos cookies
   da WebView, e um backup a levaria para outro aparelho.
+- **O servidor já vem preenchido, e trocar é um botão.** A tela de endereço abre com o do Nexo
+  (o `NEXO_SERVIDOR_PADRAO` do `.env.prod`, que `npm run android:empacotar` grava em
+  `app/servidor-padrao.json` e o Gradle leva para o `BuildConfig.SERVIDOR_PADRAO`, passado à tela no
+  parâmetro `padrao`) e tem "Usar o servidor padrão do Nexo". Dentro da sala,
+  Configurações → Aplicativo → Servidor chama a ponte (`trocarServidor`, mensagem `trocar-servidor`,
+  do APK **1.2.0** em diante; em versão anterior o botão fica escondido e a página diz para atualizar)
+  e a `MainActivity` volta para a tela de endereço, sem guardar nada até a sala nova carregar. A página
+  nunca escolhe o destino: só pede para abrir a tela local, onde a pessoa digita.
 - **http é permitido**, porque muito Nexo é um computador da casa em `http://192.168…`. A sala
   abre e o chat e a música funcionam; **microfone e câmera, não** — o Android só os libera em
   https. A tela de endereço diz isso, e completa o que se digita com `https://`.

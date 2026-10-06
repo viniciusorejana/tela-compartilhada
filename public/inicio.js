@@ -970,7 +970,7 @@
     $('copiarCodigo').textContent = conta.codigo;
     copiarComConfirmacao($('copiarUsuario'), `@${conta.usuario}`, `@${conta.usuario}`);
     copiarComConfirmacao($('copiarCodigo'), conta.codigo, conta.codigo);
-    // As cores exatas do tema são do premium; esta página sabe o plano, e o tema lembra.
+    // As cores exatas do tema são do nível completo; esta página sabe o plano, e o tema lembra.
     if (window.NexoTema && window.NexoPlanos) { NexoTema.definirPermissao(NexoPlanos.podeUsarCoresExatas(conta.nivel, dados.planosLigados === false)); NexoTema.aplicar(); }
     repintar();
     await editor.carregar();

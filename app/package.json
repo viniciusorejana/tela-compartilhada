@@ -15,10 +15,11 @@
   "_comentario_deb": "build.deb: o .deb instala o Nexo no sistema (menu de aplicativos, /opt/Nexo) e se atualiza pelo mesmo caminho do AppImage; para trocar o pacote, o atualizador pede a senha de administrador (pkexec), como todo .deb.",
   "scripts": {
     "start": "node lancar.js",
-    "empacotar": "electron-builder --win nsis portable --publish never && node escrever-versao.js windows windows-instalador",
-    "empacotar:portatil": "electron-builder --win portable --publish never && node escrever-versao.js windows",
-    "empacotar:linux": "electron-builder --linux AppImage deb --publish never && node escrever-versao.js linux linux-deb",
-    "empacotar:mac": "electron-builder --mac dmg --publish never && node escrever-versao.js mac"
+    "servidor:padrao": "node --env-file-if-exists=../.env.prod ../scripts/servidor-padrao.cjs",
+    "empacotar": "npm run servidor:padrao && electron-builder --win nsis portable --publish never && node escrever-versao.js windows windows-instalador",
+    "empacotar:portatil": "npm run servidor:padrao && electron-builder --win portable --publish never && node escrever-versao.js windows",
+    "empacotar:linux": "npm run servidor:padrao && electron-builder --linux AppImage deb --publish never && node escrever-versao.js linux linux-deb",
+    "empacotar:mac": "npm run servidor:padrao && electron-builder --mac dmg --publish never && node escrever-versao.js mac"
   },
   "build": {
     "appId": "com.telacompartilhada.app",
@@ -30,6 +31,7 @@
       "preload.js",
       "preload-escolher.js",
       "endereco.html",
+      "servidor-padrao.json",
       "escolher.html",
       "package.json",
       "lancar.js",

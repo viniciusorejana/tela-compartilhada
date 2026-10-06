@@ -110,11 +110,22 @@
     aoProgresso(avisar) { aoMudarAtualizacao.push(avisar); }
   }) : null;
 
+  // "Trocar de servidor", das configurações da sala. Só do APK 1.2.0 em diante: um mais velho ignora o pedido,
+  // e a sala o trata como ausente -- para ele, a dica manda segurar o ícone do Nexo (o atalho que sempre existiu).
+  const TROCA_DE_SERVIDOR_DESDE = [1, 2, 0];
+  const temTrocaDeServidor = (() => {
+    const partes = versao.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if (partes[i] !== TROCA_DE_SERVIDOR_DESDE[i]) return partes[i] > TROCA_DE_SERVIDOR_DESDE[i];
+    return true;
+  })();
+  const trocarServidor = ponte && temTrocaDeServidor ? () => { mandar({ tipo: 'trocar-servidor' }); return Promise.resolve({ ok: true }); } : null;
+
   window.NexoAndroid = Object.freeze({
     versao,
     chamada,
     camada,
     atualizacao,
+    trocarServidor,
     // 'alternar-microfone' e 'sair', dos botões da notificação da chamada; 'aviso-tocado', das
     // notificações ({ acao: 'abrir' | 'entrar' | 'aceitar' | 'pedidos' | 'atualizar', com, sala, codigo });
     // 'voltar-camada', do gesto de voltar do aparelho com a camada do início aberta.

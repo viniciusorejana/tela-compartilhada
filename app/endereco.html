@@ -33,6 +33,13 @@
   button:hover { background: #7b6cf0; }
   button:active { transform: scale(.985); }
   button:focus-visible { outline: 2px solid #b6abff; outline-offset: 3px; }
+  /* O "voltar ao padrão" é um link, e não um segundo botão cheio: o principal é um só. */
+  button.link {
+    width: auto; min-height: 32px; margin: 10px 0 0; padding: 0 2px; background: none; color: #c3b1ed;
+    font-weight: 500; text-decoration: underline; text-underline-offset: 3px;
+  }
+  button.link:hover { background: none; color: #e1d8fb; }
+  button.link[hidden] { display: none; }
   .versao { color: #8f8ea6; font-weight: 600; letter-spacing: .06em; }
   .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
   .falha {
@@ -48,13 +55,14 @@
   <div class="cartao">
     <span class="marca">NEXO / DESKTOP<span class="versao" id="versao"></span></span>
     <h1>Seu squad, em uma janela.</h1>
-    <p>Conecte ao servidor da sua galera. Vamos guardar o endereço para o próximo encontro.</p>
+    <p id="intro">Conecte ao servidor da sua galera. Vamos guardar o endereço para o próximo encontro.</p>
 
     <div class="falha" id="falha" hidden></div>
 
     <label for="endereco">Endereço</label>
-    <input id="endereco" type="text" placeholder="https://seu-servidor.ts.net" autofocus>
+    <input id="endereco" type="text" placeholder="https://seu-dominio.exemplo" autofocus>
     <button id="entrar" type="button">Conectar ao Nexo →</button>
+    <button id="padrao" class="link" type="button" hidden>Usar o servidor padrão do Nexo</button>
     <div class="erro" id="erro" role="alert"></div>
 
     <div class="dica">
@@ -62,7 +70,7 @@
       Nos outros, o IP dessa máquina na rede — por exemplo <code>http://192.168.0.10:3000</code>,
       ou o endereço público, se houver.
       <br><br>
-      Para voltar aqui depois: <code>Ctrl+Shift+S</code>.
+      Para voltar aqui depois: <code>Ctrl+Shift+S</code>, ou <strong>Configurações → Aplicativo → Trocar de servidor</strong>, dentro da sala.
     </div>
   </div>
 
@@ -78,6 +86,21 @@
   const anterior = parametros.get('anterior') || '';
   const falhou = parametros.get('erro') || '';
   if (anterior) campo.value = anterior;
+
+  // O servidor do Nexo já vem preenchido na primeira vez (NEXO_SERVIDOR_PADRAO do .env.prod): quem abre o aplicativo só
+  // aperta "Conectar". Quem usa outro troca o texto, e o botão de baixo devolve o padrão -- trocar de servidor
+  // não pode ser uma viagem sem volta.
+  const padrao = window.appNativo?.servidorPadrao || '';
+  const voltarAoPadrao = document.getElementById('padrao');
+  const igualAoPadrao = () => campo.value.trim().replace(/\/+$/, '') === padrao;
+  function pintarPadrao() { voltarAoPadrao.hidden = !padrao || igualAoPadrao(); }
+  if (padrao && !anterior) {
+    campo.value = padrao;
+    document.getElementById('intro').textContent = 'O endereço do servidor do Nexo já está preenchido: é só conectar. Se a sua galera usa outro servidor, troque o endereço. Vamos guardá-lo para o próximo encontro.';
+  }
+  campo.addEventListener('input', pintarPadrao);
+  voltarAoPadrao.onclick = () => { campo.value = padrao; pintarPadrao(); campo.focus(); };
+  pintarPadrao();
   if (falhou) {
     const faixa = document.getElementById('falha');
     faixa.hidden = false;

@@ -16,6 +16,12 @@ if (arquivoDaChave.exists()) arquivoDaChave.withInputStream { propriedadesDaChav
 def daChave = { String nome, String variavel -> propriedadesDaChave.getProperty(nome) ?: System.getenv(variavel) }
 def caminhoDaChave = daChave('storeFile', 'NEXO_ANDROID_KEYSTORE')
 
+// O servidor que a tela de endereço traz preenchido na primeira vez: o NEXO_SERVIDOR_PADRAO do .env.prod, que
+// scripts/servidor-padrao.cjs grava em app/servidor-padrao.json -- o MESMO arquivo do aplicativo de mesa, para os
+// dois nunca discordarem. Sem o arquivo, a tela abre vazia, como antes.
+def arquivoDoServidor = rootProject.file('../app/servidor-padrao.json')
+def servidorPadrao = arquivoDoServidor.exists() ? (new groovy.json.JsonSlurper().parse(arquivoDoServidor).endereco ?: '') : ''
+
 android {
     namespace = 'com.telacompartilhada.nexo'
     compileSdk = 36
@@ -28,8 +34,9 @@ android {
         targetSdk = 36
         // Sobe a cada APK distribuído. O servidor anuncia versionName (app/dist/versao.json),
         // e é ele que a sala compara para dizer que existe um Nexo mais novo.
-        versionCode = 3
-        versionName = '1.1.1'
+        versionCode = 4
+        versionName = '1.2.0'
+        buildConfigField 'String', 'SERVIDOR_PADRAO', "\"${servidorPadrao}\""
     }
 
     signingConfigs {

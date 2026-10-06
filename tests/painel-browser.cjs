@@ -72,7 +72,7 @@ async function primeiroDia() {
     // O teto de pessoas aparece em "Salas e uso": é ele que diz se 25 e 50 são os números certos.
     await pagina.waitForFunction(() => document.querySelector('nexo-uso').textContent.includes('Teto de pessoas · 25 por sala'));
 
-    // ---------- Contas e planos: o atalho de premium à mão ----------
+    // ---------- Contas e planos: o atalho do nível completo à mão ----------
     const { conta } = await servidor.conta('apoiadora', { apelido: 'Apoiadora' });
     await pagina.locator('a[href="#contas"]').click();
     const contas = pagina.locator('nexo-contas');
@@ -81,11 +81,11 @@ async function primeiroDia() {
     assert.equal(await contas.innerText().then(t => t.includes('scrypt')), false, 'nada de hash no painel');
     await contas.locator('.linha-conta').filter({ hasText: '@apoiadora' }).click();
     await contas.locator('.acoes-conta input[type="number"]').fill('45');
-    await contas.getByRole('button', { name: 'Premium por estes dias' }).click();
-    await contas.locator('.linha-conta').filter({ hasText: /premium até/ }).waitFor();
+    await contas.getByRole('button', { name: 'Completo por estes dias' }).click();
+    await contas.locator('.linha-conta').filter({ hasText: /completo até/ }).waitFor();
     await contas.screenshot({ path: path.join(saida, 'contas.png') });
     const lida = await (await contexto.request.get(`${servidor.origem}/painel/api/contas?busca=${conta.codigo}`)).json();
-    assert.equal(lida.contas[0].nivel, 'premium');
+    assert.equal(lida.contas[0].nivel, 'completo');
     assert.ok(lida.contas[0].planoAte > Date.now() + 44 * 86400000);
   } finally { await contexto.close(); await servidor.encerrar(); }
 }

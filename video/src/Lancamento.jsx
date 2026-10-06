@@ -163,7 +163,7 @@ function Montagem() {
     { titulo: 'Tela com som,\naté 1440p.', destaque: ['1440p.'], demo: () => (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
         <Palco largura={largura * 0.95} legenda="1440p · 60 quadros" espectadores={[{ pessoa: PESSOAS.ana, em: 8 }, { pessoa: PESSOAS.leo, em: 14 }]} />
-        <Chip inicio={16}>720p a 60 quadros já na conta grátis</Chip>
+        <Chip inicio={16}>Até 1440p a 60 quadros, para todo mundo</Chip>
       </div>) },
     { titulo: 'Assista só\no que quiser.', destaque: ['quiser.'], demo: ({ l }) => (
       <Palco largura={largura * 0.95} visto={entre(l, [20, 36])} aoVivo={l >= 36} espectadores={[{ pessoa: PESSOAS.ana, em: 0 }, { pessoa: PESSOAS.voce, em: 30 }]} capa={<CapaAssistir e={largura * 0.95 / 900} apertado={18} some={entre(l, [18, 26])} />} />), sons: [['audio/sala/assistir.mp3', 18, 1]] },
@@ -215,7 +215,7 @@ function Final() {
         <span style={{ fontFamily: FONTE, fontSize: vertical ? 140 : 170, fontWeight: 800, letterSpacing: '0.1em', color: COR.texto }}>NEXO</span>
       </div>
       <Palavras texto={vertical ? 'Crie sua sala.\nChame o squad.' : 'Crie sua sala. Chame o squad.'} destaque={['squad.']} inicio={10} passo={3} tamanho={vertical ? 76 : 78} peso={700} alinhar="center" />
-      <Apoio inicio={26} tamanho={vertical ? 36 : 36} alinhar="center">Voz, câmera e tela com som · grátis para começar</Apoio>
+      <Apoio inicio={26} tamanho={vertical ? 36 : 36} alinhar="center">Voz, câmera e tela com som · tudo liberado</Apoio>
     </AbsoluteFill>
   );
 }

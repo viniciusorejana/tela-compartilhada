@@ -21,8 +21,8 @@ test('video elements never receive audio, and repeated updates retain their stre
 });
 
 test('local host invites use the configured public origin without query tokens', () => {
-  assert.equal(media.inviteUrl('http://localhost:3000/abcd/sala?secret=1', 'https://example.ts.net', 'abcd'), 'https://example.ts.net/abcd/sala');
-  assert.equal(media.inviteUrl('https://example.ts.net/sala', '', 'principal'), 'https://example.ts.net/principal/sala');
+  assert.equal(media.inviteUrl('http://localhost:3000/abcd/sala?secret=1', 'https://example.com', 'abcd'), 'https://example.com/abcd/sala');
+  assert.equal(media.inviteUrl('https://example.com/sala', '', 'principal'), 'https://example.com/principal/sala');
   assert.throws(() => media.inviteUrl('https://example.com', 'javascript:alert(1)', 'abcd'));
 });
 

@@ -420,7 +420,7 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .call-indicator { display:none; align-items:center; gap:7px; color:var(--faint); font-size:var(--fs-rotulo); letter-spacing:.08em; margin-right:auto; }
 .call-indicator i { width:5px; height:5px; background:var(--online); border-radius:50%; }
 #enableSoundBtn { position:fixed; left:50%; top:73px; transform:translateX(-50%); z-index:65; box-shadow:0 8px 35px #0008; white-space:nowrap; }
-.chat { grid-area:chat; min-height:0; min-width:0; display:grid; grid-template-rows:64px auto minmax(0,1fr) auto auto auto; background:var(--bg-1); border-left:1px solid var(--line); }
+.chat { grid-area:chat; position:relative; min-height:0; min-width:0; display:grid; grid-template-rows:64px auto minmax(0,1fr) auto auto auto; background:var(--bg-1); border-left:1px solid var(--line); }
 .chat.musica { grid-template-rows:64px minmax(0,1fr) auto auto; }
 .chat:not(.musica)>.chat-head { grid-row:1; }
 .chat:not(.musica)>.chat-pinned-bar { grid-row:2; }
@@ -928,7 +928,7 @@ button[aria-busy="true"] { cursor:progress; }
 .lightbox-legenda { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:var(--muted); font-size:var(--fs-meta); }
 @media(min-width:1600px) { .call-indicator { display:flex; } .control-bar { padding-right:100px; } .app { --col-lateral:240px; --col-chat-aberto:320px; } }
 @media(max-width:1250px) { .app { --col-lateral:200px; --col-chat-aberto:266px; } #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
-@media(max-width:1100px) { .app { --col-lateral:210px; } .app,.app.sem-chat { grid-template-columns:var(--col-lateral) minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,360px); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
+@media(max-width:1100px) { .app { --col-lateral:210px; } .app,.app.sem-chat { grid-template-columns:var(--col-lateral) minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,var(--chat-gaveta,360px)); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
 @media(max-width:760px) {
   :root { --barra:81px; }
   .app,.app.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-rows:57px minmax(0,1fr) calc(var(--barra) + env(safe-area-inset-bottom)); grid-template-areas:"topo" "palco" "barra"; padding-top:env(safe-area-inset-top); }
@@ -1739,8 +1739,8 @@ h1#roomTitle { min-width:3ch; }
 .cores-exatas { margin:0 0 20px; padding:14px; border:1px solid var(--line); border-radius:var(--r-lg); background:rgb(var(--tinta) / 1.6%); }
 .cores-exatas-cabeca { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
 .cores-exatas-cabeca .config-rotulo { margin:0; }
-.selo-premium { display:inline-flex; align-items:center; gap:4px; padding:2px 8px 2px 6px; border-radius:var(--r-pilula); background:color-mix(in srgb, var(--aviso) 16%, transparent); color:var(--aviso-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
-.selo-premium .ico { width:12px; height:12px; }
+.selo-completo { display:inline-flex; align-items:center; gap:4px; padding:2px 8px 2px 6px; border-radius:var(--r-pilula); background:color-mix(in srgb, var(--aviso) 16%, transparent); color:var(--aviso-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
+.selo-completo .ico { width:12px; height:12px; }
 .cores-exatas-linha { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; }
 .cor-exata { position:relative; display:inline-flex; align-items:center; gap:9px; padding:5px 12px 5px 5px; border-radius:var(--r-pilula); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); cursor:pointer; transition:box-shadow var(--dur) var(--curva); }
 .cor-exata:hover { box-shadow:inset 0 0 0 1px var(--line-3); }
@@ -1776,6 +1776,15 @@ h1#roomTitle { min-width:3ch; }
 .perfil-card > .modal-fechar { z-index:8; background:#0d0d16b3; color:#fff; border-radius:50%; }
 .perfil-card > .modal-fechar:hover:not(:disabled) { background:#0d0d16e6; color:#fff; }
 .perfil-social { margin:0 0 14px; padding:12px; border-radius:var(--r-md); background:var(--accent-suave); }
+/* O cartão minimizado (sala.js, `pintarPerfilMinimizado`): o cartão em si, de cima, fica sempre inteiro -- é a
+   vitrine da pessoa -- e o que a sala acrescenta embaixo dele (o tempo na sala, a explicação do código e o
+   "Levar para o OBS") espera o "Ver mais". A linha de amizade e os botões de baixo não se escondem: são ações
+   que a pessoa procura de imediato, e esconder o "Fechar" seria prender quem abriu o cartão. */
+.perfil-mais { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:var(--ctl-p); margin:0 0 10px; padding:0 10px; border-radius:var(--r-md); background:rgb(var(--tinta) / 3.5%); color:var(--muted); font-size:var(--fs-sm); font-weight:600; }
+.perfil-mais:hover:not(:disabled) { background:rgb(var(--tinta) / 7%); color:var(--text); }
+.perfil-mais .ico { transition:transform var(--dur) var(--curva); }
+.perfil-mais[aria-expanded="true"] .ico { transform:rotate(180deg); }
+.perfil-card.minimizado .perfil-detalhes { display:none; }
 
 /* ---------- A personalização de cada pessoa, onde ela aparece (cartao.js) ----------
    A borda do avatar (pintarAvatar), o estilo do nome, e no quadradinho da plateia e na foto
@@ -1807,7 +1816,9 @@ h1#roomTitle { min-width:3ch; }
 .convidar-lista { display:grid; max-height:min(340px,46vh); overflow-y:auto; margin-top:8px; }
 
 /* ---------- Mensagens diretas na sala ---------- */
-.modal-card.mensagens-card { --pad-cartao:0px; width:min(100%,880px); height:min(640px,86vh); height:min(640px,86dvh); padding:0; overflow:hidden; }
+/* O tamanho é de quem usa (a alça do canto, social-sala.js): `--msg-largura` e `--msg-altura` chegam no painel
+   quando a pessoa o mexeu, e sem elas valem os 880 x 640 de sempre. O teto de altura continua o da janela. */
+.modal-card.mensagens-card { --pad-cartao:0px; width:min(100%,var(--msg-largura,880px)); height:min(var(--msg-altura,640px),86vh); height:min(var(--msg-altura,640px),86dvh); padding:0; overflow:hidden; }
 .mensagens-colunas { display:grid; grid-template-columns:250px minmax(0,1fr); height:100%; }
 .mensagens-lista { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:var(--bg-1); }
 .mensagens-lista h2 { margin:0; padding:18px 16px 10px; }
@@ -1827,6 +1838,30 @@ h1#roomTitle { min-width:3ch; }
 /* O botão de mensagens na lateral: o botão é largo (a fileira de ações), e o número fica ao lado
    do ícone, e não pendurado no canto do botão. */
 .connection-acoes .mensagens-btn .mensagens-contagem { flex:none; }
+
+/* ---------- A largura do chat, à escolha de quem usa (redimensionar.js) ----------
+   A alça mora na borda esquerda do painel, por dentro dele: a coluna do chat corta o que passa dela
+   (`overflow:clip`), e uma alça pendurada para fora seria cortada junto. A linha só aparece sobre a
+   alça -- em repouso o chat é o que sempre foi. Com o chat em foco, no teatro e no celular (em que
+   o chat é a tela inteira) não há o que redimensionar. */
+.chat-alca { position:absolute; z-index:6; top:0; bottom:0; left:0; width:10px; cursor:col-resize; touch-action:none; outline:none; }
+.chat-alca::after { content:''; position:absolute; top:0; bottom:0; left:0; width:3px; border-radius:0 3px 3px 0; background:var(--accent); opacity:0; transition:opacity var(--dur) var(--curva) .12s; }
+.chat-alca:hover::after,.chat-alca.arrastando::after { opacity:.85; }
+.chat-alca:focus-visible::after { opacity:1; transition-delay:0s; box-shadow:0 0 0 3px var(--accent-suave-hi); }
+.app.foco-chat .chat-alca,.app.teatro .chat-alca { display:none; }
+@media(max-width:760px) { .chat-alca { display:none; } }
+/* Enquanto se arrasta, a grade acompanha o ponteiro sem o deslize de abrir e fechar -- com ele a
+   coluna chegaria atrasada -- e nada da página é selecionado ou muda o cursor no caminho. */
+html.redimensionando .app { transition:none; }
+html.redimensionando,html.redimensionando * { user-select:none; cursor:col-resize!important; }
+html.redimensionando iframe { pointer-events:none; }
+html.redimensionando.redimensionando-xy,html.redimensionando.redimensionando-xy * { cursor:nwse-resize!important; }
+/* O painel de mensagens: uma só alça, no canto de baixo à direita, com o desenho clássico das duas riscas
+   na diagonal. Fica sobre a margem vazia embaixo do campo de escrever, longe das barras de rolagem. */
+.mensagens-alca { position:absolute; z-index:6; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; touch-action:none; outline:none; color:var(--faint); opacity:.6; background:linear-gradient(135deg,transparent 0 50%,currentColor 50% 57%,transparent 57% 69%,currentColor 69% 76%,transparent 76%); border-bottom-right-radius:var(--r-xl); transition:opacity var(--dur) var(--curva),color var(--dur) var(--curva); }
+.mensagens-alca:hover,.mensagens-alca.arrastando,.mensagens-alca:focus-visible { opacity:1; color:var(--accent-texto); }
+.mensagens-alca:focus-visible { box-shadow:inset 0 0 0 2px var(--anel-cor); }
+@media(max-width:760px) { .mensagens-alca { display:none; } }
 /* ---------- O cartão completo, num painel (editor-cartao.js) ----------
    O mesmo editor do início, sem sair da chamada. O painel é largo e de altura fixa, sem
    preenchimento: o editor rola por dentro, com a prévia presa ao lado (ou em cima, estreito) e o

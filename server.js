@@ -68,10 +68,10 @@ const PESSOAS_POR_SALA = (() => {
   return Number.isInteger(base) && base > 0 && Number.isInteger(comAssinante) && comAssinante >= base
     ? { base, comAssinante } : planos.PESSOAS;
 })();
-// NEXO_PLANOS=0 desliga os tetos de RESOLUÇÃO e de quadros: todo mundo transmite como premium.
-// É a segunda janela de transição do roteiro -- o grupo atual transmite hoje em 1440p de graça,
-// e o premium de cortesia pelo painel é o caminho previsto; esta chave cobre o intervalo. O
-// teto de pessoas não depende dela.
+// NEXO_PLANOS=0 desliga os tetos de RESOLUÇÃO e de quadros: todo mundo transmite com o nível completo.
+// É como o Nexo roda hoje -- o grupo transmite em 1440p sem limite --, e a chave deixa a regra de
+// limites pronta e desligada para o dia em que um servidor precise dela. O teto de pessoas não
+// depende dela.
 const PLANOS_LIGADOS = (process.env.NEXO_PLANOS || '').trim() !== '0';
 // NEXO_NOVIDADES=0 impede a apresentação e as novidades de abrirem sozinhas (public/novidades.js);
 // o botão "Novidades" continua abrindo. Serve a quem hospeda para um público que já conhece o
@@ -937,10 +937,10 @@ function anunciarEspectadores(roomCode, donos) {
 // dia em que resolução é o que se cobra, sugestão não serve.
 
 // O nível vale AGORA: lido da conta a cada pergunta, porque o painel pode ter acabado de
-// marcá-la premium e o prazo vence sozinho.
+// marcá-la de nível completo e o prazo vence sozinho.
 const nivelDaSessao = sessao => (sessao?.contaId ? contas.nivelDaConta(sessao.contaId) : 'anonimo');
-// O nível que vale para a TELA: o da conta, ou premium para todos com os planos desligados.
-const nivelDaTela = nivel => (PLANOS_LIGADOS ? nivel : 'premium');
+// O nível que vale para a TELA: o da conta, ou o completo para todos com os planos desligados.
+const nivelDaTela = nivel => (PLANOS_LIGADOS ? nivel : 'completo');
 const planoPublico = nivel => ({ nivel: nivelDaTela(nivel), nome: planos.NOMES[nivel], limites: planos.limites(nivelDaTela(nivel)), livre: !PLANOS_LIGADOS });
 
 // O teto de pessoas. Quem entra conta a si mesmo -- um assinante entra numa sala que está no
@@ -950,11 +950,11 @@ let recusasPorLotacao = 0;
 function cabeNaSala(sala, { identidade, nivel }) {
   const membros = [...(roomMembers.get(sala)?.values() || [])];
   if (membros.some(m => m.identidade === identidade) || identidadesConhecidasPorSala.get(sala)?.has(identidade)) return true;
-  const cabe = planos.cabeNaSala({ presentes: salas.pessoas(sala), algumAssinante: membros.some(m => m.premium), entraAssinante: nivel === 'premium' }, PESSOAS_POR_SALA);
+  const cabe = planos.cabeNaSala({ presentes: salas.pessoas(sala), algumAssinante: membros.some(m => m.completo), entraAssinante: nivel === 'completo' }, PESSOAS_POR_SALA);
   if (!cabe) recusasPorLotacao++;
   return cabe;
 }
-const MENSAGEM_SALA_CHEIA = () => `A sala está cheia: ${PESSOAS_POR_SALA.base} pessoas. Com alguém premium na sala, o teto sobe para ${PESSOAS_POR_SALA.comAssinante}.`;
+const MENSAGEM_SALA_CHEIA = () => `A sala está cheia: ${PESSOAS_POR_SALA.base} pessoas. Com alguém de nível completo na sala, o teto sobe para ${PESSOAS_POR_SALA.comAssinante}.`;
 
 // Para o painel: quantas salas encostam no teto é o que diz se os números de partida estão
 // certos. `zerar` fecha a janela de um minuto do histórico.
@@ -963,7 +963,7 @@ function estadoDoTeto({ zerar = false } = {}) {
   for (const [sala, membros] of roomMembers) {
     const pessoas = salas.pessoas(sala);
     if (pessoas >= PESSOAS_POR_SALA.base) noTetoBase++;
-    if (pessoas >= planos.tetoDePessoas({ comAssinante: [...membros.values()].some(m => m.premium) }, PESSOAS_POR_SALA)) cheias++;
+    if (pessoas >= planos.tetoDePessoas({ comAssinante: [...membros.values()].some(m => m.completo) }, PESSOAS_POR_SALA)) cheias++;
   }
   const estado = { ...PESSOAS_POR_SALA, salasNoTetoBase: noTetoBase, salasCheias: cheias, recusas: recusasPorLotacao };
   if (zerar) recusasPorLotacao = 0;
@@ -1005,7 +1005,7 @@ async function desligarTelaSeContinuar(sessao, sid) {
   sessao.socket?.emit('tela-desligada-pelo-plano', planoPublico(nivel));
 }
 
-// O atalho do painel (premium à mão, suspender) vale na hora para quem está numa sala: o plano
+// O atalho do painel (nível completo à mão, suspender) vale na hora para quem está numa sala: o plano
 // novo chega pelo socket, e a conta suspensa sai da sala -- sinalização e mídia.
 function agirNaContaPeloPainel(codigo, pedido) {
   const r = contas.agirPeloPainel(codigo, pedido);
@@ -1017,7 +1017,7 @@ function agirNaContaPeloPainel(codigo, pedido) {
   const nivel = contas.nivelDaConta(r.contaId);
   const suspensa = Boolean(r.conta.suspensaAte && r.conta.suspensaAte > Date.now());
   for (const membros of roomMembers.values()) {
-    for (const membro of membros.values()) if (membro.contaId === r.contaId) membro.premium = nivel === 'premium';
+    for (const membro of membros.values()) if (membro.contaId === r.contaId) membro.completo = nivel === 'completo';
   }
   for (const socket of io.sockets.sockets.values()) {
     const sessao = socket.data.sessaoNexo;
@@ -1080,7 +1080,7 @@ function enderecoEhDestaMaquina(address) {
 // participante remoto seria tratado como host e acabaria capturando o audio do host.
 const CABECALHOS_DE_PROXY = [
   'x-forwarded-for', 'x-real-ip', 'x-forwarded-host', 'x-forwarded-proto',
-  'forwarded', 'cf-connecting-ip', 'cf-ray', 'via', 'tailscale-funnel-request'
+  'forwarded', 'cf-connecting-ip', 'cf-ray', 'via'
 ];
 
 // O Host precisa apontar para um endereco desta maquina E para a porta real do servidor.
@@ -1529,7 +1529,7 @@ io.on('connection', (socket) => {
     // Se esta pessoa deixa ser levada para o OBS vem no aperto de mão, e não num aviso depois
     // da entrada: entre um e outro, uma captura já poderia ter começado contra a vontade dela.
     const permiteEstudio = socket.handshake.auth?.estudio !== false;
-    const { abriu } = salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, premium: nivel === 'premium', chaveDeTempo: chaveDoRelogio, desde, permiteEstudio, entrouEm: Date.now() });
+    const { abriu } = salas.entrou(roomCode, socket.id, { name, state: estadoPadrao(), identidade: sessao.identidade, contaId: sessao.contaId || null, perfil: sessao.perfil || null, completo: nivel === 'completo', chaveDeTempo: chaveDoRelogio, desde, permiteEstudio, entrouEm: Date.now() });
     // Abrir uma sala é ser o primeiro num código fechado (salas.js): soma no contador da conta.
     if (abriu && sessao.contaId) contas.contar(sessao.contaId, 'salas');
     identidadesConhecidasDaSala(roomCode).add(sessao.identidade);
@@ -2237,11 +2237,16 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     sairDaSalaAtual();
     const token = socket.data.tokenAgente;
-    if (token) {
+    if (token && navegadoresPorToken.get(token) === socket.id) {
       // Manda o agente parar de capturar: sem isso ele continuaria gravando o audio da
       // pessoa depois que ela fechou a aba.
+      //
+      // So se este socket ainda e o dono do agente. Quando a pagina reconecta, o socket novo ja se
+      // registrou com o mesmo token, e o `disconnect` do antigo (que o servidor so percebe depois
+      // do tempo de espera do ping) chegava e mandava parar a captura DA TRANSMISSAO QUE JA VOLTOU:
+      // a tela seguia no ar com o som mudo. Dono diferente, e o socket novo quem manda no agente.
       comandarAgente(token, { acao: 'parar' });
-      if (navegadoresPorToken.get(token) === socket.id) navegadoresPorToken.delete(token);
+      navegadoresPorToken.delete(token);
     }
   });
 });

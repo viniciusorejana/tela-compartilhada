@@ -86,8 +86,8 @@ function Tela({ duracao }) {
           <Palco largura={960} legenda="Você está compartilhando" espectadores={[{ pessoa: PESSOAS.ana, em: 60 }, { pessoa: PESSOAS.leo, em: 72 }, { pessoa: PESSOAS.rafa, em: 84 }]} />
         </div>
         <div style={{ position: 'absolute', left: 0, right: 0, top: 660, display: 'flex', gap: 16, justifyContent: 'center' }}>
-          <Chip inicio={96}>720p a 60 quadros, grátis</Chip>
-          <Chip inicio={110} cor={COR.avisoTexto} fundo="rgba(232,192,122,.12)">1080p e 1440p no premium</Chip>
+          <Chip inicio={96}>Até 1440p a 60 quadros</Chip>
+          <Chip inicio={110}>Para todo mundo, sem limite</Chip>
         </div>
         <Cursor caminho={[[0, 820, 600], [14, 505, 325]]} cliques={[18]} />
       </div>

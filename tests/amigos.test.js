@@ -79,13 +79,13 @@ test('o catálogo do cartão: forma fechada, o que vale para os outros e as conq
   assert.equal(limpa.bio, 'oi tudo', 'a marca de direção sai');
   assert.deepEqual(limpa.selos, ['papo']);
   assert.equal('extra' in limpa, false);
-  // Premium e conquista: guardado, mas não vale para os outros sem o requisito.
-  const efetiva = vitrine.vitrineEfetiva({ borda: 'neon', banner: 'chuva', efeito: 'confete', selos: ['papo'] }, { premium: false, conquistas: new Set() });
+  // Nível completo e conquista: guardado, mas não vale para os outros sem o requisito.
+  const efetiva = vitrine.vitrineEfetiva({ borda: 'neon', banner: 'chuva', efeito: 'confete', selos: ['papo'] }, { completo: false, conquistas: new Set() });
   assert.equal(efetiva.borda, 'nenhuma');
   assert.equal(efetiva.banner, 'tema');
   assert.equal(efetiva.efeito, 'confete', 'o comum vale para todo mundo');
   assert.deepEqual(efetiva.selos, [], 'só se mostra a conquista ganha');
-  const liberada = vitrine.vitrineEfetiva({ borda: 'neon', banner: 'chuva' }, { premium: true, conquistas: new Set(['maratona']) });
+  const liberada = vitrine.vitrineEfetiva({ borda: 'neon', banner: 'chuva' }, { completo: true, conquistas: new Set(['maratona']) });
   assert.equal(liberada.borda, 'neon');
   assert.equal(liberada.banner, 'chuva');
   // O pensamento vence em 24 horas.
@@ -159,14 +159,14 @@ test('pedidos cruzados viram amizade, e o bloqueio é silencioso para quem foi b
   assert.equal((await caio.pedir('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: '@ana2' } })).status, 409, 'quem bloqueou desbloqueia antes');
 });
 
-test('o cartão: salvar, imagem só para premium, e o que a sala recebe', async t => {
-  // Planos ligados: o premium deixa de ser de todo mundo, e o que ele libera fica guardado sem valer.
+test('o cartão: salvar, imagem só para o nível completo, e o que a sala recebe', async t => {
+  // Planos ligados: o nível completo deixa de ser de todo mundo, e o que ele libera fica guardado sem valer.
   const servidor = await iniciarServidor({ ambiente: { NEXO_PLANOS: '1' } }); t.after(servidor.encerrar);
   const ana = await criarConta(servidor, 'ana3', 'Ana');
   const salvo = await ana.pedir('/api/conta/vitrine', { metodo: 'PUT', corpo: { vitrine: { tema: 'cereja', borda: 'neon', efeito: 'neve', bio: 'Jogo de tudo um pouco.', pensamento: 'pizza hoje?' } } });
   assert.equal(salvo.status, 200, JSON.stringify(salvo.dados));
   assert.equal(salvo.dados.guardada.borda, 'neon', 'a escolha fica guardada');
-  assert.equal(salvo.dados.vitrine.borda, 'nenhuma', 'mas não vale sem o premium');
+  assert.equal(salvo.dados.vitrine.borda, 'nenhuma', 'mas não vale sem o nível completo');
   assert.equal(salvo.dados.vitrine.efeito, 'neve');
   assert.equal(salvo.dados.vitrine.pensamento.texto, 'pizza hoje?');
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
@@ -254,6 +254,72 @@ test('mensagens diretas: só entre amigos, ao vivo, com lida, convite e presenç
   const sumiu = a.proximo('presenca');
   await bia.pedir('/api/conta/social', { metodo: 'PUT', corpo: { status: 'invisivel' } });
   assert.equal((await sumiu).presenca.status, 'offline');
+});
+
+test('reações em mensagem direta: qualquer emoji, ligam e desligam, os dois veem, só entre amigos', async t => {
+  // O teste reage dezenas de vezes em segundos, o que o freio de rajada (12 em 3 s) existe para barrar.
+  const servidor = await iniciarServidor({ ambiente: { NEXO_LIMITES: JSON.stringify({ 'dm-reagir': { sessao: 1000, rajada: [1000, 3000] } }) } }); t.after(servidor.encerrar);
+  const ana = await criarConta(servidor, 'ana12', 'Ana');
+  const bia = await criarConta(servidor, 'bia12', 'Bia');
+  const caio = await criarConta(servidor, 'caio12', 'Caio');
+  await ana.pedir('/api/conta/amigos', { metodo: 'POST', corpo: { alvo: '@bia12' } });
+  await bia.pedir(`/api/conta/amigos/${ana.conta.codigo}/aceitar`, { metodo: 'POST' });
+  const a = await conectarSocial(servidor.origem, ana.cookie()); t.after(a.fechar);
+  const b = await conectarSocial(servidor.origem, bia.cookie()); t.after(b.fechar);
+  await a.evento('pronto'); await b.evento('pronto');
+  const c = await conectarSocial(servidor.origem, caio.cookie()); t.after(c.fechar);
+  await c.evento('pronto');
+
+  const enviada = await a.pedir('dm-enviar', { para: bia.conta.codigo, texto: 'olha isso' });
+  assert.deepEqual(enviada.mensagem.reacoes, {}, 'a mensagem nasce sem reações');
+  const convite = await a.pedir('convidar', { para: bia.conta.codigo, sala: 'squad-da-noite' });
+  const id = enviada.mensagem.id;
+
+  // A outra pessoa reage; as duas pontas recebem as reações, cada uma com o `com` do seu lado.
+  const naAna = a.proximo('dm-reacoes'), naBia = b.proximo('dm-reacoes');
+  const reagiu = await b.pedir('dm-reagir', { com: ana.conta.codigo, id, emoji: '👍' });
+  assert.equal(reagiu.ok, true, JSON.stringify(reagiu));
+  assert.deepEqual(reagiu.reacoes, { '👍': [bia.conta.codigo] });
+  assert.deepEqual(await naAna, { com: bia.conta.codigo, id, reacoes: { '👍': [bia.conta.codigo] } });
+  assert.equal((await naBia).com, ana.conta.codigo);
+
+  // Qualquer emoji do seletor vale: o composto (família com tom de pele) e a bandeira também.
+  assert.equal((await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: '👍' })).ok, true);
+  assert.deepEqual((await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: '🧑🏽‍🚀' })).reacoes['🧑🏽‍🚀'], [ana.conta.codigo]);
+  assert.equal((await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: '🇧🇷' })).ok, true);
+  // Quem reage de novo com o mesmo emoji tira a sua reação, e a chave vazia sai junto.
+  const tirou = await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: '🧑🏽‍🚀' });
+  assert.equal('🧑🏽‍🚀' in tirou.reacoes, false);
+  assert.deepEqual(tirou.reacoes['👍'].sort(), [ana.conta.codigo, bia.conta.codigo].sort(), 'as reações dos outros emojis ficam');
+
+  // O que não é um emoji inteiro, ou não é de uma mensagem reagível, não passa.
+  for (const lixo of ['a', 'oi', '👍👍', '<b>', '', null, 7]) assert.equal((await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: lixo })).ok, false, `recusou ${JSON.stringify(lixo)}`);
+  assert.equal((await a.pedir('dm-reagir', { com: bia.conta.codigo, id: 'nao-existe', emoji: '👍' })).ok, false);
+  assert.equal((await a.pedir('dm-reagir', { com: bia.conta.codigo, id: convite.mensagem.id, emoji: '👍' })).ok, false, 'convite não recebe reação');
+  // Fora da conversa, ninguém reage: o Caio não é amigo de nenhuma das duas.
+  assert.equal((await c.pedir('dm-reagir', { com: ana.conta.codigo, id, emoji: '👍' })).ok, false);
+
+  // Sem passar de vinte emojis diferentes numa mensagem: o servidor guarda tudo.
+  // Já há dois emojis na mensagem (👍 e 🇧🇷): dezoito mais completam os vinte.
+  const base = ['😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '😚'];
+  let ultimo;
+  for (const emoji of base) ultimo = await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji });
+  assert.equal(Object.keys(ultimo.reacoes).length, 20);
+  const vinteEUm = await a.pedir('dm-reagir', { com: bia.conta.codigo, id, emoji: '🤗' });
+  assert.equal(vinteEUm.ok, false);
+  assert.match(vinteEUm.error, /20 reações/);
+  // Mas quem já tem uma pode tirar a sua, e quem quer entrar numa que existe consegue.
+  assert.equal((await b.pedir('dm-reagir', { com: ana.conta.codigo, id, emoji: '😀' })).ok, true);
+
+  // O histórico traz as reações para quem abre a conversa depois.
+  const historico = await b.pedir('dm-historico', { com: ana.conta.codigo });
+  assert.deepEqual(historico.mensagens.find(m => m.id === id).reacoes['😀'].sort(), [ana.conta.codigo, bia.conta.codigo].sort());
+  // E reagir não conta como mensagem nova: nada acende na contagem de não lidas.
+  assert.equal((await b.pedir('dm-conversas', {})).conversas[0].naoLidas, 2, 'só a mensagem e o convite, e não as reações');
+
+  // Sem amizade (desfeita), ninguém mais reage.
+  await ana.pedir(`/api/conta/amigos/${bia.conta.codigo}`, { metodo: 'DELETE' });
+  assert.equal((await b.pedir('dm-reagir', { com: ana.conta.codigo, id, emoji: '🎉' })).ok, false);
 });
 
 // O que o aplicativo Android pergunta com a página congelada (android/…/AvisosJob.java): só leitura,

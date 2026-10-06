@@ -38,6 +38,18 @@ function salvarConfig(dados) {
   } catch (erro) { console.error('Não foi possível salvar a configuração:', erro.message); }
 }
 
+// O servidor que a tela de endereço já traz preenchido. Quem abre o Nexo pela primeira vez só aperta "Conectar",
+// sem saber digitar um endereço; quem usa outro servidor troca o texto, e a sala tem "Trocar de servidor" nas
+// configurações. O valor é o NEXO_SERVIDOR_PADRAO do .env.prod, gravado em servidor-padrao.json ao empacotar
+// (scripts/servidor-padrao.cjs: o aplicativo instalado não lê o .env de ninguém). A variável, se estiver no
+// ambiente, vence o arquivo, para desenvolver contra outro servidor. Só entra uma origem http(s) válida: o que
+// passa daqui vai para a página.
+function servidorPadrao() {
+  let doArquivo = '';
+  try { doArquivo = JSON.parse(fs.readFileSync(path.join(__dirname, 'servidor-padrao.json'), 'utf8')).endereco; } catch (_) { /* sem arquivo: sem padrão */ }
+  return origemHttp(process.env.NEXO_SERVIDOR_PADRAO) || origemHttp(doArquivo) || '';
+}
+
 let janela = null;
 let agente = null;
 // Endereço que está sendo tentado agora. Só vira configuração se a página carregar.
@@ -100,7 +112,8 @@ function criarJanela() {
       // aplicativo mais novo (public/versao-app.js).
       // E o tipo de instalação, que decide se a página espera a atualização sozinha (instalador,
       // AppImage, .deb) ou oferece o download do arquivo novo (portátil).
-      additionalArguments: [`--pid-do-app=${process.pid}`, `--versao-do-app=${app.getVersion()}`, `--instalacao=${atualizador.tipo}`]
+      // O servidor padrão vai pelo mesmo caminho: é a tela de endereço que o mostra preenchido.
+      additionalArguments: [`--pid-do-app=${process.pid}`, `--versao-do-app=${app.getVersion()}`, `--instalacao=${atualizador.tipo}`, `--servidor-padrao=${servidorPadrao()}`]
     }
   });
 

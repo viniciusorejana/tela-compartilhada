@@ -168,7 +168,7 @@ export function Cartao({ children, style }) {
   return <div style={{ background: COR.bg2, borderRadius: 26, boxShadow: `0 40px 90px rgba(0,0,0,.45), 0 0 0 1.5px ${COR.linha2}`, fontFamily: FONTE, color: COR.texto, ...style }}>{children}</div>;
 }
 
-// A pílula de "chip" usada para dizer um fato curto ("720p60 grátis").
+// A pílula de "chip" usada para dizer um fato curto ("Até 1440p a 60 quadros").
 export function Chip({ children, inicio = 0, cor = COR.accentTexto, fundo = 'rgba(136,121,246,.14)', tamanho = 26, style }) {
   const q = useCurrentFrame();
   const p = mola(q, inicio);

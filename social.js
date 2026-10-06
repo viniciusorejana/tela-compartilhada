@@ -28,6 +28,7 @@ const crypto = require('node:crypto');
 const { criarAntiabuso, regrasDoAmbiente } = require('./telemetria/abuso');
 const { formatarCodigo, normalizarCodigo } = require('./contas/regras');
 const { tipoDosBytes } = require('./contas/imagens');
+const vitrineComum = require('./public/vitrine');
 
 const DIA = 24 * 60 * 60 * 1000;
 const VIDA_DA_CONVERSA = 3 * DIA;
@@ -38,6 +39,9 @@ const TEXTO_MAXIMO = 1000;
 const IMAGEM_EM_DATA_URL = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)$/;
 const DATA_URL_MAXIMA = 820 * 1024;
 const IMAGENS_POR_CONVERSA = 20;
+// Quantos emojis diferentes uma mensagem aceita como reação: o mesmo teto do chat da sala. Sem ele,
+// um dos dois enchia uma mensagem de reações até ela virar uma parede, com o servidor guardando tudo.
+const REACOES_DIFERENTES_POR_MENSAGEM = 20;
 const BYTES_DE_IMAGENS_NO_SERVIDOR = 64 * 1024 * 1024;
 const CONVERSAS_NO_SERVIDOR = 20000;
 const ABAS_POR_CONTA = 8;
@@ -258,7 +262,7 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
     // Cada evento passa pelo freio da conta, e pelo total. Um evento sem regra cai em 'outros'.
     socket.use((args, next) => {
       const evento = args[0];
-      const tipo = { 'dm-enviar': 'dm-enviar', convidar: 'convidar', 'dm-digitando': 'dm-digitando' }[evento] || 'dm-acao';
+      const tipo = { 'dm-enviar': 'dm-enviar', convidar: 'convidar', 'dm-digitando': 'dm-digitando', 'dm-reagir': 'dm-reagir' }[evento] || 'dm-acao';
       const total = freio.verificar(contaId, 'social-total');
       const resultado = total.ok ? freio.verificar(contaId, tipo) : total;
       if (resultado.ok) return next();
@@ -304,7 +308,7 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
         if (!freada.ok) return { ok: false, error: 'Imagens demais em pouco tempo. Aguarde um instante.', segundos: freada.segundos || 10 };
       }
       if (!limpo && !lida) return { ok: false, error: 'A mensagem está vazia.' };
-      const mensagem = { id: crypto.randomUUID(), de: formatarCodigo(eu.codigo), texto: limpo, em: agora(), tipo: 'texto' };
+      const mensagem = { id: crypto.randomUUID(), de: formatarCodigo(eu.codigo), texto: limpo, em: agora(), tipo: 'texto', reacoes: {} };
       if (lida) {
         const { chave } = conversaEntre(eu.id, outro.id, true);
         mensagem.imagem = { id: guardarImagem(chave, mensagem.id, lida), largura: dimensao(largura), altura: dimensao(altura) };
@@ -352,6 +356,34 @@ function criarSocial({ io, contas, amigos, tokenDoPedido, ondeEsta = () => null,
       emitirPara(contaId, 'dm-apagada', { com: formatarCodigo(outro.codigo), id });
       emitirPara(outro.id, 'dm-apagada', { com: meu, id });
       return { ok: true };
+    }));
+
+    // Reagir a uma mensagem da conversa, com qualquer emoji do seletor. Reagir de novo com o mesmo
+    // emoji tira a reação, como no chat da sala. Só entre amigos e sem bloqueio no meio -- a mesma
+    // regra de escrever --, e nunca no convite, que é uma pergunta com botão, e não uma fala.
+    //
+    // Reagir não renova a vida da conversa (`tocar`): ela some três dias depois da última MENSAGEM, e
+    // uma carinha não é uma mensagem. Quem reage tampouco acende a contagem de não lidas do outro.
+    socket.on('dm-reagir', responderCom(({ com, id, emoji }) => {
+      if (!vitrineComum.ehUmEmoji(emoji)) return { ok: false, error: 'Escolha um emoji.' };
+      const outro = contaPeloCodigo(com);
+      if (!outro || contas.suspensa(outro)) return { ok: false, error: 'Essa conta não existe mais.' };
+      if (!amigos.saoAmigos(contaId, outro.id) || banco.bloqueioEntre(contaId, outro.id)) return { ok: false, error: 'Reações são só entre amigos.' };
+      const achada = conversaEntre(contaId, outro.id);
+      const mensagem = achada?.conversa.mensagens.find(m => m.id === String(id || ''));
+      if (!mensagem || mensagem.tipo === 'convite') return { ok: false, error: 'Mensagem não encontrada.' };
+      const meu = codigoDaConta(contaId);
+      mensagem.reacoes ||= {};
+      const pessoas = new Set(mensagem.reacoes[emoji] || []);
+      if (!pessoas.size && Object.keys(mensagem.reacoes).length >= REACOES_DIFERENTES_POR_MENSAGEM) {
+        return { ok: false, error: `Esta mensagem já tem ${REACOES_DIFERENTES_POR_MENSAGEM} reações diferentes.` };
+      }
+      pessoas.has(meu) ? pessoas.delete(meu) : pessoas.add(meu);
+      // Quem tirou a última reação daquele emoji leva a chave junto: com qualquer emoji valendo, as vazias seriam lixo.
+      if (pessoas.size) mensagem.reacoes[emoji] = [...pessoas]; else delete mensagem.reacoes[emoji];
+      emitirPara(contaId, 'dm-reacoes', { com: formatarCodigo(outro.codigo), id: mensagem.id, reacoes: mensagem.reacoes });
+      emitirPara(outro.id, 'dm-reacoes', { com: meu, id: mensagem.id, reacoes: mensagem.reacoes });
+      return { ok: true, reacoes: mensagem.reacoes };
     }));
 
     socket.on('dm-digitando', ({ para } = {}) => {

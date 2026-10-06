@@ -68,7 +68,7 @@
     <!-- O estado em cima, numa linha só cada texto, e as ações numa fileira embaixo: três ícones ao
          lado do texto espremiam "Conectado à sala" em duas linhas na lateral estreita. -->
     <div class="connection-box"><div class="connection-estado"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div></div><div class="connection-acoes"><button class="ghost mensagens-btn" id="mensagensBtn" type="button" hidden title="Mensagens diretas" aria-label="Mensagens diretas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v10H8l-4 4Z"/><path d="M8 10h8"/></svg><b class="mensagens-contagem" id="mensagensContagem" hidden>0</b></button><button class="ghost" data-action="sugestao" type="button" title="Sugestões e problemas" aria-label="Sugestões e problemas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/></svg></button><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button></div></div>
-    <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Editar meu perfil" aria-label="Editar meu perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState" title="Pronto para entrar"><span class="estado-longo">Pronto para entrar</span><span class="estado-curto">Fora da sala</span></small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost config-engrenagem" type="button" data-action="devices" title="Configurações" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button></div>
+    <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Personalizar perfil" aria-label="Personalizar perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState" title="Pronto para entrar"><span class="estado-longo">Pronto para entrar</span><span class="estado-curto">Fora da sala</span></small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost config-engrenagem" type="button" data-action="devices" title="Configurações" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button></div>
   </aside>
   <header class="topbar">
     <div class="room-id">
@@ -129,6 +129,8 @@
   </main>
 
   <aside class="chat" id="chatPanel" aria-label="Chat da sala">
+    <!-- A alça para mudar a largura (redimensionar.js, ligada em sala.js). Uma em cada painel da coluna: o chat e a música dividem o mesmo lugar. -->
+    <div class="chat-alca" id="chatAlca" aria-label="Largura do chat" title="Arraste para mudar a largura do chat · duplo clique volta ao normal"></div>
     <div class="chat-head">
       <strong><span aria-hidden="true">#</span> chat da sala</strong>
       <div class="chat-head-actions"><button id="chatPinsBtn" class="ghost chat-pins-btn" type="button" aria-label="Ver mensagens fixadas" title="Mensagens fixadas" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/></svg><span id="chatPinsCount" hidden>0</span></button><button id="chatFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no chat" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="chatClose" class="ghost" type="button" title="Fechar chat" aria-label="Fechar chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
@@ -148,6 +150,7 @@
   </aside>
 
   <aside class="chat musica" id="musicaPanel" aria-label="Canal de música">
+    <div class="chat-alca" id="musicaAlca" aria-label="Largura do canal de música" title="Arraste para mudar a largura do canal · duplo clique volta ao normal"></div>
     <div class="chat-head">
       <strong><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg> música</strong>
       <div class="chat-head-actions"><button id="musicaFocusBtn" class="ghost chat-focus-btn" type="button" aria-label="Focar somente no canal de música" aria-pressed="false" title="Ocultar palco e plateia">Focar</button><button id="musicaClose" class="ghost" type="button" title="Fechar canal de música" aria-label="Fechar canal de música"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
@@ -254,7 +257,6 @@
           <div class="config-perfil-corpo">
             <span class="perfil-avatar" id="configAvatar" aria-hidden="true"></span>
             <div class="config-perfil-nome"><strong id="configNome"></strong><small id="configCodigo"></small></div>
-            <button type="button" id="configEditarPerfil">Editar perfil</button>
             <a class="botao-link" id="configCriarConta" href="/conta" hidden>Criar conta grátis</a>
           </div>
           <dl class="config-perfil-dados">
@@ -263,7 +265,7 @@
           </dl>
         </div>
         <p class="config-dica" id="configPerfilDica"></p>
-        <div class="config-perfil-mais"><button type="button" class="secondary" id="configCartao">Personalizar o cartão</button><button type="button" class="secondary" id="configConta" data-ir-para-conta>Senha e conta</button></div>
+        <div class="config-perfil-mais"><button type="button" id="configCartao">Personalizar perfil</button><button type="button" class="secondary" id="configConta" data-ir-para-conta>Senha e conta</button></div>
       </div>
 
       <!-- O Estúdio (estudio-sala.js): deixar ou não que levem você para o OBS, e quem está
@@ -405,6 +407,13 @@
             <input type="checkbox" class="interruptor" role="switch" data-som="conexao" aria-label="Avisar quando a sua conexão cair ou voltar" checked>
           </div>
         </div>
+        <!-- O par visual dos sons de "tela ao vivo" e companhia (atividade.js): para quem não está olhando para o palco. -->
+        <span class="config-rotulo config-rotulo-grupo">Avisos na tela</span>
+        <div class="config-bloco">
+          <label class="toggle-line" for="avisosAtividade"><span><strong>Avisar quando alguém começar algo</strong><small>Um aviso no canto quando alguém compartilha a tela ou põe uma música e o palco não está na sua frente: com o chat em foco, com o início por cima da sala, ou com a janela em segundo plano.</small></span><input id="avisosAtividade" type="checkbox" role="switch" checked></label>
+          <label class="toggle-line" for="avisosSistema"><span><strong>Avisos do sistema, com a janela em segundo plano</strong><small id="avisosSistemaDica">Uma notificação do computador, sem som, quando a sala está em outra janela ou aba. O navegador pede a sua permissão uma vez.</small></span><input id="avisosSistema" type="checkbox" role="switch"></label>
+        </div>
+        <p class="config-dica">Em “Não incomodar”, os avisos do sistema ficam em silêncio; o aviso no canto da sala continua, como os sons da chamada.</p>
         <p class="config-dica">Ensurdecido (<kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd>), a sala fica em silêncio: os avisos de quem entra, sai e escreve também. Os que são sobre você continuam. Em “Não incomodar” (o status da sua conta), só as mensagens e as menções ficam em silêncio. A mesa de sons tem o volume dela, na própria mesa.</p>
       </div>
 
@@ -429,7 +438,7 @@
         <div class="cores-exatas" id="coresExatas">
           <div class="cores-exatas-cabeca">
             <span class="config-rotulo">Cores exatas</span>
-            <span class="selo-premium" id="coresExatasSelo" hidden><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Premium</span>
+            <span class="selo-completo" id="coresExatasSelo" hidden><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Nível completo</span>
           </div>
           <div class="cores-exatas-linha">
             <label class="cor-exata"><input type="color" id="corExataDestaque" value="#8879f6"><span class="cor-exata-amostra" aria-hidden="true"></span><span class="cor-exata-texto"><strong>Destaque</strong><small id="corExataDestaqueHex">do tema</small></span></label>
@@ -488,16 +497,22 @@
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAplicativo" aria-labelledby="abaAplicativo" hidden>
-        <header class="config-cabeca"><h3>Aplicativo de mesa</h3><p>O que o Nexo faz sozinho neste computador.</p></header>
-        <div class="config-bloco app-versao">
+        <header class="config-cabeca"><h3 id="appTitulo">Aplicativo de mesa</h3><p id="appSubtitulo">O que o Nexo faz sozinho neste computador.</p></header>
+        <!-- O servidor (servidor-app.js): o endereço em que o aplicativo está e o caminho de volta à tela de endereço. Só nos aplicativos; no navegador, o servidor é o próprio site. -->
+        <div class="config-bloco app-versao" id="appServidor" hidden>
+          <div class="app-versao-texto"><strong>Servidor</strong><small id="appServidorEndereco"></small></div>
+          <button type="button" class="secondary" id="appServidorTrocar">Trocar de servidor</button>
+        </div>
+        <p class="config-dica" id="appServidorDica" hidden></p>
+        <div class="config-bloco app-versao" data-so-mesa>
           <div class="app-versao-texto"><strong id="appVersao">Nexo</strong><small id="appVersaoEstado" role="status"></small></div>
           <button type="button" class="secondary" id="appProcurar">Procurar atualização</button>
         </div>
-        <div class="config-bloco" id="appOpcoes" hidden>
+        <div class="config-bloco" id="appOpcoes" data-so-mesa hidden>
           <label class="toggle-line" for="appAtualizarSozinho" id="appLinhaAtualizar"><span><strong>Atualizar sozinho</strong><small>A versão nova desce em silêncio e se instala quando você fecha o Nexo.</small></span><input id="appAtualizarSozinho" type="checkbox" role="switch"></label>
           <label class="toggle-line" for="appAbrirAoEntrar" id="appLinhaAbrir"><span><strong>Abrir ao entrar no computador</strong><small>O Nexo abre minimizado quando você liga o computador.</small></span><input id="appAbrirAoEntrar" type="checkbox" role="switch"></label>
         </div>
-        <p class="config-dica" id="appDica"></p>
+        <p class="config-dica" id="appDica" data-so-mesa></p>
       </div>
 
     <div class="modal-actions">
@@ -630,6 +645,8 @@
 </div></div>
 <!-- As mensagens diretas, sem sair da sala (conversa.js): a lista de conversas e a conversa aberta. -->
 <div class="modal hidden" id="mensagensPanel" role="dialog" aria-modal="true" aria-labelledby="mensagensTitulo"><div class="modal-card mensagens-card">
+  <!-- O canto para mudar o tamanho do painel (redimensionar.js, ligado em social-sala.js). No canto, e não numa borda: as bordas são rolagem da conversa e da lista. -->
+  <div class="mensagens-alca" id="mensagensAlca" title="Arraste para mudar o tamanho · duplo clique volta ao normal"></div>
   <div class="mensagens-colunas">
     <aside class="mensagens-lista nx-social"><h2 id="mensagensTitulo">Mensagens</h2><ul id="mensagensConversas"></ul></aside>
     <div class="mensagens-conversa" id="mensagensConversa"><p class="mensagens-vazio">Escolha uma conversa. As mensagens diretas ficam só na memória do servidor e somem três dias depois da última.</p></div>
@@ -639,7 +656,7 @@
 <div class="modal hidden" id="sugestaoPanel" role="dialog" aria-modal="true" aria-labelledby="sugestaoTitulo"><div class="modal-card"><h2 id="sugestaoTitulo">Sugestões e problemas</h2><p class="modal-sub">O que faltou, o que incomodou, o que seria bom ter. Chega direto em quem cuida do Nexo — e o que você escrever aqui é o que decide o que vem antes.</p><div class="relato"><label class="relato-titulo" for="sugestaoTexto">Conte com suas palavras</label><textarea id="sugestaoTexto" rows="5" maxlength="500" placeholder="Ex.: queria poder deixar a sala aberta e voltar depois com o mesmo link."></textarea><p class="relato-aviso">Vão junto <strong>a sala e o nome</strong> com que você entrou. <strong>Não vão</strong> mensagens do chat, o endereço do convite, senhas nem o relatório técnico — para problemas de imagem e som, o <strong>Diagnóstico</strong> tem um campo próprio, que anexa as medições.</p><div id="sugestaoStatus" class="relato-status" role="status"></div></div><div class="modal-actions"><button type="button" id="sendSugestaoBtn">Enviar</button><button class="secondary" type="button" data-close="sugestaoPanel">Fechar</button></div></div></div>
 <!-- O cartão de perfil: a vitrine da pessoa (cartao.js monta, com o banner, a borda, a bolha e o
      efeito de abrir), e embaixo o que só a sala sabe -- o tempo aqui, os amigos, o OBS. -->
-<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-vitrine" id="perfilVitrine"></div><div class="perfil-resto"><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><div class="perfil-social nx-social" id="perfilSocial" hidden></div><section class="perfil-obs" id="perfilObs" aria-labelledby="perfilObsTitulo" hidden><div class="perfil-obs-topo"><strong id="perfilObsTitulo">Levar para o OBS</strong><label class="toggle-line perfil-obs-som" for="perfilObsSom"><span>Com som</span><input type="checkbox" id="perfilObsSom" role="switch" checked></label></div><div class="perfil-obs-botoes" id="perfilObsBotoes"><button type="button" class="estudio-link" data-fonte-obs="camera">Câmera</button><button type="button" class="estudio-link" data-fonte-obs="tela">Tela</button><button type="button" class="estudio-link" data-fonte-obs="voz">Voz</button><button type="button" class="estudio-link" data-fonte-obs="somDaTela">Som da tela</button><button type="button" class="estudio-link" data-fonte-obs="reativo">Rosto que reage</button></div><p class="perfil-obs-status" id="perfilObsStatus" role="status"></p></section><div class="modal-actions"><button type="button" id="perfilEditar" hidden>Editar meu perfil</button><button type="button" class="secondary" id="perfilPersonalizar" hidden>Personalizar o cartão</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div></div>
+<div class="modal hidden" id="perfilPanel" role="dialog" aria-modal="true" aria-labelledby="perfilNome"><div class="modal-card perfil-card"><div class="perfil-vitrine" id="perfilVitrine"></div><div class="perfil-resto"><div class="perfil-social nx-social" id="perfilSocial" hidden></div><button type="button" class="perfil-mais" id="perfilMais" aria-expanded="false" aria-controls="perfilDetalhes"><span id="perfilMaisTexto">Ver mais</span><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="perfil-detalhes" id="perfilDetalhes"><p class="perfil-tempo" id="perfilTempo" hidden></p><p class="modal-sub" id="perfilDica"></p><section class="perfil-obs" id="perfilObs" aria-labelledby="perfilObsTitulo" hidden><div class="perfil-obs-topo"><strong id="perfilObsTitulo">Levar para o OBS</strong><label class="toggle-line perfil-obs-som" for="perfilObsSom"><span>Com som</span><input type="checkbox" id="perfilObsSom" role="switch" checked></label></div><div class="perfil-obs-botoes" id="perfilObsBotoes"><button type="button" class="estudio-link" data-fonte-obs="camera">Câmera</button><button type="button" class="estudio-link" data-fonte-obs="tela">Tela</button><button type="button" class="estudio-link" data-fonte-obs="voz">Voz</button><button type="button" class="estudio-link" data-fonte-obs="somDaTela">Som da tela</button><button type="button" class="estudio-link" data-fonte-obs="reativo">Rosto que reage</button></div><p class="perfil-obs-status" id="perfilObsStatus" role="status"></p></section></div><div class="modal-actions"><button type="button" id="perfilPersonalizar" hidden>Personalizar perfil</button><a class="botao-link" id="perfilCriarConta" href="/conta" hidden>Criar minha conta</a><button class="secondary" type="button" id="perfilModerar" hidden>Moderar</button><button type="button" data-close="perfilPanel">Fechar</button></div></div></div></div>
 <!-- A foto de perfil grande não mora aqui: foto-grande.js cria o visor na primeira vez que alguém o
      pede (o cartão, o "Meu perfil", as configurações), por cima de qualquer painel. -->
 <!-- A folha de volume (volume-folha.js): no toque, o controle de cada pessoa é uma pílula que
@@ -658,30 +675,19 @@
     <div class="modal-actions"><button type="button" data-close="volumePanel">Pronto</button></div>
   </div>
 </div>
-<!-- O perfil de quem tem conta, editado sem sair da chamada (perfil-sala.js). Muda na hora
-     para a sala inteira: o servidor avisa todo mundo quando a conta salva. -->
+<!-- Quem entrou sem conta não tem perfil para personalizar: este painel explica o que a conta traz e leva a criá-la.
+     Com conta, o botão do "eu" abre direto o editor do perfil (editor-cartao.js, num painel da sala): o apelido, a
+     cor, a marca, a foto e o cartão, num lugar só. -->
 <div class="modal hidden" id="meuPerfilPanel" role="dialog" aria-modal="true" aria-labelledby="meuPerfilTitulo"><div class="modal-card meu-perfil-card">
-  <h2 id="meuPerfilTitulo">Meu perfil</h2>
-  <p class="modal-sub" id="meuPerfilSub">Muda na hora para todo mundo nesta sala, e vale nas próximas: o perfil segue a sua conta.</p>
-  <div class="meu-perfil-previa"><span class="perfil-avatar" id="meuPerfilAvatar" aria-hidden="true"></span><div aria-hidden="true"><strong id="meuPerfilNome"></strong><small id="meuPerfilCodigo"></small></div><div class="meu-perfil-foto" id="meuPerfilFoto" hidden><label class="botao-arquivo" for="meuPerfilFotoArquivo" tabindex="0">Trocar a foto</label><input id="meuPerfilFotoArquivo" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden><button type="button" id="meuPerfilFotoTirar" hidden>Tirar</button></div></div>
-  <form id="meuPerfilForm" novalidate>
-    <label class="campo-rotulo" for="meuPerfilApelido">Apelido</label>
-    <input id="meuPerfilApelido" type="text" maxlength="40" autocomplete="nickname" required>
-    <small class="campo-dica">O nome que a sala mostra. Numa sala com dois nomes iguais, o seu código aparece ao lado.</small>
-    <fieldset class="escolhas" id="meuPerfilCores"><legend>Cor</legend></fieldset>
-    <fieldset class="escolhas" id="meuPerfilMarcas"><legend>Marca no lugar das iniciais</legend></fieldset>
-    <p class="relato-status" id="meuPerfilStatus" role="status"></p>
-  </form>
-  <div class="meu-perfil-sem-conta" id="meuPerfilSemConta" hidden>
-    <p class="modal-sub">Sem conta, o nome vale só nesta entrada e qualquer pessoa pode usar o mesmo. Com uma conta grátis você escolhe apelido, cor e marca, ganha um código que distingue você, e o perfil segue você em todo aparelho.</p>
+  <h2 id="meuPerfilTitulo">Seu perfil</h2>
+  <div class="meu-perfil-previa"><span class="perfil-avatar" id="meuPerfilAvatar" aria-hidden="true"></span><div aria-hidden="true"><strong id="meuPerfilNome"></strong><small id="meuPerfilCodigo"></small></div></div>
+  <div class="meu-perfil-sem-conta" id="meuPerfilSemConta">
+    <p class="modal-sub">Sem conta, o nome vale só nesta entrada e qualquer pessoa pode usar o mesmo. Com uma conta grátis você escolhe apelido, cor, marca e foto, monta o cartão do seu jeito, ganha um código que distingue você, e o perfil segue você em todo aparelho.</p>
     <p class="modal-sub">A conta é criada na página da conta, que abre aqui, no lugar da sala: você sai da chamada e, criada a conta, volta direto para esta sala, já com ela.</p>
   </div>
   <div class="modal-actions">
-    <button type="submit" form="meuPerfilForm" id="meuPerfilSalvar" disabled>Salvar</button>
-    <a class="botao-link" id="meuPerfilCriar" href="/conta" hidden>Criar conta grátis</a>
+    <a class="botao-link" id="meuPerfilCriar" href="/conta">Criar conta grátis</a>
     <button type="button" data-close="meuPerfilPanel">Fechar</button>
-    <button type="button" class="secondary meu-perfil-mais" id="meuPerfilCartao" title="Banner, borda, efeito, bio e status, sem sair da sala">Personalizar o cartão</button>
-    <button type="button" class="secondary meu-perfil-mais" id="meuPerfilConta" data-ir-para-conta>Senha e conta</button>
   </div>
 </div></div>
 <!-- O cartão completo (editor-cartao.js, o mesmo do início), sem sair da chamada: social-sala.js
@@ -840,6 +846,7 @@
 <script src="/app-android.js"></script>
 <!-- Os painelzinhos (cor e emojis) antes da sala: o chat e as reações os pedem desde o começo. -->
 <script src="/popover.js"></script>
+<script src="/redimensionar.js"></script>
 <script src="/seletor-cor.js"></script>
 <script src="/emojis.js"></script>
 <script src="/sala.js"></script>
@@ -859,7 +866,9 @@
 <script src="/estudio-sala.js"></script>
 <script src="/versao-app.js"></script>
 <script src="/toast.js"></script>
+<script src="/atividade.js"></script>
 <script src="/atualizacao-app.js"></script>
+<script src="/servidor-app.js"></script>
 <script src="/social.js"></script>
 <script src="/conversa.js"></script>
 <script src="/editor-cartao.js"></script>

@@ -50,7 +50,7 @@ function resumirAparelho(agente) {
 // servidor. Sobrevive a reiniciar o processo, o que um segredo sorteado na memória não faria.
 const csrfDe = token => crypto.createHash('sha256').update(`nexo-csrf|${token}`).digest('base64url').slice(0, 32);
 
-// `planosLigados` decide o que é "premium" no cartão de perfil, como na tela: com os planos
+// `planosLigados` decide o que é "completo" no cartão de perfil, como na tela: com os planos
 // desligados (NEXO_PLANOS=0), todo mundo tem. `aoGanharConquista(contaId, conquista)` é o aviso
 // que o servidor leva às abas da pessoa (social.js); `aoApagarConta(contaId)` esquece o que a
 // conta tinha na memória -- as conversas diretas, que nunca foram para o banco.
@@ -93,7 +93,7 @@ function criarContas({
   }
 
   // O nível que vale AGORA para esta conta. Lido do banco a cada pergunta: o painel pode ter
-  // acabado de marcá-la como premium, e o prazo vence sozinho.
+  // acabado de marcá-la como completa, e o prazo vence sozinho.
   const nivelDaConta = contaId => planos.nivelDaConta(contaId ? banco.contaPorId(contaId) : null, agora());
 
   // ---------- O painel ----------
@@ -130,20 +130,20 @@ function criarContas({
       if (lista.length > porPagina) { lista = lista.slice(0, porPagina); proxima = regras.formatarCodigo(lista.at(-1).codigo); }
     }
     return {
-      contagens: { total: numeros.total, premium: numeros.premium, suspensas: numeros.suspensas },
+      contagens: { total: numeros.total, completos: numeros.completos, suspensas: numeros.suspensas },
       cadastrosPorDia: [...porDia].map(([dia, total]) => ({ dia, total })),
       contas: lista.map(paraOPainel), proxima
     };
   }
 
-  // O atalho da fase 3: marcar premium à mão, com prazo, para quem pagar por PIX direto. É
-  // `plano` e `plano_ate` -- a mesma superfície que a webhook do pagamento vai mudar depois.
+  // O atalho do painel: marcar o nível completo à mão, com prazo (ou voltar ao básico). É `plano` e
+  // `plano_ate` -- a mesma superfície que qualquer integração futura vai mudar.
   function agirPeloPainel(codigo, { acao, dias } = {}) {
     const conta = banco.contaPorCodigo(regras.normalizarCodigo(codigo));
     if (!conta) return falha(404, 'Conta não encontrada.');
     const quantos = Number(dias);
     const prazo = Number.isFinite(quantos) && quantos > 0 && quantos <= 3650 ? agora() + Math.round(quantos) * DIA : null;
-    if (acao === 'premium') banco.definirPlano(conta.id, 'premium', prazo);
+    if (acao === 'completo') banco.definirPlano(conta.id, 'completo', prazo);
     else if (acao === 'gratis') banco.definirPlano(conta.id, 'gratis', null);
     else if (acao === 'suspender') {
       if (!prazo) return falha(400, 'Diga por quantos dias a conta fica suspensa.');
@@ -339,8 +339,8 @@ function criarContas({
     return valores;
   }
   const nivelAgora = conta => planos.nivelDaConta(conta, agora());
-  // O que vale como "premium" no cartão: o plano, ou todo mundo com os planos desligados.
-  const premiumNoCartao = conta => !planosLigados || nivelAgora(conta) === 'premium';
+  // O que vale como "completo" no cartão: o plano, ou todo mundo com os planos desligados.
+  const completoNoCartao = conta => !planosLigados || nivelAgora(conta) === 'completo';
   function anunciarConquista(contaId, conquista) {
     if (!banco.guardarConquista(contaId, conquista.id, agora())) return;
     try { aoGanharConquista(contaId, { id: conquista.id, nome: conquista.nome, descricao: conquista.descricao }); }
@@ -381,7 +381,7 @@ function criarContas({
   function conquistasDaConta(conta) {
     const lista = vitrineComum.conquistasDe({
       contadores: contadores(conta.id), amigos: banco.contarAmigos(conta.id), criadaEm: conta.criadaEm,
-      premium: nivelAgora(conta) === 'premium', agora: agora(), jaGanhas: banco.conquistasGuardadas(conta.id).map(c => c.id)
+      agora: agora(), jaGanhas: banco.conquistasGuardadas(conta.id).map(c => c.id)
     });
     return lista;
   }
@@ -401,7 +401,7 @@ function criarContas({
   // amigos veem (social.js).
   function cartaoPublico(conta, guardado = banco.perfil(conta.id)) {
     const conquistas = vitrineComum.ganhas(conquistasDaConta(conta));
-    const vitrine = vitrineComum.vitrineEfetiva(guardado?.vitrine || {}, { premium: premiumNoCartao(conta), conquistas, imagens: guardado?.vitrine?.imagens || {}, agora: agora() });
+    const vitrine = vitrineComum.vitrineEfetiva(guardado?.vitrine || {}, { completo: completoNoCartao(conta), conquistas, imagens: guardado?.vitrine?.imagens || {}, agora: agora() });
     const social = vitrineComum.socialEfetivo(guardado?.social || {}, { agora: agora() });
     return { vitrine, frase: social.frase, conquistas: [...conquistas], desde: conta.criadaEm };
   }
@@ -413,7 +413,7 @@ function criarContas({
       guardada: perfil(conta).vitrine,
       ...cartaoPublico(conta, guardado),
       lista: conquistasDaConta(conta),
-      premium: premiumNoCartao(conta), planosLigados
+      completo: completoNoCartao(conta), planosLigados
     };
   }
 
@@ -656,7 +656,7 @@ function criarContas({
     cadastrar, entrar, sessao, sair, trocarSenha, recuperar, problemaNaRecuperacao, novaRecuperacao, apagar, publica,
     perfil, salvarPerfil, salvarAjustes, dados, nivelDaConta, listarParaOPainel, agirPeloPainel,
     contar, contarTempo, gravarContadores, conquistasDaConta, conferirConquistasDeAmigos, cartaoPublico, vitrine, salvarVitrine,
-    salvarImagemDaVitrine, apagarImagemDaVitrine, salvarSocial, socialDe, premiumNoCartao,
+    salvarImagemDaVitrine, apagarImagemDaVitrine, salvarSocial, socialDe, completoNoCartao,
     salvarAvatar, apagarAvatar, salvarRosto, apagarRosto, imagem, estudio, geracaoDoEstudio, configDoEstudio, salvarEstudio,
     adicionarImagemDoEstudio, apagarImagemDoEstudio, revogarEstudio,
     contaPorCodigo: codigo => banco.contaPorCodigo(regras.normalizarCodigo(codigo)),

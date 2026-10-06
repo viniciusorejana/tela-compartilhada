@@ -101,39 +101,15 @@ const PORTAS_UDP = process.env.SFU_UDP_PORTS || '7882';
 const FAIXAS_QUE_NAO_SERVEM = [
   [/^127\./, 'loopback'],
   [/^169\.254\./, 'sem DHCP'],
-  [/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, 'CGNAT ou Tailscale'],
+  [/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, 'CGNAT'],
   [/^26\./, 'Radmin VPN'],
   [/^25\./, 'Hamachi']
 ];
 
-// O Tailscale é a exceção da faixa acima, e a exceção foi comprada com tempo de conexão.
-//
-// Quem entra pela URL da tailnet recebia dois candidatos: o da LAN e o IP público. O da LAN
-// tem prioridade de "host" -- é tentado primeiro -- e para quem está fora daquela LAN ele
-// simplesmente não responde. A conexão só acontecia depois de esse candidato morto esgotar
-// o prazo. O endereço da tailnet conserta isso: para quem está na tailnet ele responde na
-// hora, direto e cifrado, sem depender de encaminhamento de porta no roteador.
-//
-// O preço: para quem NÃO está na tailnet o 100.x é mais um candidato que nunca responde.
-// E "usar a URL da tailnet" não é o mesmo que "estar na tailnet": com o Funnel ligado, o
-// endereço .ts.net atende a internet inteira, e quem chega por ali não alcança um 100.x.
-//
-// Por isso o padrão é DESLIGADO: só ajuda quando existem outras máquinas registradas na
-// tailnet, e ligar sem elas só acrescenta espera para todo mundo. Confira com
-// `tailscale status`; se aparecer mais de uma máquina, NEXO_ANUNCIAR_TAILSCALE=1 passa a
-// valer a pena.
-//
-// A faixa 100.64/10 também é CGNAT de operadora, onde nada disso vale. Por isso a exceção
-// olha o NOME da interface, não só o endereço.
-const INTERFACE_DE_TAILSCALE = /tailscale|^ts\d/i;
-const anunciarTailscale = (process.env.NEXO_ANUNCIAR_TAILSCALE || '').trim() === '1';
-const ehEnderecoDeTailscale = (nome, ip) =>
-  anunciarTailscale && INTERFACE_DE_TAILSCALE.test(nome) && /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip);
-
 // Descobre os endereços IPv4 reais desta máquina e restringe o servidor de mídia a eles.
 //
 // Sem isso ele tenta abrir a porta em TODOS os endereços que encontrar -- e um PC comum tem
-// muito mais do que parece: Tailscale, VPNs, e sobretudo os vários IPv6 temporários que o
+// muito mais do que parece: VPNs, e sobretudo os vários IPv6 temporários que o
 // Windows cria por privacidade na mesma placa. Dois deles na mesma porta e o "bind" falha,
 // o que encerra o processo INTEIRO e deixa a sala sem vídeo nem voz.
 function enderecosParaEscutar() {
@@ -141,8 +117,7 @@ function enderecosParaEscutar() {
   for (const [nome, enderecos] of Object.entries(os.networkInterfaces())) {
     for (const endereco of enderecos || []) {
       if (endereco.family !== 'IPv4' || endereco.internal) continue;
-      const motivo = FAIXAS_QUE_NAO_SERVEM.find(([padrao]) => padrao.test(endereco.address));
-      if (motivo && !ehEnderecoDeTailscale(nome, endereco.address)) continue;
+      if (FAIXAS_QUE_NAO_SERVEM.some(([padrao]) => padrao.test(endereco.address))) continue;
       escolhidos.push({ ip: endereco.address, interface: nome });
     }
   }

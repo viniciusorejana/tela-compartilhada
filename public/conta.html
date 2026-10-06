@@ -98,33 +98,12 @@
       <p class="conta-sub">O código é permanente e é o que distingue você de outras pessoas com o mesmo apelido. Ele aparece para quem abre o seu perfil numa sala.</p>
       <p id="contaStatus" class="conta-status" role="status"></p>
 
-      <details class="conta-secao" id="secaoPerfil">
-        <summary>Perfil: foto, apelido, cor e marca</summary>
-        <!-- A foto sobe sozinha ao ser escolhida, recortada no quadrado do meio e reduzida pela
-             página (imagem-envio.js); não depende do botão "Salvar o perfil". A prévia é o avatar
-             do topo do cartão. -->
-        <div class="conta-foto">
-          <div class="conta-foto-texto">
-            <strong>Foto</strong>
-            <small>No lugar das iniciais, na sala e nos rostos do OBS. PNG, JPEG, WebP ou GIF animado de até 6 MB.</small>
-          </div>
-          <div class="conta-foto-acoes">
-            <label class="botao-link secundario" for="fotoArquivo" tabindex="0">Escolher</label>
-            <input id="fotoArquivo" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-            <button type="button" class="secondary" id="fotoTirar" hidden>Tirar</button>
-          </div>
-        </div>
-        <p class="conta-status" id="fotoStatus" role="status"></p>
-        <form id="formPerfil" novalidate>
-          <label for="perfilApelido">Apelido</label>
-          <input id="perfilApelido" name="apelido" autocomplete="nickname" maxlength="40" required>
-          <small>É o nome que a sala mostra. Numa sala com dois nomes iguais, o seu código aparece ao lado dele.</small>
-          <fieldset class="escolhas" id="perfilCores"><legend>Cor</legend></fieldset>
-          <fieldset class="escolhas" id="perfilMarcas"><legend>Marca no lugar das iniciais</legend></fieldset>
-          <p class="error" role="alert" hidden></p>
-          <button type="submit">Salvar o perfil</button>
-        </form>
-      </details>
+      <!-- O perfil (foto, apelido, cor, marca e o cartão) tem um editor só, no início: o mesmo que abre dentro da
+           sala. Esta página é da conta -- senha, código de recuperação, dados --, e não repete o que o editor faz. -->
+      <div class="conta-perfil-ir">
+        <span><strong>Perfil</strong><small>Foto, apelido, cor, marca e o cartão que os outros veem: tudo num lugar só.</small></span>
+        <a class="botao-link" id="irParaPerfil" href="/?secao=perfil">Personalizar perfil</a>
+      </div>
 
       <details class="conta-secao">
         <summary>Trocar a senha</summary>

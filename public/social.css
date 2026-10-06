@@ -86,9 +86,30 @@
 .nx-dm-msg-cabeca time { flex:none; color:var(--faint); font-size:var(--fs-meta); }
 .nx-dm-msg-texto { grid-column:2; margin:1px 0 0; color:var(--text-2); font-size:14px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
 .nx-dm-msg-texto a { color:var(--accent-texto); }
-.nx-dm-apagar { --nx-cor:var(--faint); --nx-cor-hover:var(--danger-texto); --nx-fundo-hover:var(--danger-suave); position:absolute; top:4px; right:4px; width:var(--ctl-p); height:var(--ctl-p); border-radius:var(--r-sm); opacity:0; }
-.nx-dm-msg:hover .nx-dm-apagar,.nx-dm-apagar:focus-visible { opacity:1; }
-@media (hover:none) { .nx-dm-apagar { opacity:.5; } }
+/* As ações da mensagem (reagir, apagar) numa barrinha por cima do canto de cima, como no chat da sala:
+   aparece com o mouse ou o foco na mensagem, e não ocupa lugar do texto. No toque ficam à vista, apagadas. */
+.nx-dm-msg-acoes { position:absolute; top:-13px; right:6px; z-index:3; display:flex; gap:1px; padding:2px; border-radius:var(--r-md); background:var(--bg-3); box-shadow:0 0 0 1px var(--line-2),0 6px 18px rgb(0 0 0 / 28%); opacity:0; pointer-events:none; transition:opacity var(--dur-rapida) var(--curva); }
+.nx-dm-msg:hover .nx-dm-msg-acoes,.nx-dm-msg:focus-within .nx-dm-msg-acoes { opacity:1; pointer-events:auto; }
+@media (hover:none) { .nx-dm-msg-acoes { opacity:.6; pointer-events:auto; } }
+.nx-dm-msg-acao { --nx-cor:var(--muted); --nx-cor-hover:var(--text); --nx-fundo-hover:rgb(var(--tinta) / 7.8%); width:var(--ctl-p); height:var(--ctl-p); border-radius:var(--r-sm); }
+.nx-dm-msg-acao.perigo { --nx-cor-hover:var(--danger-texto); --nx-fundo-hover:var(--danger-suave); }
+.nx-dm-msg-acao .ico { transition:transform var(--dur) var(--curva-mola); }
+.nx-dm-msg-acao:hover:not(:disabled) .ico { transform:scale(1.1); }
+/* As reações: uma fileira de pílulas embaixo do texto -- o emoji e quantos reagiram, a minha em destaque. */
+.nx-dm-reacoes { grid-column:2; display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 2px; }
+.nx-dm-reacao { --nx-fundo:rgb(var(--tinta) / 3.5%); --nx-fundo-hover:rgb(var(--tinta) / 7.8%); --nx-cor:var(--text-2); gap:5px; padding:2px 8px; border-radius:var(--r-pilula); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 7.8%); font-size:var(--fs-meta); line-height:1.7; font-variant-numeric:tabular-nums; }
+.nx-dm-reacao-emoji { font-size:var(--fs-md); line-height:1; }
+.nx-dm-reacao.minha { --nx-fundo:color-mix(in srgb,var(--accent) 15.7%,transparent); --nx-fundo-hover:color-mix(in srgb,var(--accent) 22%,transparent); --nx-cor:var(--accent-texto); box-shadow:inset 0 0 0 1px var(--accent); }
+.nx-dm-reacao.adicionar { --nx-cor:var(--faint); --nx-cor-hover:var(--text); padding:2px 7px; }
+.nx-dm-reacao .ico { width:14px; height:14px; }
+/* O painelzinho das cinco rápidas (popover.js; o `.nx-pop button` já traz a base de botão). */
+.nx-dm-rapidas { display:flex; gap:2px; padding:5px; }
+/* Com o nome do painelzinho na frente: a base de `.nx-pop button` pesa (0,1,1), mais que uma classe só. */
+.nx-dm-rapidas .nx-dm-rapida { --nx-fundo-hover:rgb(var(--tinta) / 7.1%); --nx-cor:var(--text); width:36px; height:36px; font-size:var(--fs-xl); border-radius:var(--r-md); }
+.nx-dm-rapidas .nx-dm-rapida:hover:not(:disabled) { transform:scale(1.14); }
+.nx-dm-rapidas .nx-dm-rapida.minha { --nx-fundo:color-mix(in srgb,var(--accent) 20%,transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent-hi) 40%,transparent); }
+.nx-dm-rapidas .nx-dm-rapida.mais { --nx-cor:var(--muted); --nx-cor-hover:var(--text); }
+.nx-dm-rapidas .nx-dm-rapida.mais .ico { width:18px; height:18px; }
 .nx-dm-convite { grid-column:2; display:flex; align-items:center; gap:12px; margin-top:6px; padding:12px 14px; max-width:420px; border-radius:var(--r-lg); background:linear-gradient(120deg,var(--accent-suave),rgb(var(--tinta) / 2%)); box-shadow:inset 0 0 0 1px var(--accent-suave-hi); }
 .nx-dm-convite > .ico { flex:none; width:22px; height:22px; color:var(--accent-texto); }
 .nx-dm-convite-texto { flex:1; min-width:0; display:grid; }

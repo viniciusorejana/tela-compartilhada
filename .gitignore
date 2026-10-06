@@ -3,6 +3,7 @@ test-results/
 playwright-report/
 /debug.log
 app/dist/
+app/servidor-padrao.json
 native/audio-helper/x64/
 native/audio-helper/Applicat.*/
 native/audio-agent/x64/

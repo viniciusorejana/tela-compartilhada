@@ -7,7 +7,7 @@ function instalarRotas(app, { auth, consultar, instante, relatos, contas = null,
   const periodos = ['hoje', '7d', '30d', 'tudo'];
   // A porta fecha antes de tudo: antes da chave, antes do cookie, antes de servir a própria
   // tela de login. Quem chega de fora não descobre sequer que existe um painel aqui -- daí
-  // 404, e não 403. Um túnel com Funnel ligado publica esta porta na internet inteira, e
+  // 404, e não 403. Um túnel ou proxy ligado publica esta porta na internet inteira, e
   // "protegido por uma chave" não é o mesmo que "não acessível".
   app.use('/painel', (req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
@@ -52,8 +52,7 @@ function instalarRotas(app, { auth, consultar, instante, relatos, contas = null,
     try { res.json(contas.listar({ busca: String(req.query.busca || '').slice(0, 64), antes: String(req.query.antes || '').slice(0, 16) })); }
     catch (erro) { next(erro); }
   });
-  // Marcar premium à mão (o atalho que deixa receber de apoiadores por PIX antes da
-  // integração de pagamento), voltar ao grátis, suspender e reativar. A CSRF e a origem já
+  // Marcar o nível completo à mão (com ou sem prazo), voltar ao básico, suspender e reativar. A CSRF e a origem já
   // foram conferidas por `auth.exigir`, como em toda escrita do painel.
   app.post('/painel/api/contas/:codigo', express.json({ limit: 1024, strict: true }), (req, res) => {
     if (!contas) return res.status(404).json({ erro: 'Contas indisponíveis.' });

@@ -1,41 +1,43 @@
 // Os três níveis do Nexo, e o que cada um libera. Módulo puro, para o servidor e para a página,
-// como quality-utils.js: uma regra de cobrança escrita duas vezes acabaria discordando.
+// como quality-utils.js: uma regra de limites escrita duas vezes acabaria discordando.
 //
-// Uma frase orienta tudo (docs/plano-contas.md): cobra-se RESOLUÇÃO, porque é o que custa no
-// servidor -- ele manda uma cópia por espectador. Nunca se cobra por segurança nem por
-// quadros. A única exceção consciente é o degrau de quadros entre quem não tem conta e quem
-// tem: a conta é grátis, e 60 quadros custam de fato ~1,4 vez a banda de 30.
+// Hoje o servidor roda com os planos desligados (NEXO_PLANOS=0): todo mundo tem o nível completo e nada
+// aqui limita ninguém. A regra fica pronta para o dia em que um servidor precise limitar o que custa a ele.
+//
+// Uma frase orienta tudo (docs/plano-contas.md): o que se limita é a RESOLUÇÃO, porque é o que custa no
+// servidor -- ele manda uma cópia por espectador. Nunca se limita por segurança nem por quadros. A única
+// exceção consciente é o degrau de quadros entre quem não tem conta e quem tem: 60 quadros custam de
+// fato ~1,4 vez a banda de 30.
 //
 //   sem conta        720p a 30 quadros
 //   conta grátis     720p a 60 quadros
-//   premium          1080p e 1440p, a 60 quadros
+//   completo         1080p e 1440p, a 60 quadros
 //
-// Assistir nunca é limitado por plano. Quem assiste recebe a tela na qualidade de quem
-// transmite -- e é esse o melhor argumento do premium: um assinante no grupo faz todo mundo ver
-// a tela dele em 1080p, inclusive quem nem tem conta.
+// Assistir nunca é limitado por plano. Quem assiste recebe a tela na qualidade de quem transmite --
+// então uma pessoa de nível completo no grupo faz todo mundo ver a tela dela em 1080p, inclusive quem nem
+// tem conta.
 (function (root) {
   const LIMITES = Object.freeze({
     anonimo: Object.freeze({ altura: 720, quadros: 30 }),
     gratis: Object.freeze({ altura: 720, quadros: 60 }),
-    premium: Object.freeze({ altura: 1440, quadros: 60 })
+    completo: Object.freeze({ altura: 1440, quadros: 60 })
   });
-  const NOMES = Object.freeze({ anonimo: 'sem conta', gratis: 'conta grátis', premium: 'premium' });
+  const NOMES = Object.freeze({ anonimo: 'sem conta', gratis: 'conta grátis', completo: 'completo' });
 
   // A captura raramente entrega exatamente 720, e o escalonador automático mexe na resolução o
   // tempo todo. Sem folga, a tela de quem está dentro do plano cairia por um pixel.
   const FOLGA = 0.1;
 
-  // Toda sala tem teto de pessoas, e ele SOBE quando há um assinante nela: é o impulso que
-  // quem paga dá à sala em que está. 25 fica acima dos picos de 10 a 20 do uso real; 50 é o
-  // dobro. São números de partida, e o painel mostra quantas salas encostam no teto -- é isso
-  // que diz se eles estão certos.
+  // Toda sala tem teto de pessoas, e ele SOBE quando há alguém de nível completo nela. 25 fica acima
+  // dos picos de 10 a 20 do uso real; 50 é o dobro. São números de partida, e o painel mostra quantas
+  // salas encostam no teto -- é isso que diz se eles estão certos.
   const PESSOAS = Object.freeze({ base: 25, comAssinante: 50 });
 
-  // O plano guardado na conta, com o prazo. Premium vencido é conta grátis; e a escolha de
-  // qualidade da pessoa continua guardada, para voltar sozinha quando ela renovar.
+  // O plano guardado na conta, com o prazo. O completo vencido volta ao básico; e a escolha de
+  // qualidade da pessoa continua guardada, para voltar sozinha quando o nível voltar.
   function nivelDaConta(conta, agora = Date.now()) {
     if (!conta) return 'anonimo';
-    if (conta.plano === 'premium' && (conta.planoAte === null || conta.planoAte === undefined || conta.planoAte > agora)) return 'premium';
+    if (conta.plano === 'completo' && (conta.planoAte === null || conta.planoAte === undefined || conta.planoAte > agora)) return 'completo';
     return 'gratis';
   }
 
@@ -65,19 +67,19 @@
   function tetoDePessoas({ comAssinante = false } = {}, pessoas = PESSOAS) {
     return comAssinante ? pessoas.comAssinante : pessoas.base;
   }
-  // Quem entra conta a si mesmo: um assinante entra numa sala que já está no teto base,
+  // Quem entra conta a si mesmo: alguém de nível completo entra numa sala que já está no teto base,
   // porque é a presença dele que o aumenta. Quando ele sai, ninguém é removido -- novas
-  // entradas é que esperam a sala ficar abaixo do teto base, ou outro assinante chegar.
+  // entradas é que esperam a sala ficar abaixo do teto base, ou outro de nível completo chegar.
   function cabeNaSala({ presentes, algumAssinante = false, entraAssinante = false }, pessoas = PESSOAS) {
     return presentes < tetoDePessoas({ comAssinante: algumAssinante || entraAssinante }, pessoas);
   }
 
-  // Escolher a cor exata do destaque e do fundo é do premium. É a exceção consciente à regra
-  // de só cobrar resolução: não custa nada no servidor, mas é um mimo de quem assina, e a
-  // personalização de um clique -- claro e escuro, temas prontos, oito cores -- continua
-  // livre para todo mundo. Com os planos desligados (NEXO_PLANOS=0), vale para todos, como o
-  // 1440p. Quem deixa o premium vencer não perde as cores: elas ficam guardadas e voltam.
-  const podeUsarCoresExatas = (nivel, livre = false) => Boolean(livre) || nivel === 'premium';
+  // Escolher a cor exata do destaque e do fundo é do nível completo. É a exceção consciente à regra de
+  // só limitar resolução: não custa nada no servidor, e a personalização de um clique -- claro e
+  // escuro, temas prontos, oito cores -- continua livre para todo mundo. Com os planos desligados
+  // (NEXO_PLANOS=0, o que roda hoje), vale para todos, como o 1440p. Quem perde o nível completo não
+  // perde as cores: elas ficam guardadas e voltam.
+  const podeUsarCoresExatas = (nivel, livre = false) => Boolean(livre) || nivel === 'completo';
 
   const api = { LIMITES, NOMES, FOLGA, PESSOAS, nivelDaConta, limites, alturaPermitida, quadrosPermitidos, alturaEfetiva, quadrosEfetivos, excedeTeto, tetoDePessoas, cabeNaSala, podeUsarCoresExatas };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

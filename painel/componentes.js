@@ -163,7 +163,7 @@ componente('nexo-uso', ({ contabilidade: c, atual: a }) => [
   e('div', { class: 'colunas' }, e('div', {}, e('h4', {}, 'Tempo em cada tamanho'), ...barras('Tempo acumulado por tamanho de sala', Object.entries(c?.uso.distribuicao || { '1': 0, '2': 0, '3–6': 0, '7–15': 0, '16+': 0 }).map(([nome, valor]) => ({ nome: `${nome} pessoa${nome === '1' ? '' : 's'}`, valor })), duracao)), e('div', {}, e('h4', {}, 'Salas simultâneas'), serie('Histórico de simultaneidade de salas', c?.uso.serie || [], 'pico', v => numero(v, 0)))),
   e('p', { class: 'nota' }, 'Salas e sessões ainda abertas não entram na média de duração. Uma queda de conexão encerra a sessão de sinalização; não comprova que a pessoa deixou de assistir.'),
   // O teto de pessoas começou em números de partida. É esta linha que diz se eles estão certos.
-  e('h4', {}, `Teto de pessoas · ${numero(a?.teto?.base, 0)} por sala, ${numero(a?.teto?.comAssinante, 0)} com alguém premium`),
+  e('h4', {}, `Teto de pessoas · ${numero(a?.teto?.base, 0)} por sala, ${numero(a?.teto?.comAssinante, 0)} com alguém de nível completo`),
   e('div', { class: 'metricas' },
     metrica('Salas no teto base agora', numero(a?.teto?.salasNoTetoBase, 0)),
     metrica('Pico de salas no teto · período', numero(c?.teto?.picoSalasNoTeto, 0)),
@@ -176,7 +176,7 @@ componente('nexo-salas', ({ atual: a, contabilidade: c }) => [
   tabela('Faixas confirmadas pelo SFU', ['Sala', 'Participante', 'Tipo', 'Faixas publicadas'], (a?.sfu.participantesAtuais || []).map(p => [p.sala, p.nome || 'Sem nome', p.bot ? 'Bot' : 'Pessoa', p.faixas.map(f => `${({ camera: 'Câmera', microphone: 'Voz', screen_share: 'Tela', screen_share_audio: 'Som da tela' })[f.fonte] || f.fonte}${f.altura ? ` · ${f.largura}×${f.altura}${f.altura >= 1440 ? ' · 1440p+' : ''}` : ''}${f.muda ? ' · muda' : ''}`).join('; ') || 'Sem faixa'])),
   e('details', {}, e('summary', {}, 'Ver presença e estado declarados no chat'), tabela('Estado informado pelos navegadores', ['Sala', 'Nome', 'Câmera', 'Tela', 'Microfone'], (a?.salas || []).flatMap(s => s.membros.map(m => [s.sala, m.nome, m.estadoDeclarado.camera ? 'Ligada' : 'Desligada', m.estadoDeclarado.screen ? 'Ligada' : 'Desligada', m.estadoDeclarado.micMuted ? 'Mudo' : 'Ativo'])))),
   e('details', {}, e('summary', {}, 'Telas em 1440p no período'), serie('Telas publicadas em 1440p ou mais', c?.telas1440 || [], 'quantidade', v => numero(v, 0)), e('p', { class: 'nota' }, 'Maior quantidade observada em cada janela, sem nomes. A publicação informa o perfil; não prova qual camada foi recebida. Compartilhamentos breves entre coletas podem não aparecer.')),
-  e('p', { class: 'nota' }, `Última reconciliação com o SFU: ${quando(a?.sfu.reconciliadoEm)}. A resolução é a informada na publicação. 1440p é do premium: uma tela acima do plano de quem transmite recebe um aviso e, sem ajuste em poucos segundos, é desligada -- só a tela, não a pessoa.`)
+  e('p', { class: 'nota' }, `Última reconciliação com o SFU: ${quando(a?.sfu.reconciliadoEm)}. A resolução é a informada na publicação. 1440p é do nível completo: uma tela acima do plano de quem transmite recebe um aviso e, sem ajuste em poucos segundos, é desligada -- só a tela, não a pessoa.`)
 ]);
 // ---------- O que as pessoas relataram ----------
 //
@@ -264,11 +264,11 @@ customElements.define('nexo-relatos', Relatos);
 // ---------- Contas e planos ----------
 //
 // Busca própria, como os relatos: é uma lista paginada de quem abriu a seção, e não algo que
-// viaja a cada dez segundos para cada painel aberto. O premium marcado aqui é o atalho do
-// roteiro para receber de apoiadores por PIX antes de a integração de pagamento existir.
+// viaja a cada dez segundos para cada painel aberto. O nível completo marcado aqui é o atalho de quem
+// administra o servidor: vale na hora, com ou sem prazo.
 const dataCurta = n => n ? new Date(n).toLocaleDateString('pt-BR') : '—';
-const descreverPlano = c => c.nivel === 'premium' ? `premium${c.planoAte ? ` até ${dataCurta(c.planoAte)}` : ' sem prazo'}`
-  : c.plano === 'premium' ? `premium vencido em ${dataCurta(c.planoAte)}` : 'grátis';
+const descreverPlano = c => c.nivel === 'completo' ? `completo${c.planoAte ? ` até ${dataCurta(c.planoAte)}` : ' sem prazo'}`
+  : c.plano === 'completo' ? `completo vencido em ${dataCurta(c.planoAte)}` : 'grátis';
 class Contas extends HTMLElement {
   connectedCallback() {
     this.dados = null; this.falhou = ''; this.aviso = ''; this.busca = ''; this.paginas = [''];
@@ -341,14 +341,14 @@ class Contas extends HTMLElement {
     }
     return [
       ...cabeca,
-      e('div', { class: 'metricas' }, metrica('Contas', numero(numeros?.total, 0)), metrica('Premium ativos', numero(numeros?.premium, 0)), metrica('Suspensas agora', numero(numeros?.suspensas, 0))),
+      e('div', { class: 'metricas' }, metrica('Contas', numero(numeros?.total, 0)), metrica('Completos ativos', numero(numeros?.completos, 0)), metrica('Suspensas agora', numero(numeros?.suspensas, 0))),
       // Com poucos dias o gráfico teria duas barras esticadas até a largura inteira; o
       // contêiner o mantém do tamanho de uma lista curta.
       d?.cadastrosPorDia?.length ? e('div', { class: 'grafico-compacto' }, barras('Cadastros por dia · últimos 30 dias', d.cadastrosPorDia.slice(-14).map(x => ({ nome: x.dia.split('-').reverse().slice(0, 2).join('/'), valor: x.total })), v => numero(v, 0))) : null,
       formulario, this.aviso ? e('p', { class: 'nota', role: 'status' }, this.aviso) : null,
       this.escolhida ? this.desenharAcoes(this.escolhida) : null,
       tabelaDeContas, paginacao.length ? e('div', { class: 'busca-contas' }, paginacao) : null,
-      e('p', { class: 'nota' }, 'Premium à mão é o atalho para quem pagar por PIX direto, antes de a integração de pagamento existir. O prazo vence sozinho: vencido, a conta volta a transmitir como grátis, e a qualidade que a pessoa escolheu continua guardada para quando renovar.')
+      e('p', { class: 'nota' }, 'O nível completo à mão vale na hora. O prazo vence sozinho: vencido, a conta volta a transmitir como a básica, e a qualidade que a pessoa escolheu continua guardada para quando o nível voltar.')
     ];
   }
   desenharAcoes(conta) {
@@ -359,9 +359,9 @@ class Contas extends HTMLElement {
       e('strong', {}, `${conta.apelido} · @${conta.usuario} · ${conta.codigo}`),
       e('div', { class: 'botoes' },
         dias, e('span', { class: 'nota' }, 'dias'),
-        botao('Premium por estes dias', '', () => this.agir({ acao: 'premium', dias: Number(dias.value) })),
-        botao('Premium sem prazo', 'secundario', () => this.agir({ acao: 'premium' })),
-        conta.plano === 'premium' ? botao('Voltar ao grátis', 'secundario', () => this.agir({ acao: 'gratis' })) : null,
+        botao('Completo por estes dias', '', () => this.agir({ acao: 'completo', dias: Number(dias.value) })),
+        botao('Completo sem prazo', 'secundario', () => this.agir({ acao: 'completo' })),
+        conta.plano === 'completo' ? botao('Voltar ao grátis', 'secundario', () => this.agir({ acao: 'gratis' })) : null,
         // A moderação de imagem: a foto e as imagens do Estúdio da conta, todas de uma vez.
         botao('Tirar as imagens', 'secundario', () => { if (confirm(`Apagar a foto e as imagens do Estúdio de ${conta.apelido}? Não dá para desfazer.`)) this.agir({ acao: 'remover-imagens' }); }),
         suspensa ? botao('Reativar', 'secundario', () => this.agir({ acao: 'reativar' }))

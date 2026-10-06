@@ -86,7 +86,7 @@ async function compartilhar(pagina) {
   // O desatualizado é simulado tirando a trava do cliente e ignorando o aviso -- o servidor não
   // tem como saber a diferença, e é justamente isso que ele confere.
   await ana.evaluate(() => {
-    nivelDoPlano = 'premium'; perfilDeQualidade = 'high';
+    nivelDoPlano = 'completo'; perfilDeQualidade = 'high';
     socket.off('limite-do-plano');
     socket.on('limite-do-plano', () => { window.avisoDoPlano = true; });
   });

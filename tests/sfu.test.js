@@ -47,8 +47,8 @@ test('um código de sala inválido não gera token nenhum', async () => {
 });
 test('o endereço do servidor de mídia continua na origem que serviu a página', async () => {
   const direto = await servidor.credencial('Molejo'); assert.equal(direto.url, servidor.origem.replace('http:', 'ws:'));
-  const tunel = await (await fetch(servidor.origem + '/api/sala-config?sala=sala-de-teste&nome=Molejo', { headers: { 'x-forwarded-host': 'exemplo.ts.net', 'x-forwarded-proto': 'https' } })).json();
-  assert.equal(tunel.url, 'wss://exemplo.ts.net');
+  const tunel = await (await fetch(servidor.origem + '/api/sala-config?sala=sala-de-teste&nome=Molejo', { headers: { 'x-forwarded-host': 'exemplo.com', 'x-forwarded-proto': 'https' } })).json();
+  assert.equal(tunel.url, 'wss://exemplo.com');
 });
 test('a porta Prometheus exige autenticação e o YAML aponta o webhook para a porta real', async () => {
   assert.equal((await fetch(`http://127.0.0.1:${servidor.portaMetricas}/metrics`)).status, 401);

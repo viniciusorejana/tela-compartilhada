@@ -236,13 +236,6 @@ html.nx-nov-aberto { overflow:hidden; }
 .nx-mini-chat i { height:16px; border-radius:6px; background:var(--bg-3); }
 .nx-mini-chat i.curta { width:65%; background:var(--accent-suave-hi); }
 .nx-mini-chat b { position:absolute; right:8px; bottom:8px; width:18px; height:18px; border-radius:5px; background:var(--accent-forte); }
-.nx-planos { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border-radius:var(--r-lg); background:var(--bg-2); box-shadow:0 0 0 1px var(--line-2); font-size:var(--fs-md); }
-.nx-planos th,.nx-planos td { padding:12px 16px; border-top:1px solid var(--line); text-align:left; vertical-align:top; }
-.nx-planos thead th { border-top:0; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.14em; text-transform:uppercase; }
-.nx-planos tbody th { color:var(--text-2); font-weight:600; white-space:nowrap; }
-.nx-planos td { color:var(--text-3); }
-.nx-planos th:last-child,.nx-planos td:last-child { background:var(--accent-suave); }
-.nx-planos thead th:last-child { color:var(--accent-texto); }
 
 /* 07 · atalhos */
 /* Duas colunas só quando cabem: "Configurações" mais três teclas precisa de ~280 px. */
@@ -314,8 +307,6 @@ html.nx-nov-aberto { overflow:hidden; }
   .nx-video-play-ico { width:42px; height:42px; }
   .nx-barra,.nx-mesa,.nx-temas { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .nx-atalhos { grid-template-columns:1fr; }
-  .nx-planos th,.nx-planos td { padding:10px 8px; font-size:var(--fs-sm); }
-  .nx-planos tbody th { white-space:normal; }
 }
 @media (max-height:560px) and (min-width:641px) {
   .nx-novidades { padding:0 3vw; }

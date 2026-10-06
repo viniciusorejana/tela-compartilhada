@@ -36,6 +36,12 @@
   }
   button:active { transform: scale(.985); background: #7b6cf0; }
   button:focus-visible { outline: 2px solid #b6abff; outline-offset: 3px; }
+  /* O "voltar ao padrão" é um link, e não um segundo botão cheio: o principal é um só. */
+  button.link {
+    width: auto; min-height: 44px; margin: 6px 0 0; padding: 0 2px; background: none; color: #c3b1ed;
+    font-weight: 500; text-decoration: underline; text-underline-offset: 3px;
+  }
+  button.link[hidden] { display: none; }
   .versao { color: #8f8ea6; font-weight: 600; letter-spacing: .06em; }
   .erro { color: #ff9c8a; font-size: 12px; margin-top: 10px; min-height: 18px; }
   .falha {
@@ -51,13 +57,14 @@
   <main class="cartao">
     <span class="marca">NEXO / ANDROID<span class="versao" id="versao"></span></span>
     <h1>Seu squad, no bolso.</h1>
-    <p>Conecte ao servidor da sua galera. O endereço fica guardado para o próximo encontro, e a chamada continua com a tela apagada.</p>
+    <p id="intro">Conecte ao servidor da sua galera. O endereço fica guardado para o próximo encontro, e a chamada continua com a tela apagada.</p>
 
     <div class="falha" id="falha" role="alert" hidden></div>
 
     <label for="endereco">Endereço</label>
-    <input id="endereco" type="url" inputmode="url" placeholder="https://seu-servidor.ts.net" autocomplete="url" autocapitalize="none" spellcheck="false">
+    <input id="endereco" type="url" inputmode="url" placeholder="https://seu-dominio.exemplo" autocomplete="url" autocapitalize="none" spellcheck="false">
     <button id="entrar" type="button">Conectar ao Nexo</button>
+    <button id="padrao" class="link" type="button" hidden>Usar o servidor padrão do Nexo</button>
     <div class="erro" id="erro" role="alert"></div>
 
     <div class="dica">
@@ -65,7 +72,7 @@
       Use um endereço <code>https://</code>: o Android só libera microfone e câmera em conexão segura.
       Num <code>http://192.168…</code> da sua rede a sala abre, mas sem voz nem câmera.
       <br><br>
-      Para voltar aqui depois: segure o ícone do Nexo e toque em “Trocar de servidor”.
+      Para voltar aqui depois: <strong>Configurações → Aplicativo → Trocar de servidor</strong>, dentro da sala, ou segure o ícone do Nexo e toque em “Trocar de servidor”.
     </div>
   </main>
 
@@ -82,6 +89,21 @@
   const anterior = parametros.get('anterior') || '';
   const falhou = parametros.get('erro') || '';
   if (anterior) campo.value = anterior;
+
+  // O servidor do Nexo já vem preenchido na primeira vez (o aplicativo o passa em `padrao`, do
+  // NEXO_SERVIDOR_PADRAO do .env.prod): quem instala só toca em "Conectar". Quem usa outro troca o texto, e o link de
+  // baixo devolve o padrão -- trocar de servidor não pode ser uma viagem sem volta.
+  const padrao = /^https?:\/\/[^\s/]+$/.test(parametros.get('padrao') || '') ? parametros.get('padrao') : '';
+  const voltarAoPadrao = document.getElementById('padrao');
+  const igualAoPadrao = () => campo.value.trim().replace(/\/+$/, '') === padrao;
+  function pintarPadrao() { voltarAoPadrao.hidden = !padrao || igualAoPadrao(); }
+  if (padrao && !anterior) {
+    campo.value = padrao;
+    document.getElementById('intro').textContent = 'O endereço do servidor do Nexo já está preenchido: é só conectar. Se a sua galera usa outro servidor, troque o endereço. Ele fica guardado para o próximo encontro, e a chamada continua com a tela apagada.';
+  }
+  campo.addEventListener('input', pintarPadrao);
+  voltarAoPadrao.onclick = () => { campo.value = padrao; pintarPadrao(); campo.focus(); };
+  pintarPadrao();
   if (falhou) {
     const faixa = document.getElementById('falha');
     faixa.hidden = false;
@@ -91,7 +113,7 @@
   // A ponte com o aplicativo (MainActivity) só existe nesta página e só aceita um endereço.
   const ponte = window.nexoEndereco;
   ponte?.addEventListener('message', evento => {
-    try { if (JSON.parse(evento.data)?.ok === false) erro.textContent = 'Endereço inválido. Use algo como https://seu-servidor.ts.net'; } catch (_) { /* nada a fazer */ }
+    try { if (JSON.parse(evento.data)?.ok === false) erro.textContent = 'Endereço inválido. Use algo como https://seu-dominio.exemplo'; } catch (_) { /* nada a fazer */ }
   });
 
   function abrir() {
@@ -106,7 +128,8 @@
 
   document.getElementById('entrar').onclick = abrir;
   campo.addEventListener('keydown', evento => { if (evento.key === 'Enter') abrir(); });
-  if (!anterior) campo.focus();
+  // Com o padrão já no campo, o teclado do celular subir sozinho só atrapalharia: basta tocar em "Conectar".
+  if (!anterior && !padrao) campo.focus();
 </script>
 </body>
 </html>

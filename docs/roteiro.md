@@ -24,7 +24,7 @@ dela.
 | **Fase 1, etapa A:** banco, cadastro, login e sessão sem atraso; usuário único, senha de 10+, freio por conta; origem do Socket.IO fixada; laço de eventos no painel | `5b03c4a` |
 | **Fase 1, etapa B:** perfil que segue a pessoa (leitor único das preferências); baixar meus dados; apagar a conta | `899e056` |
 | **Fase 1, etapa C:** só conta abre sala; carência de 60 s; dono sobrevive ao F5; banimento sem homônimos; sons e mensagens com conta | `f7c1f23` |
-| **Fase 1, etapa D:** os três níveis conferidos no servidor; teto de pessoas (25, e 50 com assinante); premium à mão pelo painel | `12410d7` |
+| **Fase 1, etapa D:** os três níveis conferidos no servidor; teto de pessoas (25, e 50 com assinante); nível completo à mão pelo painel | `12410d7` |
 | A imagem encolhe em vez de perder quadros | `761944f` |
 | O seletor diz, antes da escolha, o que a máquina entrega (metade do degrau 4) | `ed9ef79` |
 | Relatos de problema chegam ao painel (degrau 2) | `b18cde9` |
@@ -60,7 +60,7 @@ fim dele.
 | A | banco, cadastro, login e sessão — com o "sem atraso" garantido por teste; **nome de usuário único para entrar**, senha de 10+ caracteres, freio por conta, e a origem do Socket.IO fixada antes de o cookie existir | `5b03c4a` |
 | B | perfil que segue a pessoa; apagar a conta; **baixar meus dados** | `899e056` |
 | C | só conta abre sala; carência de 60 s; dono sobrevive ao F5; banimento sem atingir homônimos; enviar e apagar sons exigem conta; a própria mensagem continua editável depois do F5 | `f7c1f23` |
-| D | os níveis 720p30 / 720p60 / 1080p–1440p, com o teto conferido no servidor; teto de pessoas maior com assinante na sala; premium à mão pelo painel | `12410d7` |
+| D | os níveis 720p30 / 720p60 / 1080p–1440p, com o teto conferido no servidor; teto de pessoas maior com assinante na sala; nível completo à mão pelo painel | `12410d7` |
 
 Cada etapa subiu sozinha, com testes próprios (`npm test`, `npm run test:contas`,
 `npm run test:planos`, e os de antes). Três coisas para saber antes de pôr no ar:
@@ -113,7 +113,7 @@ Cada etapa subiu sozinha, com testes próprios (`npm test`, `npm run test:contas
   código da conta — que o cartão de perfil da sala já mostra. Com o ECA Digital, deixa de ser
   conveniência e passa a ser obrigação.
 - **Avisar o grupo atual** e dar uma janela antes de "só conta abre sala" valer. Sugestão:
-  premium de cortesia para esse grupo por alguns meses, pelo painel ("Contas e planos", já
+  nível completo de cortesia para esse grupo por alguns meses, pelo painel ("Contas e planos", já
   pronto). Hoje eles transmitem em 1440p de graça; assim viram os primeiros apoiadores, em vez de
   sentirem que perderam algo. A janela existe no código: `NEXO_ANONIMO_ABRE_SALA=1` e
   `NEXO_PLANOS=0` até todos terem conta — e no dia de criarem as contas, lembrar do teto diário
@@ -125,7 +125,7 @@ Cada etapa subiu sozinha, com testes próprios (`npm test`, `npm run test:contas
 
 Com as fases 1 e 2 prontas, o Nexo pode receber desconhecidos: contas existem, só conta abre
 sala, os níveis valem no servidor, e o servidor não depende mais da sua máquina ligada. O
-premium aparece no seletor com cadeado desde aqui; antes de a fase 3 existir, quem quiser pode
+nível completo aparece no seletor com cadeado desde aqui; antes de a fase 3 existir, quem quiser pode
 recebê-lo pelo atalho do painel.
 
 ---
@@ -141,7 +141,7 @@ Estimativa deste roteiro; nenhum plano mediu esta fase ainda.
   assinatura de cada aviso da webhook é conferida.
 - **Fora do código:** receber como pessoa física ou como MEI é conversa com contador, e precisa
   estar resolvido antes do primeiro pagamento.
-- **Atalho, pronto desde a etapa D:** o painel marca uma conta como premium à mão, para quem
+- **Atalho, pronto desde a etapa D:** o painel marca uma conta de nível completo à mão, para quem
   pagar por PIX direto. Valida se R$ 10 converte antes de gastar dias na integração.
 - **Vitalício só como captação limitada** ("primeiros apoiadores"): o custo é mensal e a
   receita seria única — ver `lancamento.md`, degrau 5.
@@ -169,7 +169,7 @@ A ordem aqui é decidida pelo que a comunidade reclamar mais, e não antes.
   da tela inteira ficou barato; falta o agente nativo devolver o retângulo da janela, e aceitar
   que o que passar por cima dela aparece. Ver o fim da primeira parte de `captura-de-tela.md`.
 - **Salas e conversas persistentes**, preparadas no plano de contas. A sala que não expira é
-  por onde o premium cresce.
+  por onde o nível completo cresce.
 - Entrar com Discord; senha de sala; avatar enviado por arquivo; agentes de áudio nativos no
   Linux (PipeWire) e no macOS (ScreenCaptureKit).
 

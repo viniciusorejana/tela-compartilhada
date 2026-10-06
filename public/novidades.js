@@ -397,23 +397,6 @@
       </section>`;
   }
 
-  function tabelaDePlanos() {
-    const P = root.NexoPlanos;
-    const lim = nivel => (P ? P.LIMITES[nivel] : { anonimo: { altura: 720, quadros: 30 }, gratis: { altura: 720, quadros: 60 }, premium: { altura: 1440, quadros: 60 } }[nivel]);
-    const pessoas = P ? P.PESSOAS : { base: 25, comAssinante: 50 };
-    const tela = nivel => (nivel === 'premium' ? `1080p e ${lim(nivel).altura}p a ${lim(nivel).quadros}` : `${lim(nivel).altura}p a ${lim(nivel).quadros}`);
-    return `
-      <table class="nx-planos">
-        <thead><tr><th scope="col"><span class="so-leitor">Recurso</span></th><th scope="col">sem conta</th><th scope="col">conta grátis</th><th scope="col">premium</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Transmitir tela</th><td>${tela('anonimo')}</td><td>${tela('gratis')}</td><td><b>${tela('premium')}</b></td></tr>
-          <tr><th scope="row">Assistir telas</th><td colspan="3">na qualidade de quem transmite, para todo mundo</td></tr>
-          <tr><th scope="row">Pessoas na sala</th><td>${pessoas.base}</td><td>${pessoas.base}</td><td><b>leva a ${pessoas.comAssinante}</b></td></tr>
-          <tr><th scope="row">Abrir uma sala</th><td>—</td><td>✓</td><td>✓</td></tr>
-        </tbody>
-      </table>`;
-  }
-
   function conteudoConheca() {
     const host = esc(root.location.host);
     const temas = (root.NexoTema?.TEMAS || []).map(tema => `<button type="button" class="nx-tema" data-tema="${esc(tema.id)}" aria-pressed="false"><i></i><span>${esc(tema.nome)}</span></button>`).join('');
@@ -525,8 +508,7 @@
             <div class="nx-mini-lado"><i></i><i></i><i></i></div>
             <div class="nx-mini-palco"><span></span></div>
             <div class="nx-mini-chat"><i></i><i class="curta"></i><b></b></div>
-          </div>`,
-        `<div class="nx-secao-largo"><span class="nx-rotulo">O que cada um transmite</span>${tabelaDePlanos()}<p class="nx-demo-nota">Cobra-se resolução porque é ela que custa no servidor. Assistir nunca é limitado: um premium no grupo faz todo mundo ver a tela dele em alta.</p></div>`)}
+          </div>`)}
 
       ${secao('mais', '07', 'Aplicativo, ajuda e atalhos', `
           <p>O <b>aplicativo de mesa</b> faz o que o navegador não faz: no Windows ele manda o som de <b>um programa só</b> e tira o Nexo da captura — a voz dos outros não volta como eco. Baixe na página inicial.</p>
