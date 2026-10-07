@@ -3,6 +3,9 @@
     <!-- As mesmas da sala no tema escuro (public/tema.css): o fundo por trás das barras do sistema
          e enquanto a página carrega, e o violeta do Nexo. -->
     <color name="fundo">#FF161720</color>
+    <!-- O fundo da splash e o da tela de carregamento da página (o token bg-fundo de public/tema.css): o mesmo, para a troca da
+         splash para a página não mudar de cor no meio. -->
+    <color name="fundo_splash">#FF12131C</color>
     <color name="destaque">#FF8174FA</color>
     <color name="icone_fundo">#FF8174FA</color>
 </resources>

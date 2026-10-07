@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A splash do Nexo: a marca dentro da roda do Nexo (public/carregando.css, `.nx-roda`), o arco com cauda de
+     cometa e a faísca na ponta, num brilho violeta. É o ícone da tela de abertura (themes.xml,
+     `Tema.Nexo.Abertura`): no Android 12 em diante o sistema o desenha SOBRE o fundo, dentro de um círculo de 192 dp
+     no meio desta tela de 288 dp (tudo o que passa disso é cortado), e antes do 12 a biblioteca de tela de
+     abertura o desenha como está. Por isso o anel tem 80 de raio e a marca 96: cabem folgados nos 96 do círculo.
+     Os valores de cada grupo são o fim da animação (splash_animado.xml), que é também o desenho parado do Android
+     antigo. As cores são as da marca e do tema escuro, que não mudam. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="VectorLargeSize"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+
+    <!-- O brilho atrás da marca: some antes de chegar à borda do círculo. -->
+    <path android:pathData="M144,144m-96,0a96,96 0 1,1 192,0a96,96 0 1,1 -192,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="144"
+                android:centerY="144"
+                android:gradientRadius="96">
+                <item android:offset="0.0" android:color="#478879F6" />
+                <item android:offset="0.55" android:color="#228879F6" />
+                <item android:offset="1.0" android:color="#008879F6" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- A trilha do anel. -->
+    <path
+        android:pathData="M144,144m-80,0a80,80 0 1,1 160,0a80,80 0 1,1 -160,0"
+        android:strokeColor="#26FFFFFF"
+        android:strokeWidth="4" />
+
+    <!-- O arco: começa às 3 horas e vai até 30% da volta; o gradiente em varredura acompanha o caminho, da cauda
+         transparente até a ponta, e o grupo gira para pôr a ponta onde a roda da página a mostra. -->
+    <group
+        android:name="arco"
+        android:pivotX="144"
+        android:pivotY="144"
+        android:rotation="200">
+        <path
+            android:pathData="M224,144a80,80 0 1,1 -0.01,0"
+            android:strokeLineCap="round"
+            android:strokeWidth="6"
+            android:trimPathEnd="0.3">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="sweep"
+                    android:centerX="144"
+                    android:centerY="144">
+                    <item android:offset="0.0" android:color="#008879F6" />
+                    <item android:offset="0.04" android:color="#368879F6" />
+                    <item android:offset="0.3" android:color="#FFA092FF" />
+                    <item android:offset="1.0" android:color="#FFA092FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- A faísca na ponta do arco, a 108 graus do começo (30% de 360): 144 + 80·cos(108°), 144 + 80·sen(108°). -->
+        <group
+            android:translateX="119.3"
+            android:translateY="220.1">
+            <path
+                android:fillColor="#FFA092FF"
+                android:pathData="M0,-8L2.1,-3L8,0L2.1,3L0,8L-2.1,3L-8,0L-2.1,-3Z" />
+        </group>
+    </group>
+
+    <!-- A marca (public/mark.svg), de 64 para 96: o quadrado violeta, o N e a faísca verde. -->
+    <group
+        android:name="marca"
+        android:pivotX="144"
+        android:pivotY="144"
+        android:scaleX="1"
+        android:scaleY="1">
+        <group
+            android:scaleX="1.5"
+            android:scaleY="1.5"
+            android:translateX="96"
+            android:translateY="96">
+            <path
+                android:fillColor="#FF8174FA"
+                android:pathData="M20,0H44A20,20 0 0,1 64,20V44A20,20 0 0,1 44,64H20A20,20 0 0,1 0,44V20A20,20 0 0,1 20,0Z" />
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M18,45V19h7l14,17V19h7v26h-7L25,28v17z" />
+            <path
+                android:fillColor="#FFD1FFC1"
+                android:pathData="M44,10l1.7,4.3L50,16l-4.3,1.7L44,22l-1.7,-4.3L38,16l4.3,-1.7z" />
+        </group>
+    </group>
+</vector>

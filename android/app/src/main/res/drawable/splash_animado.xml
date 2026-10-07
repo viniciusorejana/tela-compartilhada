@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A animação da splash (splash_icone.xml): a ponta do arco dá uma volta e a marca "pega" com um pulinho. No Android
+     12 o sistema a toca uma vez, em até um segundo (`windowSplashScreenAnimationDuration`), e a tela fica no último
+     quadro (o desenho parado) até a página pintar. Antes do 12 a biblioteca de tela de abertura desenha o ícone
+     sem animar, e o que se vê é esse último quadro. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/splash_icone">
+
+    <target android:name="arco">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="1000"
+                android:interpolator="@android:interpolator/decelerate_cubic"
+                android:propertyName="rotation"
+                android:valueFrom="-160"
+                android:valueTo="200"
+                android:valueType="floatType" />
+        </aapt:attr>
+    </target>
+
+    <target android:name="marca">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:duration="620"
+                    android:interpolator="@android:interpolator/overshoot"
+                    android:propertyName="scaleX"
+                    android:valueFrom="0.86"
+                    android:valueTo="1"
+                    android:valueType="floatType" />
+                <objectAnimator
+                    android:duration="620"
+                    android:interpolator="@android:interpolator/overshoot"
+                    android:propertyName="scaleY"
+                    android:valueFrom="0.86"
+                    android:valueTo="1"
+                    android:valueType="floatType" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

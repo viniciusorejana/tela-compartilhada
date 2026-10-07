@@ -15,6 +15,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.SystemClock;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
@@ -33,6 +34,7 @@ import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.core.content.ContextCompat;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebViewAssetLoader;
@@ -75,6 +77,10 @@ public class MainActivity extends Activity {
     private static final int PEDIDO_DE_AVISOS = 3;
     // Uma página nova que não confirma a chamada neste tempo não é uma sala: o serviço sai.
     private static final long MS_PARA_CONFIRMAR_A_CHAMADA = 30_000;
+    // A splash do Nexo fica até a página ter o que mostrar; passado este tempo ela sai de qualquer jeito, porque uma
+    // abertura que nunca acaba seria pior que uma página ainda carregando (a página tem a tela de carregamento dela).
+    private static final long MS_MAXIMO_DA_SPLASH = 4_000;
+    private static final long MS_DA_SAIDA_DA_SPLASH = 260;
 
     private WebView web;
     private SharedPreferences preferencias;
@@ -93,6 +99,9 @@ public class MainActivity extends Activity {
     private boolean camadaAberta;
     private boolean chamadaConfirmada;
     private boolean pedindoAvisos;
+    // A página já tem conteúdo à vista (`onPageCommitVisible`): a splash pode sair. Lida pela condição da splash, a
+    // cada quadro, e escrita pela WebView -- as duas na thread principal, mas `volatile` custa nada.
+    private volatile boolean paginaPronta;
     private final Handler relogio = new Handler(Looper.getMainLooper());
     private final Runnable conferirChamada = () -> { if (!chamadaConfirmada) pararChamada(); };
     // O Nexo à vista: o AvisosJob não toca nada, porque a página já mostra no canto dela.
@@ -100,7 +109,11 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle estado) {
+        // ANTES do super, como a biblioteca pede: ela troca o tema da abertura (Tema.Nexo.Abertura, a splash) pelo
+        // Tema.Nexo de sempre e entrega a splash do sistema, para ficarmos com ela até a página pintar.
+        SplashScreen splash = SplashScreen.installSplashScreen(this);
         super.onCreate(estado);
+        segurarASplash(splash);
         preferencias = getSharedPreferences("nexo", MODE_PRIVATE);
 
         FrameLayout raiz = new FrameLayout(this);
@@ -130,6 +143,18 @@ public class MainActivity extends Activity {
         } else {
             irPara(salvo);
         }
+    }
+
+    // A splash fica na tela até a página ter o que mostrar -- ou até o limite, se ela não vier -- e sai em fusão: o
+    // padrão do sistema é um corte seco, e depois dela vem a tela de carregamento da página, com a mesma marca.
+    private void segurarASplash(SplashScreen splash) {
+        final long inicio = SystemClock.uptimeMillis();
+        splash.setKeepOnScreenCondition(() -> !paginaPronta && SystemClock.uptimeMillis() - inicio < MS_MAXIMO_DA_SPLASH);
+        splash.setOnExitAnimationListener(provedor -> provedor.getView().animate()
+            .alpha(0f)
+            .setDuration(MS_DA_SAIDA_DA_SPLASH)
+            .withEndAction(provedor::remove)
+            .start());
     }
 
     @Override
@@ -615,6 +640,12 @@ public class MainActivity extends Activity {
             chamadaConfirmada = false;
             relogio.removeCallbacks(conferirChamada);
             if (emChamada) relogio.postDelayed(conferirChamada, MS_PARA_CONFIRMAR_A_CHAMADA);
+        }
+
+        // O primeiro conteúdo da página (a sala, ou a tela de endereço) já está à vista: a splash do Nexo pode sair.
+        @Override
+        public void onPageCommitVisible(WebView vista, String url) {
+            paginaPronta = true;
         }
 
         @Override

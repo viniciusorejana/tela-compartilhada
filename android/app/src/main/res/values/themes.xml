@@ -8,4 +8,15 @@
         <item name="android:navigationBarColor">@color/fundo</item>
         <item name="android:colorAccent">@color/destaque</item>
     </style>
+
+    <!-- A splash do Nexo, do ícone até a página pintar (MainActivity: `installSplashScreen`). Usa a biblioteca de tela
+         de abertura do AndroidX, que dá a mesma tela em todos os Androids do aplicativo (o 8 em diante): a marca na roda
+         do Nexo (splash_animado.xml) no fundo escuro da tela de carregamento da página (o token bg-fundo de public/tema.css).
+         Quando a atividade assume, o tema volta a ser o Tema.Nexo de sempre (`postSplashScreenTheme`). -->
+    <style name="Tema.Nexo.Abertura" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/fundo_splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_animado</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Tema.Nexo</item>
+    </style>
 </resources>

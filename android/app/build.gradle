@@ -71,6 +71,8 @@ dependencies {
     // NotificationCompat e ServiceCompat: o serviço da chamada em todas as versões do Android.
     // A 1.18 em diante pede compileSdk 37 e um AGP mais novo; a 1.17 é a última do SDK 36.
     implementation 'androidx.core:core:1.17.0'
+    // A splash do Nexo (res/drawable/splash_animado.xml): a tela de abertura do AndroidX, igual do Android 8 em diante.
+    implementation 'androidx.core:core-splashscreen:1.0.1'
     // A ponte com a sala presa a uma origem (addWebMessageListener) e a tela de endereço servida
     // como https (WebViewAssetLoader), em vez de file://.
     implementation 'androidx.webkit:webkit:1.17.1'
