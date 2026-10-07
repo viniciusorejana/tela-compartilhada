@@ -146,6 +146,9 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   await ana.locator('#editorCartaoPanel').waitFor();
   const editor = ana.locator('#editorCartaoPanel');
   assert.equal(await editor.locator('[data-ed="salvar"]').isDisabled(), true, 'sem mudança, não há o que salvar');
+  // O editor carrega o perfil de forma assíncrona: a prévia é a última coisa que ele pinta. Digitar antes disso é
+  // ignorado (o rascunho ainda não existe), e o teste ficava intermitente.
+  await editor.locator('[data-ed="previa"] .nx-cartao-nome').waitFor();
   await editor.locator('[data-ed="apelido"]').fill('Ana Clara');
   // Clica na amostra, como uma pessoa: o rádio em si é invisível, e é o rótulo que se toca.
   await editor.locator('[data-ed="coresAvatar"] label:has(input[value="menta"])').click();
