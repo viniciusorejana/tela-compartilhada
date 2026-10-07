@@ -409,6 +409,23 @@ const semTela = pagina => esperarAte(async () => (await pagina.locator('#nexoCar
     console.log('PASS: uma espera curta mostra só a marca e a tela sai logo depois de pronta');
   }
 
+  // ---------- 14. Nos aplicativos a tela de carregamento nasce acesa: a splash do aplicativo acabou de cobrir a abertura ----------
+  for (const [nome, opcoes, aoCriar] of [
+    ['o Android (o user agent traz NexoAndroid)', { userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36 NexoAndroid/1.2.0' }, null],
+    ['o aplicativo de mesa (o preload põe appNativo)', {}, c => c.addInitScript(() => { window.appNativo = { versao: '1.4.0' }; })]
+  ]) {
+    const contexto = await comConta(ana, opcoes, async c => { await vigiarATela(c); if (aoCriar) await aoCriar(c); });
+    const p = observar(await contexto.newPage(), nome);
+    await p.goto(`${origem}/sobre`);
+    await p.waitForTimeout(500);
+    const estado = await p.evaluate(() => window.__tela);
+    assert.equal(estado.nasceuAcesa, true, `${nome}: a página abre com a tela de carregamento já acesa, sem os 220 ms de espera`);
+    assert.deepEqual(estado.niveis, ['1'], `${nome}: e no grau mínimo, só a marca`);
+    await semTela(p);
+    await contexto.close();
+  }
+  console.log('PASS: no Android e no aplicativo de mesa a tela de carregamento nasce já acesa, para a splash passar a ela sem um vazio');
+
   assert.deepEqual(erros, [], 'nenhum erro na página: ' + erros.join(' | '));
 })().then(() => console.log('PASS: o carregamento do Nexo')).catch(erro => { console.error(erro); process.exitCode = 1; }).finally(async () => {
   await navegador?.close();

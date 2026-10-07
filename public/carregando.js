@@ -67,6 +67,11 @@
   const reduzido = () => raiz.classList.contains('menos-movimento') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   let emQuadro = false;
   try { emQuadro = window.parent !== window; } catch (_) { emQuadro = true; }
+  // Dentro dos aplicativos (o de mesa e o Android) a splash do aplicativo acabou de cobrir a abertura -- app/splash.html,
+  // `docs/interface.md` 4.21 --, e a página nasce com a tela de carregamento JÁ acesa, sem os 220 ms de espera: a passagem
+  // da splash para ela (a mesma marca, o mesmo fundo) não deixa um vazio no meio. `appNativo` é do preload do Electron; o
+  // Android se anuncia no user agent ("NexoAndroid/1.2.0", app-android.js).
+  const emAplicativo = Boolean(window.appNativo) || /\bNexoAndroid\//.test(navigator.userAgent || '');
 
   // ---------- O esqueleto ----------
   // Serve em qualquer página, também em quadro: o lugar de uma lista que ainda não chegou.
@@ -380,7 +385,7 @@
 
   // ---------- Chegando ----------
   const recado = lerRecado();
-  montar(recado?.titulo || tituloDoCaminho(window.location.pathname), { imediato: Boolean(recado), partindoDe: recado ? Math.min(recado.p || 0, 0.6) : 0, desde: recado?.desde || 0 });
+  montar(recado?.titulo || tituloDoCaminho(window.location.pathname), { imediato: Boolean(recado) || emAplicativo, partindoDe: recado ? Math.min(recado.p || 0, 0.6) : 0, desde: recado?.desde || 0 });
   // O que o navegador já provou sozinho: o HTML veio, a página inteira veio.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => etapa('', 0.45), { once: true });
   else etapa('', 0.45);
