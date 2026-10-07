@@ -244,7 +244,7 @@
         : instalado
         ? {
           titulo: `Nexo ${versao} pronto`, icone: 'ok', tom: 'ok', progresso: 1, aoCancelar: null, fecharEm: 0,
-          detalhe: 'Ele se instala quando você fechar o Nexo. Para usar agora, reinicie.',
+          detalhe: 'Ele se instala quando você sair do Nexo. Para usar agora, reinicie.',
           acoes: [{ rotulo: 'Reiniciar agora', principal: true, fecha: false, fazer: () => motor.abrir() }]
         }
         : {

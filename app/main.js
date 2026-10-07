@@ -14,7 +14,7 @@
 // A interface não é copiada para cá: a janela carrega a mesma URL do servidor. Uma
 // interface só, um lugar para manter.
 
-const { app, BrowserWindow, Menu, session, desktopCapturer, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, Tray, session, desktopCapturer, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
@@ -52,6 +52,10 @@ function servidorPadrao() {
 
 let janela = null;
 let agente = null;
+// O ícone ao lado do relógio (ver "a bandeja do sistema" mais abaixo) e o "agora é para valer": só com `saindo`
+// verdadeiro o fechar da janela fecha de fato.
+let bandeja = null;
+let saindo = false;
 // Endereço que está sendo tentado agora. Só vira configuração se a página carregar.
 let enderecoPendente = null;
 // A única origem em que a janela pode ficar, e a única que fala com as funções nativas. Ela
@@ -171,6 +175,62 @@ function revelarJanela() {
   }, falta);
 }
 
+// ---------------------------------------------------------------- a bandeja do sistema
+// Fechar a janela (o X, Alt+F4, "fechar" na barra de tarefas) não encerra o Nexo: ele esconde a janela e fica na
+// bandeja, ao lado do relógio, como o Discord. Quem está numa chamada ou transmitindo a tela não a perde por um clique
+// distraído no X, e as menções e os avisos continuam chegando. Para sair de verdade: botão direito no ícone > "Sair
+// do Nexo" (ou "Sair" no menu da janela, que é sempre uma saída de verdade).
+//
+// Só no Windows e no Linux: no macOS fechar a janela já não encerra o programa, e o ícone fica na barra de menus
+// por outros caminhos. Se o ícone não puder ser criado, fechar a janela volta a encerrar -- sem o ícone, uma janela
+// escondida seria um programa sem volta. O Linux tem outra armadilha: o GNOME puro não mostra ícones de bandeja sem
+// uma extensão, e nenhuma API diz se ele está à vista. Por isso a escolha tem a chave "Fechar a janela deixa o Nexo
+// na bandeja" no menu (Alt abre a barra), e abrir o Nexo de novo sempre traz a janela escondida de volta
+// (`second-instance`).
+const bandejaDisponivel = () => process.platform !== 'darwin';
+const fecharParaBandeja = () => bandejaDisponivel() && lerConfig().fecharParaBandeja !== false;
+
+// Traz a janela de volta, onde quer que ela esteja: escondida na bandeja, minimizada ou atrás de outras.
+function mostrarJanela() {
+  if (!janela || janela.isDestroyed()) { criarJanela({ comSplash: false }); return; }
+  if (janela.isMinimized()) janela.restore();
+  janela.show();
+  janela.focus();
+}
+
+function criarBandeja() {
+  if (!bandejaDisponivel() || bandeja) return;
+  try {
+    // O Windows lê o .ico em vários tamanhos e escolhe o do ícone; o Linux só aceita PNG.
+    bandeja = new Tray(path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'));
+  } catch (erro) {
+    console.error('Não foi possível criar o ícone da bandeja:', erro.message);
+    bandeja = null;
+    return;
+  }
+  bandeja.setToolTip('Nexo');
+  // No Linux o menu é o único jeito de usar o ícone (o clique nem sempre chega), então "Abrir" também está nele.
+  bandeja.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir o Nexo', click: mostrarJanela },
+    { type: 'separator' },
+    { label: 'Sair do Nexo', click: () => app.quit() }
+  ]));
+  bandeja.on('click', mostrarJanela);
+}
+
+// Na primeira vez que a janela vai para a bandeja, o Windows diz onde o Nexo foi parar -- o ícone novo costuma ficar
+// na seta "^" da barra, e quem não sabe acha que o programa fechou. Uma vez só: depois disso é ruído.
+function avisarDaBandeja() {
+  if (process.platform !== 'win32' || !bandeja || bandeja.isDestroyed() || lerConfig().avisouDaBandeja) return;
+  salvarConfig({ ...lerConfig(), avisouDaBandeja: true });
+  bandeja.displayBalloon({
+    iconType: 'custom',
+    icon: path.join(__dirname, 'icon.ico'),
+    title: 'O Nexo continua aberto',
+    content: 'Ele ficou na bandeja, ao lado do relógio. Para sair de verdade, clique no ícone com o botão direito e escolha "Sair do Nexo".'
+  });
+}
+
 // ---------------------------------------------------------------- janela principal
 function criarJanela({ comSplash = splashLigada() } = {}) {
   janela = new BrowserWindow({
@@ -271,6 +331,17 @@ function criarJanela({ comSplash = splashLigada() } = {}) {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // O X esconde a janela e deixa o Nexo na bandeja (ver "a bandeja do sistema"). `saindo` vale a partir do momento em
+  // que o aplicativo começou a encerrar (`before-quit`), e o desligar ou sair da sessão do Windows também é um
+  // encerrar: impedir o fechar ali seria segurar o desligamento do computador.
+  janela.on('close', evento => {
+    if (saindo || !bandeja || bandeja.isDestroyed() || !fecharParaBandeja()) return;
+    evento.preventDefault();
+    janela.hide();
+    avisarDaBandeja();
+  });
+  janela.on('session-end', () => { saindo = true; });
 
   janela.on('closed', () => { janela = null; fecharSplash(false); });
 }
@@ -653,7 +724,7 @@ ipcMain.handle('atualizacao:abrir', async evento => {
     const { response } = await dialog.showMessageBox(janela, {
       type: 'question', buttons: ['Reiniciar agora', 'Depois'], defaultId: 0, cancelId: 1, noLink: true,
       title: 'Atualizar o Nexo', message: `Instalar o Nexo ${pronta.versao} agora?`,
-      detail: 'O Nexo fecha, instala a versão nova e abre de novo. Uma chamada em andamento cai por alguns segundos. "Depois" instala quando você fechar o Nexo.'
+      detail: 'O Nexo fecha, instala a versão nova e abre de novo. Uma chamada em andamento cai por alguns segundos. "Depois" instala quando você sair do Nexo de verdade (botão direito no ícone da bandeja, "Sair do Nexo").'
     });
     return response === 0 ? atualizador.instalar() : false;
   }
@@ -721,6 +792,10 @@ function instalarMenu() {
   // caminho de quem está na tela de endereço, sem sala nenhuma aberta.
   const opcoes = opcoesDoAplicativo();
   const doAplicativo = [
+    bandejaDisponivel() && {
+      label: 'Fechar a janela deixa o Nexo na bandeja', type: 'checkbox', checked: fecharParaBandeja(),
+      click: item => salvarConfig({ ...lerConfig(), fecharParaBandeja: item.checked })
+    },
     opcoes.atualizaSozinho && {
       label: 'Atualizar sozinho', type: 'checkbox', checked: opcoes.atualizarSozinho,
       click: item => definirOpcao('atualizarSozinho', item.checked)
@@ -769,11 +844,8 @@ function instalarMenu() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!janela) return;
-    if (janela.isMinimized()) janela.restore();
-    janela.focus();
-  });
+  // Abrir o Nexo de novo traz a janela de volta -- inclusive a que está escondida na bandeja.
+  app.on('second-instance', () => { if (janela) mostrarJanela(); });
 
   app.whenReady().then(() => {
     // A primeira coisa: a splash tem de aparecer antes de qualquer outro trabalho da abertura.
@@ -784,10 +856,13 @@ if (!app.requestSingleInstanceLock()) {
     instalarPermissoes();
     instalarDownloadDaAtualizacao();
     criarJanela({ comSplash });
+    criarBandeja();
     // O macOS recria a janela ao clicar no ícone: aí o aplicativo já está aberto, e não há splash.
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela({ comSplash: false }); });
   });
 
   app.on('window-all-closed', () => { pararAgente(); app.quit(); });
-  app.on('before-quit', pararAgente);
+  // `before-quit` vem antes de qualquer janela fechar: é o que diferencia o "Sair" de verdade (menu, bandeja,
+  // atualização) do X, que só esconde a janela.
+  app.on('before-quit', () => { saindo = true; pararAgente(); });
 }

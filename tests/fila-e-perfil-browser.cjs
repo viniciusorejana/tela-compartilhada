@@ -286,7 +286,7 @@ const ultimaDoBot = pagina => pagina.locator('#musicaMsgs .msg.do-bot .msg-texto
   assert.equal(await instalado.locator('#atualizarAppBtn').isHidden(), true, 'nem o botão');
   await instalado.evaluate(() => avisarDoPrincipal({ estado: 'pronto', versao: '1.3.0', recebidos: 100 * 1048576, total: 100 * 1048576, silenciosa: true }));
   await instalado.locator('.nexo-toast', { hasText: 'Nexo 1.3.0 pronto' }).waitFor({ timeout: 5000 });
-  assert.match(await instalado.locator('.nexo-toast').textContent(), /se instala quando você fechar o Nexo/);
+  assert.match(await instalado.locator('.nexo-toast').textContent(), /se instala quando você sair do Nexo/);
   assert.equal(await instalado.locator('.nexo-toast').getByRole('button', { name: 'Mostrar na pasta' }).count(), 0, 'o instalado não tem arquivo para mostrar');
   assert.equal(await instalado.locator('#atualizarAppBtn span').textContent(), 'Reiniciar');
   await instalado.screenshot({ path: path.join(saida, 'atualizacao-instalado-pronta.png') });
