@@ -370,12 +370,26 @@ function garantirDependenciasDoApp() {
 }
 
 // O agente de áudio é compilado à parte (Visual Studio) e entra pronto no build do Windows. O
-// lançamento não o compila: só avisa quando o código dele é mais novo que o executável.
+// lançamento não o compila: só avisa quando o código dele mudou desde o executável.
+//
+// A data não serve de prova: o executável costuma ser compilado da cópia de trabalho ANTES do commit
+// do mesmo código, e aí o commit parece mais novo. Quem prova é a marca ao lado do executável
+// (AgenteAudio.exe.fonte, fora do Git): a árvore do native/audio-agent de que ele saiu, gravada
+// quando alguém confirma que ele está em dia. Sem marca, sobra a comparação de datas, como aviso.
 function conferirAgenteDeAudio() {
   if (!fs.existsSync(AGENTE)) throw new Error(`Falta ${path.relative(RAIZ, AGENTE)}: compile o agente de áudio (native/audio-agent) antes.`);
+  const arvore = git(['rev-parse', 'HEAD:native/audio-agent'], { permitirFalha: true });
+  const marca = `${AGENTE}.fonte`;
+  const comando = `git rev-parse HEAD:native/audio-agent > ${path.relative(RAIZ, marca)}`;
+  let marcada = null;
+  try { marcada = fs.readFileSync(marca, 'utf8').trim(); } catch (_) { /* nunca marcado */ }
+  if (marcada) {
+    if (arvore && marcada !== arvore) aviso(`O código do agente de áudio mudou desde que o AgenteAudio.exe foi compilado. Compile de novo e marque: ${comando}`);
+    return;
+  }
   const ultimoCommit = Number(git(['log', '-1', '--format=%ct', '--', 'native/audio-agent'], { permitirFalha: true })) * 1000;
   if (ultimoCommit && fs.statSync(AGENTE).mtimeMs < ultimoCommit) {
-    aviso('O código do agente de áudio tem commit mais novo que o AgenteAudio.exe. Se o código dele mudou, compile de novo.');
+    aviso(`O código do agente de áudio tem commit mais novo que o AgenteAudio.exe. Se o executável já tem esse código, marque: ${comando}`);
   }
 }
 

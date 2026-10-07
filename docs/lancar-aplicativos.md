@@ -145,7 +145,12 @@ endereço, o lançamento avisa e segue com o do `config.json`.
 
 - Node 24, Git e o cliente OpenSSH (`ssh` e `scp`).
 - O agente de áudio compilado em `native/audio-agent/x64/Release/AgenteAudio.exe`. O lançamento não
-  o compila, só avisa se o código dele tem commit mais novo que o executável.
+  o compila. Ele avisa quando o código do agente mudou desde o executável, comparando com a marca
+  `AgenteAudio.exe.fonte`, que fica ao lado do executável e fora do Git. A marca guarda a árvore do
+  `native/audio-agent` de que o executável saiu. Depois de compilar, grave a marca:
+  `git rev-parse HEAD:native/audio-agent > native/audio-agent/x64/Release/AgenteAudio.exe.fonte`.
+  A data não serve de prova, porque o executável costuma ser compilado antes do commit do mesmo
+  código. Sem a marca, ele compara as datas e só avisa.
 - Para o Android: o Android SDK, um JDK 17 ou 21 e a chave de assinatura
   (`android/keystore.properties`, ver `docs/android.md`).
 - As dependências do aplicativo se resolvem sozinhas: quando o `app/package-lock.json` muda, ele
