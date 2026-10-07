@@ -995,7 +995,8 @@ Saem duas formas do mesmo build, com cerca de 96 MB cada:
 - **`app/dist/Nexo-Setup.exe`, o instalador.** Pergunta a pasta, instala só para quem está
   usando (sem pedir administrador; dá para escolher todos os usuários), põe atalho no menu Iniciar
   e na área de trabalho, deixa um desinstalador e **se atualiza sozinho** pelo próprio servidor:
-  a versão nova desce em silêncio e se instala quando o Nexo fecha. Ao lado dele saem
+  a versão nova desce em silêncio e se instala quando o Nexo encerra (fechar a janela só o
+  deixa na bandeja; "Sair do Nexo" no ícone da bandeja encerra de verdade). Ao lado dele saem
   `Nexo-Setup.exe.blockmap` (para a atualização baixar só o que mudou) e `latest.yml` (a ficha
   da versão) -- os três vão juntos para o `app/dist` do servidor.
 - **`app/dist/SalaCompartilhada.exe`, o portátil.** Nao precisa de instalacao: dois cliques e

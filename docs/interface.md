@@ -760,7 +760,7 @@ perdeu o "AGORA" pelo mesmo motivo: o ponto pulsando já diz que é agora.
   que ele não faz e onde está o instalador. O menu do aplicativo fica escondido (Alt mostra), e o
   que só existe num menu escondido ninguém descobre.
 - **A atualização do instalado não aparece enquanto desce.** Só o fim: um aviso, uma vez ("Ele se
-  instala quando você fechar o Nexo"), e o botão **Reiniciar** no topo. O progresso só aparece
+  instala quando você sair do Nexo"), e o botão **Reiniciar** no topo. O progresso só aparece
   quando foi a pessoa que pediu.
 - **A versão nova aparece fora da sala também.** O botão **Atualizar** (verde, o ícone de
   download) mora no topo da sala e no topo do início, antes do "Adicionar amigo"; abaixo de
@@ -1073,6 +1073,16 @@ ou Enter. É um `role="separator"` com `aria-valuenow/min/max`, e a largura fica
 lembrada. No celular, onde o chat é a tela inteira, a alça não existe. O canal de música tem a alça
 dele (`#musicaAlca`) e vale a mesma largura; a janela de mensagens usa a mesma peça num canto de dois
 eixos (`role="button"`, mesmas setas).
+
+**Mensagens seguidas da mesma pessoa se juntam** (`agruparNoChat`, `sala.js`; `#chatMsgs > .msg.continua`,
+`sala.css`). A primeira traz avatar, nome e hora; as seguintes são só o texto, coladas embaixo, e a hora
+delas aparece na coluna do avatar quando o ponteiro (ou o foco) chega. Passados **5 minutos** desde a mensagem
+de antes — ou ao falar outra pessoa, ao responder (a citação pede o cabeçalho) ou ao passar o divisor de "Novas
+mensagens" — a pessoa volta inteira. É o **espaço** que conta a pausa: o vão de dentro de um grupo é de uns
+6 px, o de entre grupos, `--chat-entre-grupos` (16 px; 9 na densidade compacta), mais que o dobro. O
+agrupamento é uma função da mensagem que está **antes na tela** e é refeito onde a posição muda (editar,
+apagar, tirar o divisor), e não decidido uma vez na chegada. O canal de música e a conversa direta já se
+agrupavam, cada um com a sua regra de 5 minutos. Prova: `npm run test:agrupamento`.
 
 **O meu perfil**, no pé da lateral, é o "eu" da moldura (64 px, avatar de 34, 2.10) e tem o estado do
 microfone embaixo do nome, numa linha só. Entre o avatar e os dois botões sobram de 56 a 110 px para ele
