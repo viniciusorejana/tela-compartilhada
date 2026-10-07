@@ -16,7 +16,7 @@ a 2560 px**.
 | O trilho das salas (o mesmo no início e na sala) | `public/trilho.{js,css}`; na sala, `trilho-sala.js` |
 | A troca de página animada, o recado de "entrar direto" e a dica de "tem conta" antes da primeira pintura | `public/chassi.css`, `chassi.js` |
 | Tema claro e escuro, temas prontos, cores exatas | `public/tema.js` (no `<head>` de toda página) |
-| O carregamento: a tela cheia da troca de página, a roda, o esqueleto, a barra, o botão ocupado (4.19) | `public/carregando.{css,js}`; a abertura do aplicativo de mesa em `app/carregando.html` |
+| O carregamento: a tela cheia da troca de página, a roda, o esqueleto, a barra, o botão ocupado (4.19) | `public/carregando.{css,js}`; a splash dos aplicativos (4.21) em `app/splash.html` e no `android/` |
 | A sala inteira | `public/sala.css` |
 | A página inicial; a da conta herda dela | `public/home.css`, `public/conta.css` |
 | O modal da apresentação e das novidades (vale nas duas páginas) | `public/novidades.css` |
@@ -863,7 +863,7 @@ sala — na troca de página ela fica onde estava —, e a sala de agora vem **p
 
 Esperar é parte do produto, e o Nexo espera sempre do mesmo jeito: com a **faísca da marca** (o losango
 do canto do "N") e o violeta, calmo, honesto e sem pedir atenção. Tudo mora em `public/carregando.{css,js}`
-(e em `app/carregando.html`, a abertura do aplicativo de mesa). Duas escalas e uma regra para escolher:
+(e, nos aplicativos, a splash de 4.21, que vem antes dela). Duas escalas e uma regra para escolher:
 **dentro de uma página, uma peça pequena ao lado do que espera; entre duas páginas e na abertura do
 aplicativo, a tela cheia.**
 
@@ -885,7 +885,9 @@ aplicativo, a tela cheia.**
   status: o leitor de tela o anuncia mesmo invisível). **O relógio é o da espera, e não o da página**: o recado
   leva o instante em que a pessoa pediu (`desde`), e a página que chega abre no grau em que a espera já estava, em
   vez de recomeçar da marca. Os instantes são ajustáveis (`NexoCarregandoAjustes`: `nivel2`, `nivel3`); a tela de
-  abertura do aplicativo de mesa (`app/carregando.html`) tem os mesmos três graus.
+  abertura dos aplicativos tem a splash própria (4.21), e a página, quando abre dentro de um aplicativo, **nasce com esta
+  tela já acesa** (`emAplicativo`, `carregando.js`: sem os 220 ms de espera), para a passagem da splash a ela não deixar
+  um vazio.
 - **O que mostra** (no grau 3): a marca com o anel de progresso (a faísca na ponta do arco e a órbita tracejada), o
   título ("Entrando em #sala", "Saindo da sala", "Abrindo a sua conta", "Abrindo o Nexo"), a etapa
   ("Conectando ao servidor"), uma barra de XP de doze pedaços com a porcentagem, uma dica por vez e as
@@ -931,8 +933,7 @@ Os nomes dos `@keyframes` levam `nx-carga-` (`nx-carga-aurora`…): `nx-aurora`,
 em outras folhas, e com o mesmo nome quem carrega por último vence.
 
 **Onde já está aplicado**: a tela cheia em todas as páginas e nas trocas (`sairDaSala`, o "Entrar" do início, a
-pergunta da camada, o convite, os links, a apresentação); a abertura do aplicativo de mesa
-(`app/carregando.html`, local e instantânea: a janela mostra o Nexo até a sala pintar pela primeira vez); a
+pergunta da camada, o convite, os links, a apresentação); a splash dos aplicativos (4.21); a
 roda na sala de espera e na camada, no "Conectando à transmissão…" e "Recebendo vídeo…" do palco
 (`.stage.esperando` — e não no "Toque em Ativar reprodução", que pede uma ação), no "Procurando…" da busca de
 música (`.pedido-status`), nos emojis (a lista de 170 KB desce na primeira vez) e na conta; o esqueleto nas
@@ -993,6 +994,38 @@ início (`.ini-eu`) e na sala (`.self-profile`). A troca de página anima o "eu"
 - **A prova** é `npm run test:chassi`: cada peça medida pelo lugar dentro da faixa e pelo que a desenha, o
   ponto, e o recorte do avatar, do nome, do rosto e da engrenagem **pixel por pixel** (até 2 de 255 de desvio, o
   arredondamento da cor).
+
+### 4.21 A splash do Nexo
+
+O que aparece **na hora em que um aplicativo abre**, antes da tela de carregamento da página (4.19): a marca do
+Nexo dentro da roda (o arco com cauda de cometa e a faísca na ponta, `.nx-roda`) num brilho violeta, no fundo
+escuro da tela de carregamento (`--bg-fundo`, `#12131c`). É um desenho só nas três plataformas — a marca
+(`public/mark.svg`), a roda, o violeta e esse fundo — e a splash passa à tela de carregamento da página sem
+mudar de cor nem deixar um vazio no meio (a página nasce com a tela dela já acesa dentro dos aplicativos, 4.19).
+
+| onde | como é | quando sai |
+|---|---|---|
+| **Windows e Linux** (aplicativo de mesa) | `app/splash.html` numa janelinha sem moldura de 460 × 320, no meio da tela, por cima e fora da barra de tarefas (`criarSplash`, `app/main.js`; no Linux, do tipo `splash`). A marca na roda, a palavra NEXO e uma frase que muda com a espera: "Abrindo o Nexo", aos 3 s "Conectando ao servidor", aos 12 s "Está demorando mais que o normal" (CSS puro, por `animation-delay`) | quando a janela principal, que nasce escondida, **pinta pela primeira vez** (a sala, que traz a tela de carregamento dela, ou a tela de endereço se o servidor falhou), depois de **no mínimo 1,1 s** (uma splash que some em 300 ms é um piscar); sai em fusão por cima da janela |
+| **Windows portátil** | `app/build/splash.bmp`, a imagem que o executável portátil mostra **enquanto se desempacota** (alguns segundos, a cada abertura, antes de o Electron sequer existir): o mesmo desenho, gerado de `app/splash.html` por `npm run splash:gerar` (`portable.splashImage` no `app/package.json`) | quando o Electron sobe e a splash acima toma o lugar |
+| **Android** | a tela de abertura do AndroidX (`Tema.Nexo.Abertura`, `res/drawable/splash_icone.xml` e `splash_animado.xml`): a marca na roda no meio de um círculo de 192 dp, com a ponta do arco dando uma volta e a marca "pegando" com um pulinho (Android 12 em diante; antes, o último quadro, parado) | quando a página tem o primeiro conteúdo à vista (`onPageCommitVisible`), ou aos **4 s**, o que vier primeiro; sai em fusão de 260 ms |
+
+- **Nunca prende**: no aplicativo de mesa, aos **25 s** sem o servidor responder a splash sai para a **tela de
+  endereço**, com o motivo ("o servidor não respondeu a tempo"), onde dá para tentar de novo ou trocar de servidor; no
+  Android, aos 4 s ela sai de qualquer jeito, e a página tem a tela de carregamento dela.
+- **Não aparece** quando o sistema abriu o aplicativo ao entrar no computador (a janela já nasce minimizada: uma splash
+  ali seria um clarão que ninguém pediu), nem quando o macOS recria a janela ao clicar no ícone; nos testes do
+  aplicativo, `NEXO_SEM_SPLASH=1` (e `NEXO_SPLASH_MAXIMO_MS` encurta os 25 s).
+- **Isolada**: `splash.html` não tem script nenhum, tem CSP `default-src 'none'` e roda com `sandbox`, sem Node e sem
+  `devTools`: é uma página local que roda antes de tudo, e não tem o que pedir à rede.
+- **Menos movimento**: a roda fica parada e a frase fica a primeira; a marca e a roda continuam, dizendo que está abrindo.
+- **Mudou a marca ou as cores?** São quatro lugares que seguem o mesmo desenho: `public/carregando.css` (a tela de
+  carregamento), `app/splash.html`, o BMP (`npm run splash:gerar`, que **versiona o resultado**: o empacotamento não
+  depende do Playwright) e o `res/drawable/splash_icone.xml`. O BMP não entra na lista do que pede versão nova
+  (`build.files`), então uma mudança só nele vai para o portátil com a próxima versão que sair por outro motivo.
+- **O que não se prova aqui**: a splash do Android se prova num aparelho (docs/android.md); o resto, por
+  `npm run test:splash` (o Electron de verdade: a splash vem antes da janela, dura o mínimo, a sala toma o lugar dela;
+  servidor lento, fora do ar e mudo; primeira abertura; sem splash quando o sistema abre) e por `npm run test:carregando`
+  (a tela de carregamento que nasce acesa nos aplicativos).
 
 ---
 

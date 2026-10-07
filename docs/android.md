@@ -17,6 +17,7 @@ amigos**: mensagem direta, convite para sala, pedido de amizade e pedido aceito.
 | A pergunta ao servidor com o aplicativo congelado | `AvisosJob.java`; no servidor, `/api/social/avisos` (`server.js`) e `avisosPara` (`social.js`) |
 | A atualização (baixar, conferir a assinatura, instalar) | `Atualizador.java` + `AtualizacaoRecebedor.java`; na página, `public/atualizacao-app.js` (ver "A atualização") |
 | A tela de endereço (antes de qualquer servidor) | `android/app/src/main/assets/endereco.html` |
+| A splash (a marca na roda do Nexo, até a página pintar) | `res/drawable/splash_icone.xml` e `splash_animado.xml`, `Tema.Nexo.Abertura` em `res/values/themes.xml`, `segurarASplash` na `MainActivity` (ver "A splash") |
 | A ponte do lado da sala | `public/app-android.js`; os ganchos em `sala.js` (`atualizarModoSegundoPlano`, `encerrarMidiasDaSala`) |
 | A versão do aplicativo | `versionCode` e `versionName` em `android/app/build.gradle` |
 | Empacotar e pôr no servidor | `scripts/empacotar-android.cjs` (`npm run android:empacotar`) |
@@ -40,9 +41,10 @@ As alternativas, e por que não:
 - **Capacitor ou Cordova** trazem um servidor local e uma ponte que só vale para a origem
   escolhida *na hora do build* (`server.url`). Aqui a origem é escolhida pela pessoa, como no
   aplicativo de mesa; seria contornar o framework em vez de usá-lo.
-- **WebView nativa, em Java**, com duas dependências pequenas (`androidx.core` para a
+- **WebView nativa, em Java**, com três dependências pequenas (`androidx.core` para a
   notificação e o serviço em todas as versões, `androidx.webkit` para a ponte presa a uma
-  origem). O APK assinado tem cerca de 2 MB.
+  origem, `androidx.core:core-splashscreen` para a splash, igual do Android 8 em diante). O APK
+  assinado tem cerca de 2 MB.
 
 ## Como a chamada sobrevive
 
@@ -272,6 +274,32 @@ O que ele não resolve:
 - **Versão que volta.** Um APK com `versionCode` menor ou igual ao instalado é recusado, mesmo
   com o `versionName` maior: suba os dois.
 
+## A splash
+
+A tela de abertura do Nexo: a marca dentro da roda do Nexo (o arco com cauda de cometa e a faísca na ponta) no
+fundo escuro da tela de carregamento da página (`@color/fundo_splash`, `#12131C`, o `--bg-fundo` do
+`public/tema.css`). Faz parte do desenho único das três plataformas (`docs/interface.md` 4.21).
+
+| Peça | Arquivo |
+|---|---|
+| O tema da abertura (`Tema.Nexo.Abertura`, filho de `Theme.SplashScreen`, com `postSplashScreenTheme` = `Tema.Nexo`) | `res/values/themes.xml`; o manifesto o põe na `MainActivity` (o `<application>` continua `Tema.Nexo`) |
+| O desenho: o brilho, a trilha do anel, o arco com gradiente em varredura e a faísca, e a marca | `res/drawable/splash_icone.xml` (288 dp: o anel de raio 80 e a marca de 96 cabem folgados no círculo de 192 dp que o Android 12 deixa à vista) |
+| A animação: a ponta do arco dá uma volta (1 s) e a marca "pega" com um pulinho | `res/drawable/splash_animado.xml` |
+| Segurar e soltar | `MainActivity`: `SplashScreen.installSplashScreen` **antes** do `super.onCreate`, `segurarASplash`, e `Navegacao.onPageCommitVisible` |
+
+- **Quanto fica**: até a página ter o primeiro conteúdo à vista (`onPageCommitVisible`, que vale também para a tela
+  de endereço) ou **4 s**, o que vier primeiro (`MS_MAXIMO_DA_SPLASH`); sai em fusão de 260 ms. Depois dela vem a tela
+  de carregamento da página, que dentro do aplicativo **nasce já acesa** (`carregando.js`, `emAplicativo`: o user agent
+  traz `NexoAndroid/`), com a mesma marca e o mesmo fundo.
+- **Em cada Android**: no 12 em diante o sistema desenha o ícone animado sobre o fundo, em até um segundo, e fica no
+  último quadro; do 8 ao 11 a biblioteca desenha o último quadro, parado, como fundo da janela, e a saída em fusão
+  é a mesma. A animação do 12 só toca uma vez: se a abertura for mais longa, a splash fica parada no desenho final.
+- **O que mudou**: o `values-v31/themes.xml` (que só punha a cor da tela de abertura do sistema) saiu, e entrou a
+  dependência `androidx.core:core-splashscreen`. O ícone do aplicativo (o adaptável, `mipmap-anydpi`) não mudou.
+- **Mudar o desenho**: os números de `splash_icone.xml` (o centro é 144, 144); o que passar de 96 de raio é cortado no
+  Android 12. As cores são as da marca e do tema escuro e não mudam com o tema do sistema. Mexeu na marca ou nas cores?
+  Os outros três lugares que seguem o mesmo desenho estão em `docs/interface.md` 4.21.
+
 ## O que ele não resolve
 
 - **Compartilhar a tela.** A WebView do Android não tem `getDisplayMedia`; a sala já desliga o
@@ -292,13 +320,10 @@ O que ele não resolve:
 - **Mensagem de antes de reiniciar o servidor.** As conversas moram só na memória: um servidor
   reiniciado não tem o que avisar.
 - **iPhone.** Não há aplicativo para iOS; lá a sala é a do navegador.
-- **Tela de abertura própria.** Ao abrir, a WebView mostra o fundo escuro do Nexo (`R.color.fundo`) até a
-  página chegar, e então a tela de carregamento da própria página acende (`docs/interface.md` 4.19: ela nasce
-  no `<head>` e já mostra a marca, o andamento e as dicas). O aplicativo de mesa tem a dele, local e
-  instantânea (`app/carregando.html`), porque lá a janela abre antes de o servidor responder; no Android uma
-  tela assim seria uma página de `assets/` carregada antes do endereço do servidor, o que mexe na pilha de
-  navegação (`voltar` levaria à tela de abertura) e na ponte presa à origem — e **não foi feita sem um aparelho
-  para provar**.
+- **A splash não foi vista num aparelho.** Não há emulador nesta máquina, e a splash (abaixo, "A splash") só
+  se prova num celular: o Gradle compila e o lint passa, e a geometria foi conferida num desenho com os mesmos
+  números, mas a animação do Android 12, o corte circular de 192 dp, a saída em fusão e o momento certo de sair
+  são do aparelho. Conferir num Android 8 a 11 (a biblioteca desenha o último quadro, parado) e num 12 em diante.
 
 ## Testes
 
