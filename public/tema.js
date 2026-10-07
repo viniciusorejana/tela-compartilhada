@@ -27,6 +27,10 @@
   // o tema precisa ser pintado antes: quem escolheu cores exatas não pode ver o fundo trocar de cor a cada
   // carregamento enquanto a conta responde.
   const CHAVE_DA_PERMISSAO = 'nexo.pref.coresLivres';
+  // A cor do fundo do tema de agora (`--bg`), para o <head> da página seguinte pintar o <html> antes de
+  // qualquer arquivo chegar. Só existe quando o tema NÃO é o de sempre: o de sempre é o fundo escuro
+  // que o próprio <head> já tem por padrão.
+  const CHAVE_DO_FUNDO = 'nexoFundo';
 
   // ---------- Os temas prontos ----------
   // Quatro escuros e quatro claros. `fundo` é matiz e saturação das superfícies; `luz` desloca
@@ -253,12 +257,22 @@
     doc.style.colorScheme = efetivo.modo === 'claro' ? 'light' : 'dark';
     aplicadas.forEach(nome => doc.style.removeProperty(nome));
     aplicadas.clear();
-    if (!efetivo.padrao) {
-      for (const [nome, valor] of Object.entries(derivar(efetivo))) { doc.style.setProperty(nome, valor); aplicadas.add(nome); }
+    // O `--bg` posto pelo trecho do <head> (a cor da última vez) sai: quem manda agora é o tema de agora.
+    doc.style.removeProperty('--bg');
+    const paleta = efetivo.padrao ? null : derivar(efetivo);
+    if (paleta) {
+      for (const [nome, valor] of Object.entries(paleta)) { doc.style.setProperty(nome, valor); aplicadas.add(nome); }
     }
     // A barra do navegador no celular acompanha o fundo.
     const meta = root.document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = efetivo.padrao ? '#191a24' : derivar(efetivo)['--bg'];
+    if (meta) meta.content = paleta ? paleta['--bg'] : '#191a24';
+    // A cor do fundo fica guardada para a PRÓXIMA página, que a usa antes de qualquer arquivo chegar: o
+    // <head> de cada página pinta o <html> com ela (`--bg`), e é isso que impede o canvas de aparecer
+    // branco -- num tema escuro, ou num claro --, nos instantes entre a página velha sair e a nova pintar.
+    try {
+      if (paleta) root.localStorage?.setItem(CHAVE_DO_FUNDO, paleta['--bg']);
+      else root.localStorage?.removeItem(CHAVE_DO_FUNDO);
+    } catch (_) { /* sem a dica, o fundo escuro de sempre */ }
     return efetivo;
   }
 

@@ -11,6 +11,7 @@
       input.focus();
       return;
     }
+    window.NexoCarregando?.navegando(`Entrando em #${code}`);
     window.location.href = `/${encodeURIComponent(code)}/sala`;
   }
   document.getElementById('roomForm').onsubmit = event => { event.preventDefault(); openRoom(input.value); };
@@ -35,6 +36,7 @@
     const codigo = normalize(input.value) || `sala-${random}`;
     const dados = await conta;
     if (!dados?.conta && !dados?.abrirSemConta && /^[a-z0-9_-]{4,32}$/.test(codigo)) {
+      window.NexoCarregando?.navegando('Abrindo a sua conta');
       window.location.href = `/conta?motivo=criar-sala&voltar=${encodeURIComponent(`/${codigo}/sala`)}`;
       return;
     }

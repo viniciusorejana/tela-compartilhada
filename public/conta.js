@@ -40,6 +40,8 @@
 
   function mostrar(qual) {
     for (const id of ['carregando', 'semConta', 'codigoNovo', 'comConta']) $(id).hidden = id !== qual;
+    // A conta respondeu e a seção certa está à vista: a tela de carregamento (carregando.js) pode sair.
+    if (qual !== 'carregando') window.NexoCarregando?.concluir();
     const alvo = $(qual).querySelector('input:not([type="checkbox"]), h1');
     if (alvo?.tagName === 'INPUT') alvo.focus();
   }

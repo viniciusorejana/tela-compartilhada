@@ -177,7 +177,13 @@
     ponte.instancia = root.NexoPopover.abrir(botao, caixa => {
       caixa.classList.add('nx-emo-pop');
       if (cache) { caixa.append(construir(cache, ponte)); return; }
-      caixa.append(elemento('p', 'nx-emo-estado', 'Carregando os emojis…'));
+      // A lista de emojis (170 KB) só desce na primeira vez: o anel do Nexo diz que está vindo (docs/interface.md 4.19).
+      const espera = elemento('div', 'nx-emo-estado');
+      const roda = elemento('span', 'nx-roda m');
+      roda.setAttribute('aria-hidden', 'true');
+      espera.setAttribute('role', 'status');
+      espera.append(roda, elemento('p', '', 'Carregando os emojis…'));
+      caixa.append(espera);
       carregar().then(dados => {
         if (!caixa.isConnected) return;
         caixa.replaceChildren(construir(dados, ponte));

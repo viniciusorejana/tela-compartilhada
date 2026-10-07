@@ -419,6 +419,11 @@
     }
 
     async function carregar() {
+      // O histórico vem do servidor: até chegar, a lista desenha o lugar das mensagens (o esqueleto do Nexo,
+      // docs/interface.md 4.19), e não uma conversa vazia que se enche de repente.
+      // Vai DENTRO de `mensagensEl` (o que `desenhar` esvazia e preenche), e não em `lista`, que também carrega o
+      // aviso do topo e o "escrevendo…": trocar os filhos da lista tiraria o `mensagensEl` da tela.
+      if (!mensagens.length && root.NexoCarregando) mensagensEl.replaceChildren(root.NexoCarregando.esqueleto('linhas', 4));
       const r = await social.historico(codigo);
       if (fechado) return;
       if (!r.ok) { dizer(r.error || 'Não foi possível abrir a conversa.'); return; }

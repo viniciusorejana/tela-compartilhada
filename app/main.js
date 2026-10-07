@@ -89,6 +89,18 @@ function irParaEndereco(url) {
   janela.loadURL(url);
 }
 
+// A abertura do aplicativo: a janela mostra o Nexo carregando (carregando.html, local, na hora) enquanto o servidor
+// responde -- o endereço, a conexão, o HTML chegando --, em vez de uma janela escura e vazia. A tela fica até a sala
+// pintar pela primeira vez; se o servidor não responde, o `did-fail-load` de sempre leva à tela de endereço.
+// O endereço só entra em `enderecoPendente` DEPOIS de a abertura carregar: o `did-finish-load` dela não pode
+// "guardar" um endereço que ainda não carregou (veja o comentário de `did-finish-load`).
+function abrirComCarregamento(url) {
+  if (!janela) return;
+  janela.loadFile(path.join(__dirname, 'carregando.html'))
+    .catch(() => { /* sem a tela de abertura a janela só espera: o servidor abre do mesmo jeito */ })
+    .finally(() => irParaEndereco(url));
+}
+
 // ---------------------------------------------------------------- janela principal
 function criarJanela() {
   janela = new BrowserWindow({
@@ -162,7 +174,7 @@ function criarJanela() {
   });
 
   const config = lerConfig();
-  if (config.endereco) irParaEndereco(config.endereco);
+  if (config.endereco) abrirComCarregamento(config.endereco);
   else janela.loadFile(path.join(__dirname, 'endereco.html'));
 
   // Link externo abre no navegador de verdade, não dentro da sala.

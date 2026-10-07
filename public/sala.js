@@ -392,6 +392,7 @@ window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
     // Sem conta o recado de "entrar direto" não vale: o portão, escondido no primeiro quadro, volta.
     window.NexoChassi?.consumirEntrada(roomCode);
     document.documentElement.classList.remove('entrando-direto');
+    window.NexoCarregando?.concluir();
     return;
   }
   contaNaSala = conta;
@@ -414,8 +415,16 @@ window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
   if (window.NexoChassi?.consumirEntrada(roomCode)) entrar();
   else {
     document.documentElement.classList.remove('entrando-direto');
+    // O portão está à vista: a página está pronta, e é a pessoa quem decide o próximo passo.
+    window.NexoCarregando?.concluir();
   }
 });
+// A tela de carregamento sai também quando a sala tem o que dizer sem estar de pé: a espera pela aprovação, a
+// sala ainda fechada, quem foi removido -- cada um tem painel próprio, e a pessoa precisa vê-lo.
+for (const id of ['waitingPanel', 'removidoPanel']) {
+  const painel = document.getElementById(id);
+  if (painel) new MutationObserver(() => { if (!painel.classList.contains('hidden')) window.NexoCarregando?.concluir(); }).observe(painel, { attributes: true, attributeFilter: ['class'] });
+}
 
 function entrar() {
   if (socket) return;
@@ -538,6 +547,8 @@ function avisarTela(par) {
 // ---------- Conexão / sala ----------
 async function iniciarConexao() {
   status.textContent = 'Conectando ao servidor...';
+  // Quem entrou direto (sem o portão) está olhando a tela de carregamento: diz a etapa, e o anel anda.
+  window.NexoCarregando?.etapa('Conectando ao servidor', 0.78);
   try {
     salaConfig = await buscarConfigDaSala(myName);
   } catch (erro) {
@@ -557,9 +568,10 @@ async function iniciarConexao() {
     status.textContent = erro.message === 'servidor-de-midia-indisponivel'
       ? 'O servidor de mídia não está no ar. O chat funciona, mas ninguém vai ver nem ouvir ninguém.'
       : 'Não foi possível preparar a entrada na sala. Recarregue a página.';
-    if (erro.message !== 'servidor-de-midia-indisponivel') return;
+    if (erro.message !== 'servidor-de-midia-indisponivel') { window.NexoCarregando?.concluir(); return; }
   }
   if (saindoDaSala) return;
+  window.NexoCarregando?.etapa('Entrando na sala', 0.88);
   myId = salaConfig?.identidade || identidadeSessao || `local-${Math.random().toString(36).slice(2)}`;
   // Quem decide o nome na sala é o servidor: com conta, é o apelido dela, mesmo que o campo
   // tenha sido preenchido antes de a conta terminar de carregar.
@@ -691,6 +703,7 @@ async function iniciarConexao() {
     socket.emit('join-room', roomCode, myName, myId, (response) => {
       if (!response?.ok) {
         status.textContent = response?.error || 'Não foi possível entrar na sala.';
+        window.NexoCarregando?.concluir();
         return;
       }
       // O próprio perfil primeiro: o quadradinho, a lista e as permissões da mesa de sons
@@ -698,6 +711,8 @@ async function iniciarConexao() {
       if (response.perfil) meuPerfil = response.perfil;
       if (response.plano) aplicarPlano(response.plano);
       criarTileLocal();
+      // A sala está de pé: a tela de carregamento (de quem entrou direto) pode sair.
+      window.NexoCarregando?.concluir();
       donoDaSala = response.dono || null;
       podeModerar = Boolean(response.podeModerar);
       aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
@@ -5388,6 +5403,9 @@ function encerrarMidiasDaSala() {
 async function sairDaSala(destino = '/') {
   if (saindoDaSala) return;
   saindoDaSala = true;
+  // Sair leva um instante (o relatório, a despedida do servidor): a tela de carregamento acende na hora, em vez de a
+  // sala ficar parada com a mídia já desligada, e a página que chega a abre já acesa.
+  window.NexoCarregando?.navegando(window.NexoCarregando.tituloDe(destino));
   await Promise.race([relatarRecebimento(), new Promise(resolve => setTimeout(resolve, 400))]);
   encerrarMidiasDaSala();
   if (socket?.connected) {
@@ -6610,8 +6628,10 @@ const stageEmptyTitle = document.getElementById('stageEmptyTitle');
 const stageEmptyText = document.getElementById('stageEmptyText');
 const stageEmptyActions = document.getElementById('stageEmptyActions');
 
-function porPalcoVazio(titulo, texto, acoes = []) {
+function porPalcoVazio(titulo, texto, acoes = [], esperando = false) {
   stage.classList.toggle('so-mensagem', !acoes.length);
+  // `esperando`: o palco está esperando algo chegar (o anel do Nexo em cima do texto, 4.19), e não só dizendo algo.
+  stage.classList.toggle('esperando', esperando && !acoes.length);
   stageEmptyTitle.textContent = titulo;
   stageEmptyText.textContent = texto || '';
   stageEmptyText.hidden = !texto;
@@ -6628,7 +6648,7 @@ function porPalcoVazio(titulo, texto, acoes = []) {
 
 // Mensagem de passagem ("estou esperando a imagem"): sem ilustracao e sem botao, para nao
 // parecer que a transmissao acabou quando ela so esta chegando.
-const mensagemDePalco = texto => porPalcoVazio(texto, '');
+const mensagemDePalco = (texto, esperando = true) => porPalcoVazio(texto, '', [], esperando);
 
 function convidarParaOPalco() {
   const transmitindo = [...peers.values()].filter(par => par.state?.screen && !par.assistindo);
@@ -6926,7 +6946,9 @@ function atualizarEstadoDoVideo() {
     esperaDoVideo = null;
     document.getElementById('playbackRecovery').hidden = true;
   } else {
-    mensagemDePalco(midiasBloqueadas.has(stageVideo) ? 'Toque em Ativar reprodução para assistir.' : 'Recebendo vídeo…');
+    // "Toque em Ativar reprodução" pede uma ação da pessoa: não é uma espera, e não leva o anel.
+    if (midiasBloqueadas.has(stageVideo)) mensagemDePalco('Toque em Ativar reprodução para assistir.', false);
+    else mensagemDePalco('Recebendo vídeo…');
     aguardarVideo();
   }
 }

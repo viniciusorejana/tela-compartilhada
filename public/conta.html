@@ -1,13 +1,19 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-carregando="manual">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- O fundo antes de qualquer arquivo (tema.js guarda a cor): ver inicio.html. -->
+  <script>try{var f=localStorage.getItem('nexoFundo');if(f)document.documentElement.style.setProperty('--bg',f)}catch(e){}</script>
+  <style>html{background:var(--bg,#191a24)}</style>
   <meta name="theme-color" content="#161720">
   <title>Sua conta · Nexo</title>
   <meta name="description" content="Crie sua conta no Nexo para abrir salas, transmitir a 60 quadros e ter um perfil que segue você.">
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <script src="/tema.js"></script>
+  <!-- A tela de carregamento (carregando.js): some quando a conta responde (`concluir()`, em conta.js). -->
+  <script src="/carregando.js"></script>
+  <link rel="stylesheet" href="/carregando.css">
   <!-- Dentro da sala (a camada do início, inicio-na-sala.js) esta página roda num quadro: este arquivo
        é o que ela precisa para saber disso. No <head> e síncrono, como o tema, para a página já
        nascer no modo certo. Fora da camada, não faz nada. -->
@@ -20,7 +26,7 @@
 <body>
   <header class="home-nav"><a class="brand" href="/" aria-label="Nexo · Início"><img src="/mark.svg" width="38" height="38" alt=""><strong>NEXO<span> / </span></strong><small>sua conta</small></a><a class="nav-link" href="/">Voltar ao início</a></header>
   <main class="conta-main">
-    <p id="carregando" class="conta-carregando" role="status">Carregando…</p>
+    <p id="carregando" class="conta-carregando nx-espera" role="status"><span class="nx-roda" aria-hidden="true"></span>Carregando…</p>
 
     <!-- Sem conta: entrar, criar ou recuperar. Três formulários, um visível por vez. -->
     <section id="semConta" class="conta-card" aria-labelledby="semContaTitulo" hidden>

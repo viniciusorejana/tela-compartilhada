@@ -1,0 +1,186 @@
+/* O carregamento do Nexo (docs/interface.md, 4.19): a tela cheia da troca de página e da abertura do
+ * aplicativo, e as peças pequenas de "estou esperando" -- o anel, o esqueleto, a barra, os pontinhos e o
+ * botão ocupado. É tudo do mesmo desenho: a faísca da marca (o losango do canto do "N") e o violeta.
+ *
+ * Calmo por padrão (docs/interface.md, 1): nada pisca, nada toca, e o que aparece só aparece se a espera
+ * for de verdade -- a tela cheia nasce transparente e só se acende depois de uma fração de segundo
+ * (carregando.js), então uma página que abre depressa não a mostra nunca. Cor, sempre pelos tokens; as
+ * duas regras de menos movimento estão no fim do arquivo.
+ *
+ * Vive em páginas com regras globais de `button` e `a` diferentes (seção 8): o que é botão aqui declara
+ * tudo o que precisa. */
+@import url('/tema.css');
+
+/* ---------- 1. A tela cheia ---------- */
+.nx-tela { position:fixed; inset:0; z-index:127; display:grid; place-items:center; overflow:hidden; padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); background:var(--bg-fundo); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; user-select:none; -webkit-user-select:none; opacity:0; visibility:hidden; transition:opacity var(--nx-saida,var(--dur-lenta)) var(--curva),visibility 0s linear var(--nx-saida,var(--dur-lenta)); }
+.nx-tela.visivel { opacity:1; visibility:visible; transition-delay:0s; }
+/* O céu: um brilho violeta atrás da marca, um verde de canto e pontos de uma grade bem fraca. Só a tela de dois
+   níveis para cima tem céu (ver "Os três graus"): o nível 1 é a marca no fundo liso. */
+.nx-tela::before { content:''; position:absolute; inset:-25%; background:radial-gradient(ellipse 46% 40% at 50% 40%,var(--accent-suave-hi),transparent 72%),radial-gradient(ellipse 30% 26% at 84% 80%,var(--online-suave),transparent 70%),radial-gradient(ellipse 34% 30% at 12% 86%,var(--accent-suave),transparent 70%); animation:nx-carga-aurora 16s ease-in-out infinite alternate; pointer-events:none; opacity:0; transition:opacity .9s var(--curva); }
+.nx-tela::after { content:''; position:absolute; inset:0; background-image:radial-gradient(rgb(var(--tinta) / 9%) 1px,transparent 1.5px); background-size:28px 28px; -webkit-mask:radial-gradient(ellipse 70% 60% at 50% 45%,#000,transparent 78%); mask:radial-gradient(ellipse 70% 60% at 50% 45%,#000,transparent 78%); opacity:0; pointer-events:none; transition:opacity .9s var(--curva); }
+.nx-tela[data-nivel="2"]::before { opacity:.55; }
+.nx-tela[data-nivel="2"]::after { opacity:.35; }
+.nx-tela[data-nivel="3"]::before { opacity:1; }
+.nx-tela[data-nivel="3"]::after { opacity:.7; }
+/* Os nomes dos keyframes levam `nx-carga-`: `nx-aurora`, `nx-flutuar` e `nx-pronto` já existem (cartao.css, novidades.css) e,
+   com o mesmo nome, quem carrega por último vence -- a tela de carregamento animaria com o desenho do cartão. */
+@keyframes nx-carga-aurora { to { transform:translate3d(2%,-2%,0) scale(1.06); } }
+
+.nx-tela-caixa { position:relative; z-index:1; display:grid; justify-items:center; width:min(100%,360px); text-align:center; }
+
+/* O emblema: a marca, o anel de progresso com a faísca na ponta do arco, e a órbita tracejada. */
+.nx-emblema { --p:.04; position:relative; width:168px; height:168px; }
+
+/* Os três graus da espera (docs/interface.md, 4.19). `data-nivel` é posto por carregando.js conforme a espera se
+   alonga, e só sobe. 1: só a marca, pequena, no fundo liso. 2: a marca cresce, o céu acende pela metade e entram o
+   título e a etapa. 3: a tela completa -- a órbita, a barra de XP, a dica, o nível e as faíscas. Cada degrau é uma
+   fusão (opacidade e altura), e o grupo, que está sempre no meio da tela, vai subindo para dar lugar ao que entra. */
+.nx-emblema { zoom:1; transition:zoom .8s var(--curva); }
+.nx-tela[data-nivel="1"] .nx-emblema { zoom:.62; }
+.nx-tela[data-nivel="2"] .nx-emblema { zoom:.82; }
+/* A altura que entra e sai: uma linha de grade que vai de 0 a 1fr (animável). O miolo corta o que passa, com folga para o
+   brilho da barra; o que está dentro fica transparente até o seu grau chegar. */
+.nx-resto { display:grid; width:100%; grid-template-rows:0fr; transition:grid-template-rows .8s var(--curva); }
+.nx-resto-miolo { min-height:0; display:grid; justify-items:center; overflow:clip; overflow-clip-margin:14px; }
+.nx-tela:is([data-nivel="2"],[data-nivel="3"]) .nx-resto-2,.nx-tela[data-nivel="3"] .nx-resto-3 { grid-template-rows:1fr; }
+.nx-resto-2 > .nx-resto-miolo > :is(.nx-tela-titulo,.nx-tela-etapa,.nx-devagar),.nx-resto-3 > .nx-resto-miolo > *,.nx-nivel { opacity:0; transition:opacity .7s var(--curva) .15s; }
+.nx-tela:is([data-nivel="2"],[data-nivel="3"]) .nx-resto-2 > .nx-resto-miolo > :is(.nx-tela-titulo,.nx-tela-etapa,.nx-devagar),.nx-tela[data-nivel="3"] .nx-resto-3 > .nx-resto-miolo > *,.nx-tela[data-nivel="3"] .nx-nivel { opacity:1; }
+.nx-orbita { opacity:0; transition:opacity 1s var(--curva); }
+.nx-tela[data-nivel="3"] .nx-orbita { opacity:1; }
+.nx-emblema > svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.nx-anel-trilha { fill:none; stroke:var(--line-3); stroke-width:3; }
+.nx-anel-arco { fill:none; stroke:var(--accent-hi); stroke-width:3.5; stroke-linecap:round; filter:drop-shadow(0 0 6px var(--accent)); transition:stroke-dasharray .5s var(--curva); }
+.nx-orbita { position:absolute; inset:-18px; border:1px dashed rgb(var(--tinta) / 16%); border-radius:50%; animation:nx-giro 32s linear infinite; }
+.nx-orbita i { position:absolute; width:11px; height:11px; color:var(--aviso-texto); }
+.nx-orbita i:nth-child(1) { left:calc(50% - 5.5px); top:-5.5px; }
+.nx-orbita i:nth-child(2) { right:14px; bottom:14px; width:8px; height:8px; color:var(--online-texto); animation:nx-cintila 2.8s ease-in-out infinite alternate; }
+.nx-orbita i:nth-child(3) { left:12px; bottom:22px; width:7px; height:7px; color:var(--accent-texto); animation:nx-cintila 3.4s ease-in-out infinite alternate-reverse; }
+.nx-estrela { display:block; width:100%; height:100%; fill:currentColor; }
+/* A faísca na ponta do arco acompanha o progresso: o anel é de 76 de raio numa caixa de 168, e a ponta gira junto. */
+.nx-ponta { position:absolute; inset:0; transform:rotate(calc(var(--p) * 360deg)); transition:transform .5s var(--curva); }
+.nx-ponta i { position:absolute; left:calc(50% - 9px); top:-1px; width:18px; height:18px; color:var(--accent-hi); filter:drop-shadow(0 0 7px var(--accent)); }
+.nx-marca { position:absolute; inset:42px; border-radius:26px; box-shadow:0 14px 40px color-mix(in srgb,var(--accent) 38%,transparent); animation:nx-carga-flutuar 3.6s ease-in-out infinite alternate; }
+.nx-marca > svg { display:block; width:100%; height:100%; border-radius:26px; }
+.nx-tela.pronta .nx-marca { animation:nx-carga-pronto .5s var(--curva-mola); }
+@keyframes nx-giro { to { transform:rotate(360deg); } }
+@keyframes nx-carga-flutuar { from { transform:translateY(2px); } to { transform:translateY(-3px); } }
+@keyframes nx-cintila { from { opacity:.25; transform:scale(.8); } to { opacity:1; transform:scale(1.1); } }
+@keyframes nx-carga-pronto { 0% { transform:scale(1); } 45% { transform:scale(1.09); } 100% { transform:scale(1); } }
+
+.nx-tela-titulo { margin:24px 0 0; font-size:var(--fs-xl); font-weight:650; letter-spacing:-.02em; line-height:1.25; max-width:100%; overflow-wrap:anywhere; }
+.nx-tela-etapa { margin:6px 0 0; color:var(--muted); font-size:var(--fs-sm); min-height:1.5em; }
+.nx-pontos { display:inline-flex; gap:3px; margin-left:4px; vertical-align:middle; }
+.nx-pontos i { width:4px; height:4px; border-radius:50%; background:currentColor; animation:nx-pulo 1.2s ease-in-out infinite both; }
+.nx-pontos i:nth-child(2) { animation-delay:.15s; }
+.nx-pontos i:nth-child(3) { animation-delay:.3s; }
+@keyframes nx-pulo { 0%,70%,100% { opacity:.25; transform:translateY(0); } 35% { opacity:1; transform:translateY(-3px); } }
+
+/* A barra de XP: doze pedaços que acendem com o progresso, o próximo respirando. */
+.nx-xp { width:min(100%,300px); margin-top:22px; display:grid; gap:8px; }
+.nx-xp-seg { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:3px; }
+.nx-xp-seg i { height:8px; border-radius:3px; background:rgb(var(--tinta) / 8%); transition:background-color var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.nx-xp-seg i.on { background:var(--accent); box-shadow:0 0 10px var(--accent-suave-hi); }
+.nx-xp-seg i.prox { background:var(--accent-suave-hi); animation:nx-respira 1.4s ease-in-out infinite alternate; }
+@keyframes nx-respira { from { opacity:.45; } to { opacity:1; } }
+.nx-xp-rotulos { display:flex; justify-content:space-between; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+.nx-xp-rotulos b { color:var(--accent-texto); font-weight:750; font-variant-numeric:tabular-nums; }
+
+/* A dica: uma frase por vez, trocada com uma fusão curta. */
+.nx-dica { width:100%; min-height:72px; margin-top:24px; display:grid; align-content:start; gap:5px; padding:12px 14px; border-radius:var(--r-lg); background:rgb(var(--tinta) / 3%); box-shadow:inset 0 0 0 1px var(--line); text-align:left; }
+.nx-dica small { color:var(--accent-texto); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+.nx-dica p { margin:0; color:var(--text-2); font-size:var(--fs-sm); line-height:1.55; transition:opacity var(--dur-lenta) var(--curva); }
+.nx-dica p.troca { opacity:0; }
+
+/* O nível de quem juntou faíscas, no canto: só aparece depois da primeira. */
+.nx-nivel { position:absolute; z-index:2; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right)); display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 5%); box-shadow:inset 0 0 0 1px var(--line-2); color:var(--text-2); font-size:var(--fs-meta); font-weight:650; font-variant-numeric:tabular-nums; }
+.nx-nivel[hidden] { display:none; }
+.nx-nivel .nx-estrela { width:11px; height:11px; color:var(--aviso-texto); }
+.nx-nivel.subiu { animation:nx-carga-pronto .6s var(--curva-mola); }
+
+/* As faíscas que passam: tocar numa a pega (carregando.js). Não são botões -- decoração com um gesto escondido,
+   fora da ordem do teclado e do leitor de tela. */
+.nx-faisca { position:absolute; z-index:1; left:var(--x); top:var(--y); width:38px; height:38px; margin:-19px 0 0 -19px; display:grid; place-items:center; color:var(--aviso-texto); cursor:pointer; -webkit-tap-highlight-color:transparent; animation:nx-deriva var(--t,9s) ease-in-out infinite alternate; }
+.nx-faisca .nx-estrela { width:17px; height:17px; filter:drop-shadow(0 0 8px currentColor); animation:nx-cintila 2.4s ease-in-out infinite alternate; }
+.nx-faisca.pegou { animation:none; pointer-events:none; }
+.nx-faisca.pegou .nx-estrela { animation:nx-pegar .55s var(--curva) forwards; }
+.nx-faisca.pegou::after { content:'+1'; position:absolute; top:-6px; color:var(--accent-texto); font-size:var(--fs-sm); font-weight:750; animation:nx-sobe .7s var(--curva) forwards; }
+@keyframes nx-deriva { from { transform:translate3d(-14px,8px,0); } to { transform:translate3d(16px,-12px,0); } }
+@keyframes nx-pegar { 0% { transform:scale(1); opacity:1; } 40% { transform:scale(2.2); opacity:1; } 100% { transform:scale(.2); opacity:0; } }
+@keyframes nx-sobe { from { transform:translateY(0); opacity:1; } to { transform:translateY(-22px); opacity:0; } }
+
+/* A espera longa: depois de uns segundos a tela admite, e oferece tentar de novo. */
+.nx-devagar { display:none; margin-top:20px; gap:10px; justify-items:center; color:var(--aviso-texto); font-size:var(--fs-sm); }
+.nx-tela.devagar .nx-devagar { display:grid; }
+.nx-tela .nx-tela-botao { appearance:none; -webkit-appearance:none; display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:0; min-height:var(--ctl-m); margin:0; padding:0 16px; border:0; border-radius:var(--r-md); background:var(--accent-forte); color:#fff; font:600 var(--fs-md)/1 "Segoe UI",system-ui,sans-serif; cursor:pointer; box-shadow:none; transform:none; user-select:auto; transition:background-color var(--dur) var(--curva); }
+.nx-tela .nx-tela-botao:hover:not(:disabled) { background:var(--accent-forte-hi); }
+.nx-tela .nx-tela-botao:focus-visible { outline:2px solid var(--anel-cor); outline-offset:3px; }
+
+@media (max-width:380px) { .nx-emblema { width:136px; height:136px; } .nx-tela-titulo { margin-top:20px; } .nx-marca { inset:34px; border-radius:21px; } .nx-marca > svg { border-radius:21px; } .nx-ponta i { left:calc(50% - 8px); width:16px; height:16px; } .nx-dica { min-height:0; } }
+/* Janela baixa (o celular deitado): a dica e as faíscas saem, para o emblema e a barra caberem. */
+@media (max-height:520px) { .nx-dica,.nx-faisca { display:none; } .nx-emblema { width:124px; height:124px; } .nx-tela-titulo { margin-top:14px; } .nx-marca { inset:30px; border-radius:19px; } .nx-marca > svg { border-radius:19px; } .nx-xp { margin-top:14px; } }
+
+/* ---------- 2. A roda: o "estou esperando" pequeno ----------
+   O arco com a cauda de cometa e a faísca na ponta, girando (`.nx-roda`; o `.nx-anel` é o do contador das
+   novidades, em novidades.css). Três tamanhos; o padrão é o de 20 px. É o que vai ao lado do texto que espera
+   ("Conectando…"), no lugar do anel genérico de antes. */
+.nx-roda { --tam:20px; --esp:2.5px; position:relative; display:inline-block; flex:none; width:var(--tam); height:var(--tam); vertical-align:middle; animation:nexo-girar .95s linear infinite; }
+.nx-roda::before { content:''; position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,var(--accent) 12%,transparent) 10%,var(--accent) 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - var(--esp)),#000 calc(100% - var(--esp) + .5px)); mask:radial-gradient(farthest-side,transparent calc(100% - var(--esp)),#000 calc(100% - var(--esp) + .5px)); }
+.nx-roda::after { content:''; position:absolute; left:50%; top:calc(var(--esp) * -.7); width:calc(var(--esp) * 3.2); height:calc(var(--esp) * 3.2); margin-left:calc(var(--esp) * -1.6); background:var(--accent-hi); clip-path:polygon(50% 0,63% 37%,100% 50%,63% 63%,50% 100%,37% 63%,0 50%,37% 37%); }
+.nx-roda.p { --tam:14px; --esp:2px; }
+.nx-roda.m { --tam:28px; --esp:3px; }
+.nx-roda.g { --tam:44px; --esp:4px; }
+/* O anel que já existia na sala de espera e na camada (`.waiting-spinner`) é este mesmo. */
+.waiting-spinner { --tam:36px; --esp:3.5px; position:relative; display:block; width:var(--tam); height:var(--tam); margin:0 auto 14px; border:0; border-radius:0; background:none; animation:nexo-girar .95s linear infinite; }
+.waiting-spinner::before { content:''; position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,var(--accent) 12%,transparent) 10%,var(--accent) 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - var(--esp)),#000 calc(100% - var(--esp) + .5px)); mask:radial-gradient(farthest-side,transparent calc(100% - var(--esp)),#000 calc(100% - var(--esp) + .5px)); }
+.waiting-spinner::after { content:''; position:absolute; left:50%; top:calc(var(--esp) * -.7); width:calc(var(--esp) * 3.2); height:calc(var(--esp) * 3.2); margin-left:calc(var(--esp) * -1.6); background:var(--accent-hi); clip-path:polygon(50% 0,63% 37%,100% 50%,63% 63%,50% 100%,37% 63%,0 50%,37% 37%); }
+/* O estado "carregando" ao lado de um texto: o anel e a frase na mesma linha. */
+.nx-espera { display:inline-flex; align-items:center; gap:9px; color:var(--muted); font-size:var(--fs-sm); }
+
+/* ---------- 3. O esqueleto: o lugar do que vai chegar ----------
+   Uma lista que ainda não chegou desenha as linhas que vai ter, em vez de dizer "Nenhum amigo ainda" por um
+   instante e trocar. O brilho que varre é de 1,5 s e bem fraco. */
+.nx-esq { position:relative; display:block; overflow:hidden; flex:none; border-radius:var(--r-xs); background:rgb(var(--tinta) / 6%); }
+.nx-esq::after { content:''; position:absolute; inset:0; transform:translateX(-100%); background:linear-gradient(90deg,transparent,rgb(var(--tinta) / 7%),transparent); animation:nx-varre 1.5s ease-in-out infinite; }
+@keyframes nx-varre { to { transform:translateX(100%); } }
+.nx-esq.linha { height:10px; border-radius:5px; }
+.nx-esq.avatar { width:34px; height:34px; border-radius:50%; }
+.nx-esq.quadrado { border-radius:11px; }
+.nx-esq.bloco { height:84px; border-radius:var(--r-lg); }
+.nx-esq-item { display:flex; align-items:center; gap:12px; padding:10px; }
+.nx-esq-textos { flex:1; min-width:0; display:grid; gap:8px; }
+.nx-esq-textos .nx-esq:first-child { width:46%; }
+.nx-esq-textos .nx-esq:last-child { width:72%; height:8px; }
+.nx-esq-grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+/* O cartão de perfil que ainda não chegou: o banner, o avatar de 86 que sobe por cima dele e as linhas de baixo. */
+.nx-esq-cartao { display:grid; gap:14px; padding-bottom:22px; border-radius:var(--r-xl); background:var(--bg-cartao); overflow:hidden; }
+.nx-esq-cartao .nx-esq.banner { height:108px; border-radius:0; }
+.nx-esq-cartao .nx-esq.grande { width:86px; height:86px; margin:-52px 0 0 18px; box-shadow:0 0 0 4px var(--bg-cartao); background:var(--bg-3); }
+.nx-esq-cartao .nx-esq-textos { padding:0 18px; }
+.nx-esq-cartao .nx-esq-textos .nx-esq:nth-child(1) { width:48%; height:14px; }
+.nx-esq-cartao .nx-esq-textos .nx-esq:nth-child(2) { width:70%; height:10px; }
+.nx-esq-cartao .nx-esq-textos .nx-esq:nth-child(3) { width:90%; height:10px; }
+
+/* ---------- 4. A barra de progresso ----------
+   Para o que tem um andamento: um envio, um download. Determinada (`--p` de 0 a 1) ou indeterminada. */
+.nx-progresso { --p:0; position:relative; height:6px; border-radius:var(--r-pilula); background:rgb(var(--tinta) / 8%); overflow:hidden; }
+.nx-progresso > i { display:block; height:100%; width:calc(var(--p) * 100%); border-radius:inherit; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .3s var(--curva); }
+.nx-progresso.indeterminada > i { width:34%; animation:nx-vai-e-vem 1.3s ease-in-out infinite; }
+@keyframes nx-vai-e-vem { 0% { transform:translateX(-100%); } 100% { transform:translateX(300%); } }
+
+/* ---------- 5. O botão ocupado ----------
+   Quem clicou vê o anel no lugar do ícone e o botão parado até a resposta chegar. */
+.nx-botao[aria-busy="true"] { pointer-events:none; cursor:progress; }
+.nx-botao[aria-busy="true"] .ico { display:none; }
+.nx-botao[aria-busy="true"]::before { content:''; flex:none; width:14px; height:14px; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,currentColor 14%,transparent) 10%,currentColor 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); animation:nexo-girar .9s linear infinite; }
+
+/* O texto de andamento ("Enviando…", "Salvando…") leva o anel do Nexo à frente: onde a página já marca o retorno com
+   `data-tom="andamento"`, é só isso. O arco é o da `.nx-roda`, do tamanho de uma linha de texto. */
+:is(.ed-retorno,.ini-retorno,.nx-dm-status)[data-tom="andamento"] { color:var(--muted); }
+:is(.ed-retorno,.ini-retorno,.nx-dm-status)[data-tom="andamento"]::before { content:''; display:inline-block; width:12px; height:12px; margin-right:8px; vertical-align:-2px; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,var(--accent-hi) 14%,transparent) 10%,var(--accent-hi) 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); animation:nexo-girar .9s linear infinite; }
+
+/* ---------- 6. Menos movimento ----------
+   Os dois níveis (o do sistema e o "Menos animação" das configurações) já encurtam toda animação para 1 ms
+   (tema.css). Aqui sai o que é só brincadeira: as faíscas que passam, a órbita e o céu que se mexe. O emblema e
+   a barra continuam, parados -- eles dizem que está carregando. */
+@media (prefers-reduced-motion: reduce) { .nx-faisca,.nx-orbita,.nx-tela::before { display:none; } }
+html.menos-movimento .nx-faisca,html.menos-movimento .nx-orbita,html.menos-movimento .nx-tela::before { display:none; }

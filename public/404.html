@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- O fundo antes de qualquer arquivo (tema.js guarda a cor): ver inicio.html. -->
+  <script>try{var f=localStorage.getItem('nexoFundo');if(f)document.documentElement.style.setProperty('--bg',f)}catch(e){}</script>
+  <style>html{background:var(--bg,#191a24)}</style>
   <meta name="theme-color" content="#161720">
   <meta name="robots" content="noindex">
   <title>Página não encontrada · Nexo</title>
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <script src="/tema.js"></script>
+  <script src="/carregando.js"></script>
+  <link rel="stylesheet" href="/carregando.css">
   <link rel="stylesheet" href="/nao-encontrada.css">
 </head>
 <body>

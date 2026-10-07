@@ -571,7 +571,11 @@
   const modal = $('cartaoModal');
   let antesDoModal = null;
   let pararEfeito = () => {};
+  // Cada abertura tem um número: fechar o painel (ou abrir outro cartão) antes de o servidor responder cancela a
+  // abertura que ainda esperava, e ela não reabre o painel quando a resposta chega.
+  let aberturaDoCartao = 0;
   function fecharCartao() {
+    aberturaDoCartao++;
     if (modal.hidden) return;
     pararEfeito();
     modal.hidden = true;
@@ -580,8 +584,22 @@
   async function abrirCartao(codigo) {
     fecharMenu();
     antesDoModal = document.activeElement;
+    const minha = ++aberturaDoCartao;
+    // O cartão vem do servidor: se demora, o painel já abre com o lugar dele (o esqueleto, docs/interface.md 4.19).
+    // Só se demora -- um cartão que chega depressa não pisca um esqueleto.
+    const espera = window.NexoCarregando && setTimeout(() => {
+      if (minha !== aberturaDoCartao) return;
+      $('cartaoModalCaixa').replaceChildren(window.NexoCarregando.esqueleto('cartao'));
+      modal.hidden = false;
+    }, 220);
     const r = await S.cartao(codigo);
-    if (!r.ok) { aviso({ tom: 'erro', icone: 'erro', titulo: 'Não foi possível abrir o perfil', detalhe: r.dados.error }); return; }
+    clearTimeout(espera);
+    if (minha !== aberturaDoCartao) return;
+    if (!r.ok) {
+      if (!modal.hidden) fecharCartao();
+      aviso({ tom: 'erro', icone: 'erro', titulo: 'Não foi possível abrir o perfil', detalhe: r.dados.error });
+      return;
+    }
     const p = r.dados.pessoa;
     const presenca = p.relacao === 'amigos' ? S.presencaDe(codigo) : p.relacao === 'eu' ? S.estado.minha : null;
     const montado = C.montar({ nome: p.apelido, perfil: p.perfil, cartao: p, presenca, apelidoMeu: p.apelidoMeu, ids: { nome: 'cartaoModalNome' } });
@@ -636,10 +654,13 @@
     const valor = $('adicionarCampo').value.trim();
     if (!valor) { retorno.dataset.tom = 'erro'; retorno.textContent = 'Digite o nome de usuário ou o código de quem você quer adicionar.'; $('adicionarCampo').focus(); return; }
     $('adicionarEnviar').disabled = true;
-    retorno.dataset.tom = '';
+    $('adicionarEnviar').setAttribute('aria-busy', 'true');
+    retorno.dataset.tom = 'andamento';
     retorno.textContent = 'Enviando…';
     const r = await S.pedirAmizade(valor);
     $('adicionarEnviar').disabled = false;
+    $('adicionarEnviar').removeAttribute('aria-busy');
+    retorno.dataset.tom = '';
     if (!r.ok) { retorno.dataset.tom = 'erro'; retorno.textContent = r.dados.error || 'Não foi possível enviar o pedido.'; return; }
     const nome = r.dados.pessoa?.apelido || valor;
     retorno.textContent = r.dados.estado === 'amigos' ? `Você e ${nome} agora são amigos.` : `Pedido enviado para ${nome}. Quando aceitar, aparece na sua lista.`;
@@ -709,6 +730,8 @@
 
   // ---------- Conquistas ----------
   async function pintarConquistas() {
+    // Os cartões vêm do servidor: até chegarem, a grade desenha o lugar deles (o esqueleto do Nexo, 4.19).
+    if (!$('gradeConquistas').childElementCount && window.NexoCarregando) $('gradeConquistas').replaceChildren(...window.NexoCarregando.esqueleto('cartoes', 6).children);
     const dados = await editor.carregar();
     if (!dados) return;
     const lista = dados.lista;
@@ -930,6 +953,7 @@
     // As cores exatas do tema são do nível completo; esta página sabe o plano, e o tema lembra.
     if (window.NexoTema && window.NexoPlanos) { NexoTema.definirPermissao(NexoPlanos.podeUsarCoresExatas(conta.nivel, dados.planosLigados === false)); NexoTema.aplicar(); }
     repintar();
+    window.NexoCarregando?.etapa('Buscando seus amigos', 0.78);
     await editor.carregar();
     await S.iniciar();
     recebidosVistos = new Set(S.estado.amigos.recebidos.map(p => p.codigo));
@@ -950,7 +974,14 @@
   // instante --, mas não espera para sempre: um servidor lento não pode deixar a camada girando.
   const avisarPronto = (() => {
     let avisado = false;
-    return () => { if (avisado) return; avisado = true; camada?.avisar('pronto', { pagina: 'inicio' }); };
+    return () => {
+      if (avisado) return;
+      avisado = true;
+      camada?.avisar('pronto', { pagina: 'inicio' });
+      // Fora da camada, quem espera é a tela de carregamento (carregando.js): ela sai quando as listas estão
+      // desenhadas, e a pessoa nunca vê "Seus amigos aparecem aqui" por um instante.
+      window.NexoCarregando?.concluir();
+    };
   })();
   if (camada) setTimeout(avisarPronto, 4000);
   // A notificação tocada com a página aberta (app-android.js): sem recarregar nada.

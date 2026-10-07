@@ -226,6 +226,10 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
    não parecer que a transmissão terminou quando ela só está chegando. */
 .stage.so-mensagem .stage-art { display:none; }
 .stage.so-mensagem .stage-empty h3 { font-size:var(--fs-lg); font-weight:600; color:var(--text-3); letter-spacing:0; }
+/* A passagem ("Conectando à transmissão…", "Recebendo vídeo…") ganha o anel do Nexo em cima do texto: diz que o
+   Nexo está trabalhando, sem a ilustração nem botão que fariam parecer que acabou (4.12, 4.19). O arco é o de
+   carregando.css; aqui é só o contorno, porque `h3::before` não carrega a faísca da ponta. */
+.stage.esperando .stage-empty h3::before { content:''; display:block; width:34px; height:34px; margin:0 auto 14px; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,var(--accent-hi) 14%,transparent) 10%,var(--accent-hi) 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px)); animation:nexo-girar .95s linear infinite; }
 .stage-art { position:relative; width:216px; height:149px; margin-bottom:14px; flex:none; }
 .orbit { position:absolute; border:1px solid color-mix(in srgb, var(--accent) 8.2%, transparent); border-radius:50%; width:185px; height:110px; left:15px; top:14px; transform:rotate(-25deg); }
 .orbit-two { width:225px; height:130px; left:-4px; top:4px; transform:rotate(25deg); border-style:dashed; }
@@ -1259,8 +1263,7 @@ button[aria-busy="true"] { cursor:progress; }
 .join-request button { padding:6px 10px; font-size:var(--fs-meta); }
 .waiting-card { text-align:center; }
 .waiting-card .modal-actions { justify-content:center; }
-.waiting-spinner { display:block; width:32px; height:32px; margin:0 auto 14px; border:3px solid rgb(var(--tinta) / 12.5%); border-top-color:var(--accent); border-radius:50%; animation:girar .8s linear infinite; }
-@keyframes girar { to { transform:rotate(360deg); } }
+/* O anel da sala de espera e da camada (`.waiting-spinner`) é o anel do Nexo, de carregando.css (4.19). */
 /* Sem `left`/`bottom` fixos: quem posiciona é o JS, ancorando no botão que abriu. A barra
    lateral recolhe, e no celular ela é uma gaveta -- uma distância fixa da quina deixava o
    menu boiando longe do que o chamou. O `max-height` acompanha a folga de 10 px que o JS deixa em cima e
@@ -1602,7 +1605,8 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 /* O pedido esperando a busca: um indicador pequeno embaixo do que a pessoa escreveu, que some
    quando a música entra (ou quando não se acha nada). */
 .pedido-status { grid-column:2; display:inline-flex; align-items:center; gap:7px; margin-top:4px; color:var(--muted); font-size:var(--fs-meta); animation:nexo-aparecer var(--dur) var(--curva); }
-.pedido-status::before { content:''; width:10px; height:10px; flex:none; border-radius:50%; border:2px solid color-mix(in srgb, var(--accent) 25.1%, transparent); border-top-color:var(--accent-hi); animation:nexo-girar .8s linear infinite; }
+/* O mesmo arco com cauda da roda do Nexo (carregando.css, `.nx-roda`), no tamanho de uma linha de meta. */
+.pedido-status::before { content:''; width:12px; height:12px; flex:none; border-radius:50%; background:conic-gradient(from 100.8deg,transparent 0 10%,color-mix(in srgb,var(--accent-hi) 14%,transparent) 10%,var(--accent-hi) 72%,transparent 72%); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px)); animation:nexo-girar .9s linear infinite; }
 
 /* ---------- Mais resposta à mão ---------- */
 .participant { transition:border-color .16s,transform var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }

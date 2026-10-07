@@ -3,11 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- O fundo antes de qualquer arquivo (tema.js guarda a cor): ver inicio.html. -->
+  <script>try{var f=localStorage.getItem('nexoFundo');if(f)document.documentElement.style.setProperty('--bg',f)}catch(e){}</script>
+  <style>html{background:var(--bg,#191a24)}</style>
   <meta name="theme-color" content="#161720">
   <title>Nexo · Seu squad, mais perto</title>
   <meta name="description" content="Um espaço para conversar, compartilhar a tela e estar junto. Entre no Nexo pelo navegador ou pelo aplicativo.">
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <script src="/tema.js"></script>
+  <!-- A tela de carregamento (carregando.js): a apresentação não espera ninguém, e ela se resolve sozinha. -->
+  <script src="/carregando.js"></script>
+  <link rel="stylesheet" href="/carregando.css">
   <link rel="stylesheet" href="/home.css">
   <link rel="stylesheet" href="/novidades.css">
 </head>

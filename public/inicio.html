@@ -1,14 +1,22 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-carregando="manual">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- O fundo antes de qualquer arquivo (tema.js guarda a cor): sem isto o canvas aparece branco nos instantes
+       em que a página nova ainda não pintou, entre a velha sair e esta aparecer. -->
+  <script>try{var f=localStorage.getItem('nexoFundo');if(f)document.documentElement.style.setProperty('--bg',f)}catch(e){}</script>
+  <style>html{background:var(--bg,#191a24)}</style>
   <meta name="theme-color" content="#191a24">
   <title>Nexo</title>
   <meta name="description" content="Seus amigos, suas conversas e suas salas no Nexo.">
   <link rel="icon" href="/mark.svg" type="image/svg+xml">
   <!-- Antes do CSS e síncrono: o tema claro tem de valer já na primeira pintura (tema.js). -->
   <script src="/tema.js"></script>
+  <!-- A tela de carregamento (carregando.js): nasce antes da primeira pintura, some quando o início tem os amigos
+       na mão (`concluir()`, em inicio.js). -->
+  <script src="/carregando.js"></script>
+  <link rel="stylesheet" href="/carregando.css">
   <!-- O recado de "entrar direto" (chassi.js): quem clica em "Entrar" aqui não passa pelo portão da sala. -->
   <script src="/chassi.js"></script>
   <!-- As peças compartilhadas antes: a base de botão de social.css pesa o mesmo que as classes

@@ -455,7 +455,7 @@
         let blob;
         try { blob = await prepararImagem(arquivo, campo === 'banner' ? 1600 : 1100); }
         catch (erro) { dizer('retorno', erro.message, 'erro'); return; }
-        dizer('retorno', 'Enviando…');
+        dizer('retorno', 'Enviando…', 'andamento');
         depoisDaImagem(await NexoImagem.enviar(`/api/conta/vitrine/imagem/${campo}`, blob, { csrf: csrf() }), campo, true);
       };
     }
@@ -522,7 +522,7 @@
       let blob;
       try { blob = await NexoImagem.prepararAvatar(arquivo); }
       catch (erro) { dizerDaFoto(erro.message || 'Não foi possível abrir esta imagem.', 'erro'); return; }
-      dizerDaFoto('Enviando…');
+      dizerDaFoto('Enviando…', 'andamento');
       depoisDaFoto(await NexoImagem.enviar('/api/conta/avatar', blob, { csrf: csrf() }), 'Foto trocada. Quem está numa sala com você já vê a nova.');
     });
     // O rótulo faz as vezes de botão: pelo teclado, Enter e espaço abrem a escolha do arquivo também.
@@ -630,7 +630,7 @@
       evento.preventDefault();
       if (q('salvar').disabled) return;
       q('salvar').disabled = true;
-      dizer('retorno', 'Salvando…');
+      dizer('retorno', 'Salvando…', 'andamento');
       // Primeiro quem a pessoa é (apelido, cor, marca): é a mesma rota da conta, e a sala inteira recebe o perfil
       // novo (`peer-perfil`) na hora. Se ela recusar -- um apelido que não vale --, o cartão não é salvo pela metade.
       if (identidadeMudou()) {
@@ -755,7 +755,7 @@
       return Date.now() + prazo.ms;
     }
     async function salvarSocial(pedido, textoDeSucesso) {
-      dizer('statusRetorno', 'Salvando…');
+      dizer('statusRetorno', 'Salvando…', 'andamento');
       const r = await S().definirSocial(pedido);
       if (!r.ok) { dizer('statusRetorno', r.dados.error || 'Não foi possível salvar.', 'erro'); return; }
       guardarSocial(r.dados.social);

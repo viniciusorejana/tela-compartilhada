@@ -1,13 +1,21 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-carregando="manual">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- O fundo antes de qualquer arquivo (tema.js guarda a cor): sem isto o canvas aparece branco nos instantes
+     em que a página nova ainda não pintou, entre a velha sair e esta aparecer. -->
+<script>try{var f=localStorage.getItem('nexoFundo');if(f)document.documentElement.style.setProperty('--bg',f)}catch(e){}</script>
+<style>html{background:var(--bg,#191a24)}</style>
 <meta name="theme-color" content="#14151d">
 <title>Sala</title>
 <link rel="icon" href="/mark.svg" type="image/svg+xml">
 <!-- Antes do CSS e síncrono: o tema claro tem de valer já na primeira pintura (tema.js). -->
 <script src="/tema.js"></script>
+<!-- A tela de carregamento (carregando.js): nasce antes da primeira pintura e some quando a sala está pronta -- no
+     portão, ou, para quem clicou em "Entrar", já dentro da chamada (`concluir()`, em sala.js). -->
+<script src="/carregando.js"></script>
+<link rel="stylesheet" href="/carregando.css">
 <!-- Também antes da primeira pintura: quem tem conta vê o trilho já no primeiro quadro, sem a lateral
      se alargar quando a conta responde (chassi.js). -->
 <script src="/chassi.js"></script>
