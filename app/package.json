@@ -13,6 +13,7 @@
   "_comentario_publish": "build.publish: o endereço é só um lugar-reservado. O electron-builder precisa de um para gerar latest.yml e latest-linux.yml, mas cada Nexo se atualiza pelo servidor que a PESSOA escolheu -- atualizacao-automatica.js troca o endereço na hora de procurar, para a origem da sala. 'never' nos scripts: os arquivos ficam em dist/ e o servidor os entrega em /downloads/atualizacoes.",
   "_comentario_nsis": "build.nsis: o instalador assistido. Pergunta a pasta, instala só para quem está usando (sem pedir administrador; dá para escolher todos os usuários), põe atalho no menu Iniciar e na área de trabalho, e deixa um desinstalador. O nome é fixo, sem a versão: é o que deixa o servidor ter uma lista fechada de arquivos (desktop-download.js) e o latest.yml apontar sempre para o mesmo caminho.",
   "_comentario_deb": "build.deb: o .deb instala o Nexo no sistema (menu de aplicativos, /opt/Nexo) e se atualiza pelo mesmo caminho do AppImage; para trocar o pacote, o atualizador pede a senha de administrador (pkexec), como todo .deb.",
+  "_comentario_portable": "build.portable.splashImage: o BMP que o executável portátil mostra enquanto se desempacota (alguns segundos, a cada abertura, antes de o Electron existir). É a splash do Nexo (splash.html) congelada num quadro: `npm run splash:gerar` (na raiz) o refaz, e o resultado é versionado, para o empacotamento não depender do Playwright. A splash de verdade, depois que o Electron sobe, é a splash.html (main.js, `criarSplash`).",
   "scripts": {
     "start": "node lancar.js",
     "servidor:padrao": "node --env-file-if-exists=../.env.prod ../scripts/servidor-padrao.cjs",
@@ -31,7 +32,7 @@
       "preload.js",
       "preload-escolher.js",
       "endereco.html",
-      "carregando.html",
+      "splash.html",
       "servidor-padrao.json",
       "escolher.html",
       "package.json",
@@ -60,7 +61,8 @@
       ]
     },
     "portable": {
-      "artifactName": "SalaCompartilhada.exe"
+      "artifactName": "SalaCompartilhada.exe",
+      "splashImage": "build/splash.bmp"
     },
     "nsis": {
       "artifactName": "Nexo-Setup.exe",

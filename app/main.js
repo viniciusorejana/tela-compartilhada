@@ -86,29 +86,101 @@ function irParaEndereco(url) {
   if (!janela) return;
   enderecoPendente = url;
   origemDaSala = origemHttp(url);
-  janela.loadURL(url);
+  // Falhar ao carregar não é erro daqui: o `did-fail-load` leva à tela de endereço.
+  janela.loadURL(url).catch(() => {});
 }
 
-// A abertura do aplicativo: a janela mostra o Nexo carregando (carregando.html, local, na hora) enquanto o servidor
-// responde -- o endereço, a conexão, o HTML chegando --, em vez de uma janela escura e vazia. A tela fica até a sala
-// pintar pela primeira vez; se o servidor não responde, o `did-fail-load` de sempre leva à tela de endereço.
-// O endereço só entra em `enderecoPendente` DEPOIS de a abertura carregar: o `did-finish-load` dela não pode
-// "guardar" um endereço que ainda não carregou (veja o comentário de `did-finish-load`).
-function abrirComCarregamento(url) {
-  if (!janela) return;
-  janela.loadFile(path.join(__dirname, 'carregando.html'))
-    .catch(() => { /* sem a tela de abertura a janela só espera: o servidor abre do mesmo jeito */ })
-    .finally(() => irParaEndereco(url));
+// ---------------------------------------------------------------- a splash
+// A janelinha com a marca do Nexo (splash.html) que aparece NA HORA em que o aplicativo abre, antes de a janela de
+// verdade existir e de o servidor responder, e some quando a sala pinta pela primeira vez. É ela que cobre o que
+// não tem cara: o Electron subindo (e, no portátil, o desempacotamento -- ver `portable.splashImage` no
+// package.json), o endereço sendo resolvido, a conexão, o HTML chegando. A janela principal nasce escondida e só
+// aparece quando já tem o que mostrar: a página do servidor (que traz a tela de carregamento dela), ou a tela de
+// endereço, se o servidor não respondeu.
+//
+// Não aparece quando o sistema abriu o aplicativo ao entrar no computador (a janela já nasce minimizada: uma
+// splash ali seria um clarão que ninguém pediu), nem quando o macOS recria a janela ao clicar no ícone.
+const MS_MINIMO_DA_SPLASH = 1100;   // uma splash que some em 300 ms é um piscar, e não uma marca
+// Um servidor que não responde nem a isto: a tela de endereço, para trocar ou tentar de novo. A variável é só dos testes
+// (os 25 s de verdade não cabem num).
+const MS_MAXIMO_DA_SPLASH = Number(process.env.NEXO_SPLASH_MAXIMO_MS) || 25000;
+// Os testes do aplicativo (tests/electron.cjs) escondem toda janela e pegam "a primeira": uma splash antes da janela
+// principal os desorientaria, então eles abrem sem ela (`NEXO_SEM_SPLASH=1`). O teste da splash, não.
+const splashLigada = () => !inicializacao.abertoPeloSistema() && process.env.NEXO_SEM_SPLASH !== '1';
+let splash = null;
+let splashDesde = 0;
+let janelaRevelada = true;
+let relogioDaSplash = null;
+
+function criarSplash() {
+  splashDesde = Date.now();
+  splash = new BrowserWindow({
+    width: 460,
+    height: 320,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    center: true,
+    hasShadow: true,
+    backgroundColor: '#12131c',
+    title: 'Nexo',
+    icon: path.join(__dirname, 'icon.ico'),
+    // No Linux, o gerenciador de janelas trata uma janela do tipo "splash" como tal: sem moldura nem lugar na barra.
+    ...(process.platform === 'linux' ? { type: 'splash' } : {}),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: false }
+  });
+  splash.setMenuBarVisibility(false);
+  // Só aparece depois de pintar: uma janela vazia e clara no primeiro quadro seria pior que nenhuma.
+  splash.once('ready-to-show', () => { if (splash && !splash.isDestroyed()) splash.show(); });
+  splash.on('closed', () => { splash = null; });
+  splash.loadFile(path.join(__dirname, 'splash.html')).catch(() => fecharSplash(false));
+}
+
+// Sai em fusão (a opacidade desce em passos, onde o sistema deixa) e fecha. `suave` falso: fecha na hora.
+function fecharSplash(suave = true) {
+  clearTimeout(relogioDaSplash);
+  const alvo = splash;
+  if (!alvo || alvo.isDestroyed()) return;
+  splash = null;
+  const fechar = () => { if (!alvo.isDestroyed()) alvo.close(); };
+  if (!suave) { fechar(); return; }
+  let passo = 0;
+  const descer = () => {
+    if (alvo.isDestroyed()) return;
+    passo++;
+    try { alvo.setOpacity(Math.max(0, 1 - passo / 6)); } catch (_) { fechar(); return; }
+    if (passo >= 6) fechar(); else setTimeout(descer, 28);
+  };
+  descer();
+}
+
+// A janela de verdade já tem o que mostrar: aparece, e a splash sai por cima dela. Respeita o mínimo da splash.
+function revelarJanela() {
+  if (janelaRevelada) return;
+  janelaRevelada = true;
+  clearTimeout(relogioDaSplash);
+  const falta = Math.max(0, MS_MINIMO_DA_SPLASH - (Date.now() - splashDesde));
+  setTimeout(() => {
+    if (janela && !janela.isDestroyed()) { janela.show(); janela.focus(); }
+    fecharSplash();
+  }, falta);
 }
 
 // ---------------------------------------------------------------- janela principal
-function criarJanela() {
+function criarJanela({ comSplash = splashLigada() } = {}) {
   janela = new BrowserWindow({
     width: 1360,
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#06080a',
+    // O fundo do Nexo escuro (o --bg-fundo da página): a janela nunca pisca outra cor entre a splash e a sala.
+    backgroundColor: '#12131c',
+    show: !comSplash,
     autoHideMenuBar: true,
     title: 'Sala compartilhada',
     icon: path.join(__dirname, 'icon.ico'),
@@ -136,6 +208,9 @@ function criarJanela() {
   // numa página quebrada -- e, sem tela de endereço, sem forma de corrigir: foi o que
   // aconteceu quando o servidor estava fora do ar no momento em que o endereço foi digitado.
   janela.webContents.on('did-finish-load', () => {
+    // Qualquer página que termine de carregar -- a sala, ou a tela de endereço quando o servidor falhou -- é o que a
+    // janela tinha a mostrar: a splash pode sair.
+    revelarJanela();
     // A sala abriu: é dela que vêm as atualizações do aplicativo instalado.
     if (origemDaSala && origemHttp(janela.webContents.getURL()) === origemDaSala) atualizador.definirOrigem(origemDaSala);
     if (!enderecoPendente) return;
@@ -173,8 +248,22 @@ function criarJanela() {
     manterNaSala(detalhes);
   });
 
+  if (comSplash) {
+    janelaRevelada = false;
+    // O primeiro quadro pintado de qualquer página (a sala, que traz a tela de carregamento dela, ou a de endereço).
+    janela.once('ready-to-show', revelarJanela);
+    // Um servidor que não responde nem a isto não deixa a pessoa olhando uma splash para sempre: vai para a tela de
+    // endereço, com o motivo, onde dá para tentar de novo ou trocar de servidor.
+    relogioDaSplash = setTimeout(() => {
+      if (janelaRevelada) return;
+      mostrarTelaDeEndereco('o servidor não respondeu a tempo', enderecoPendente || lerConfig().endereco || '');
+      // Se nem a tela local carregar, a janela aparece assim mesmo.
+      setTimeout(revelarJanela, 3000);
+    }, MS_MAXIMO_DA_SPLASH);
+  }
+
   const config = lerConfig();
-  if (config.endereco) abrirComCarregamento(config.endereco);
+  if (config.endereco) irParaEndereco(config.endereco);
   else janela.loadFile(path.join(__dirname, 'endereco.html'));
 
   // Link externo abre no navegador de verdade, não dentro da sala.
@@ -183,7 +272,7 @@ function criarJanela() {
     return { action: 'deny' };
   });
 
-  janela.on('closed', () => { janela = null; });
+  janela.on('closed', () => { janela = null; fecharSplash(false); });
 }
 
 // ---------------------------------------------------------------- escolha da tela
@@ -687,12 +776,16 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    // A primeira coisa: a splash tem de aparecer antes de qualquer outro trabalho da abertura.
+    const comSplash = splashLigada();
+    if (comSplash) criarSplash();
     instalarMenu();
     instalarSeletorDeTela();
     instalarPermissoes();
     instalarDownloadDaAtualizacao();
-    criarJanela();
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
+    criarJanela({ comSplash });
+    // O macOS recria a janela ao clicar no ícone: aí o aplicativo já está aberto, e não há splash.
+    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela({ comSplash: false }); });
   });
 
   app.on('window-all-closed', () => { pararAgente(); app.quit(); });

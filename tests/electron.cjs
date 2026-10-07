@@ -82,7 +82,7 @@ let server, electron;
   // encerrarOrfaos() derrubar a sala de verdade aberta nesta máquina. E ele abre a janela de
   // transição, porque o "Electron" entra sem conta numa sala vazia.
   server = await iniciarServidor({ ambiente: { PORT: '3219' }, midia: true });
-  const env = { ...process.env };
+  const env = { ...process.env, NEXO_SEM_SPLASH: '1' };   // a splash tem o teste dela (test:splash)
   delete env.ELECTRON_RUN_AS_NODE;
   electron = await _electron.launch({ executablePath: path.join(__dirname, '../app/node_modules/electron/dist/electron.exe'), args: [harness], env, timeout: 20000 });
   electron.process().stderr.on('data', chunk => process.stderr.write(chunk));

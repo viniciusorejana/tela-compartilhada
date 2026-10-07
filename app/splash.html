@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Nexo</title>
+<!-- A splash do aplicativo de mesa: a janelinha que aparece NA HORA em que o Nexo abre -- antes de o Electron terminar
+     de subir a janela de verdade e de o servidor responder -- e some quando a sala pinta pela primeira vez (main.js,
+     `criarSplash`). É a marca dentro da roda do Nexo (public/carregando.css, `.nx-roda`), a mesma que gira em todo
+     "estou esperando" do Nexo, e a palavra NEXO. Só CSS, sem nenhum script: é uma página local que roda antes de tudo
+     o mais, e não tem o que pedir à rede. As cores são escritas à mão porque aqui não há tema.css -- o aplicativo
+     abre sempre no escuro. Se a abertura se alonga, a frase de baixo vai ficando mais franca (CSS puro, por
+     `animation-delay`): "Abrindo o Nexo", aos 3 s "Conectando ao servidor", aos 12 s "Está demorando mais que o normal". -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<style>
+  :root { color-scheme: dark; --curva: cubic-bezier(.2, .8, .2, 1); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; display: grid; place-items: center; overflow: hidden; position: relative;
+    background: #12131c; color: #eeeef5; font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; cursor: default;
+    /* A janela não tem barra de título: arrastar por qualquer ponto a move. */
+    -webkit-app-region: drag;
+  }
+  /* O céu: um brilho violeta atrás da marca e um verde no canto, como o da tela de carregamento. */
+  body::before {
+    content: ''; position: absolute; inset: -25%; pointer-events: none;
+    background: radial-gradient(ellipse 46% 40% at 50% 42%, #8879f640, transparent 72%),
+      radial-gradient(ellipse 30% 26% at 88% 90%, #90dfb320, transparent 70%),
+      radial-gradient(ellipse 34% 30% at 8% 92%, #8879f620, transparent 70%);
+    animation: surge 1.2s var(--curva) both, deriva 14s ease-in-out infinite alternate;
+  }
+  /* A borda fininha: sem ela uma janela sem moldura some no fundo escuro do sistema. */
+  body::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px #ffffff14; }
+  @keyframes surge { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes deriva { to { transform: translate3d(2%, -2%, 0) scale(1.06); } }
+
+  .centro { position: relative; z-index: 1; display: grid; justify-items: center; animation: entra .8s var(--curva) both; }
+  @keyframes entra { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  /* A marca dentro da roda do Nexo: o arco com cauda de cometa e a faísca na ponta, girando. */
+  .emblema { position: relative; width: 152px; height: 152px; }
+  .trilha { position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 2.5px #ffffff1f; }
+  .roda { position: absolute; inset: 0; animation: giro 1.7s linear infinite; }
+  .roda::before {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 100.8deg, transparent 0 10%, #8879f624 10%, #a092ff 72%, transparent 72%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+    filter: drop-shadow(0 0 5px #8879f6);
+  }
+  .roda::after {
+    content: ''; position: absolute; left: 50%; top: -4px; width: 14px; height: 14px; margin-left: -7px; background: #a092ff;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    filter: drop-shadow(0 0 6px #8879f6);
+  }
+  @keyframes giro { to { transform: rotate(360deg); } }
+  .marca { position: absolute; inset: 38px; border-radius: 24px; box-shadow: 0 14px 40px #8879f66b; animation: flutua 3.6s ease-in-out infinite alternate; }
+  .marca svg { display: block; width: 100%; height: 100%; border-radius: 24px; }
+  @keyframes flutua { from { transform: translateY(2px); } to { transform: translateY(-3px); } }
+
+  .nome { margin: 26px 0 0 .42em; font-size: 17px; font-weight: 800; letter-spacing: .42em; line-height: 1; }
+
+  /* A frase de baixo: três, uma por vez, trocadas só por tempo. A primeira sai aos 3 s, a segunda entra e sai aos
+     12 s, e a terceira fica. */
+  .estado { position: relative; width: 340px; height: 20px; margin: 10px 0 0; color: #8f8ea6; font-size: 12px; text-align: center; }
+  .estado > span { position: absolute; inset: 0; opacity: 0; }
+  .estado .e1 { animation: aparece .6s var(--curva) .7s forwards, some .5s ease 3s forwards; }
+  .estado .e2 { animation: aparece .6s var(--curva) 3.4s forwards, some .5s ease 12s forwards; }
+  .estado .e3 { color: #f1d58c; animation: aparece .6s var(--curva) 12.4s forwards; }
+  @keyframes aparece { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  @keyframes some { to { opacity: 0; } }
+  .pontos { display: inline-flex; gap: 3px; margin-left: 5px; vertical-align: middle; }
+  .pontos i { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; animation: pulo 1.2s ease-in-out infinite both; }
+  .pontos i:nth-child(2) { animation-delay: .15s; }
+  .pontos i:nth-child(3) { animation-delay: .3s; }
+  @keyframes pulo { 0%, 70%, 100% { opacity: .25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+
+  /* Menos movimento: o sistema pediu, e a splash respeita. A marca e a roda ficam, paradas -- elas dizem que está abrindo. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; }
+    .roda { animation: none !important; transform: rotate(40deg); }
+    .estado .e1 { animation: none !important; opacity: 1; }
+    .estado .e2, .estado .e3 { display: none; }
+    .pontos { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="centro" role="status" aria-live="polite" aria-label="Abrindo o Nexo">
+  <div class="emblema" aria-hidden="true">
+    <div class="trilha"></div>
+    <div class="roda"></div>
+    <div class="marca"><svg viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#8174fa"/><path d="M18 45V19h7l14 17V19h7v26h-7L25 28v17z" fill="#fff"/><path d="m44 10 1.7 4.3L50 16l-4.3 1.7L44 22l-1.7-4.3L38 16l4.3-1.7z" fill="#d1ffc1"/></svg></div>
+  </div>
+  <div class="nome">NEXO</div>
+  <p class="estado">
+    <span class="e1">Abrindo o Nexo<span class="pontos" aria-hidden="true"><i></i><i></i><i></i></span></span>
+    <span class="e2">Conectando ao servidor<span class="pontos" aria-hidden="true"><i></i><i></i><i></i></span></span>
+    <span class="e3">Está demorando mais que o normal. Confira a sua conexão.</span>
+  </p>
+</main>
+</body>
+</html>
