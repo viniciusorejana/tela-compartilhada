@@ -290,6 +290,13 @@ O que ele não resolve:
 - **Mensagem de antes de reiniciar o servidor.** As conversas moram só na memória: um servidor
   reiniciado não tem o que avisar.
 - **iPhone.** Não há aplicativo para iOS; lá a sala é a do navegador.
+- **Tela de abertura própria.** Ao abrir, a WebView mostra o fundo escuro do Nexo (`R.color.fundo`) até a
+  página chegar, e então a tela de carregamento da própria página acende (`docs/interface.md` 4.19: ela nasce
+  no `<head>` e já mostra a marca, o andamento e as dicas). O aplicativo de mesa tem a dele, local e
+  instantânea (`app/carregando.html`), porque lá a janela abre antes de o servidor responder; no Android uma
+  tela assim seria uma página de `assets/` carregada antes do endereço do servidor, o que mexe na pilha de
+  navegação (`voltar` levaria à tela de abertura) e na ponte presa à origem — e **não foi feita sem um aparelho
+  para provar**.
 
 ## Testes
 

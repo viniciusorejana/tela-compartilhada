@@ -129,7 +129,8 @@ A conta é identificada para fora pelo **código** — nunca pelo id interno, qu
 | Não incomodar | ponto vermelho (traço) | **sem som nem aviso de mensagem**: o aviso no canto, o som do chat da sala (a mensagem e a menção), o aviso do sistema da menção e a notificação do Android; a contagem de não lidas e a marca no chat continuam. Convites e pedidos de amizade ainda chegam, porque pedem uma decisão |
 | Invisível | desconectado (e sem a sala em que está) | nada |
 
-O status é escolhido no início, no menu da sala (o botão da carinha, "Seu status") ou no editor do
+O status é escolhido no início e no menu da sala — nas duas, **o botão da carinha ao lado do nome** (o "eu" é
+a mesma peça nas duas páginas, `docs/interface.md` 4.20; o avatar e o nome levam ao perfil) — ou no editor do
 cartão, e segue a conta — fica guardado nela, em qualquer aparelho.
 
 **O status também chega à sala.** O ponto ao lado do nome, na lista da sala, é o status da conta de
@@ -249,16 +250,18 @@ direto no início.
 
 | coluna | o quê |
 |---|---|
-| Trilha (72 px) | o Nexo, as salas recentes deste aparelho, criar sala, entrar por código, novidades |
-| Lateral (264 px) | buscar, Amigos, Personalizar perfil, Conquistas, as conversas, e você (status, conta) |
+| Trilho (64 px) | o Nexo, as salas recentes deste aparelho, criar sala, entrar por código, novidades — o mesmo trilho da sala |
+| Lateral (232 px) | buscar, Amigos, Personalizar perfil, Conquistas, as conversas, e você (status, conta) |
 | Centro | amigos (Disponíveis, Todos, Pedidos, Bloqueados, Adicionar), a conversa aberta, o editor do cartão, as conquistas |
-| Agora no Nexo (340 px) | os amigos que estão em sala, agrupados por sala, com Entrar; abrir uma sala |
+| Agora no Nexo (292 px) | os amigos que estão em sala, agrupados por sala, com Entrar; abrir uma sala |
 
-Abaixo de 1100 px a coluna da direita vira um bloco no topo dos amigos; abaixo de 760 px a trilha
-e a lateral viram gaveta.
+Os números são os da moldura que o início divide com a sala (`docs/interface.md` 2.10): ao trocar de
+página nenhuma borda se move. Abaixo de 1100 px a coluna da direita vira um bloco no topo dos amigos;
+abaixo de 760 px o trilho e a lateral viram gaveta.
 
 "Entrar" na sala de um amigo é ir ao link dela: se a sala estiver trancada, quem chega cai na fila
-de pedidos, como qualquer um — o botão já diz "Pedir para entrar".
+de pedidos, como qualquer um — o botão já diz "Pedir para entrar". Quem tem conta e clica em "Entrar"
+daqui não passa pelo portão da sala (`docs/interface.md` 5.3).
 
 ---
 

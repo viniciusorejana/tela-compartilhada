@@ -12,7 +12,11 @@ a 2560 px**.
 | assunto | onde mora |
 |---|---|
 | Os números (cor, letra, altura, raio, sombra, tempo) e as peças comuns a toda página | `public/tema.css` |
+| A moldura: as larguras, a linha de cima e o "eu" iguais no início e na sala (2.10) | `public/tema.css` (`--chassi-*`) |
+| O trilho das salas (o mesmo no início e na sala) | `public/trilho.{js,css}`; na sala, `trilho-sala.js` |
+| A troca de página animada, o recado de "entrar direto" e a dica de "tem conta" antes da primeira pintura | `public/chassi.css`, `chassi.js` |
 | Tema claro e escuro, temas prontos, cores exatas | `public/tema.js` (no `<head>` de toda página) |
+| O carregamento: a tela cheia da troca de página, a roda, o esqueleto, a barra, o botão ocupado (4.19) | `public/carregando.{css,js}`; a abertura do aplicativo de mesa em `app/carregando.html` |
 | A sala inteira | `public/sala.css` |
 | A página inicial; a da conta herda dela | `public/home.css`, `public/conta.css` |
 | O modal da apresentação e das novidades (vale nas duas páginas) | `public/novidades.css` |
@@ -241,6 +245,16 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 `npm run test:aparencia`. A troca de tema desliza as cores por 280 ms, só durante a troca
 (`html.trocando-tema`).
 
+**A troca de página, do início para a sala e de volta**, é animada pelo navegador (`chassi.css`:
+`@view-transition { navigation: auto }`, 240 ms, `--curva`). O que tem o mesmo `view-transition-name`
+nas duas páginas — o trilho, a lateral, o "eu" — fica no lugar, e o resto faz uma fusão. Só acontece
+entre páginas que aderem (o início e a sala; a apresentação, a conta e o 404 não), e onde não há suporte
+(Firefox, Safari antigo, WebView antigo) a navegação é a de sempre. Os pseudo-elementos
+`::view-transition-*` **não** são alcançados pelo `*` das regras de menos movimento: elas os citam
+(`tema.css`), com 1 ms, nos dois níveis. E uma transição pulada rejeita as promessas dela com "Transition
+was skipped": o `tema.js`, que está no `<head>` de toda página, ouve e ignora essa rejeição — pular não é
+erro —, e só ela.
+
 ### 2.9 Camadas (z-index)
 
 | camada | z | quem |
@@ -251,6 +265,7 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | lateral em gaveta (celular) / chat em gaveta (≤1100 px) / gaveta do início | 68 / 70 / 70 | |
 | modal, o cartão de um amigo no início, e o portão de entrada | 80 / 80 / 90 | |
 | a camada do início por cima da sala / o que ela pergunta (entrar noutra sala) | 84 / 86 | acima dos painéis, abaixo do aviso de pedido de entrada (110) e das novidades (125) |
+| a tela de carregamento (4.19) | 127 | acima das novidades (a apresentação nunca abre com a tela por baixo), abaixo dos avisos no canto (130) |
 | visualizador de imagem, reações que voam | 95–96 | |
 | o visor da imagem da conversa direta, e o da foto de perfil ampliada | 97 | nascem de dentro de um painel |
 | menu de presença, menu de mensagem, menus do início e dica da trilha | 105–106 | |
@@ -261,6 +276,40 @@ continuar visível com menos movimento (a reação discreta, que diz quem reagiu
 | avisos no canto (toast) | 130 | |
 
 Peça nova entra numa dessas faixas, e não num número novo no meio.
+
+### 2.10 A moldura: um chassi só para o início e a sala
+
+O início de quem tem conta e a sala são **o mesmo lugar em dois modos**: o que muda de uma página para
+a outra é o miolo (a lista de amigos, o palco), e **a moldura fica onde estava** — o fim do trilho, o
+da lateral, o começo da coluna da direita, a linha de cima, o "eu" de baixo. Quem troca de página não
+vê nenhuma borda pular. As cores e as peças já eram as mesmas; o que se alinhou foi a geometria.
+
+| token | valor | quem usa |
+|---|---|---|
+| `--chassi-trilho` | **64** (quadrados de `--chassi-trilho-item`, 44) | o trilho das salas (4.18) |
+| `--chassi-topo` | **56** | a linha de cima: a barra de cima da sala, o alto da lateral, o cabeçalho do chat e do canal de música; no início, a busca, o `.ini-topo` e "Agora no Nexo" |
+| `--chassi-lateral` | **232** · 208 (≤ 1250) · 248 (≥ 1600) | a lateral das duas páginas |
+| `--chassi-direita` | **292** · 266 (≤ 1250) · 320 (≥ 1600) | "Agora no Nexo" e o chat (o tamanho de fábrica dele: a largura escolhida, 5, continua sendo de quem conversa) |
+| `--chassi-eu` | **64** | o "eu" de baixo (avatar de 34, quadrado arredondado, `.nx-av.quadrado`); a peça inteira é a de 4.20 |
+| `--chassi-topo-lado` | **20** | o recuo do que mora na linha de cima (o título começa no mesmo ponto nas duas páginas) |
+| `--chassi-calha` | **8** | a calha da lista da lateral: os itens começam na mesma borda, e o rótulo de seção ("MENSAGENS DIRETAS", "CANAIS DA SALA") na mesma letra (calha + 10) |
+
+- **Na sala**, o trilho mora **dentro do `.room-sidebar`** (uma linha: trilho e conteúdo da lateral), e
+  `--col-lateral` é o trilho **mais** a lateral. Assim recolher a barra, o teatro, o foco no chat e a
+  gaveta do celular continuam valendo sem reescrever as listas de `grid-template-areas`. O trilho só
+  existe para **quem tem conta** (`html.com-conta`, posta antes da primeira pintura por `chassi.js`);
+  sem conta não há início para onde voltar, e a coluna é só a lateral (`--trilho-ativo`, `sala.css`).
+- **A faixa de cima é `--bg-1`** nas duas páginas, e o miolo `--bg`: a moldura é o `--bg-1` em volta.
+- **O alto da lateral** é a linha de 56 px com a borda embaixo. No início é a busca; na sala, de quem
+  tem conta, diz onde a pessoa está (o quadrado da cor da sala, `#código`, "2 pessoas · há 0:12"), e de
+  quem não tem é a marca e as novidades de sempre.
+- **Mudou a moldura, mudam as duas páginas.** `npm run test:layout` confere que nada se sobrepõe nem
+  rola para o lado de 320 a 2560 px nas duas, e o protótipo que mediu a proposta
+  (`docs/plano-continuidade.md`) conferiu que trilho, lateral, linha de cima, "eu" e coluna da direita
+  têm **a mesma posição e o mesmo tamanho** nas duas páginas.
+- **O custo é do palco**, e desigual: o trilho tira 64 px de largura e a lateral 8, e a linha de cima
+  devolve 8 px de altura. Em telas 16:9 o vídeo contido no palco até cresce (+2 a +5%); em monitores
+  16:10 ele perde de 11 a 16% de área. "Recolher a barra lateral" devolve tudo, e é lembrado.
 
 ---
 
@@ -290,6 +339,16 @@ O que precisa de cuidado no claro:
 
 `tema.js` roda no `<head>` antes da primeira pintura: um tema claro que nascesse escuro piscaria
 a cada navegação.
+
+**O canvas nunca fica branco entre duas páginas.** Nos instantes em que a página velha já saiu e a nova
+ainda não pintou (o `tema.js` e os CSS ainda chegando, ou o computador dando uma travada), o navegador
+mostra o canvas do documento novo — e, sem nada dito, ele é **branco**, num tema escuro. Por isso o `<head>`
+de toda página (início, sala, conta, apresentação, "não encontrada") traz, antes de qualquer arquivo, duas
+linhas inline: um trechinho que lê `nexoFundo` (a cor do fundo que o `tema.js` guardou na última vez que
+aplicou um tema que não é o de sempre) e a regra `html { background: var(--bg, #191a24) }`. O `<html>` já
+nasce escuro — ou do tema claro, ou das cores exatas, de quem os escolheu. O `tema.js` apaga a dica quando o
+tema volta ao de sempre, e `chassi.css` dá o mesmo fundo ao `::view-transition`. `npm run test:carregando`
+prova o `<html>` com o CSS e o `tema.js` atrasados.
 
 ---
 
@@ -478,7 +537,8 @@ A cor fica por baixo da foto e aparece enquanto ela carrega.
 |---|---|---|
 | menção, placar de quem assiste | 18–24 | círculo |
 | chat | 28 (22 no compacto) | quadrado arredondado |
-| lista lateral e o "eu" de baixo | 30–32, com o ponto de status da conta (4.14) | quadrado arredondado |
+| lista lateral | 30, com o ponto de status da conta (4.14) | quadrado arredondado |
+| o "eu" de baixo, **o mesmo no início e na sala** (2.10) | 34, com o ponto de status; no início é `.nx-av.quadrado` | quadrado arredondado |
 | quadradinho sem câmera | 36 | quadrado arredondado |
 | Estúdio, folha de volume | 36–44 | círculo |
 | amigos e conversas (início, convidar, mensagens) | 34 (`.nx-av.pequeno`) ou 44 (`.medio`), com borda e ponto de status | círculo |
@@ -552,8 +612,9 @@ foco estiver neles pelo teclado ou se alguém estiver digitando o volume.
   linha de explicação e até duas ações. A ilustração sai primeiro quando falta altura.
 - **Passagem** ("Conectando…", "Recebendo vídeo…"): sem ilustração e sem botão
   (`.stage.so-mensagem`), para não parecer que acabou quando só está chegando.
-- **Carregando**: anel girando pequeno (`nexo-girar`) ao lado do que espera, nunca uma tela
-  inteira de carregamento.
+- **Carregando**: a roda do Nexo (`.nx-roda`, 4.19) ao lado do que espera, e o esqueleto no lugar de uma
+  lista que ainda não chegou — **nunca uma tela inteira de carregamento dentro de uma página**. A tela
+  cheia existe só para a troca de página e para a abertura do aplicativo, e tem as regras dela (4.19).
 - **Lista vazia**: uma frase em `--faint` dizendo o que vai aparecer ali e como fazer aparecer.
   Numa área grande (a lista de amigos), o mesmo com um ícone num quadrado de destaque, um
   título curto e, quando há, o botão que resolve ("Adicionar amigo").
@@ -777,32 +838,194 @@ escolhe o primeiro resultado —, **Shift+clique escolhe e deixa aberto**.
   mapa guardado com a mensagem e vai para a tela de todo mundo; uma mensagem aceita até **20 emojis
   diferentes**, e quem tira a última reação de um emoji leva a chave junto. Era uma lista de cinco.
 
+### 4.18 O trilho das salas
+
+A coluna escura da esquerda (`--bg-fundo`, 64 px, 2.10): a marca do Nexo, as salas recentes deste
+aparelho e as novidades. É **a mesma peça** (`trilho.{js,css}`) no início de quem tem conta e dentro da
+sala — na troca de página ela fica onde estava —, e a sala de agora vem **primeiro, com o anel verde**
+(`.trilho-sala.aqui`, `aria-current`).
+
+- **Cada sala** é um quadrado de 44 px na cor sorteada pelo código, com as duas iniciais; ao passar o
+  mouse cresce com a mola dos avatares e uma dica diz `#código` e quem dos amigos está lá. O número verde
+  no canto é quantos amigos estão nela — na sala de agora ele some (a lista da lateral já diz quem está).
+- **No início** há também "criar uma sala" e "entrar por código", e o botão direito numa sala abre o
+  menu (entrar, tirar das recentes).
+- **Na sala** não há "criar" nem "entrar por código" (o convite sairia antes da pergunta, 5.2): o "N"
+  abre o início por cima da chamada, **clicar noutra sala pergunta antes** (entrar sai desta chamada) e a
+  estrela das novidades fica no pé do trilho. Só quem tem conta o vê (`html.com-conta`); sem conta a sala
+  não tem início para onde voltar.
+- **A marca tem classe `.trilho-marca`** e a das salas `.trilho-sala`; a marca em forma de NEXO + "seu
+  espaço", só da sala sem conta, continua `.workspace-name`.
+- Os botões se defendem das regras globais pela base de `.nx-social :where(button)` (seção 8), que o
+  `<nav>` traz na classe.
+
+### 4.19 O carregamento
+
+Esperar é parte do produto, e o Nexo espera sempre do mesmo jeito: com a **faísca da marca** (o losango
+do canto do "N") e o violeta, calmo, honesto e sem pedir atenção. Tudo mora em `public/carregando.{css,js}`
+(e em `app/carregando.html`, a abertura do aplicativo de mesa). Duas escalas e uma regra para escolher:
+**dentro de uma página, uma peça pequena ao lado do que espera; entre duas páginas e na abertura do
+aplicativo, a tela cheia.**
+
+**A tela cheia** (`#nexoCarregando`, camada 127):
+
+- **Quando aparece**: a página abre; a pessoa sai da página (sair da sala, entrar numa sala, abrir a conta,
+  qualquer link do Nexo); o aplicativo abre.
+- **É progressiva** (`data-nivel` em `#nexoCarregando`): a espera não é sempre do mesmo tamanho — sair de uma
+  sala dura meio segundo, abrir o aplicativo numa rede ruim dura dez —, e a tela não finge que é. **Nasce
+  mínima e se completa em fusão** conforme a espera se alonga, e só sobe:
+  - **grau 1** (de 0 a 1,2 s): só **a marca com o anel**, pequena (62%), no fundo liso — nem uma palavra. É a que
+    quem sai de uma sala vê, e some depressa (a marca sozinha só se segura 0,26 s, e a fusão para fora dura 0,2);
+  - **grau 2** (a partir de 1,2 s): a marca cresce (82%), o céu acende pela metade e entram **o título e a etapa**
+    ("Entrando em #sala", "Conectando…");
+  - **grau 3** (a partir de 3 s): a **tela completa** — a marca inteira, a órbita, a barra de XP, a dica, o nível e as
+    faíscas (as dicas e as faíscas só começam a girar aqui) —, que comemora um instante ("Pronto") antes de sair.
+  Cada degrau é uma fusão de opacidade e de altura (uma linha de grade que vai de 0 a 1fr), e o grupo, sempre no
+  meio da tela, sobe para dar lugar ao que entra. O título existe no DOM desde o grau 1 (a tela é uma região de
+  status: o leitor de tela o anuncia mesmo invisível). **O relógio é o da espera, e não o da página**: o recado
+  leva o instante em que a pessoa pediu (`desde`), e a página que chega abre no grau em que a espera já estava, em
+  vez de recomeçar da marca. Os instantes são ajustáveis (`NexoCarregandoAjustes`: `nivel2`, `nivel3`); a tela de
+  abertura do aplicativo de mesa (`app/carregando.html`) tem os mesmos três graus.
+- **O que mostra** (no grau 3): a marca com o anel de progresso (a faísca na ponta do arco e a órbita tracejada), o
+  título ("Entrando em #sala", "Saindo da sala", "Abrindo a sua conta", "Abrindo o Nexo"), a etapa
+  ("Conectando ao servidor"), uma barra de XP de doze pedaços com a porcentagem, uma dica por vez e as
+  faíscas que passam. Tem tema claro (só tokens), cabe de 320 a 2560 px e, em janela baixa, tira a dica
+  e as faíscas.
+- **Calma, na ordem em que importa**:
+  - **só acende depois de 220 ms** (160 ao sair): uma página que abre depressa nunca a mostra;
+  - **o recado**: quem sai acende a tela e deixa um recado (`sessionStorage`, 8 s, uma vez); a página que
+    chega a abre **já acesa**, com o mesmo título, e continua do andamento onde ele parou. As duas telas são
+    uma só (a troca de página animada, 2.8, funde as duas);
+  - **o andamento é honesto**: o piso é o que a página provou (o HTML chegou: 45%; a página inteira: 70%; as
+    etapas que ela declara), entre um sinal e outro sobe devagar, e nunca passa de 92% — só `concluir()` o
+    leva a 100%, e a marca dá um pulinho antes de a tela se apagar;
+  - **nunca prende**: aos 12 s ela admite ("Está demorando mais que o normal") e oferece "Tentar de
+    novo"; aos 24 s (10 s ao sair) sai sozinha e deixa a página como está;
+  - **em quadro não existe**: a camada tem a espera dela;
+  - **menos movimento**: sem faíscas, sem órbita, sem o céu que se mexe; o emblema e a barra continuam,
+    parados — eles dizem que está carregando.
+- **Como a página usa**: `<html data-carregando="manual">` (a sala, o início e a conta) e chama
+  `NexoCarregando.concluir()` quando está pronta — a sala, no portão ou, para quem clicou em "Entrar", com a
+  chamada de pé; o início, com os amigos desenhados (o que também esconde o "Seus amigos aparecem aqui" por um
+  instante); a conta, quando responde. Sem o atributo (a apresentação e a "não encontrada"), ela se resolve
+  no DOMContentLoaded. `NexoCarregando.etapa(texto, piso)` diz o que está acontecendo, e
+  `NexoCarregando.navegando(titulo)` é para quem navega por JavaScript — já é chamado por `sairDaSala`,
+  `NexoChassi.irParaSala` e `home.js`; um `<a href>` simples é pego sozinho.
+- **A gamificação é quieta**: as faíscas que passam se pegam com um toque, cada uma conta, e a cada dez sobe o
+  **nível** ("Nv 2 · 14", no canto, lembrado só neste navegador: `nexoFaiscas`). Não destrava nada nem
+  chega a nenhum servidor; é só para a espera ser bonita. As faíscas não são botões (ficam fora do teclado e
+  do leitor de tela).
+
+**As peças pequenas**:
+
+| peça | classe | quando |
+|---|---|---|
+| a roda | `.nx-roda` (`.p` 14 px, padrão 20, `.m` 28, `.g` 44) | ao lado do texto que espera: um arco com cauda de cometa e a faísca na ponta. `.waiting-spinner` é a mesma roda. (O `.nx-anel` é outra coisa: o contador das novidades.) |
+| o esqueleto | `.nx-esq` (`.linha`, `.avatar`, `.quadrado`, `.bloco`, `.banner`) e `NexoCarregando.esqueleto(tipo, n)` com `amigos`, `conversas`, `cartoes`, `cartao`, `linhas` | o lugar de uma lista que vem do servidor, no lugar de um vazio que se enche de repente; o brilho que varre é de 1,5 s e bem fraco |
+| a barra de progresso | `.nx-progresso` (`--p` de 0 a 1, ou `.indeterminada`) | o que tem andamento: um envio, um download |
+| o botão ocupado | `.nx-botao[aria-busy="true"]` | a roda no lugar do ícone e o botão parado até a resposta chegar |
+| o texto de andamento | `data-tom="andamento"` em `.ed-retorno`, `.ini-retorno` e `.nx-dm-status` | "Enviando…", "Salvando…", com a roda à frente |
+| os pontinhos | `.nx-pontos` | três pontos que pulam, depois de uma frase |
+
+Os nomes dos `@keyframes` levam `nx-carga-` (`nx-carga-aurora`…): `nx-aurora`, `nx-flutuar` e `nx-pronto` já existem
+em outras folhas, e com o mesmo nome quem carrega por último vence.
+
+**Onde já está aplicado**: a tela cheia em todas as páginas e nas trocas (`sairDaSala`, o "Entrar" do início, a
+pergunta da camada, o convite, os links, a apresentação); a abertura do aplicativo de mesa
+(`app/carregando.html`, local e instantânea: a janela mostra o Nexo até a sala pintar pela primeira vez); a
+roda na sala de espera e na camada, no "Conectando à transmissão…" e "Recebendo vídeo…" do palco
+(`.stage.esperando` — e não no "Toque em Ativar reprodução", que pede uma ação), no "Procurando…" da busca de
+música (`.pedido-status`), nos emojis (a lista de 170 KB desce na primeira vez) e na conta; o esqueleto nas
+conquistas, no histórico da conversa direta e **no cartão de um amigo** (`esqueleto('cartao')`: o painel abre
+na hora com o lugar do cartão, só se o servidor demora mais de 220 ms, e fechar antes de ele chegar cancela a
+abertura); o texto de andamento e o botão ocupado em "Adicionar amigo", no editor do cartão (salvar, foto,
+banner, status) e no envio de imagem da conversa direta ("Preparando a imagem…", "Enviando a imagem…").
+
+**Onde ainda poderia entrar** (fora desta entrega):
+
+- esqueleto nas salas ao vivo do "Agora no Nexo", no chat da sala ao reconectar e no histórico do canal de música;
+- a barra de progresso (`.nx-progresso`) no envio de imagem — o `fetch` não informa o andamento do envio, então
+  seria a indeterminada, e a roda do texto de andamento já diz o essencial;
+- a roda no "Preparando…" do filtro de ruído;
+- uma tela nativa de abertura no Android: hoje o WebView tem o fundo escuro do Nexo e, quando a página chega, a
+  tela web acende; uma tela de abertura antes disso mexe na pilha de navegação do `MainActivity`, e pede um
+  aparelho para testar (`docs/android.md`).
+
+**A prova** é `npm run test:carregando`: a página rápida que nunca acende a tela, a espera que acende e anda, a
+sala e o início que abrem com a tela já acesa (e no grau em que a espera já estava), **os três graus** (só a marca,
+o título, a tela completa; e a espera curta que nunca passa do grau 1 e sai depressa), as faíscas e o nível, menos
+movimento, a espera longa, a camada, o
+tema claro e o celular, o `<html>` com o CSS atrasado (o canvas nunca branco), as peças pequenas e o cartão de
+um amigo.
+
+### 4.20 O "eu": uma peça só no início e na sala
+
+A faixa de baixo da lateral — o avatar, o nome, o estado e os botões da própria pessoa — é **a mesma peça** no
+início (`.ini-eu`) e na sala (`.self-profile`). A troca de página anima o "eu" como um elemento só
+(`nx-eu`, 2.8): três pixels no avatar, um peso de fonte, um botão a mais ou o anel do ponto numa cor que não
+é a do fundo aparecem como um tremor no meio da transição. Por isso o desenho mora **uma vez**, em
+`public/eu.css`, e as duas páginas só dão o conteúdo.
+
+- **As classes**: a faixa é `.nx-eu`; dentro dela `.nx-eu-perfil` (o botão de avatar e nome),
+  `.nx-eu-avatar`, `.nx-eu-textos` (`strong` e `small`) e `.nx-eu-acao` (os botões de ícone;
+  `.nx-eu-engrenagem` gira um quarto de volta). As classes de cada página (`.self-*`, `.ini-eu-*`,
+  `#presenceBtn`, `#euBtn`) **continuam**, para o JavaScript e os testes; só o desenho saiu delas.
+- **O que é igual**: 64 px de altura (`--chassi-eu`); o botão do perfil com 5 × 7 px de recuo e 10 px de
+  vão — na lateral do computador (a faixa tem 208 a 248 px, e a medida é a **da faixa**, `container: eu`, e não a
+  da janela) o desenho compacto, 6 × 4 e 8, que é o mesmo nas duas porque a faixa é a mesma; o avatar de 34 px,
+  cantos de 11, as iniciais a `34 × .36` px e peso 750; o nome em `--fs-sm` e peso 650; o estado em `--fs-meta`
+  e peso 500, na cor `--faint`; os dois botões de ícone de `--ctl-p` (28 de largura no compacto), ícone de 17 px.
+- **O ponto do estado** é o `.nx-av-status` do cartão no início e o `::after` do `.self-avatar` na sala, com o
+  **mesmo desenho**: 10 px, no canto (0,7 px), anel de 2 px **da cor do fundo da faixa** (`--eu-fundo`, e não o
+  `#14141c` fixo do cartão, que no tema claro virava um aro escuro). A lua do "ausente", o traço do "ocupado" e o
+  anel vazio do "invisível" são **pintados** com essa cor — o pedaço comido se junta ao anel, como no Discord.
+  (O ponto da *lista* de gente, de 30 px, é outro e continua em `sala.css`.)
+- **Cada peça faz a mesma coisa nas duas páginas**: o avatar e o nome levam ao perfil (na sala, o painel
+  "Personalizar perfil"; no início, a seção de mesmo nome); o **rosto** é o status (o menu "Seu status"); a
+  **engrenagem** abre as configurações (na sala) ou a conta (no início, `/conta`, que é onde elas moram lá).
+- **O conteúdo do estado é de cada página**: "Disponível" (ou a frase) no início, "Mic mudo" na sala — o que
+  tem de ser igual é o lugar, o tamanho e o desenho.
+- **Sempre que uma peça se repete entre as duas páginas, o desenho mora num arquivo só.** Foi o que se fez aqui,
+  e é o que `--chassi-topo-lado` e `--chassi-calha` (2.10) fazem pelo resto: o título da linha de cima e o
+  rótulo de seção da lateral começam **no mesmo ponto** (e o título da coluna da direita tem o mesmo tamanho:
+  15 px, peso 650, aperto de -0,02 em). Ao criar uma peça nova para uma das páginas, olhe se a outra tem o par
+  dela.
+- **A prova** é `npm run test:chassi`: cada peça medida pelo lugar dentro da faixa e pelo que a desenha, o
+  ponto, e o recorte do avatar, do nome, do rosto e da engrenagem **pixel por pixel** (até 2 de 255 de desvio, o
+  arredondamento da cor).
+
 ---
 
 ## 5. Leiaute da sala
 
-A sala é uma grade: **lateral | palco | chat**, com a barra de cima e a de controles.
+A sala é uma grade: **lateral | palco | chat**, com a barra de cima e a de controles. A lateral
+de quem tem conta é o **trilho das salas mais a lateral** (4.18), e os números das colunas e da linha de
+cima são os da moldura, os mesmos do início (2.10).
 
 | largura da janela | o que muda |
 |---|---|
-| ≥ 1600 | lateral 240, chat 320 |
-| padrão | lateral 224, chat 292, barra de cima 64, barra de controles 84 |
-| ≤ 1250 | lateral 200, chat 266, controles mais estreitos |
+| ≥ 1600 | trilho 64 + lateral 248, chat 320 |
+| padrão | trilho 64 + lateral 232, chat 292, barra de cima 56, barra de controles 84 |
+| ≤ 1250 | trilho 64 + lateral 208, chat 266, controles mais estreitos |
 | ≤ 1100 | o chat vira gaveta (360 px) que entra pela direita, com botão na barra de cima |
-| ≤ 760 | uma coluna: a lateral vira gaveta, barra de cima 57, controles 81 + área segura |
+| ≤ 760 | uma coluna: o trilho e a lateral viram gaveta, barra de cima 56, controles 81 + área segura |
 | ≤ 430 | a barra de controles fica só com ícones (o nome continua para o leitor de tela) |
+
+Sem conta não há trilho: a lateral é só a lateral (232, 208, 248), e o resto é igual.
 
 Por altura: abaixo de 800, 690 e 480 px a ilustração do palco encolhe, some, e por fim a plateia
 sai, para o palco continuar com espaço.
 
-As larguras das colunas são `--col-lateral` e `--col-chat-aberto` (de onde vem `--col-chat`),
-redefinidas em cada degrau; a barra recolhida e o chat fechado só zeram a sua (2.8).
+As larguras das colunas são `--col-lateral` (o trilho ativo mais `--chassi-lateral`) e
+`--col-chat-aberto` (de onde vem `--col-chat`, `--chassi-direita` de fábrica); a barra recolhida e o
+chat fechado só zeram a sua (2.8) — a barra recolhida leva o trilho junto.
 
-**O topo da lateral** é uma linha com dois itens: o link da marca (para quem tem conta, abre o
-início por cima da sala — 5.2; sem conta, sai da sala para a apresentação) e a estrela das
-novidades. Onde "seu espaço" não cabe ao lado de NEXO (lateral de 224 px ou menos), a frase
-desce para baixo dele (consulta de contêiner `marca`) — a estrela já foi posta por cima, com posição
-absoluta, e passava sobre a frase.
+**O topo da lateral** é a linha de 56 px da moldura. Para quem tem conta diz **onde a pessoa está** — o
+quadrado da cor da sala, `#código` e, embaixo, "2 pessoas · há 0:12" (o mesmo bloco que a camada mostra, 5.2)
+— e a marca do Nexo mora no trilho, onde abre o início por cima da sala. Sem conta, que não tem trilho,
+continua o link da marca (sai da sala para a apresentação) e a estrela das novidades; onde "seu espaço" não
+cabe ao lado de NEXO (lateral de 224 px ou menos), a frase desce para baixo dele (consulta de contêiner
+`marca`) — a estrela já foi posta por cima, com posição absoluta, e passava sobre a frase.
 
 **A caixa de conexão**, embaixo da lateral, é o estado em cima (o ponto, "Conectado à sala" e o
 relógio, cada um numa linha só) e as ações numa fileira de botões iguais embaixo (mensagens,
@@ -818,21 +1041,23 @@ lembrada. No celular, onde o chat é a tela inteira, a alça não existe. O cana
 dele (`#musicaAlca`) e vale a mesma largura; a janela de mensagens usa a mesma peça num canto de dois
 eixos (`role="button"`, mesmas setas).
 
-**O meu perfil**, no pé da lateral, tem o estado do microfone embaixo do nome, numa linha só. Entre
-o avatar e os dois botões sobram de 56 a 96 px para ele no computador, e "Microfone desligado" pede
-103: ali vale a **forma curta** ("Mic mudo", "Mic ligado", "Ensurdecido", "Fora da sala"), com os
-espaços um pouco mais justos; a frase inteira fica para a gaveta do celular, onde cabe, e para o
-`title` (consulta de contêiner `eu`). As duas formas estão no HTML e o CSS escolhe — a frase não
+**O meu perfil**, no pé da lateral, é o "eu" da moldura (64 px, avatar de 34, 2.10) e tem o estado do
+microfone embaixo do nome, numa linha só. Entre o avatar e os dois botões sobram de 56 a 110 px para ele
+no computador, e "Microfone desligado" pede 103: ali vale a **forma curta** ("Mic mudo", "Mic ligado",
+"Ensurdecido", "Fora da sala"), com os espaços um pouco mais justos; a frase inteira fica para a gaveta
+do celular, onde cabe, e para o `title` (consulta de contêiner `eu`, até 260 px). As duas formas estão no HTML e o CSS escolhe — a frase não
 muda de tamanho a cada segundo, quando o relógio da sala repinta.
 
 ### 5.1 O início de quem tem conta
 
-`/` com a sessão aberta: **trilha | lateral | centro | Agora no Nexo**.
+`/` com a sessão aberta: **trilho | lateral | centro | Agora no Nexo**. Os números são os da moldura
+(2.10), os mesmos da sala: a troca de página não move nenhuma borda.
 
 | largura | o que muda |
 |---|---|
-| padrão | trilha 72, lateral 264, "Agora no Nexo" 340 |
-| ≤ 1250 | lateral 240, "Agora" 300 |
+| padrão | trilho 64, lateral 232, "Agora no Nexo" 292, linha de cima 56 |
+| ≤ 1250 | lateral 208, "Agora" 266 |
+| ≥ 1600 | lateral 248, "Agora" 320 |
 | ≤ 1100 | "Agora no Nexo" sai da direita e as salas ao vivo descem para o topo dos amigos |
 
 O editor do cartão não segue esta tabela: ele decide pela própria largura (4.13), então tem duas
@@ -840,10 +1065,12 @@ colunas a 1440 e entre 1012 e 1100 px, e uma só (a prévia em cima) a 1250 e no
 | ≤ 760 | uma coluna: trilha e lateral viram gaveta (botão no topo), as abas descem para uma linha própria |
 | ≤ 430 | os botões de linha ficam só com o ícone (o nome continua para o leitor de tela) |
 
-A trilha mostra as salas recentes deste aparelho (`localStorage`, até 12), cada uma com a cor
+O trilho (4.18) mostra as salas recentes deste aparelho (`localStorage`, até 12), cada uma com a cor
 sorteada pelo código e as duas iniciais; o número verde no canto é quantos amigos estão nela agora.
+A coluna da direita tem o cabeçalho de 56 px com borda que o chat da sala também tem, e a faixa de
+cima é `--bg-1`: a linha de cima atravessa as três colunas, como na sala.
 
-**A busca** (o alto da lateral) é um campo de verdade, no padrão de combobox: digita-se nele mesmo,
+**A busca** (o alto da lateral, na linha de 56 px com a borda embaixo) é um campo de verdade, no padrão de combobox: digita-se nele mesmo,
 e as sugestões caem embaixo — vazio, os amigos; com texto, os amigos e as salas recentes que
 batem, e "Entrar na sala #código" quando o texto é um código e não um amigo (ou começa com `#`). O
 foco fica no campo: as setas andam pela lista, Enter segue a marcada (com texto, a primeira), Esc
@@ -863,7 +1090,7 @@ num balão, com "Ctrl K" escrito ao lado — o atalho continua, só não ocupa m
 
 ### 5.2 O início por cima da sala (a camada)
 
-Para quem tem conta, a **marca do Nexo** na lateral, **Ctrl K** e "Senha e conta" abrem a página
+Para quem tem conta, a **marca do Nexo** (o "N" no alto do trilho, 4.18), **Ctrl K** e "Senha e conta" abrem a página
 inteira — o início (`/`) ou a conta (`/conta`) — **por cima da sala, sem sair da chamada**. Antes,
 ver os amigos, as mensagens ou as conquistas pedia sair: o microfone, a câmera e a tela paravam, e a
 sala via a pessoa ir embora.
@@ -900,6 +1127,55 @@ sala via a pessoa ir embora.
 `npm run test:camada` prova a chamada de pé por baixo (o servidor e os outros nunca veem a pessoa
 sair), a barra, os atalhos, o Esc, o Ctrl K, o histórico, o aviso único, a conta e a pergunta de
 trocar de sala; `npm run test:layout` tem os três estados (`camada`, `camada:conta`, `camada-sair`).
+
+### 5.3 Entrar numa sala sem o portão
+
+O portão da sala ("Você está entrando na sala", o nome, o botão) existe para quem chega por um link ou
+não tem conta. **Quem tem conta e clicou em "Entrar"** — no início, no trilho (4.18), na pergunta de
+trocar de sala (5.2), no convite de um amigo (a mensagem direta e o aviso no canto) — já disse que quer
+entrar, e o portão seria uma segunda pergunta sobre uma sala que já está à vista. Quem sai da página deixa
+um recado (`NexoChassi.marcarEntrada`, `sessionStorage`, desta aba, 15 s, uma vez) e a sala o lê e **entra
+sozinha** (`sala.js`, depois de a conta responder).
+
+- **O portão nem aparece no primeiro quadro.** `chassi.js`, no `<head>`, põe `html.entrando-direto`
+  (`#nameGate { display:none }`, `sala.css`); a primeira coisa que se vê é a sala com "Entrando na
+  sala…" no alto da lateral. Se a conta não responder (a sessão acabou), `sala.js` tira a classe e o
+  portão volta, com o nome.
+- **Quem chega por um link continua passando pelo portão**: alguém que clicou num convite não pode
+  aparecer numa chamada sem ter confirmado. O recado vale só para a sala dele e some depois de lido; um
+  link aberto depois não o encontra.
+- **O microfone e a câmera continuam começando desligados**: o "eu" de baixo diz "Mic mudo" desde o
+  primeiro instante.
+- O som só toca depois de um gesto do navegador, e o clique em "Entrar" foi na página anterior. O Chrome
+  conta a interação com o domínio, e a sala tem o botão "Ativar reprodução" (`#enableSoundBtn`) para
+  quando não vale — Safari e o WebView do Android merecem conferência num aparelho.
+- A prova é `npm run test:camada` (a pergunta de trocar de sala entra sem o portão) e `npm run test:inicio`.
+
+**Quanto leva entrar** (medido em localhost, com o servidor de mídia, do clique em "Entrar" até o próprio
+quadradinho na sala): **~0,4 a 0,55 s**. Eram de 1,0 a 1,6 s, e o excesso não era rede nem mídia:
+
+- **Dois pacotes de entrada no mesmo namespace derrubavam a conexão.** Quem tem conta já tem o socket do
+  social (`io('/social')`, criado com a página), e ele cria o *gerenciador* do Socket.IO — de conexão
+  automática. O `io()` da sala **reaproveita** esse gerenciador e o `autoConnect: false` dele é ignorado (o
+  gerenciador já existe), então o socket da sala já nascia conectando; e o `socket.connect()` do fim de
+  `iniciarConexao` mandava **um segundo** pacote de entrada para o mesmo namespace. O servidor responde ao
+  segundo com "estado inválido" e **fecha o transporte inteiro**, levando o social junto; a volta pagava a
+  espera de reconexão do Socket.IO (0,5 a 1,5 s, sorteada). Agora o `connect()` só roda se ninguém conectou
+  (`if (!socket.active)`).
+- **A mídia e o chat sobem juntos** (`midiaPronta`, `sala.js`): a conexão com o servidor de mídia (~0,25 s em
+  localhost) não espera mais o chat, nem o chat a ela. Quem liga câmera, tela ou microfone antes de a mídia
+  subir não perde nada — `aplicarPublicacao` ignora o pedido sem transporte, e o `republicarTudo` sobe o que
+  estiver ligado quando ela entra. A tela de carregamento espera a mídia só até 2,5 s depois do chat.
+- **A tela de carregamento** não segura mais a sala por 0,75 s depois de pronta: a marca sozinha (grau 1, 4.19) sai
+  em ~0,3 s.
+- **O que sobra**: a página (≈ 0,2 s, 100 arquivos locais), a conta e a configuração da sala (≈ 0,1 s) e a
+  entrada no chat. O Socket.IO começa por *long-polling* e sobe para WebSocket (duas idas e voltas a mais que
+  abrir o WebSocket direto); em localhost isso custa 10 ms, e na internet ~100 a 200 ms. Não se mudou porque
+  `transports: ['websocket']` quebra atrás de proxies que bloqueiam WebSocket, e o Nexo não escolhe a rede de
+  quem entra.
+- No DevTools, a linha `socket.io/?transport=websocket&sid=…` com **status 101 e tempo "Pending"** é a conexão
+  permanente: um WebSocket nunca "termina" enquanto está aberto, e o "Pending" é isso. As requisições
+  `transport=polling` curtinhas ao lado são o aperto de mão e a subida.
 
 ---
 
@@ -1061,6 +1337,9 @@ Quando a frase pede concordância, ela vai com "a pessoa".
 - [ ] Tema claro conferido (e a peça sobre vídeo continua escura).
 - [ ] Menos movimento: a peça funciona com animações de 1 ms.
 - [ ] Se é peça compartilhada entre páginas, se defende das regras globais (seção 8).
+- [ ] Se há uma espera que a pessoa vê: a roda ao lado do que espera, o esqueleto no lugar da lista, o botão
+      ocupado — e a tela cheia só entre páginas (4.19). Nome novo de classe ou de `@keyframes`: procurar se já
+      existe (`nx-anel`, `nx-aurora` e `nx-pronto` já existiam).
 
 ---
 
