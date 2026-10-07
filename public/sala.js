@@ -180,6 +180,10 @@ const tiles = new Map(); // id -> dom refs
 // token que vale so para ESTA sala, com prazo. Nada disso e escolhido do lado do cliente.
 let salaConfig = null;
 let transporte = null;
+// A primeira conexão com o servidor de mídia está em andamento. O chat não espera por ela (ver
+// `iniciarConexao`), e uma sala que ainda está subindo não é uma sala que caiu: enquanto isto
+// vale, `acompanharQueda` não conta o tempo.
+let midiaEntrando = false;
 
 // Logo depois de o servidor subir, o servidor de midia ainda esta descobrindo o proprio
 // endereco. Quem abre a pagina nesse intervalo receberia um erro e ficaria sem midia ate
@@ -474,7 +478,7 @@ function conectadoDeVerdade() {
   return Boolean(socket?.connected) && (!transporte || transporte.sala?.state === 'connected');
 }
 function acompanharQueda() {
-  if (!sessaoIniciada || saindoDaSala || fuiRemovido) return;
+  if (!sessaoIniciada || saindoDaSala || fuiRemovido || midiaEntrando) return;
   if (conectadoDeVerdade()) {
     clearTimeout(temporizadorDaQueda);
     temporizadorDaQueda = null;
@@ -546,6 +550,11 @@ function avisarTela(par) {
 
 // ---------- Conexão / sala ----------
 async function iniciarConexao() {
+  // A primeira conexão com a mídia, que corre em paralelo com a do chat (ver mais abaixo).
+  let midiaPronta = Promise.resolve();
+  // Quanto a tela de carregamento espera pela mídia depois que o chat já entrou: a sala não fica coberta por uma
+  // mídia lenta, já que o chat funciona.
+  const MS_DA_MIDIA_NA_TELA_DE_CARREGAMENTO = 2500;
   status.textContent = 'Conectando ao servidor...';
   // Quem entrou direto (sem o portão) está olhando a tela de carregamento: diz a etapa, e o anel anda.
   window.NexoCarregando?.etapa('Conectando ao servidor', 0.78);
@@ -642,12 +651,23 @@ async function iniciarConexao() {
     });
     transporte.definirEconomia?.(document.getElementById('dataSaver')?.checked);
     configurarTelaPorWebCodecs();
-    try {
-      await transporte.conectar(salaConfig.url, salaConfig.token);
-    } catch (erro) {
-      status.textContent = 'Não foi possível conectar ao servidor de mídia: ' + erro.message;
-    }
-    if (saindoDaSala) { await transporte.desconectar(); return; }
+    // A mídia e o chat sobem JUNTOS. A mídia leva quase todo o tempo da entrada (é a negociação do
+    // WebRTC, mais de meio segundo até em localhost) e o chat não depende dela: esperar uma para abrir
+    // o outro somava as duas. Quem ligar câmera, tela ou microfone antes de a mídia subir não perde
+    // nada: `aplicarPublicacao` ignora o pedido sem transporte, e o `republicarTudo` daqui sobe o que
+    // estiver ligado assim que ela entra.
+    midiaEntrando = true;
+    midiaPronta = (async () => {
+      try {
+        await transporte.conectar(salaConfig.url, salaConfig.token);
+      } catch (erro) {
+        if (!saindoDaSala) status.textContent = 'Não foi possível conectar ao servidor de mídia: ' + erro.message;
+      }
+      midiaEntrando = false;
+      if (saindoDaSala) { await transporte.desconectar(); return; }
+      acompanharQueda();
+      if (transporte.conectada && (micStream || cameraStream || screenStream)) await republicarTudo();
+    })();
   }
 
   // `tempo` é o sorteio que faz o relógio desta pessoa sobreviver a um F5 quando ela não tem
@@ -669,6 +689,8 @@ async function iniciarConexao() {
       catch (falha) { if (falha.message !== 'servidor-de-midia-indisponivel' || !credencialSessao) throw falha; salaConfig = null; }
       myId = salaConfig?.identidade || identidadeSessao;
       if (transporte && salaConfig && antiga !== myId) {
+        // A primeira conexão com a mídia pode ainda estar em andamento: desfazê-la no meio daria duas corridas.
+        await midiaPronta;
         await transporte.desconectar();
         await transporte.conectar(salaConfig.url, salaConfig.token);
         await republicarTudo();
@@ -711,8 +733,10 @@ async function iniciarConexao() {
       if (response.perfil) meuPerfil = response.perfil;
       if (response.plano) aplicarPlano(response.plano);
       criarTileLocal();
-      // A sala está de pé: a tela de carregamento (de quem entrou direto) pode sair.
-      window.NexoCarregando?.concluir();
+      // A sala está de pé: a tela de carregamento (de quem entrou direto) pode sair, quando a mídia
+      // também subiu ou, se ela demora, depois de uma espera curta -- o chat já funciona.
+      Promise.race([midiaPronta, new Promise(resolver => setTimeout(resolver, MS_DA_MIDIA_NA_TELA_DE_CARREGAMENTO))])
+        .then(() => window.NexoCarregando?.concluir());
       donoDaSala = response.dono || null;
       podeModerar = Boolean(response.podeModerar);
       aplicarConfiguracaoDaSala(response.configuracao || configuracaoDaSala);
@@ -999,8 +1023,17 @@ async function iniciarConexao() {
     if (!erro.message?.includes('Sessão inválida') && !erro.message?.includes('Aguarde')) status.textContent = 'Não foi possível alcançar o servidor. Tentando novamente...';
     registrarDiagnostico('socket.connect_error');
   });
-  // Register listeners before connecting: a fast socket used to beat the RTC fetch.
-  socket.connect();
+  // Os ouvintes acima já estão registrados antes de conectar (tudo isto é síncrono, então nem uma
+  // conexão rápida chega antes deles).
+  //
+  // Só conecta se ninguém conectou ainda: com conta, o socket do social (`io('/social')`, criado
+  // quando a página abre) é quem cria o gerenciador, e ele é de conexão automática -- o `autoConnect:
+  // false` do `io()` acima é ignorado, porque o gerenciador já existe, e o socket da sala já nasce
+  // conectando. Um segundo `connect()` mandava um segundo pacote de entrada para o mesmo namespace; o
+  // servidor o trata como estado inválido e FECHA O TRANSPORTE INTEIRO, derrubando o social junto, e
+  // a volta pagava a espera de reconexão do Socket.IO (de 0,5 a 1,5 s). Era isso o "segundinho" extra
+  // de toda entrada numa sala por quem tem conta.
+  if (!socket.active) socket.connect();
 }
 
 function meuEstado() {
