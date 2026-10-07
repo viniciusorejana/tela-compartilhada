@@ -1,6 +1,6 @@
 {
   "name": "sala-compartilhada-app",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Aplicativo de mesa do Nexo: a mesma sala, fora do navegador, para que o cliente possa ficar fora da captura de audio.",
   "author": "Nexo",
