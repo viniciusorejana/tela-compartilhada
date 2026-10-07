@@ -13,6 +13,7 @@
     "test:electron": "node tests/electron.cjs",
     "test:splash": "node tests/splash-electron.cjs",
     "test:bandeja": "node tests/bandeja-electron.cjs",
+    "test:agrupamento": "node tests/agrupamento-browser.cjs",
     "test:download": "node tests/download-browser.cjs",
     "test:soundboard": "node tests/soundboard-browser.cjs",
     "test:painel": "node tests/painel-browser.cjs",

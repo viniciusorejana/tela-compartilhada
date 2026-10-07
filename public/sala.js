@@ -7212,7 +7212,7 @@ function fecharChat() {
   chatPanel.classList.remove('aberto');
   document.querySelector('.app').classList.add('sem-chat');
   if (chatLargo.matches) Preferencias.gravar('chatFechado', true);
-  chatMsgs.querySelectorAll('.unread-divider').forEach(el => el.remove());
+  tirarDivisoresDeNaoLidas();
 }
 chatToggle.onclick = () => (chatVisivel() ? fecharChat() : abrirChat());
 chatClose.onclick = fecharChat;
@@ -7384,6 +7384,36 @@ function redecorarChat() {
   });
 }
 
+// Mensagens seguidas da mesma pessoa dividem o avatar e o nome (`.continua`, em sala.css), como no Discord: a segunda
+// em diante é só o texto, embaixo da anterior. A pausa fica marcada: passados 5 minutos desde a mensagem de antes, a
+// pessoa volta inteira, com avatar, nome e hora, e o espaço entre dois grupos é bem maior que o de dentro de um.
+// Uma resposta também começa grupo novo, porque traz a citação em cima.
+//
+// Quem decide é a mensagem que está ANTES NA TELA, e não a última que chegou: editar uma mensagem a tira do lugar e a
+// põe de volta, apagar junta quem estava dos dois lados, e o divisor de "Novas mensagens" corta o grupo. Por isso o
+// agrupamento é uma função da posição, refeita onde a posição muda (`agruparNoChat`).
+const MS_PARA_AGRUPAR_NO_CHAT = 5 * 60000;
+function continuaAFala(msg, antes) {
+  if (!msg || !antes || msg.resposta) return false;
+  const pausa = msg.em - antes.em;   // sem `em` (mensagem de antes de existir a hora) dá NaN, e nada se junta
+  return msg.autorId === antes.autorId && msg.autor === antes.autor && pausa >= 0 && pausa < MS_PARA_AGRUPAR_NO_CHAT;
+}
+function agruparNoChat(el) {
+  if (!el?.classList?.contains('msg')) return;
+  const anterior = el.previousElementSibling;
+  const junta = anterior?.classList.contains('msg')
+    && continuaAFala(mensagensDoChat.get(el.dataset.messageId), mensagensDoChat.get(anterior.dataset.messageId));
+  el.classList.toggle('continua', Boolean(junta));
+}
+// Tirar o divisor devolve ao grupo a mensagem que vinha depois dele.
+function tirarDivisoresDeNaoLidas() {
+  chatMsgs.querySelectorAll('.unread-divider').forEach(divisor => {
+    const seguinte = divisor.nextElementSibling;
+    divisor.remove();
+    agruparNoChat(seguinte);
+  });
+}
+
 function mostrarMensagem(msg) {
   const vazio = chatMsgs.querySelector('.chat-vazio');
   if (vazio) vazio.remove();
@@ -7392,7 +7422,7 @@ function mostrarMensagem(msg) {
   msg.id ||= `legado-${msg.em || Date.now()}-${Math.random().toString(36).slice(2)}`;
   mensagensDoChat.set(msg.id, msg);
   if (!carregandoHistorico && !msg._atualizandoLocal && !chatVisivel() && msg.autorId !== myId && !divisorDeNaoLidas) {
-    chatMsgs.querySelectorAll('.unread-divider').forEach(divisor => divisor.remove());
+    tirarDivisoresDeNaoLidas();
     const divisor = document.createElement('div');
     divisor.className = 'unread-divider';
     divisor.textContent = 'Novas mensagens';
@@ -7427,6 +7457,9 @@ function mostrarMensagem(msg) {
   hora.className = 'msg-hora';
   hora.textContent = horaCurta(msg.em || Date.now());
   topo.append(autor, hora);
+  // Na mensagem que continua a fala de cima o cabeçalho some, e a hora aparece na coluna do avatar ao passar o
+  // ponteiro (sala.css: `.msg.continua::before`).
+  el.dataset.hora = hora.textContent;
 
   // A citação entra DEPOIS da linha do nome. Antes dela, virava a primeira linha da grade e
   // puxava o avatar para cima junto -- ele deixava de ficar ao lado de quem falou e passava a
@@ -7492,6 +7525,7 @@ function mostrarMensagem(msg) {
     el.append(reacoes);
   }
   chatMsgs.appendChild(el);
+  agruparNoChat(el);
   if (perto) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
   // As minhas não tocam: eu sei que mandei. Uma mensagem editada ou reagida também não -- ela
@@ -7540,13 +7574,20 @@ function atualizarMensagemDoChat(msg) {
   delete msg._atualizandoLocal;
   const novo = chatMsgs.lastElementChild;
   if (proximo) chatMsgs.insertBefore(novo, proximo);
+  // Voltou ao lugar de antes: a mensagem, e a que vem depois dela, se juntam (ou não) com quem as precede de verdade.
+  agruparNoChat(novo);
+  agruparNoChat(novo.nextElementSibling);
   if (!perto) chatMsgs.scrollTop = rolagem;
   atualizarFixadas();
 }
 function removerMensagemDoChat(id) {
   mensagensDoChat.delete(id);
   if (mensagemDoMenu?.id === id) fecharMenuDaMensagem();
-  chatMsgs.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.remove();
+  const removida = chatMsgs.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+  const seguinte = removida?.nextElementSibling;
+  removida?.remove();
+  // Quem vinha depois passa a ter outra mensagem em cima: pode ter de voltar a mostrar o avatar e o nome.
+  agruparNoChat(seguinte);
   if (contextoDoChat?.mensagem.id === id) limparContextoDoChat();
   atualizarFixadas();
   if (!mensagensDoChat.size) mostrarVazio();

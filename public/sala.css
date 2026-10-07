@@ -1553,6 +1553,33 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 .texto-maior .msg-hora,.texto-maior .previa-hora { font-size:var(--fs-md); }
 .texto-maior .msg-reply { font-size:var(--fs-sm); }
 
+/* ---------- Mensagens seguidas da mesma pessoa (sala.js: agruparNoChat) ----------
+   Quem escreve várias vezes seguidas aparece uma vez só: a primeira mensagem traz avatar, nome e hora, e as
+   seguintes são apenas o texto, coladas embaixo. Passados 5 minutos de pausa a pessoa volta inteira, e é o ESPAÇO
+   que conta isso: dentro de um grupo as linhas quase se encostam, e entre dois grupos há um vão de três a quatro
+   vezes maior. Para isso o espaço da lista (o `gap`) passa a morar na própria mensagem -- a que abre um grupo traz o
+   vão em cima, a que continua não traz nenhum. */
+#chatMsgs { gap:0; --chat-entre-grupos:16px; }
+.densidade-compacta #chatMsgs { --chat-entre-grupos:9px; }
+#chatMsgs > .msg { margin-top:var(--chat-entre-grupos); }
+#chatMsgs > .msg:first-child { margin-top:0; }
+#chatMsgs > .unread-divider { margin-block:var(--chat-entre-grupos) 0; }
+/* O `margin-top:0!important` de `.msg.continua` (mais acima) já tira o vão; aqui só se aperta o preenchimento. */
+#chatMsgs > .msg.continua { padding-block:2px; }
+.densidade-compacta #chatMsgs > .msg.continua { padding-block:1px; }
+/* No lugar do avatar, a hora da mensagem aparece quando o ponteiro (ou o foco) chega nela: é como se descobre quando
+   uma linha do meio do grupo foi escrita. O texto alternativo vazio tira a hora da leitura por voz, que já a diz
+   na primeira mensagem do grupo. */
+#chatMsgs > .msg.continua::before {
+  content:attr(data-hora); content:attr(data-hora) / '';
+  grid-column:1; grid-row:1; align-self:start; justify-self:center; margin-top:2px;
+  font-size:var(--fs-rotulo); line-height:1.7; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--faint);
+  opacity:0; pointer-events:none; transition:opacity var(--dur-rapida) var(--curva);
+}
+#chatMsgs > .msg.continua:hover::before,#chatMsgs > .msg.continua:focus-within::before { opacity:1; }
+.texto-grande #chatMsgs > .msg.continua::before { margin-top:4px; }
+.texto-maior #chatMsgs > .msg.continua::before { margin-top:6px; }
+
 /* ---------- O bot de música, em linhas curtas ----------
    Cada fala do bot era um cartão com avatar, nome e hora -- três por pedido ("procurando",
    "entrou na fila", "tocando"), e o canal virava uma parede do mesmo nome repetido. Agora a
