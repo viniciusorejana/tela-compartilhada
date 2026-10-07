@@ -35,7 +35,7 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-busca-lista { position:absolute; top:calc(100% - 2px); left:10px; right:10px; width:auto; max-height:min(360px,60vh); }
 /* A sugestão que o Enter escolhe, andando pelas setas: o mesmo fundo do passar o mouse. */
 .ini-busca-lista .nx-menu-item[aria-selected="true"] { --nx-fundo:var(--nx-fundo-hover); --nx-cor:var(--nx-cor-hover); }
-.ini-secoes { display:grid; gap:2px; padding:4px 8px 6px; }
+.ini-secoes { display:grid; gap:2px; padding:4px var(--chassi-calha) 6px; }
 .ini-secao { --nx-fundo-hover:rgb(var(--tinta) / 4.5%); --nx-cor:var(--muted); --nx-cor-hover:var(--text); justify-content:flex-start; gap:12px; min-height:42px; padding:0 12px; border-radius:var(--r-md); font-size:var(--fs-md); }
 .ini-secao span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ini-secao .ico { width:20px; height:20px; transition:transform var(--dur) var(--curva-mola); }
@@ -43,8 +43,8 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-secao[aria-current="page"] { --nx-fundo:var(--accent-suave); --nx-fundo-hover:var(--accent-suave-hi); --nx-cor:var(--accent-texto); --nx-cor-hover:var(--accent-texto); }
 .ini-secao-meta { color:var(--faint); font-size:var(--fs-meta); font-weight:600; font-variant-numeric:tabular-nums; }
 .ini-contagem { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; margin-left:6px; border-radius:var(--r-pilula); background:var(--danger-forte); color:#fff; font-size:var(--fs-rotulo); font-weight:750; font-variant-numeric:tabular-nums; }
-.ini-rotulo { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 12px 4px 18px; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
-.ini-conversas { flex:1; min-height:0; overflow-y:auto; margin:0; padding:2px 8px 8px; list-style:none; }
+.ini-rotulo { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 12px 4px calc(var(--chassi-calha) + 10px); color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+.ini-conversas { flex:1; min-height:0; overflow-y:auto; margin:0; padding:2px var(--chassi-calha) 8px; list-style:none; }
 .ini-conversa { --nx-fundo-hover:rgb(var(--tinta) / 4.5%); --nx-cor:var(--muted); --nx-cor-hover:var(--text); width:100%; justify-content:flex-start; gap:10px; min-height:46px; padding:5px 8px; border-radius:var(--r-md); }
 .ini-conversa[aria-current="page"] { --nx-fundo:var(--bg-3); --nx-cor:var(--text); }
 .ini-conversa .nx-av { transition:transform var(--dur) var(--curva-mola); }
@@ -54,22 +54,13 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-conversa-textos small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); font-weight:500; }
 .ini-conversa.nao-lida .ini-conversa-textos strong { color:var(--text); font-weight:750; }
 .ini-conversas-vazio { padding:10px 12px; color:var(--faint); font-size:var(--fs-sm); line-height:1.5; }
-.ini-eu { flex:none; display:flex; align-items:center; gap:4px; min-height:var(--chassi-eu); padding:8px; background:var(--bg-0); }
-.ini-eu-botao { --nx-fundo-hover:rgb(var(--tinta) / 5%); --nx-cor:var(--text); flex:1; min-width:0; justify-content:flex-start; gap:10px; padding:5px 7px; border-radius:var(--r-md); }
-.ini-eu-botao .nx-av { transition:transform var(--dur) var(--curva-mola); }
-.ini-eu-botao:hover .nx-av { transform:scale(1.06); }
-.ini-eu-textos { min-width:0; display:grid; }
-.ini-eu-textos strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); font-weight:650; }
-.ini-eu-textos small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); font-weight:500; }
-.ini-eu-conta { display:inline-grid; place-items:center; text-decoration:none; color:var(--muted); transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva); }
-.ini-eu-conta:hover { background:var(--bg-3); color:var(--text); }
-.ini-eu-conta .ico { transition:transform var(--dur) var(--curva-mola); }
-.ini-eu-conta:hover .ico { transform:rotate(45deg); }
+/* O "eu" de baixo (.ini-eu) é o mesmo da sala (.self-profile): o desenho mora em eu.css, para os dois não se
+   afastarem -- e a troca de página não ter o que tremer (docs/interface.md, 4.20). */
 
 /* ---------- O centro ---------- */
 .ini-centro { grid-area:centro; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg); }
 /* A faixa de cima é `--bg-1`, como na sala: o `--bg-1` em volta e o `--bg` no miolo são a moldura das duas. */
-.ini-topo { flex:none; display:flex; align-items:center; gap:12px; min-height:var(--chassi-topo); padding:8px 20px; border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
+.ini-topo { flex:none; display:flex; align-items:center; gap:12px; min-height:var(--chassi-topo); padding:8px var(--chassi-topo-lado); border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
 .ini-menu { display:none; }
 .ini-titulo { flex:none; font-size:var(--fs-lg); font-weight:650; white-space:nowrap; }
 .ini-abas { display:flex; gap:4px; min-width:0; padding:3px; border-radius:11px; background:var(--bg-1); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 3.9%); overflow-x:auto; scrollbar-width:none; }

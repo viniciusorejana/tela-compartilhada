@@ -86,7 +86,7 @@ html:not(.com-conta) .lateral-topo > .sala-id { display:none; }
 @container marca (max-width:215px) {
   .workspace-textos { flex-direction:column; align-items:flex-start; gap:1px; }
 }
-.sidebar-content { padding:20px 12px; overflow-y:auto; flex:1; }
+.sidebar-content { padding:20px var(--chassi-calha); overflow-y:auto; flex:1; }
 /* Um cartão só, no lugar dos três blocos que antes diziam a mesma coisa (frase de efeito,
    botão de convite solto e um "monte seu squad" no rodapé). O gradiente continua; o que
    mudou é que agora ele conta o estado real da sessão. */
@@ -98,8 +98,8 @@ html:not(.com-conta) .lateral-topo > .sala-id { display:none; }
 .cover-invite:hover:not(:disabled) { background:rgb(var(--tinta) / 12.2%); }
 .cover-invite .ico { width:15px; height:15px; margin:-2px 6px 0 0; }
 .cover-orbit { position:absolute; right:-8px; bottom:-27px; font-size:113px; color:color-mix(in srgb, var(--accent-hi) 15.7%, transparent); line-height:1; transform:rotate(-15deg); }
-.section-caption { display:flex; justify-content:space-between; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.1em; padding:0 9px; margin-bottom:10px; }
-.channel { display:flex; width:100%; gap:10px; padding:9px 10px; align-items:center; background:transparent; color:var(--muted); text-align:left; font-size:var(--fs-sm); margin-bottom:3px; border-radius:var(--r-sm); }
+.section-caption { display:flex; justify-content:space-between; color:var(--faint); font-size:var(--fs-rotulo); font-weight:750; letter-spacing:.08em; padding:0 10px; margin-bottom:10px; }
+.channel { display:flex; width:100%; gap:10px; padding:9px 12px; align-items:center; background:transparent; color:var(--muted); text-align:left; font-size:var(--fs-sm); margin-bottom:3px; border-radius:var(--r-md); }
 .channel:hover:not(:disabled) { background:rgb(var(--tinta) / 3.9%); color:var(--text-2); }
 .channel:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 6.3%); }
 .channel.active { background:var(--accent-suave); color:var(--accent-texto); }
@@ -114,17 +114,18 @@ html:not(.com-conta) .lateral-topo > .sala-id { display:none; }
 .member-list { display:flex; flex-direction:column; gap:4px; }
 .member { display:flex; align-items:center; gap:9px; padding:7px 9px; min-width:0; border-radius:var(--r-sm); transition:background-color var(--dur) var(--curva); }
 .member:hover { background:rgb(var(--tinta) / 3.1%); }
-.member-avatar,.self-avatar { display:grid; place-items:center; flex:none; position:relative; width:30px; height:30px; border-radius:11px; color:var(--sobre-cor); font-size:var(--fs-meta); font-weight:800; }
+.member-avatar { display:grid; place-items:center; flex:none; position:relative; width:30px; height:30px; border-radius:11px; color:var(--sobre-cor); font-size:var(--fs-meta); font-weight:800; }
 /* O ponto de status: o da conta (`perfil.status`, server.js `perfilNaSala`), no mesmo desenho do cartão --
    verde, âmbar com a lua, vermelho com o traço, anel vazio. Antes era sempre verde: o status escolhido no
    perfil não chegava à sala. `data-status` vem de sala.js (`pintarStatusNoAvatar`); sem ele, e para quem
    entrou sem conta, o ponto é o verde de "está aqui". O anel de `--bg-1` separa o ponto do avatar, e a lua
    e o traço são PINTADOS com essa mesma cor: o pedaço comido e a barra se juntam ao anel, como no Discord.
-   Um furo (máscara, como no `.nx-ponto` solto) mostraria o avatar de quem está por baixo. */
-.member-avatar::after,.self-avatar::after { content:''; position:absolute; z-index:2; right:-3px; bottom:-3px; width:13px; height:13px; background:var(--online); border:2.5px solid var(--bg-1); border-radius:50%; }
-:is(.member-avatar,.self-avatar)[data-status="ausente"]::after { background:radial-gradient(circle at 30% 30%,var(--bg-1) 0 32%,transparent 34%),var(--aviso); }
-:is(.member-avatar,.self-avatar)[data-status="ocupado"]::after { background:linear-gradient(var(--bg-1),var(--bg-1)) center / 6px 2px no-repeat,var(--danger); }
-:is(.member-avatar,.self-avatar)[data-status="offline"]::after { background:var(--bg-1); box-shadow:inset 0 0 0 2px var(--faint); }
+   Um furo (máscara, como no `.nx-ponto` solto) mostraria o avatar de quem está por baixo.
+   Este é o ponto da LISTA (30 px); o do "eu" de baixo é o da faixa `.nx-eu` (eu.css). */
+.member-avatar::after { content:''; position:absolute; z-index:2; right:-3px; bottom:-3px; width:13px; height:13px; background:var(--online); border:2.5px solid var(--bg-1); border-radius:50%; }
+.member-avatar[data-status="ausente"]::after { background:radial-gradient(circle at 30% 30%,var(--bg-1) 0 32%,transparent 34%),var(--aviso); }
+.member-avatar[data-status="ocupado"]::after { background:linear-gradient(var(--bg-1),var(--bg-1)) center / 6px 2px no-repeat,var(--danger); }
+.member-avatar[data-status="offline"]::after { background:var(--bg-1); box-shadow:inset 0 0 0 2px var(--faint); }
 .member-name { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:var(--fs-sm); color:var(--text-2); }
 .member-state { color:var(--faint); font-size:var(--fs-meta); }
 .member.falando .member-avatar { box-shadow:0 0 0 2px var(--online); }
@@ -145,44 +146,35 @@ html:not(.com-conta) .lateral-topo > .sala-id { display:none; }
 .connection-box strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-meta); font-weight:600; color:var(--muted); }
 .connection-box.connected strong { color:var(--online); }
 .connection-box small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
-.connection-box small,.self-profile small { display:block; font-size:var(--fs-meta); color:var(--faint); margin-top:2px; }
+.connection-box small { display:block; font-size:var(--fs-meta); color:var(--faint); margin-top:2px; }
 .connection-acoes { display:flex; gap:4px; }
 .connection-acoes > button { flex:1 1 0; min-width:0; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:var(--ctl-p); padding:0; border-radius:var(--r-sm); background:rgb(var(--tinta) / 3.5%); color:var(--muted); }
 .connection-acoes > button:hover:not(:disabled) { background:rgb(var(--tinta) / 7.5%); color:var(--text); }
 .connection-acoes .ico { width:17px; height:17px; transition:transform var(--dur) var(--curva-mola); }
 .connection-acoes > button:hover:not(:disabled) .ico { transform:scale(1.12); }
-.self-profile>button.ghost { flex:none; display:inline-grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:var(--r-sm); font-size:17px; }
-/* O "eu" de baixo é o da moldura: 64 px, o avatar de 34 -- o mesmo desenho e no mesmo lugar do início. */
-.self-profile { display:flex; gap:4px; align-items:center; padding:8px; background:var(--bg-0); min-height:var(--chassi-eu); }
-/* Avatar e nome são o botão do perfil, como o painel de usuário do Discord: é onde a mão vai
-   quando se quer mudar como aparece. */
-.self-perfil-btn { flex:1; min-width:0; display:flex; align-items:center; gap:10px; padding:5px 7px; background:transparent; color:var(--text); text-align:left; border-radius:var(--r-md); }
-.self-perfil-btn:hover:not(:disabled) { background:rgb(var(--tinta) / 5.1%); }
-.self-perfil-btn:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 7.8%); }
-.self-textos { min-width:0; flex:1; }
-.self-profile strong { font-size:var(--fs-sm); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* O "eu" de baixo (.self-profile) é o mesmo do início (.ini-eu): o desenho -- o avatar de 34 px, o nome, o
+   estado, os botões, o ponto -- mora em eu.css, para os dois não se afastarem (docs/interface.md, 4.20). Daqui
+   fica só o que é da sala: a cor do avatar antes de o perfil chegar, e o estado do microfone. */
+.self-avatar { background:var(--accent-hi); }
 /* O estado embaixo do nome, numa linha só. Na lateral do computador (56 a 96 px para o texto,
    entre o avatar e os dois botões) "Microfone desligado" não cabe em largura nenhuma e quebrava em
    duas linhas: ali vale a forma curta ("Mic mudo"), com os espaços um pouco mais justos; a inteira
-   fica para a gaveta do celular, que tem 156 px, e para o `title`. */
-.self-profile { container:eu / inline-size; }
+   fica para a gaveta do celular, que tem 156 px, e para o `title`. A medida é a da faixa (`container: eu`,
+   eu.css). */
 #selfState { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #selfState .estado-curto { display:none; }
 @container eu (max-width:260px) {
   #selfState .estado-longo { display:none; }
   #selfState .estado-curto { display:inline; }
-  .self-perfil-btn { gap:8px; padding:6px 4px; }
-  .self-profile > button.ghost { width:28px; }
 }
-.self-avatar { background:var(--accent-hi); width:34px; height:34px; }
-.topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 24px; border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
+.topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 var(--chassi-topo-lado); border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
 .room-id { display:flex; align-items:center; gap:12px; min-width:0; }
 .topbar-symbol { color:var(--text-3); font-size:22px; }
 /* O nome da sala é o último a ceder espaço na barra de cima. Sem o mínimo garantido, ele e o
    contador encolhiam juntos e o título chegava a ZERO enquanto "Só você na sala" continuava
    inteiro ao lado -- a sala perdia o nome para não perder um número que a barra lateral e a
    plateia já mostram. Agora a pressão vai toda para o contador, que some se precisar. */
-h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; min-width:7ch; }
+h1#roomTitle { font-size:var(--fs-lg); font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; min-width:7ch; }
 #participantCount { font-size:var(--fs-rotulo); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; border-left:1px solid rgb(var(--tinta) / 7.8%); padding-left:12px; }
 .topbar-actions { display:flex; flex:none; align-items:center; gap:6px; }
 /* A atualização do aplicativo: verde, pequena, e só existe quando há o que atualizar. */
@@ -458,8 +450,9 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 .chat.musica>.musica-corpo { grid-row:2; }
 .chat.musica>.chat-compose { grid-row:3; }
 .chat.musica>.chat-hint { grid-row:4; }
-.chat-head { display:flex; align-items:center; justify-content:space-between; padding:0 14px 0 19px; border-bottom:1px solid var(--line); font-size:var(--fs-sm); }
-.chat-head strong { font-weight:600; }
+.chat-head { display:flex; align-items:center; justify-content:space-between; padding:0 14px 0 16px; border-bottom:1px solid var(--line); font-size:var(--fs-sm); }
+/* O título da coluna da direita é o do início ("Agora no Nexo"): o mesmo tamanho, peso e aperto. */
+.chat-head strong { font-size:var(--fs-lg); font-weight:650; letter-spacing:-.02em; }
 .chat-head strong span { margin-right:7px; font-size:var(--fs-xl); color:var(--faint); font-weight:400; }
 .chat-head strong .ico { width:17px; height:17px; margin:-3px 7px 0 0; color:var(--faint); }
 .chat-head button { display:inline-grid; place-items:center; min-width:var(--ctl-p); height:var(--ctl-p); font-size:var(--fs-md); padding:0; border-radius:var(--r-sm); }
@@ -956,7 +949,7 @@ button[aria-busy="true"] { cursor:progress; }
 .lightbox-barra button.icone-so { width:var(--ctl-m); height:var(--ctl-m); padding:0; }
 .lightbox-legenda { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:var(--muted); font-size:var(--fs-meta); }
 @media(min-width:1600px) { .call-indicator { display:flex; } .control-bar { padding-right:100px; } }
-@media(max-width:1250px) { #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
+@media(max-width:1250px) { #participantCount { display:none; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
 @media(max-width:1100px) { .app,.app.sem-chat { grid-template-columns:var(--col-lateral) minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,var(--chat-gaveta,360px)); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
 @media(max-width:760px) {
   :root { --barra:81px; }
@@ -1625,17 +1618,13 @@ input.interruptor:disabled,.toggle-line input[type="checkbox"]:disabled { opacit
 /* O desenho de cada botão responde antes do botão: o ícone sobe um pixel e cresce um pouco, com
    a mola dos avatares. É pouco de propósito -- uma barra que pula a cada passar de mouse cansa --,
    mas é o que diz "isto é um botão, e está vivo" sem precisar de cor nenhuma. */
-.control-btn::before,.channel-symbol,.self-profile>button.ghost svg,.topbar-actions button svg,.chat-head-actions button svg { transition:transform var(--dur) var(--curva-mola); }
+.control-btn::before,.channel-symbol,.topbar-actions button svg,.chat-head-actions button svg { transition:transform var(--dur) var(--curva-mola); }
 .control-btn:hover:not(:disabled)::before { transform:translateY(-1px) scale(1.08); }
 .channel:hover:not(:disabled) .channel-symbol { transform:scale(1.08); }
-.self-profile>button.ghost:hover:not(:disabled) svg,.topbar-actions button:hover:not(:disabled) svg,.chat-head-actions button:hover:not(:disabled) svg { transform:scale(1.1); }
-/* A engrenagem gira um quarto de volta, como quem diz "ajustes". */
-.config-engrenagem:hover:not(:disabled) svg { transform:rotate(45deg); }
+.topbar-actions button:hover:not(:disabled) svg,.chat-head-actions button:hover:not(:disabled) svg { transform:scale(1.1); }
 .cover-invite,.stage-empty-actions button { transition:background-color var(--dur) var(--curva),transform var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
 .cover-invite:hover:not(:disabled),.stage-empty-actions button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 8px 20px color-mix(in srgb, var(--accent) 22%, transparent); }
 .cover-invite:active:not(:disabled),.stage-empty-actions button:active:not(:disabled) { transform:scale(.97); box-shadow:none; }
-.self-avatar { transition:transform var(--dur) var(--curva-mola); }
-.self-perfil-btn:hover .self-avatar { transform:scale(1.06); }
 /* As abas da coluna das configurações: o ícone anda um pouco para dentro ao passar o mouse. */
 .config-fita .aba .ico { transition:transform var(--dur) var(--curva); }
 .config-fita .aba:hover .ico { transform:translateX(2px); }
@@ -1819,7 +1808,7 @@ h1#roomTitle { min-width:3ch; }
    A borda do avatar (pintarAvatar), o estilo do nome, e no quadradinho da plateia e na foto
    grande também a moldura e o fundo do cartão. O anel segue o formato de cada avatar: os da
    sala têm cantos arredondados, e não são círculos. */
-.member-avatar,.self-avatar { --borda-raio:11px; }
+.member-avatar { --borda-raio:11px; }
 .avatar-fallback { --borda-raio:13px; --borda-anel:2.5px; }
 .msg-avatar { --borda-raio:10px; }
 .densidade-compacta .msg-avatar { --borda-raio:8px; }

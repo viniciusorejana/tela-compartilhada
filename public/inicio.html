@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="/trilho.css">
   <link rel="stylesheet" href="/inicio.css">
   <link rel="stylesheet" href="/novidades.css">
+  <link rel="stylesheet" href="/eu.css">
   <link rel="stylesheet" href="/chassi.css">
 </head>
 <body>
@@ -61,12 +62,13 @@
       </nav>
       <div class="ini-rotulo"><span id="rotuloConversas">Mensagens diretas</span><button class="nx-icone pequeno" id="novaConversa" type="button" title="Nova conversa" aria-label="Começar uma conversa com um amigo"><svg class="ico ico-p" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
       <ul class="ini-conversas" id="listaConversas" aria-labelledby="rotuloConversas"></ul>
-      <div class="ini-eu">
-        <button class="ini-eu-botao" id="euBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Mudar o status">
-          <span id="euAvatar"></span>
-          <span class="ini-eu-textos"><strong id="euNome">Você</strong><small id="euStatus">Disponível</small></span>
+      <div class="ini-eu nx-eu">
+        <button class="ini-eu-botao nx-eu-perfil" id="euPerfilBtn" type="button" title="Personalizar perfil" aria-label="Personalizar perfil">
+          <span class="nx-eu-avatar" id="euAvatar"></span>
+          <span class="ini-eu-textos nx-eu-textos"><strong id="euNome">Você</strong><small id="euStatus">Disponível</small></span>
         </button>
-        <a class="nx-icone ini-eu-conta" href="/conta" title="Conta, senha e dados" aria-label="Conta, senha e dados"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
+        <button class="nx-eu-acao" id="euBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Mudar o status" aria-label="Mudar o status"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button>
+        <a class="nx-eu-acao nx-eu-engrenagem ini-eu-conta" href="/conta" title="Conta, senha e dados" aria-label="Conta, senha e dados"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
       </div>
     </aside>
 

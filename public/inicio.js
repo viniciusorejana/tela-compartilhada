@@ -703,6 +703,9 @@
     const frase = minha?.frase || perfil.social?.frase;
     $('euStatus').textContent = frase && (frase.texto || frase.emoji) ? `${frase.emoji || ''} ${frase.texto || ''}`.trim() : C.NOMES_DOS_STATUS[escolhido];
   }
+  // Avatar e nome levam ao perfil, como na sala (o botão "Personalizar perfil" da lateral); o status é o
+  // rosto ao lado, o mesmo da sala. As duas páginas têm o mesmo "eu" (eu.css), e cada peça faz a mesma coisa.
+  $('euPerfilBtn').onclick = () => irPara('perfil');
   $('euBtn').onclick = evento => {
     const atual = minhaPresencaEscolhida();
     abrirMenu(evento.currentTarget, [

@@ -190,6 +190,90 @@ async function conferirMoldura(pagina, aberta, L, A) {
   assert.equal(avatarInicio.r, '11px', 'e o início o desenha com os cantos arredondados, como a sala');
   console.log('PASS: o trilho, a lateral, a linha de cima e o "eu" têm a mesma posição e tamanho no início e na sala, de 1100 a 1920 px');
 
+  // ---------- 3b. O "eu" é a MESMA peça, e não duas parecidas ----------
+  // A troca de página anima o "eu" como um elemento só: um pixel de diferença no avatar, um peso de fonte ou um
+  // botão a mais é um tremor no meio dela. Cada peça se mede pelo lugar DENTRO da faixa e pelo que a desenha.
+  const PECAS_DO_EU = {
+    perfil: ['.ini-eu-botao', '.self-perfil-btn'], avatar: ['#euAvatar .nx-av-img', '.self-avatar'], nome: ['#euNome', '#selfName'],
+    estado: ['#euStatus', '#selfState'], status: ['#euBtn', '#presenceBtn'], engrenagem: ['.ini-eu-conta', '.config-engrenagem']
+  };
+  const medirEu = (alvo, lado) => alvo.evaluate(({ pecas, lado }) => {
+    const faixa = document.querySelector(lado ? '.self-profile' : '.ini-eu').getBoundingClientRect();
+    const arredonda = n => Math.round(n * 10) / 10;
+    return Object.fromEntries(Object.entries(pecas).map(([nome, par]) => {
+      const el = document.querySelector(par[lado]);
+      const r = el.getBoundingClientRect(), c = getComputedStyle(el);
+      return [nome, { x: arredonda(r.x - faixa.x), y: arredonda(r.y - faixa.y), w: arredonda(r.width), h: arredonda(r.height), fonte: c.fontSize, peso: c.fontWeight, raio: c.borderTopLeftRadius, cor: c.color }];
+    }));
+  }, { pecas: PECAS_DO_EU, lado });
+  const euInicio = await medirEu(inicio, 0);
+  const euSala = await medirEu(pagina, 1);
+  for (const peca of Object.keys(PECAS_DO_EU)) {
+    // O texto do estado é de cada página ("Disponível", "Mic mudo"): o que tem de ser igual é o lugar, o tamanho e o desenho.
+    assert.deepEqual(euInicio[peca], euSala[peca], `o "${peca}" do "eu" é o mesmo nas duas páginas: ${JSON.stringify([euInicio[peca], euSala[peca]])}`);
+  }
+  assert.equal(await inicio.locator('.ini-eu .nx-eu-acao').count(), 2, 'o início tem os dois botões de ícone, como a sala');
+  assert.equal(await pagina.locator('.self-profile .nx-eu-acao').count(), 2, 'e a sala também');
+  // O ponto do estado: o mesmo tamanho, no mesmo canto, com o anel da cor do FUNDO da faixa (e não um `#14141c` fixo).
+  const pontoInicio = await inicio.locator('#euAvatar .nx-av-status').evaluate(el => {
+    const r = el.getBoundingClientRect(), a = el.closest('.nx-av').getBoundingClientRect(), c = getComputedStyle(el);
+    return { w: r.width, h: r.height, direita: Math.round((a.right - r.right) * 10) / 10, baixo: Math.round((a.bottom - r.bottom) * 10) / 10, sombra: c.boxShadow, fundo: c.backgroundColor };
+  });
+  const pontoSala = await pagina.locator('.self-avatar').evaluate(el => {
+    const c = getComputedStyle(el, '::after'), a = el.getBoundingClientRect();
+    return { w: parseFloat(c.width), h: parseFloat(c.height), direita: parseFloat(c.right), baixo: parseFloat(c.bottom), sombra: c.boxShadow, fundo: c.backgroundColor, avatar: a.width };
+  });
+  assert.deepEqual([pontoInicio.w, pontoInicio.h, pontoInicio.direita, pontoInicio.baixo], [pontoSala.w, pontoSala.h, pontoSala.direita, pontoSala.baixo], `o ponto do estado tem o mesmo tamanho e canto: ${JSON.stringify([pontoInicio, pontoSala])}`);
+  assert.equal(pontoInicio.sombra, pontoSala.sombra, 'e o mesmo anel');
+  assert.equal(pontoInicio.fundo, pontoSala.fundo, 'e a mesma cor');
+  const fundoDaFaixa = await inicio.locator('.ini-eu').evaluate(el => getComputedStyle(el).backgroundColor);
+  assert.ok(pontoInicio.sombra.includes(fundoDaFaixa), `o anel do ponto é da cor do fundo da faixa (${fundoDaFaixa}): ${pontoInicio.sombra}`);
+  // E, por fim, o desenho em si: o recorte do avatar com o ponto, do nome e dos dois botões, pixel por pixel.
+  const recorte = async (alvo, seletores, folga) => {
+    const caixa = await alvo.evaluate(({ seletores, folga }) => {
+      const r = seletores.map(s => document.querySelector(s).getBoundingClientRect());
+      const x0 = Math.min(...r.map(c => c.left)) - folga, y0 = Math.min(...r.map(c => c.top)) - folga;
+      return { x: x0, y: y0, width: Math.max(...r.map(c => c.right)) + folga - x0, height: Math.max(...r.map(c => c.bottom)) + folga - y0 };
+    }, { seletores, folga });
+    return alvo.screenshot({ clip: caixa, animations: 'disabled' });
+  };
+  // Sem o mouse em cima: o passar do mouse é outro desenho.
+  await inicio.mouse.move(700, 400); await pagina.mouse.move(700, 400);
+  // A diferença é medida no navegador (sem biblioteca de PNG): o maior desvio de um canal em qualquer pixel. Até 2 de 255 é
+  // o arredondamento da cor, que o olho não vê; mais que isso é um desenho diferente.
+  const aferidor = await contexto.newPage();
+  const desvio = (a, b) => aferidor.evaluate(async ([x, y]) => {
+    const dados = async b64 => { const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob()); const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height); };
+    const A = await dados(x), B = await dados(y);
+    if (A.width !== B.width || A.height !== B.height) return 255;
+    let maior = 0;
+    for (let i = 0; i < A.data.length; i++) maior = Math.max(maior, Math.abs(A.data[i] - B.data[i]));
+    return maior;
+  }, [a.toString('base64'), b.toString('base64')]);
+  for (const [nome, [deIni, daSala], folga] of [['o avatar e o ponto', [['#euAvatar'], ['.self-avatar']], 5], ['o nome', [['#euNome'], ['#selfName']], 2], ['o rosto do estado', [['#euBtn'], ['#presenceBtn']], 3], ['a engrenagem', [['.ini-eu-conta'], ['.config-engrenagem']], 3]]) {
+    const a = await recorte(inicio, deIni, folga), b = await recorte(pagina, daSala, folga);
+    const maior = await desvio(a, b);
+    assert.ok(maior <= 2, `${nome} se desenha igual nas duas páginas, pixel por pixel (maior desvio: ${maior} de 255)`);
+  }
+  await aferidor.close();
+  // O que fica ao redor do "eu" e o olho também segue: onde começa o título da linha de cima (e o seu tamanho), o rótulo da
+  // seção na lateral (a letra e o espaçamento) e o título da coluna da direita.
+  const topoIni =await inicio.evaluate(() => { const t = document.querySelector('.ini-titulo'), r = t.getBoundingClientRect(), c = getComputedStyle(t); return { x: r.x, fonte: c.fontSize, peso: c.fontWeight }; });
+  const topoSala = await pagina.evaluate(() => { const t = document.querySelector('#roomTitle'), r = document.querySelector('.room-id').getBoundingClientRect(), c = getComputedStyle(t); return { x: r.x, fonte: c.fontSize, peso: c.fontWeight }; });
+  assert.deepEqual(topoIni, topoSala, `o título da linha de cima começa no mesmo ponto e tem o mesmo tamanho: ${JSON.stringify([topoIni, topoSala])}`);
+  const direitaIni = await inicio.evaluate(() => { const t = document.querySelector('.ini-agora-titulo'), c = getComputedStyle(t); return { fonte: c.fontSize, peso: c.fontWeight, espaco: c.letterSpacing }; });
+  const direitaSala = await pagina.evaluate(() => { const c = getComputedStyle(document.querySelector('.chat-head strong')); return { fonte: c.fontSize, peso: c.fontWeight, espaco: c.letterSpacing }; });
+  assert.deepEqual(direitaIni, direitaSala, `o título da coluna da direita é o mesmo: ${JSON.stringify([direitaIni, direitaSala])}`);
+  const rotulo = (alvo, seletor) => alvo.evaluate(s => {
+    const el = document.querySelector(s), c = getComputedStyle(el);
+    const no = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) }).nextNode();
+    const intervalo = document.createRange(); intervalo.selectNodeContents(no);
+    return { letra: Math.round(intervalo.getBoundingClientRect().x * 10) / 10, fonte: c.fontSize, peso: c.fontWeight, espaco: c.letterSpacing };
+  }, seletor);
+  const rotuloIni = await rotulo(inicio, '.ini-rotulo'), rotuloSala = await rotulo(pagina, '.section-caption');
+  assert.deepEqual(rotuloIni, rotuloSala, `o rótulo da seção da lateral começa na mesma letra e tem o mesmo desenho: ${JSON.stringify([rotuloIni, rotuloSala])}`);
+  console.log('PASS: o "eu" do início e o da sala são a mesma peça (posição, tamanho, fonte, ponto e pixels), e o título de cima, o da direita e os rótulos da lateral começam no mesmo ponto');
+
   // O celular: o trilho e a lateral são uma gaveta só, como a do início. Com outra conta: uma conta só fica numa sala
   // por vez, e entrar com a Ana de novo mandaria a sala da Ana embora.
   const celular = await comConta(bia, { viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36' });

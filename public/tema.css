@@ -84,6 +84,10 @@
      Quem mexe num destes números mexe nas duas páginas (inicio.css, sala.css). */
   --chassi-trilho:64px; --chassi-trilho-item:44px; --chassi-topo:56px; --chassi-eu:64px;
   --chassi-lateral:232px; --chassi-direita:292px;
+  /* E o que mora DENTRO da moldura e o olho também acompanha: o recuo do que está na linha de cima (o
+     título começa no mesmo ponto nas duas páginas) e a calha da lista da lateral (os itens começam na
+     mesma borda, e os rótulos de seção, na mesma letra). */
+  --chassi-topo-lado:20px; --chassi-calha:8px;
 }
 @media (max-width:1250px) { :root { --chassi-lateral:208px; --chassi-direita:266px; } }
 @media (min-width:1600px) { :root { --chassi-lateral:248px; --chassi-direita:320px; } }

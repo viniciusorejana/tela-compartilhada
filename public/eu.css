@@ -1,0 +1,68 @@
+/* O "eu": a faixa de baixo da lateral -- o seu avatar, o seu nome, o seu estado e os botões.
+ *
+ * É a MESMA peça no início (`.ini-eu`) e na sala (`.self-profile`). A troca de página a anima como um
+ * elemento só (chassi.css, `nx-eu`), e por isso qualquer diferença entre as duas -- três pixels no
+ * avatar, um peso de fonte, um botão a mais ou a menos, o anel do ponto numa cor que não é a do
+ * fundo -- aparece como um tremor no meio da transição. O desenho mora aqui, uma vez; as páginas só
+ * dão o conteúdo (docs/interface.md, 4.20).
+ *
+ * As duas páginas têm bases de botão diferentes (a da sala pinta todo `button`, a do início se defende
+ * com `:where`), então cada regra diz tudo o que importa em vez de herdar o que sobrar. As classes de
+ * cada página (`.self-*`, `.ini-eu-*`) continuam, para o JavaScript e os testes; só o desenho saiu delas.
+ * Cor sempre pelos tokens. */
+
+.nx-eu { --eu-fundo:var(--bg-0); --nx-chao:var(--eu-fundo); container:eu / inline-size; flex:none; display:flex; align-items:center; gap:4px; min-height:var(--chassi-eu); padding:8px; background:var(--eu-fundo); }
+
+/* Avatar e nome são o botão do perfil, como o painel de usuário do Discord: é onde a mão vai quando se
+   quer mudar como aparece. */
+.nx-eu .nx-eu-perfil { flex:1; min-width:0; display:flex; align-items:center; justify-content:flex-start; gap:10px; width:auto; min-height:0; margin:0; padding:5px 7px; border:0; border-radius:var(--r-md); box-shadow:none; background:transparent; color:var(--text); font-size:var(--fs-sm); font-weight:500; text-align:left; cursor:pointer; transition:background-color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.nx-eu .nx-eu-perfil:hover:not(:disabled) { background:rgb(var(--tinta) / 5%); }
+.nx-eu .nx-eu-perfil:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 8%); }
+
+/* O avatar: 34 px de cantos arredondados. Na sala é o próprio `.self-avatar` (um <span> pintado por
+   perfil.js); no início é o <span> que leva o `.nx-av` do cartão. O resultado é o mesmo. */
+.nx-eu .nx-eu-avatar { --borda-raio:11px; position:relative; flex:none; display:grid; place-items:center; width:34px; height:34px; border-radius:11px; transition:transform var(--dur) var(--curva-mola); }
+.nx-eu .nx-eu-perfil:hover .nx-eu-avatar { transform:scale(1.06); }
+/* O do início já vem com o texto do cartão; o da sala o recebe daqui: o mesmo tamanho e peso das iniciais. */
+.nx-eu .self-avatar { color:var(--sobre-cor); font-size:calc(34px * .36); font-weight:750; line-height:1; }
+.nx-eu .self-avatar.com-marca { font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",system-ui,sans-serif; font-weight:400; }
+.nx-eu .self-avatar.com-foto { color:transparent; }
+/* O anel que separa a imagem da borda animada do cartão é da cor do FUNDO da faixa -- e não do
+   `#14141c` fixo do cartão, que no tema claro virava um aro escuro em volta do avatar. */
+.nx-eu .nx-av > .nx-av-img { box-shadow:0 0 0 var(--anel) var(--eu-fundo); }
+
+/* O ponto do estado, igual nos dois avatares: o `.nx-av-status` do cartão (início) e o `::after` do
+   `.self-avatar` (sala). Verde, âmbar com a lua, vermelho com o traço, anel vazio. O anel de fora, a lua e o
+   traço são PINTADOS com a cor do fundo -- o pedaço comido e a barra se juntam ao anel. */
+.nx-eu .self-avatar::after,.nx-eu .nx-av-status { content:''; position:absolute; z-index:3; right:.7px; bottom:.7px; width:10px; height:10px; min-width:0; min-height:0; box-sizing:border-box; border:0; border-radius:50%; background:var(--online); box-shadow:0 0 0 2px var(--eu-fundo); -webkit-mask:none; mask:none; }
+.nx-eu .self-avatar[data-status="ausente"]::after,.nx-eu .nx-av-status[data-status="ausente"] { background:radial-gradient(circle at 30% 30%,var(--eu-fundo) 0 32%,transparent 34%),var(--aviso); }
+.nx-eu .self-avatar[data-status="ocupado"]::after,.nx-eu .nx-av-status[data-status="ocupado"] { background:linear-gradient(var(--eu-fundo),var(--eu-fundo)) center / 6px 2px no-repeat,var(--danger); }
+.nx-eu .self-avatar[data-status="offline"]::after,.nx-eu .nx-av-status[data-status="offline"] { background:var(--eu-fundo); box-shadow:inset 0 0 0 2px var(--faint),0 0 0 2px var(--eu-fundo); }
+.nx-eu .nx-av-status::after { display:none; }
+
+.nx-eu .nx-eu-textos { min-width:0; flex:1; display:grid; }
+.nx-eu .nx-eu-textos strong { display:block; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); font-weight:650; }
+.nx-eu .nx-eu-textos small { display:block; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); font-weight:500; }
+
+/* Os botões de ícone, do mesmo tamanho nas duas páginas: o estado (o rosto) e a engrenagem. */
+.nx-eu .nx-eu-acao { flex:none; display:inline-grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); min-height:0; margin:0; padding:0; border:0; border-radius:var(--r-sm); box-shadow:none; background:transparent; color:var(--muted); font-size:17px; font-weight:500; text-decoration:none; cursor:pointer; transition:background-color var(--dur) var(--curva),color var(--dur) var(--curva),transform var(--dur-rapida) var(--curva); }
+.nx-eu .nx-eu-acao:hover:not(:disabled) { background:var(--bg-3); color:var(--text); }
+.nx-eu .nx-eu-acao:active:not(:disabled) { transform:scale(.97); }
+.nx-eu .nx-eu-acao svg { width:17px; height:17px; transition:transform var(--dur) var(--curva-mola); }
+.nx-eu .nx-eu-acao:hover:not(:disabled) svg { transform:scale(1.1); }
+/* A engrenagem gira um quarto de volta, como quem diz "ajustes". */
+.nx-eu .nx-eu-engrenagem:hover:not(:disabled) svg { transform:rotate(45deg) scale(1.1); }
+
+/* Na lateral do computador (208 a 248 px) a faixa tem três peças e o texto aperta: o botão do perfil
+   fica mais justo e os de ícone um pouco mais estreitos. Na gaveta do celular, que é mais larga, volta o
+   desenho folgado. A medida é a da própria faixa, e não a da janela -- por isso as duas páginas escolhem
+   sempre o mesmo. */
+@container eu (max-width:260px) {
+  .nx-eu .nx-eu-perfil { gap:8px; padding:6px 4px; }
+  .nx-eu .nx-eu-acao { width:28px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .nx-eu .nx-eu-avatar,.nx-eu .nx-eu-acao svg { transition:none; }
+  .nx-eu .nx-eu-perfil:hover .nx-eu-avatar,.nx-eu .nx-eu-acao:hover:not(:disabled) svg { transform:none; }
+}
