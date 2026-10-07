@@ -77,7 +77,16 @@
   /* Movimento: rápido para o que responde ao dedo, um pouco mais para o que aparece. */
   --dur-rapida:110ms; --dur:170ms; --dur-lenta:240ms;
   --curva:cubic-bezier(.2,.8,.2,1); --curva-mola:cubic-bezier(.34,1.4,.64,1);
+
+  /* A moldura (docs/plano-continuidade.md): o início de quem tem conta e a sala são o mesmo lugar em
+     dois modos, e as bordas que o olho segue -- o fim do trilho, o da lateral, o começo da coluna da
+     direita, a linha de cima, o "eu" de baixo -- ficam exatamente onde estavam na troca de página.
+     Quem mexe num destes números mexe nas duas páginas (inicio.css, sala.css). */
+  --chassi-trilho:64px; --chassi-trilho-item:44px; --chassi-topo:56px; --chassi-eu:64px;
+  --chassi-lateral:232px; --chassi-direita:292px;
 }
+@media (max-width:1250px) { :root { --chassi-lateral:208px; --chassi-direita:266px; } }
+@media (min-width:1600px) { :root { --chassi-lateral:248px; --chassi-direita:320px; } }
 
 /* O tema claro de partida (o "Claro"). tema.js recalcula tudo isto para os outros temas e
    para as cores exatas; estes valores são os que valem se o cálculo não acontecer. */
@@ -121,8 +130,11 @@ html.trocando-tema,html.trocando-tema *,html.trocando-tema *::before,html.trocan
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; transition-delay:0s!important; scroll-behavior:auto!important; }
   html.trocando-tema,html.trocando-tema * { transition:none!important; }
+  /* A troca de página (chassi.css) mora em pseudo-elementos que o `*` acima não alcança. */
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*) { animation-duration:1ms!important; animation-delay:0s!important; }
 }
 html.menos-movimento *,html.menos-movimento *::before,html.menos-movimento *::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; transition-delay:0s!important; scroll-behavior:auto!important; }
+html.menos-movimento::view-transition-group(*),html.menos-movimento::view-transition-old(*),html.menos-movimento::view-transition-new(*) { animation-duration:1ms!important; animation-delay:0s!important; }
 
 /* Texto que só o leitor de tela lê: o rótulo continua lá, a tela mostra só o ícone. */
 .so-leitor { position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }

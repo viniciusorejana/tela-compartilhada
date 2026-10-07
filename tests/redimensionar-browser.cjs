@@ -157,7 +157,10 @@ async function arrastar(pagina, de, ate) {
   await pagina.setViewportSize({ width: 1200, height: 800 });
   await pagina.waitForTimeout(400);
   const cabe = await largura(pagina);
-  assert.ok(cabe <= 1200 - 224 - 420 + 1 && cabe >= 240, `o chat cede para o palco ter chão (${cabe} px)`);
+  // A lateral toma o que a moldura manda para esta janela (208 px a 1200, mais os 64 do trilho para quem tem conta).
+  const lateral = await pagina.locator('.room-sidebar').evaluate(el => Math.round(el.getBoundingClientRect().width));
+  assert.ok(lateral >= 200, `a lateral está aberta (${lateral} px)`);
+  assert.ok(cabe <= 1200 - lateral - 420 + 1 && cabe >= 240, `o chat cede para o palco ter chão (${cabe} px, com a lateral em ${lateral} px)`);
   await pagina.setViewportSize({ width: 1440, height: 900 });
   await pagina.waitForTimeout(400);
   assert.equal(await largura(pagina), 720, 'e volta a ter o que se escolheu quando a janela alarga');

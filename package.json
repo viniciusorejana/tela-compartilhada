@@ -17,6 +17,7 @@
     "test:contas": "node tests/contas-browser.cjs",
     "test:inicio": "node tests/inicio-browser.cjs",
     "test:camada": "node tests/camada-browser.cjs",
+    "test:chassi": "node tests/chassi-browser.cjs",
     "test:foto": "node tests/foto-browser.cjs",
     "test:status": "node tests/status-browser.cjs",
     "test:cor": "node tests/cor-browser.cjs",

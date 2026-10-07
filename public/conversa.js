@@ -236,6 +236,8 @@
           textos.append(elemento('strong', '', minha ? `Você chamou para #${m.sala}` : `Chamou você para #${m.sala}`), elemento('small', '', 'Convite para uma sala do Nexo'));
           const entrar = elemento('a', 'nx-dm-convite-entrar', 'Entrar na sala');
           entrar.href = `/${encodeURIComponent(m.sala)}/sala`;
+          // Clicar em "Entrar na sala" é dizer que quer entrar: a sala não repete a pergunta (chassi.js).
+          entrar.addEventListener('click', evento => { if (!evento.button && !evento.ctrlKey && !evento.metaKey && !evento.shiftKey) root.NexoChassi?.marcarEntrada(m.sala); });
           convite.append(textos, entrar);
           linha.append(convite);
         } else {

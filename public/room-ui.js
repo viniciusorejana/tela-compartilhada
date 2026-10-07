@@ -8,6 +8,11 @@
   let collecting = false;
 
   $('sidebarRoom').textContent = roomCode;
+  // O alto da lateral de quem tem conta diz onde a pessoa está: o quadrado da cor da sala, o código e,
+  // embaixo, quantas pessoas e há quanto tempo (renderRoom). A marca do Nexo está no trilho.
+  $('salaIdNome').textContent = `#${roomCode}`;
+  $('salaIdTile').textContent = window.NexoTrilho.sigla(String(roomCode).toLowerCase());
+  $('salaIdTile').style.setProperty('--cor-sala', NexoPerfil.corDoNome(String(roomCode).toLowerCase()));
 
   function closeSidebar() {
     appRoot.classList.remove('sidebar-open');
@@ -130,6 +135,7 @@
     // aba conta sozinha, e a troca não se nota.
     const desde = window.NexoTempo?.desdeDe('self') ?? startedAt;
     $('sessionClock').textContent = joined && desde ? `Você está há ${NexoTempo.relogio(Date.now() - desde)}` : 'Sua sessão começa aqui';
+    $('salaIdMeta').textContent = joined ? `${total} ${total === 1 ? 'pessoa' : 'pessoas'}${desde ? ` · há ${NexoTempo.relogio(Date.now() - desde)}` : ''}` : 'Entrando na sala…';
     $('selfName').textContent = myName || 'Seu perfil';
     // A borda (pintarAvatar) e o estilo do nome do cartão, para a pessoa se ver como a sala a vê.
     pintarAvatar($('selfAvatar'), myName || '?', perfilDe('self'));

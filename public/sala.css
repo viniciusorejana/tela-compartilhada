@@ -38,7 +38,15 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
    conteúdo do chat vazava da coluna ainda estreita durante o deslize, a página ficava mais larga
    que a janela, e o foco no campo do chat a rolava 166 px para o lado: a lateral "piscava" e a
    tela inteira tremia ao abrir o chat. */
-.app { --col-lateral:224px; --col-chat-aberto:292px; --col-chat:var(--col-chat-aberto); display:grid; width:100%; height:100vh; height:100dvh; overflow:clip; grid-template-columns:var(--col-lateral) minmax(0,1fr) var(--col-chat); grid-template-rows:64px minmax(0,1fr) var(--barra); grid-template-areas:"sidebar topo chat" "sidebar palco chat" "sidebar barra chat"; }
+/* As larguras e a linha de cima são as da moldura (tema.css, `--chassi-*`): o início de quem tem conta
+   usa os mesmos números, e é isso que deixa a troca de página sem pulo (docs/plano-continuidade.md).
+   A "lateral" da grade é o trilho das salas MAIS a lateral, porque o trilho mora dentro do
+   `.room-sidebar` -- assim recolher a barra, o teatro, o foco no chat e a gaveta do celular continuam
+   valendo sem reescrever as listas de áreas. O trilho só existe para quem tem conta (chassi.js põe
+   `com-conta` no <html> antes da primeira pintura); sem ele a coluna é só a lateral. */
+:root { --trilho-ativo:0px; }
+html.com-conta { --trilho-ativo:var(--chassi-trilho); }
+.app { --col-lateral:calc(var(--trilho-ativo) + var(--chassi-lateral)); --col-chat-aberto:var(--chassi-direita); --col-chat:var(--col-chat-aberto); display:grid; width:100%; height:100vh; height:100dvh; overflow:clip; grid-template-columns:var(--col-lateral) minmax(0,1fr) var(--col-chat); grid-template-rows:var(--chassi-topo) minmax(0,1fr) var(--barra); grid-template-areas:"sidebar topo chat" "sidebar palco chat" "sidebar barra chat"; }
 /* O conteúdo do chat apaga rápido antes de a coluna estreitar, para ninguém ver o texto se
    espremendo, e só fica `hidden` quando a coluna já fechou -- e, aberto, volta na hora. Durante o
    deslize ele já tem a largura final (`--col-chat-aberto`) e a coluna o revela, cortado: o texto
@@ -50,12 +58,25 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
   .app.sem-chat .chat { visibility:hidden; border-left-color:transparent; transition:visibility 0s linear var(--dur-lenta),border-color 0s linear var(--dur-lenta); }
   .app.sem-chat .chat > * { opacity:0; transition-duration:var(--dur-rapida); }
 }
-.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:column; background:var(--bg-1); border-right:1px solid var(--line); position:relative; }
+/* Uma linha: o trilho das salas (trilho.css) e o conteúdo da lateral, que é uma coluna. */
+.room-sidebar { grid-area:sidebar; min-height:0; display:flex; flex-direction:row; background:var(--bg-1); border-right:1px solid var(--line); position:relative; }
+.lateral-conteudo { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+html:not(.com-conta) .room-sidebar > .trilho { display:none; }
+/* A linha de cima da lateral é a da moldura: 56 px, e a borda atravessa as três colunas. Com conta
+   diz onde a pessoa está (a marca do Nexo está no trilho); sem conta, que não tem trilho, é a marca e
+   as novidades de sempre. */
+html.com-conta .lateral-topo > :is(.workspace-name,.novidades-da-sala) { display:none; }
+html:not(.com-conta) .lateral-topo > .sala-id { display:none; }
+.sala-id { flex:1; min-width:0; display:flex; align-items:center; gap:10px; padding-left:12px; }
+.sala-id-tile { flex:none; display:grid; place-items:center; width:34px; height:34px; border-radius:var(--r-md); background:var(--cor-sala,var(--bg-3)); color:var(--sobre-cor); font-size:var(--fs-sm); font-weight:750; letter-spacing:.02em; }
+.sala-id-textos { display:grid; min-width:0; line-height:1.25; }
+.sala-id-textos strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-md); font-weight:650; }
+.sala-id-textos small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; }
 /* A linha da marca: o link de voltar ao início e, ao lado, as novidades. Os dois são itens da
    mesma linha -- a estrela já foi posta por cima, e passava sobre "seu espaço" na lateral
    estreita. Onde a frase não cabe ao lado de NEXO, ela desce para baixo dele (a pergunta é a
    largura da LATERAL, que muda com a janela, recolhe e vira gaveta: daí o container). */
-.lateral-topo { height:64px; flex:none; display:flex; align-items:center; gap:4px; padding-right:12px; border-bottom:1px solid var(--line); container:marca / inline-size; }
+.lateral-topo { height:var(--chassi-topo); flex:none; display:flex; align-items:center; gap:4px; padding-right:12px; border-bottom:1px solid var(--line); container:marca / inline-size; }
 .workspace-name { flex:1; min-width:0; align-self:stretch; display:flex; align-items:center; gap:9px; margin:8px 0 8px 8px; padding:0 8px 0 12px; border-radius:var(--r-md); }
 .workspace-name img { flex:none; transition:transform var(--dur) var(--curva-mola); }
 .workspace-name:hover img { transform:scale(1.06) rotate(-4deg); }
@@ -131,10 +152,11 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
 .connection-acoes .ico { width:17px; height:17px; transition:transform var(--dur) var(--curva-mola); }
 .connection-acoes > button:hover:not(:disabled) .ico { transform:scale(1.12); }
 .self-profile>button.ghost { flex:none; display:inline-grid; place-items:center; width:var(--ctl-p); height:var(--ctl-p); padding:0; border-radius:var(--r-sm); font-size:17px; }
-.self-profile { display:flex; gap:4px; align-items:center; padding:12px 10px; background:var(--bg-0); min-height:70px; }
+/* O "eu" de baixo é o da moldura: 64 px, o avatar de 34 -- o mesmo desenho e no mesmo lugar do início. */
+.self-profile { display:flex; gap:4px; align-items:center; padding:8px; background:var(--bg-0); min-height:var(--chassi-eu); }
 /* Avatar e nome são o botão do perfil, como o painel de usuário do Discord: é onde a mão vai
    quando se quer mudar como aparece. */
-.self-perfil-btn { flex:1; min-width:0; display:flex; align-items:center; gap:9px; padding:6px 7px; background:transparent; color:var(--text); text-align:left; border-radius:var(--r-md); }
+.self-perfil-btn { flex:1; min-width:0; display:flex; align-items:center; gap:10px; padding:5px 7px; background:transparent; color:var(--text); text-align:left; border-radius:var(--r-md); }
 .self-perfil-btn:hover:not(:disabled) { background:rgb(var(--tinta) / 5.1%); }
 .self-perfil-btn:active:not(:disabled) { transform:none; background:rgb(var(--tinta) / 7.8%); }
 .self-textos { min-width:0; flex:1; }
@@ -146,13 +168,13 @@ input::placeholder,textarea::placeholder { color:var(--faint); }
 .self-profile { container:eu / inline-size; }
 #selfState { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #selfState .estado-curto { display:none; }
-@container eu (max-width:240px) {
+@container eu (max-width:260px) {
   #selfState .estado-longo { display:none; }
   #selfState .estado-curto { display:inline; }
   .self-perfil-btn { gap:8px; padding:6px 4px; }
   .self-profile > button.ghost { width:28px; }
 }
-.self-avatar { background:var(--accent-hi); width:32px; height:32px; }
+.self-avatar { background:var(--accent-hi); width:34px; height:34px; }
 .topbar { grid-area:topo; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 24px; border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
 .room-id { display:flex; align-items:center; gap:12px; min-width:0; }
 .topbar-symbol { color:var(--text-3); font-size:22px; }
@@ -419,9 +441,9 @@ h1#roomTitle { font-size:14px; font-weight:650; white-space:nowrap; overflow:hid
 @keyframes pulsa { 50% { opacity:.35; } }
 .call-indicator { display:none; align-items:center; gap:7px; color:var(--faint); font-size:var(--fs-rotulo); letter-spacing:.08em; margin-right:auto; }
 .call-indicator i { width:5px; height:5px; background:var(--online); border-radius:50%; }
-#enableSoundBtn { position:fixed; left:50%; top:73px; transform:translateX(-50%); z-index:65; box-shadow:0 8px 35px #0008; white-space:nowrap; }
-.chat { grid-area:chat; position:relative; min-height:0; min-width:0; display:grid; grid-template-rows:64px auto minmax(0,1fr) auto auto auto; background:var(--bg-1); border-left:1px solid var(--line); }
-.chat.musica { grid-template-rows:64px minmax(0,1fr) auto auto; }
+#enableSoundBtn { position:fixed; left:50%; top:calc(var(--chassi-topo) + 17px); transform:translateX(-50%); z-index:65; box-shadow:0 8px 35px #0008; white-space:nowrap; }
+.chat { grid-area:chat; position:relative; min-height:0; min-width:0; display:grid; grid-template-rows:var(--chassi-topo) auto minmax(0,1fr) auto auto auto; background:var(--bg-1); border-left:1px solid var(--line); }
+.chat.musica { grid-template-rows:var(--chassi-topo) minmax(0,1fr) auto auto; }
 .chat:not(.musica)>.chat-head { grid-row:1; }
 .chat:not(.musica)>.chat-pinned-bar { grid-row:2; }
 .chat:not(.musica)>.chat-msgs { grid-row:3; }
@@ -657,6 +679,9 @@ html.menos-movimento .som-btn.meu-tocando::after { display:none; }
 .msg-menu,.presence-menu { transition:opacity var(--dur-rapida) var(--curva),transform var(--dur-rapida) var(--curva),display var(--dur-rapida) allow-discrete; }
 .msg-menu.hidden,.presence-menu.hidden { opacity:0; transform:translateY(-3px); pointer-events:none; }
 #nameGate { z-index:90; background:radial-gradient(ellipse at 50% 40%,#34304c88,transparent 65%),#101119f5; }
+/* Quem clicou em "Entrar" no início já disse que quer entrar: o portão nem aparece no primeiro quadro, e
+   a sala abre direto (chassi.js, sala.js). Se a conta não responder, sala.js tira a classe e ele volta. */
+html.entrando-direto #nameGate { display:none!important; }
 .gate-card { width:min(100%,430px); padding:37px; border:1px solid color-mix(in srgb, var(--accent) 11%, transparent); background:var(--bg-2); border-radius:var(--r-xl); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
 .gate-mark { margin-bottom:21px; }
 .gate-card .eyebrow { font-size:var(--fs-rotulo); }
@@ -926,14 +951,14 @@ button[aria-busy="true"] { cursor:progress; }
 .lightbox-barra button { min-height:var(--ctl-m); padding:0 15px; background:var(--bg-3); color:var(--text); }
 .lightbox-barra button.icone-so { width:var(--ctl-m); height:var(--ctl-m); padding:0; }
 .lightbox-legenda { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:var(--muted); font-size:var(--fs-meta); }
-@media(min-width:1600px) { .call-indicator { display:flex; } .control-bar { padding-right:100px; } .app { --col-lateral:240px; --col-chat-aberto:320px; } }
-@media(max-width:1250px) { .app { --col-lateral:200px; --col-chat-aberto:266px; } #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
-@media(max-width:1100px) { .app { --col-lateral:210px; } .app,.app.sem-chat { grid-template-columns:var(--col-lateral) minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,var(--chat-gaveta,360px)); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
+@media(min-width:1600px) { .call-indicator { display:flex; } .control-bar { padding-right:100px; } }
+@media(max-width:1250px) { #participantCount { display:none; } .topbar { padding:0 18px; } .palco-area { padding:18px 18px 0; } .participants-heading>span { display:none; } .control-btn { min-width:55px; padding:8px; } .control-bar { gap:6px; padding:10px; } }
+@media(max-width:1100px) { .app,.app.sem-chat { grid-template-columns:var(--col-lateral) minmax(0,1fr); grid-template-areas:"sidebar topo" "sidebar palco" "sidebar barra"; } #chatToggle { display:inline-flex; align-items:center; } .chat { position:fixed; top:0; right:0; bottom:0; width:min(100%,var(--chat-gaveta,360px)); z-index:70; box-shadow:-20px 0 65px #0005; transform:translateX(110%); visibility:hidden; transition:transform .2s,visibility .2s; } .chat.aberto { transform:translateX(0); visibility:visible; } }
 @media(max-width:760px) {
   :root { --barra:81px; }
-  .app,.app.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-rows:57px minmax(0,1fr) calc(var(--barra) + env(safe-area-inset-bottom)); grid-template-areas:"topo" "palco" "barra"; padding-top:env(safe-area-inset-top); }
-  .server-rail { display:none; }
-  .room-sidebar { display:none; position:fixed; inset:57px 0 calc(var(--barra) + env(safe-area-inset-bottom)); width:min(300px,88vw); z-index:68; box-shadow:0 0 0 100vmax #0809109c; }
+  .app,.app.sem-chat { grid-template-columns:minmax(0,1fr); grid-template-rows:var(--chassi-topo) minmax(0,1fr) calc(var(--barra) + env(safe-area-inset-bottom)); grid-template-areas:"topo" "palco" "barra"; padding-top:env(safe-area-inset-top); }
+  /* A gaveta traz o trilho junto com a lateral, como a do início. */
+  .room-sidebar { display:none; position:fixed; inset:var(--chassi-topo) 0 calc(var(--barra) + env(safe-area-inset-bottom)); width:min(calc(300px + var(--trilho-ativo)),92vw); z-index:68; box-shadow:0 0 0 100vmax #0809109c; }
   .app.sidebar-open .room-sidebar { display:flex; }
   #sidebarToggle { display:inline-flex; font-size:18px; padding:7px; }
   .topbar-symbol { display:none; }
@@ -1298,9 +1323,9 @@ html.menos-movimento .room-reaction { animation:reacao-discreta 1.9s ease-out fo
 html.menos-movimento :is(.room-reaction-emoji,.room-reaction-nome) { animation:none!important; }
 /* Na sala o canto de baixo é do chat e da barra de controles; o aviso do download desce do
    topo, abaixo da barra de cima, como o de pedido de entrada. */
-.nexo-toasts { top:76px; bottom:auto; right:18px; }
-@media(max-width:560px) { .nexo-toasts { top:calc(64px + env(safe-area-inset-top)); bottom:auto; } }
-.join-request-notice { position:fixed; z-index:110; right:18px; top:72px; width:min(350px,calc(100vw - 28px)); display:flex; align-items:center; gap:12px; padding:12px; border:1px solid color-mix(in srgb, var(--accent-hi) 27.1%, transparent); border-radius:12px; background:color-mix(in srgb, var(--bg-1) 96%, transparent); box-shadow:0 16px 45px #0009; }
+.nexo-toasts { top:calc(var(--chassi-topo) + 20px); bottom:auto; right:18px; }
+@media(max-width:560px) { .nexo-toasts { top:calc(var(--chassi-topo) + 8px + env(safe-area-inset-top)); bottom:auto; } }
+.join-request-notice { position:fixed; z-index:110; right:18px; top:calc(var(--chassi-topo) + 16px); width:min(350px,calc(100vw - 28px)); display:flex; align-items:center; gap:12px; padding:12px; border:1px solid color-mix(in srgb, var(--accent-hi) 27.1%, transparent); border-radius:12px; background:color-mix(in srgb, var(--bg-1) 96%, transparent); box-shadow:0 16px 45px #0009; }
 .join-request-notice[hidden] { display:none; }
 .join-request-notice>div { display:grid; flex:1; gap:3px; min-width:0; }
 .join-request-notice strong { font-size:var(--fs-sm); }

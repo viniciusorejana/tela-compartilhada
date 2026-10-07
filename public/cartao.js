@@ -76,8 +76,9 @@
   }
 
   // O avatar com a borda e o ponto de status. `tamanho`: '' (o do cartão), 'medio' ou 'pequeno'.
-  function avatar({ nome, perfil, vitrine = null, status = null, tamanho = '', id = '' } = {}) {
-    const caixa = elemento('span', `nx-av${tamanho ? ` ${tamanho}` : ''}`);
+  // `forma`: '' (o círculo) ou 'quadrado' (os cantos arredondados da sala, o do "eu" de baixo).
+  function avatar({ nome, perfil, vitrine = null, status = null, tamanho = '', forma = '', id = '' } = {}) {
+    const caixa = elemento('span', `nx-av${tamanho ? ` ${tamanho}` : ''}${forma ? ` ${forma}` : ''}`);
     caixa.dataset.borda = vitrine?.borda || 'nenhuma';
     if (vitrine) aplicarCores(caixa, vitrine);
     const img = elemento('span', 'nx-av-img');

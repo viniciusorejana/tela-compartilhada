@@ -220,7 +220,7 @@ const fecharComEsc = async pagina => {
   await salaDaAna.evaluate(() => window.NexoConta?.pronto);
   await salaDaAna.locator('#nameConfirmBtn').click();
   await salaDaAna.waitForFunction(() => tiles.has('self'), null, { timeout: 20000 });
-  await salaDaAna.locator('.workspace-name').click();
+  await salaDaAna.locator('.trilho-marca').click();
   await salaDaAna.locator('.camada-quadro.pronto').waitFor({ timeout: 15000 });
   const quadro = salaDaAna.frameLocator('.camada-quadro');
   await quadro.locator('#listaAmigos .nx-amigo', { hasText: 'Bia Souza' }).click();

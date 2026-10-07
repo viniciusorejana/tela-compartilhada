@@ -8,6 +8,9 @@
 <link rel="icon" href="/mark.svg" type="image/svg+xml">
 <!-- Antes do CSS e síncrono: o tema claro tem de valer já na primeira pintura (tema.js). -->
 <script src="/tema.js"></script>
+<!-- Também antes da primeira pintura: quem tem conta vê o trilho já no primeiro quadro, sem a lateral
+     se alargar quando a conta responde (chassi.js). -->
+<script src="/chassi.js"></script>
 <link rel="stylesheet" href="/sala.css">
 <!-- Depois de sala.css: as peças de amigos se defendem das regras globais da sala pela ordem e
      pelo peso (social.css, docs/interface.md seção 8). -->
@@ -17,10 +20,12 @@
 <link rel="stylesheet" href="/popover.css">
 <link rel="stylesheet" href="/seletor-cor.css">
 <link rel="stylesheet" href="/emojis.css">
+<link rel="stylesheet" href="/trilho.css">
 <link rel="stylesheet" href="/novidades.css">
 <link rel="stylesheet" href="/reativo.css">
 <link rel="stylesheet" href="/estudio.css">
 <link rel="stylesheet" href="/inicio-na-sala.css">
+<link rel="stylesheet" href="/chassi.css">
 </head>
 <body>
 
@@ -43,9 +48,23 @@
 
 <div class="app">
   <aside class="room-sidebar" aria-label="Sala e participantes" id="roomSidebar">
-    <!-- A marca e as novidades dividem a linha: a estrela tem lugar próprio, e "seu espaço" desce
-         para baixo de NEXO quando a lateral estreita, em vez de passar por baixo dela. -->
+    <!-- O trilho é o mesmo do início (trilho.js, trilho.css): quem tem conta vê a moldura do Nexo no
+         mesmo lugar nas duas páginas, com a sala de agora marcada. Sem conta não há início, e o
+         trilho fica escondido (`html:not(.com-conta)`, sala.css). Aqui não há "criar sala" nem
+         "entrar por código": o convite sairia antes da pergunta (docs/interface.md, 5.2). -->
+    <nav class="trilho nx-social" id="trilho" aria-label="Suas salas">
+      <a class="trilho-marca" href="/" title="Início" aria-label="Início do Nexo"><img src="/mark.svg" width="26" height="26" alt=""></a>
+      <span class="trilho-sep" aria-hidden="true"></span>
+      <div class="trilho-salas" id="trilhoSalas"></div>
+      <span class="trilho-espaco" aria-hidden="true"></span>
+      <button class="trilho-botao" type="button" data-novidades title="Novidades e apresentação do Nexo" aria-label="Novidades e apresentação do Nexo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 3v4M17 5h4"/></svg></button>
+    </nav>
+    <div class="lateral-conteudo">
+    <!-- O alto da lateral é a linha de 56 px da moldura. Com conta, diz onde a pessoa está (a marca
+         está no trilho); sem conta, que não tem trilho, é a marca e as novidades de sempre, e a
+         frase "seu espaço" desce para baixo de NEXO quando a lateral estreita. -->
     <div class="lateral-topo">
+    <div class="sala-id" id="salaId"><span class="sala-id-tile" id="salaIdTile" aria-hidden="true"></span><span class="sala-id-textos"><strong id="salaIdNome"></strong><small id="salaIdMeta">Entrando na sala…</small></span></div>
     <a class="workspace-name" href="/" title="Sair da sala e voltar ao início"><img src="/mark.svg" alt="" width="30" height="30"><span class="workspace-textos"><strong>NEXO</strong><span>seu espaço</span></span></a>
     <button class="ghost icone-so novidades-da-sala" type="button" data-novidades title="Novidades e apresentação do Nexo" aria-label="Novidades e apresentação do Nexo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 3v4M17 5h4"/></svg></button>
     </div>
@@ -69,6 +88,7 @@
          lado do texto espremiam "Conectado à sala" em duas linhas na lateral estreita. -->
     <div class="connection-box"><div class="connection-estado"><span class="connection-dot"></span><div><strong id="connectionLabel">Aguardando entrada</strong><small id="sessionClock">Sua sessão começa aqui</small></div></div><div class="connection-acoes"><button class="ghost mensagens-btn" id="mensagensBtn" type="button" hidden title="Mensagens diretas" aria-label="Mensagens diretas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v10H8l-4 4Z"/><path d="M8 10h8"/></svg><b class="mensagens-contagem" id="mensagensContagem" hidden>0</b></button><button class="ghost" data-action="sugestao" type="button" title="Sugestões e problemas" aria-label="Sugestões e problemas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/></svg></button><button class="ghost" data-action="diagnostics" type="button" title="Diagnóstico da conexão" aria-label="Diagnóstico da conexão"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button></div></div>
     <div class="self-profile"><button class="self-perfil-btn" id="meuPerfilBtn" type="button" title="Personalizar perfil" aria-label="Personalizar perfil"><span class="self-avatar" id="selfAvatar">?</span><span class="self-textos"><strong id="selfName">Seu perfil</strong><small id="selfState" title="Pronto para entrar"><span class="estado-longo">Pronto para entrar</span><span class="estado-curto">Fora da sala</span></small></span></button><button class="ghost icone-so" id="presenceBtn" type="button" title="Definir status ou reagir" aria-label="Definir status ou reagir" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.4 14.3a4.6 4.6 0 0 0 7.2 0"/></svg></button><button class="ghost config-engrenagem" type="button" data-action="devices" title="Configurações" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button></div>
+    </div>
   </aside>
   <header class="topbar">
     <div class="room-id">
@@ -846,6 +866,7 @@
 <script src="/app-android.js"></script>
 <!-- Os painelzinhos (cor e emojis) antes da sala: o chat e as reações os pedem desde o começo. -->
 <script src="/popover.js"></script>
+<script src="/trilho.js"></script>
 <script src="/redimensionar.js"></script>
 <script src="/seletor-cor.js"></script>
 <script src="/emojis.js"></script>
@@ -874,6 +895,7 @@
 <script src="/editor-cartao.js"></script>
 <script src="/social-sala.js"></script>
 <script src="/inicio-na-sala.js"></script>
+<script src="/trilho-sala.js"></script>
 <script src="/room-ui.js"></script>
 <!-- Depois de room-ui.js de propósito: ele adota como modal todo [role="dialog"] que existir
      quando roda, e o das novidades cuida de si mesmo (ver o topo de novidades.js). -->

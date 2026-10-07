@@ -388,7 +388,12 @@ window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
   // O cadeado aparece antes de entrar, pelo plano da conta; a entrada na sala confirma.
   const livre = planosLigados === false;
   aplicarPlano({ nivel: livre ? 'completo' : conta?.nivel || 'anonimo', livre });
-  if (!conta) return;
+  if (!conta) {
+    // Sem conta o recado de "entrar direto" não vale: o portão, escondido no primeiro quadro, volta.
+    window.NexoChassi?.consumirEntrada(roomCode);
+    document.documentElement.classList.remove('entrando-direto');
+    return;
+  }
   contaNaSala = conta;
   meuPerfil = { conta: true, codigo: conta.codigo, cor: perfil?.cor || null, marca: perfil?.marca || null };
   recarregarAjustes();
@@ -403,6 +408,13 @@ window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
   aviso.append(trocar);
   aviso.hidden = false;
   document.getElementById('gateContaLink').hidden = true;
+  // Quem chegou clicando em "Entrar" no início, no trilho ou num convite já disse que quer entrar: o
+  // portão não pergunta de novo, e a sala abre direto (chassi.js, o recado vale uma vez). Quem chega
+  // por um link continua passando pelo portão.
+  if (window.NexoChassi?.consumirEntrada(roomCode)) entrar();
+  else {
+    document.documentElement.classList.remove('entrando-direto');
+  }
 });
 
 function entrar() {
@@ -7162,13 +7174,21 @@ const LARGURA_MINIMA_DO_CHAT = 240;
 const LARGURA_MAXIMA_DO_CHAT = 720;
 // O palco precisa de chão: na coluna, o chat nunca toma o que o deixaria menor que isto.
 const LARGURA_MINIMA_DO_PALCO = 420;
-const LARGURA_DA_LATERAL = 224;
+// O que a lateral toma da janela quando aberta: a lateral e, para quem tem conta, o trilho das salas
+// -- os dois números da moldura (tema.css), que mudam com a largura da janela.
+function larguraDaLateral() {
+  const raiz = document.documentElement;
+  const estilo = getComputedStyle(raiz);
+  const lateral = parseFloat(estilo.getPropertyValue('--chassi-lateral')) || 232;
+  const trilho = raiz.classList.contains('com-conta') ? parseFloat(estilo.getPropertyValue('--chassi-trilho')) || 64 : 0;
+  return lateral + trilho;
+}
 let larguraEscolhidaDoChat = Preferencias.ler('chatLargura', null);
 if (!Number.isFinite(larguraEscolhidaDoChat)) larguraEscolhidaDoChat = null;
 
 function limitesDoChat() {
   const janela = document.documentElement.clientWidth;
-  const sobra = chatLargo.matches ? janela - LARGURA_DA_LATERAL - LARGURA_MINIMA_DO_PALCO : janela;
+  const sobra = chatLargo.matches ? janela - larguraDaLateral() - LARGURA_MINIMA_DO_PALCO : janela;
   return [LARGURA_MINIMA_DO_CHAT, Math.min(LARGURA_MAXIMA_DO_CHAT, Math.max(LARGURA_MINIMA_DO_CHAT, sobra))];
 }
 // O tamanho de fábrica é o que a folha de estilo diz para esta janela (292, 266 ou 320 na coluna, 360

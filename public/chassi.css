@@ -1,0 +1,23 @@
+/* A troca de página, animada (docs/plano-continuidade.md). Carregado só pelo início de quem tem conta
+ * (inicio.html) e pela sala (sala.html): é lá que a moldura é a mesma.
+ *
+ * Duas páginas da mesma origem, e o navegador anima a navegação entre elas (cross-document view
+ * transitions): o que tem o mesmo `view-transition-name` nas duas fica no lugar -- o trilho, a
+ * lateral, o "eu" --, e o resto (o miolo, a coluna da direita) faz uma fusão curta. Onde não há
+ * suporte (Firefox, Safari antigo, WebView antigo), a navegação é a de sempre.
+ *
+ * As regras de menos movimento dos pseudo-elementos `::view-transition-*` moram em tema.css, junto
+ * das outras duas. */
+@view-transition { navigation: auto; }
+
+/* Os nomes são únicos por página. Cada um é só o que existe nas duas: na sala sem conta, que não tem
+   trilho, o `.trilho` está escondido e não é capturado. */
+.ini > .trilho,.room-sidebar > .trilho { view-transition-name:nx-trilho; }
+.ini-lateral,.lateral-conteudo { view-transition-name:nx-lateral; }
+.ini-eu,.self-profile { view-transition-name:nx-eu; }
+
+/* O fundo por trás das duas imagens da fusão é o do tema: com as duas opacas isso não se vê, mas um quadro da
+   transição que ainda não pintou nunca deixa o canvas branco aparecer. */
+::view-transition { background:var(--bg,#191a24); }
+::view-transition-group(*) { animation-duration:var(--dur-lenta); animation-timing-function:var(--curva); }
+::view-transition-old(root),::view-transition-new(root) { animation-duration:var(--dur-lenta); animation-timing-function:var(--curva); }

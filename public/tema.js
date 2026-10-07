@@ -283,6 +283,22 @@
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   root.NexoTema = api;
   aplicar();
+
+  // A troca de página animada (chassi.css) só acontece quando as DUAS páginas aderem; o início e a sala
+  // aderem, e a apresentação, a conta e o 404 não. Quando a página de destino não participa, o navegador
+  // pula a transição e rejeita as promessas dela com "Transition was skipped" -- e uma rejeição que ninguém
+  // ouve vira erro na página (no console, e no `pageerror` dos testes). Pular não é erro: a navegação foi
+  // normal. Por isso a escuta mora aqui, no <head> de toda página, e não só nas duas que aderem. O filtro
+  // do `unhandledrejection` é só para esse erro: qualquer outro continua aparecendo.
+  const ehTransicaoPulada = motivo => motivo?.name === 'AbortError' && /Transition was skipped/i.test(String(motivo.message || ''));
+  const calarTransicao = evento => {
+    const transicao = evento.viewTransition;
+    if (!transicao) return;
+    for (const promessa of [transicao.ready, transicao.finished, transicao.updateCallbackDone]) promessa?.catch?.(() => {});
+  };
+  root.addEventListener('pageswap', calarTransicao);
+  root.addEventListener('pagereveal', calarTransicao);
+  root.addEventListener('unhandledrejection', evento => { if (ehTransicaoPulada(evento.reason)) evento.preventDefault(); });
   consultaDoSistema?.addEventListener?.('change', () => { if (lerEscolha().modo === 'sistema') aplicarComTransicao(); });
   // Outra aba mudou o tema: esta acompanha.
   root.addEventListener('storage', evento => { if (evento.key === CHAVE || evento.key === CHAVE_DA_PERMISSAO) aplicar(); });

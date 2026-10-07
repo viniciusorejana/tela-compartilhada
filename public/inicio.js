@@ -66,26 +66,18 @@
   }
   const minhaPresencaEscolhida = () => S.estado.minha?.escolhido || 'online';
 
-  // ---------- Salas recentes (a trilha) ----------
-  // Ficam no navegador, como sempre ficaram: de onde você entrou e quando não sobe para a conta
-  // (docs/plano-contas.md, seção 5).
-  function salasRecentes() {
-    try {
-      const lista = JSON.parse(localStorage.getItem('nexoRecentRooms') || '[]');
-      return Array.isArray(lista) ? lista.filter(c => typeof c === 'string' && CODIGO_DE_SALA.test(c)).slice(0, 12) : [];
-    } catch (_) { return []; }
-  }
+  // ---------- Salas recentes (o trilho) ----------
+  // O trilho é o mesmo da sala (public/trilho.js): ele lê as recentes do navegador, como sempre
+  // ficaram -- de onde você entrou e quando não sobe para a conta (docs/plano-contas.md, seção 5).
+  const { salasRecentes, sigla: siglaDaSala } = window.NexoTrilho;
   function esquecerSala(codigo) {
-    try { localStorage.setItem('nexoRecentRooms', JSON.stringify(salasRecentes().filter(c => c !== codigo))); } catch (_) { /* vale só agora */ }
+    window.NexoTrilho.esquecerSala(codigo);
     pintarTrilho();
   }
-  const siglaDaSala = codigo => {
-    const partes = codigo.split(/[-_]+/).filter(Boolean);
-    return (partes.length > 1 ? partes[0][0] + partes[1][0] : codigo.replace(/[-_]/g, '').slice(0, 2)).toUpperCase();
-  };
+  // Entrar numa sala daqui deixa o recado de entrada direta (chassi.js): a sala não repete a pergunta.
   const irParaSala = codigo => {
     if (camada) { camada.avisar('entrar', { sala: codigo }); return; }
-    window.location.href = `/${encodeURIComponent(codigo)}/sala`;
+    window.NexoChassi.irParaSala(codigo);
   };
   // Quem dos meus amigos está em cada sala agora.
   function amigosPorSala() {
@@ -104,56 +96,21 @@
     return `${nomes.slice(0, 2).join(', ')} e mais ${nomes.length - 2}`;
   };
 
-  let dica = null;
-  function mostrarDica(ancora, titulo, detalhe) {
-    esconderDica();
-    dica = elemento('div', 'ini-dica-flutuante');
-    dica.append(elemento('strong', '', titulo));
-    if (detalhe) dica.append(elemento('small', '', detalhe));
-    document.body.append(dica);
-    const r = ancora.getBoundingClientRect();
-    dica.style.left = `${Math.round(r.right + 10)}px`;
-    dica.style.top = `${Math.round(r.top + r.height / 2 - dica.offsetHeight / 2)}px`;
-  }
-  function esconderDica() { dica?.remove(); dica = null; }
-
+  const esconderDica = () => window.NexoTrilho.esconderDica();
   function pintarTrilho() {
-    const lugar = $('trilhoSalas');
-    const porSala = amigosPorSala();
-    const salas = salasRecentes();
-    // A sala da chamada vem primeiro e marcada, mesmo que o navegador não a tenha guardado.
-    if (camada) salas.splice(0, salas.length, camada.sala, ...salas.filter(codigo => !ehMinhaSala(codigo)));
-    lugar.replaceChildren(...salas.map(codigo => {
-      const link = elemento('a', 'ini-sala nx-social', siglaDaSala(codigo));
-      link.href = `/${encodeURIComponent(codigo)}/sala`;
-      link.style.setProperty('--cor-sala', NexoPerfil.corDoNome(codigo));
-      const aqui = porSala.get(codigo)?.pessoas || [];
-      link.setAttribute('aria-label', `Sala #${codigo}${ehMinhaSala(codigo) ? ', a sua sala agora' : ''}${aqui.length ? `, com ${nomesJuntos(aqui)}` : ''}`);
-      if (camada) {
-        // Nenhum clique navega o quadro: a sala decide (e pergunta, se for outra).
-        link.addEventListener('click', evento => { evento.preventDefault(); irParaSala(codigo); });
-        if (ehMinhaSala(codigo)) { link.classList.add('aqui'); link.setAttribute('aria-current', 'true'); }
-      }
-      if (aqui.length) {
-        const marca = elemento('span', 'ini-sala-amigos', String(aqui.length));
-        marca.setAttribute('aria-hidden', 'true');
-        link.append(marca);
-      }
-      const detalhe = ehMinhaSala(codigo)
-        ? (aqui.length ? `Sua sala agora, com ${nomesJuntos(aqui)}` : 'Sua sala agora')
-        : aqui.length ? `${nomesJuntos(aqui)} ${aqui.length === 1 ? 'está' : 'estão'} aqui agora` : 'Sala recente';
-      link.addEventListener('mouseenter', () => mostrarDica(link, `#${codigo}`, detalhe));
-      link.addEventListener('focus', () => mostrarDica(link, `#${codigo}`, detalhe));
-      link.addEventListener('mouseleave', esconderDica);
-      link.addEventListener('blur', esconderDica);
-      link.addEventListener('contextmenu', evento => {
-        evento.preventDefault();
-        esconderDica();
-        if (ehMinhaSala(codigo)) { abrirMenu(link, [{ titulo: `#${codigo}` }, { rotulo: 'Voltar para a sala', ico: 'porta', fazer: () => irParaSala(codigo) }]); return; }
+    window.NexoTrilho.pintar($('trilhoSalas'), {
+      // A sala da chamada vem primeiro e marcada, mesmo que o navegador não a tenha guardado.
+      aqui: camada ? camada.sala : null,
+      porSala: amigosPorSala(),
+      nomes: nomesJuntos,
+      // Dentro da chamada nenhum clique navega o quadro: a sala decide (e pergunta, se for outra).
+      aoEntrar: irParaSala,
+      interceptarTudo: Boolean(camada),
+      aoContexto: (link, codigo, aqui) => {
+        if (aqui) { abrirMenu(link, [{ titulo: `#${codigo}` }, { rotulo: 'Voltar para a sala', ico: 'porta', fazer: () => irParaSala(codigo) }]); return; }
         abrirMenu(link, [{ titulo: `#${codigo}` }, { rotulo: 'Entrar na sala', ico: 'porta', fazer: () => irParaSala(codigo) }, { rotulo: 'Tirar das recentes', ico: 'lixo', perigo: true, fazer: () => esquecerSala(codigo) }]);
-      });
-      return link;
-    }));
+      }
+    });
   }
 
   function novoCodigo() {
@@ -272,7 +229,7 @@
     if (y + altura > window.innerHeight - 12) y = Math.max(12, r.top - altura - 6);
     // Da trilha, o menu sai ao lado do botão -- mas nunca passa da borda direita: num celular
     // estreito, os 280 px dele não cabem depois dos 72 da trilha.
-    if (ancoraDoMenu.closest('.ini-trilho')) { x = Math.min(r.right + 8, window.innerWidth - largura - 12); y = Math.min(r.top, window.innerHeight - altura - 12); }
+    if (ancoraDoMenu.closest('.trilho')) { x = Math.min(r.right + 8, window.innerWidth - largura - 12); y = Math.min(r.top, window.innerHeight - altura - 12); }
     menu.style.left = `${Math.max(12, Math.round(x))}px`;
     menu.style.top = `${Math.round(y)}px`;
   }
@@ -719,7 +676,7 @@
     const statusDoPonto = escolhido === 'invisivel' ? 'offline' : escolhido;
     // Como os outros veem: a borda e o estilo do nome do cartão efetivo.
     const vitrine = editor.dados()?.vitrine || NexoConta.atual().cartao?.vitrine || null;
-    $('euAvatar').replaceChildren(C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine, status: statusDoPonto, tamanho: 'pequeno' }));
+    $('euAvatar').replaceChildren(C.avatar({ nome: conta.apelido, perfil: { conta: true, codigo: conta.codigo, ...perfil }, vitrine, status: statusDoPonto, tamanho: 'pequeno', forma: 'quadrado' }));
     $('euNome').textContent = conta.apelido;
     C.estilizarNome($('euNome'), vitrine);
     const frase = minha?.frase || perfil.social?.frase;
@@ -909,7 +866,7 @@
       else if (nome === 'pedidos') escolherAba('pedidos');
     });
     // A marca da trilha é "Início" aqui dentro: leva aos amigos, e não recarrega o quadro.
-    document.querySelector('.ini-trilho-marca').addEventListener('click', evento => { evento.preventDefault(); irPara('amigos'); });
+    document.querySelector('.trilho-marca').addEventListener('click', evento => { evento.preventDefault(); irPara('amigos'); });
     // A engrenagem abre a conta no mesmo quadro (a camada mostra a conta, e não a navegação).
     document.querySelector('.ini-eu-conta').addEventListener('click', evento => { evento.preventDefault(); camada.irPara('/conta'); });
   }

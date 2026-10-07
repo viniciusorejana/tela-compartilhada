@@ -97,8 +97,8 @@ const quadroPronto = async pagina => {
 
   // ---------- A marca abre a camada, e a chamada continua ----------
   const urlDaSala = naSala.url();
-  assert.equal(await naSala.locator('.workspace-name').getAttribute('title'), 'Abrir o início: amigos, conversas e conquistas. A chamada continua.');
-  await naSala.locator('.workspace-name').click();
+  assert.equal(await naSala.locator('.trilho-marca').getAttribute('title'), 'Abrir o início: amigos, conversas e conquistas. A chamada continua.');
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   const quadro = await quadroPronto(naSala);
   await quadro.locator('#inicioApp').waitFor();
@@ -107,8 +107,8 @@ const quadroPronto = async pagina => {
   assert.equal(await naSala.evaluate(() => document.querySelector('.app').inert), true, 'a sala por baixo fica inerte, como sob qualquer painel');
   assert.equal(await naSala.locator('#camadaSalaNome').textContent(), `#${SALA}`);
   assert.match(await naSala.locator('#camadaSalaMeta').textContent(), /^\d+ pessoas? · há /, 'a barra diz quantos estão na sala e há quanto tempo');
-  assert.equal(await quadro.locator('.ini-sala.aqui').count(), 1, 'a sala da chamada vem marcada na trilha');
-  assert.equal(await quadro.locator('.ini-sala').first().getAttribute('aria-current'), 'true');
+  assert.equal(await quadro.locator('.trilho-sala.aqui').count(), 1, 'a sala da chamada vem marcada na trilha');
+  assert.equal(await quadro.locator('.trilho-sala').first().getAttribute('aria-current'), 'true');
   assert.deepEqual(await quadro.locator('#listaAmigos .nx-amigo-nome').allTextContents(), ['Bia Souza'], 'os amigos estão ali');
   await naSala.waitForTimeout(500);
   await naSala.screenshot({ path: path.join(saida, 'camada-aberta.png') });
@@ -194,7 +194,7 @@ const quadroPronto = async pagina => {
   }
 
   // ---------- O "voltar" do navegador fecha a camada, e não a sala ----------
-  await naSala.locator('.workspace-name').click();
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   await quadroPronto(naSala);
   await naSala.goBack();
@@ -203,7 +203,7 @@ const quadroPronto = async pagina => {
   assert.equal(await emPe(naSala), true, 'voltar fechou a camada, e não a chamada');
   // Abrir e fechar pelo botão não deixa entradas a mais no histórico.
   const tamanhoDoHistorico = await naSala.evaluate(() => history.length);
-  await naSala.locator('.workspace-name').click();
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   await quadroPronto(naSala);
   await naSala.locator('#camadaVoltar').click();
@@ -213,7 +213,7 @@ const quadroPronto = async pagina => {
 
   // ---------- Um aviso só ----------
   const avisosNaSala = () => naSala.locator('.nexo-toasts .nexo-toast').count();
-  await naSala.locator('.workspace-name').click();
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   const quadro3 = await quadroPronto(naSala);
   await noInicioDaBia.evaluate(codigo => NexoSocial.enviar(codigo, 'oi, com a camada aberta'), ana.conta.codigo);
@@ -267,7 +267,7 @@ const quadroPronto = async pagina => {
   await noInicioDaBia.close();
   const bia2 = await entrar(contextoDaBia, 'Bia', OUTRA);
   await esperarAte(() => naSala.evaluate(([codigo, sala]) => NexoSocial.presencaDe(codigo).sala?.codigo === sala, [bia.conta.codigo, OUTRA]), 'a Ana devia ver a Bia na outra sala');
-  await naSala.locator('.workspace-name').click();
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   const quadro4 = await quadroPronto(naSala);
   const entrarNaDaBia = quadro4.locator('#listaAmigos .nx-amigo', { hasText: 'Bia Souza' }).getByRole('button', { name: 'Entrar' });
@@ -282,9 +282,9 @@ const quadroPronto = async pagina => {
   assert.equal(await emPe(naSala), true);
   assert.equal((await eventosDoCaio('peer-left')).length, 0, 'e o Caio continua vendo a Ana');
   // A sala da própria chamada, na trilha, é só voltar -- sem pergunta.
-  await quadro4.locator('.ini-sala.aqui').click();
+  await quadro4.locator('.trilho-sala.aqui').click();
   await esperarCamada(naSala, false);
-  await naSala.locator('.workspace-name').click();
+  await naSala.locator('.trilho-marca').click();
   await esperarCamada(naSala, true);
   await (await quadroPronto(naSala)).locator('#listaAmigos .nx-amigo', { hasText: 'Bia Souza' }).getByRole('button', { name: 'Entrar' }).click();
   await naSala.locator('#camadaSairPanel:not(.hidden)').waitFor();
@@ -307,7 +307,7 @@ const quadroPronto = async pagina => {
   });
   const tel = await entrar(contextoDaDuda, 'Duda');
   await tel.locator('#sidebarToggle').tap();
-  await tel.locator('.workspace-name').tap();
+  await tel.locator('.trilho-marca').tap();
   await esperarCamada(tel, true);
   const quadroDoTel = await quadroPronto(tel);
   await quadroDoTel.locator('#inicioApp').waitFor();

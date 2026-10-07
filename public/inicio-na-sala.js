@@ -55,6 +55,7 @@
   let fechandoPeloHistorico = false;
   let trincoDoHistorico = null;
   let destinoPendente = '';
+  let salaPendente = '';
 
   const aberta = () => !painel.classList.contains('hidden');
   const comConta = () => Boolean(window.NexoConta?.atual?.().conta);
@@ -248,6 +249,7 @@
     if (!CODIGO_DE_SALA.test(sala)) return;
     if (sala === salaDaChamada) { fechar(); return; }
     destinoPendente = `/${encodeURIComponent(sala)}/sala`;
+    salaPendente = sala;
     $('camadaSairTitulo').textContent = `Sair desta sala para entrar em #${sala}?`;
     $('camadaSairTexto').textContent = `Você sai da chamada de #${roomCode}: o microfone, a câmera e a tela param, e a sala vê você sair. Em seguida você entra em #${sala}.`;
     $('camadaSairConfirmar').textContent = `Sair e entrar em #${sala}`;
@@ -258,6 +260,8 @@
     if (!destinoPendente) return;
     $('camadaSairConfirmar').disabled = true;
     $('camadaSairConfirmar').textContent = 'Saindo da sala…';
+    // A pessoa já confirmou que quer a outra sala: lá, o portão não pergunta de novo (chassi.js).
+    window.NexoChassi?.marcarEntrada(salaPendente);
     sairDaSala(destinoPendente);
   });
 
@@ -295,11 +299,12 @@
   });
 
   // ---------- Como se chega aqui ----------
-  // A marca do Nexo na lateral. A escuta é na captura do documento, como a do convite em
-  // social-sala.js: chega antes da do próprio link (sala.js), que sai da sala. Sem conta, ou fora da
-  // chamada (a porta de entrada), `pode()` é falso e o link faz o que sempre fez.
+  // A marca do Nexo: o "N" no alto do trilho (quem tem conta) ou o NEXO do alto da lateral. A escuta
+  // é na captura do documento, como a do convite em social-sala.js: chega antes da do próprio link
+  // (sala.js), que sai da sala. Sem conta, ou fora da chamada (a porta de entrada), `pode()` é falso
+  // e o link faz o que sempre fez.
   document.addEventListener('click', evento => {
-    const marca = evento.target.closest?.('.workspace-name');
+    const marca = evento.target.closest?.('.trilho-marca, .workspace-name');
     if (!marca || evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
     if (!pode()) return;
     evento.preventDefault();
@@ -317,7 +322,7 @@
   // Nexo (MainActivity.voltar). O aplicativo só sabe que ela está aberta pelo aviso de `abrir`.
   window.NexoAndroid?.ao('voltar-camada', () => fechar());
   window.NexoConta?.pronto.then(() => {
-    const marca = document.querySelector('.workspace-name');
+    const marca = document.querySelector('.trilho-marca');
     if (marca && comConta()) marca.title = 'Abrir o início: amigos, conversas e conquistas. A chamada continua.';
   });
 

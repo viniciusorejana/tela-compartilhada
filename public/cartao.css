@@ -102,6 +102,10 @@
 @keyframes nx-cintilar { from { opacity:.25; } to { opacity:1; } }
 /* Pequeno (listas): o anel afina junto com o avatar. */
 .nx-av.pequeno { --av:34px; --anel:2px; }
+/* O avatar de cantos arredondados, o da lista da sala e o do "eu" de baixo (docs/interface.md, 4.9):
+   o "eu" é o mesmo desenho no início e na sala. O ponto de status continua redondo, no canto. */
+.nx-av.quadrado,.nx-av.quadrado > .nx-av-img { border-radius:11px; }
+.nx-av.quadrado::before { border-radius:calc(11px + var(--anel) * 2.1); }
 .nx-av.medio { --av:44px; --anel:2.5px; }
 
 /* ---------- A bolha de pensamento ---------- */

@@ -1,0 +1,35 @@
+/* O trilho das salas (public/trilho.js): a coluna escura da esquerda, com a marca do Nexo, as salas
+ * recentes e as novidades. É a mesma peça no início de quem tem conta e dentro da sala
+ * (docs/plano-continuidade.md): na troca de página ela fica onde estava, e o que muda é só o que a
+ * sala de agora ganha de destaque.
+ *
+ * Vive em duas páginas com regras globais de `button` e `a` diferentes (docs/interface.md, seção 8).
+ * Os botões se defendem pela base de `.nx-social :where(button)` (social.css), que o `<nav>` traz na
+ * classe; aqui cada peça declara o que precisa. Cor, sempre pelos tokens. */
+
+.trilho { flex:none; display:flex; flex-direction:column; align-items:center; gap:8px; width:var(--chassi-trilho); min-height:0; padding:10px 0; background:var(--bg-fundo); overflow-y:auto; overflow-x:hidden; scrollbar-width:none; box-sizing:border-box; }
+.trilho::-webkit-scrollbar { display:none; }
+.trilho-marca { flex:none; display:grid; place-items:center; width:var(--chassi-trilho-item); height:var(--chassi-trilho-item); border-radius:var(--r-lg); background:var(--accent-suave); box-shadow:inset 0 0 0 1px var(--accent-suave-hi); text-decoration:none; transition:transform var(--dur) var(--curva-mola),background-color var(--dur) var(--curva); }
+.trilho-marca:hover { transform:scale(1.06); background:var(--accent-suave-hi); }
+.trilho-marca img { display:block; width:26px; height:26px; }
+.trilho-sep { flex:none; width:24px; height:2px; margin:2px 0; border-radius:2px; background:var(--line-3); }
+.trilho-salas { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.trilho-espaco { flex:1; }
+.trilho-sala,.trilho-botao { --nx-fundo:var(--bg-1); --nx-fundo-hover:var(--bg-3); --nx-cor:var(--text-2); --nx-cor-hover:var(--text); position:relative; flex:none; width:var(--chassi-trilho-item); height:var(--chassi-trilho-item); border-radius:var(--r-lg); }
+.trilho-botao { --nx-cor:var(--online-texto); --nx-fundo-hover:color-mix(in srgb,var(--online) 18%,var(--bg-1)); }
+.trilho-botao[data-novidades] { --nx-cor:var(--accent-texto); --nx-fundo-hover:var(--accent-suave-hi); }
+.trilho-botao .ico { width:20px; height:20px; transition:transform var(--dur) var(--curva-mola); }
+.trilho-botao:hover .ico { transform:rotate(90deg); }
+.trilho-botao[data-novidades]:hover .ico,#trilhoEntrar:hover .ico { transform:scale(1.12); }
+/* Cada sala recente é um quadrado com a cor sorteada pelo código e as duas primeiras letras dele.
+   Ao passar o mouse ele cresce com a mola dos avatares; com amigos dentro, ganha o ponto verde. */
+.trilho-sala { display:grid; place-items:center; color:var(--sobre-cor); font-size:var(--fs-md); font-weight:750; letter-spacing:.02em; text-decoration:none; background:var(--cor-sala,var(--bg-3)); transition:transform var(--dur) var(--curva-mola),border-radius var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
+.trilho-sala:hover,.trilho-sala:focus-visible { transform:scale(1.06); border-radius:var(--r-md); box-shadow:0 6px 18px rgb(0 0 0 / 28%); }
+.trilho-sala-amigos { position:absolute; right:-3px; bottom:-3px; min-width:18px; height:18px; padding:0 4px; display:grid; place-items:center; border-radius:var(--r-pilula); background:var(--online); color:var(--sobre-cor); font-size:var(--fs-rotulo); font-weight:800; box-shadow:0 0 0 3px var(--bg-fundo); }
+/* A sala em que a pessoa está agora (dentro da chamada, e no início por cima dela): o anel verde. */
+.trilho-sala.aqui { border-radius:var(--r-md); box-shadow:0 0 0 2px var(--bg-fundo),0 0 0 4px var(--online); }
+/* Quem já está na sala não precisa do número de amigos nela: a lista da lateral diz quem está. */
+.trilho-sala.aqui .trilho-sala-amigos { display:none; }
+.trilho-dica { position:fixed; z-index:106; max-width:240px; padding:7px 10px; border-radius:var(--r-md); background:var(--bg-1); color:var(--text); font-size:var(--fs-sm); line-height:1.4; box-shadow:var(--sombra-menu); pointer-events:none; animation:nexo-surgir var(--dur-rapida) var(--curva); }
+.trilho-dica strong { font-weight:600; }
+.trilho-dica small { display:block; color:var(--muted); font-size:var(--fs-meta); }

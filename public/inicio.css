@@ -16,41 +16,23 @@ h1,h2,h3,p { margin:0; }
 kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 5px; border-radius:var(--r-xs); background:var(--bg-3); color:var(--faint); font:600 var(--fs-rotulo)/1 "Segoe UI",system-ui,sans-serif; }
 
 /* ---------- O desenho ---------- */
-.ini { --col-trilho:72px; --col-lateral:264px; --col-agora:340px; display:grid; height:100vh; height:100dvh; grid-template-columns:var(--col-trilho) var(--col-lateral) minmax(0,1fr) var(--col-agora); grid-template-areas:"trilho lateral centro agora"; }
-
-/* ---------- A trilha das salas ---------- */
-.ini-trilho { grid-area:trilho; display:flex; flex-direction:column; align-items:center; gap:8px; min-height:0; padding:12px 0; background:var(--bg-fundo); overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
-.ini-trilho::-webkit-scrollbar { display:none; }
-.ini-trilho-marca { flex:none; display:grid; place-items:center; width:48px; height:48px; border-radius:var(--r-lg); background:var(--accent-suave); box-shadow:inset 0 0 0 1px var(--accent-suave-hi); transition:transform var(--dur) var(--curva-mola),background-color var(--dur) var(--curva); }
-.ini-trilho-marca:hover { transform:scale(1.06); background:var(--accent-suave-hi); }
-.ini-trilho-sep { flex:none; width:28px; height:2px; margin:2px 0; border-radius:2px; background:var(--line-3); }
-.ini-trilho-salas { display:flex; flex-direction:column; align-items:center; gap:8px; }
-.ini-trilho-espaco { flex:1; }
-.ini-sala,.ini-trilho-botao { --nx-fundo:var(--bg-1); --nx-fundo-hover:var(--bg-3); --nx-cor:var(--text-2); --nx-cor-hover:var(--text); position:relative; flex:none; width:48px; height:48px; border-radius:var(--r-lg); }
-.ini-trilho-botao { --nx-cor:var(--online-texto); --nx-fundo-hover:color-mix(in srgb,var(--online) 18%,var(--bg-1)); }
-.ini-trilho-botao[data-novidades] { --nx-cor:var(--accent-texto); --nx-fundo-hover:var(--accent-suave-hi); }
-.ini-trilho-botao .ico { width:20px; height:20px; transition:transform var(--dur) var(--curva-mola); }
-.ini-trilho-botao:hover .ico { transform:rotate(90deg); }
-.ini-trilho-botao[data-novidades]:hover .ico,#trilhoEntrar:hover .ico { transform:scale(1.12); }
-/* Cada sala recente é um quadrado com a cor sorteada pelo código e as duas primeiras letras dele.
-   Ao passar o mouse ele cresce com a mola dos avatares; com amigos dentro, ganha o ponto verde. */
-.ini-sala { display:grid; place-items:center; color:var(--sobre-cor); font-weight:750; font-size:var(--fs-md); letter-spacing:.02em; text-decoration:none; background:var(--cor-sala,var(--bg-3)); transition:transform var(--dur) var(--curva-mola),border-radius var(--dur) var(--curva),box-shadow var(--dur) var(--curva); }
-.ini-sala:hover,.ini-sala:focus-visible { transform:scale(1.06); border-radius:var(--r-md); box-shadow:0 6px 18px rgb(0 0 0 / 28%); }
-.ini-sala-amigos { position:absolute; right:-3px; bottom:-3px; min-width:18px; height:18px; padding:0 4px; display:grid; place-items:center; border-radius:var(--r-pilula); background:var(--online); color:var(--sobre-cor); font-size:var(--fs-rotulo); font-weight:800; box-shadow:0 0 0 3px var(--bg-fundo); }
-.ini-dica-flutuante { position:fixed; z-index:106; max-width:240px; padding:7px 10px; border-radius:var(--r-md); background:var(--bg-1); color:var(--text); font-size:var(--fs-sm); box-shadow:var(--sombra-menu); pointer-events:none; animation:nexo-surgir var(--dur-rapida) var(--curva); }
-.ini-dica-flutuante small { display:block; color:var(--muted); font-size:var(--fs-meta); }
+/* As larguras são as da moldura (tema.css, `--chassi-*`): a sala usa os mesmos números, e é isso que
+   deixa a troca de página sem pulo. O trilho é a peça de trilho.css. */
+.ini { --col-trilho:var(--chassi-trilho); --col-lateral:var(--chassi-lateral); --col-agora:var(--chassi-direita); display:grid; height:100vh; height:100dvh; grid-template-columns:var(--col-trilho) var(--col-lateral) minmax(0,1fr) var(--col-agora); grid-template-areas:"trilho lateral centro agora"; }
+.ini > .trilho { grid-area:trilho; }
 
 /* ---------- A lateral ---------- */
 .ini-lateral { grid-area:lateral; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg-1); border-right:1px solid var(--line); }
 /* A busca: o campo acende inteiro no foco, como o filtro dos amigos (4.2), e as sugestões são um
    `.nx-menu` preso embaixo dele pelo CSS -- não pelo JS --, então o teclado do celular que sobe e
-   muda a janela não o tira do lugar. */
-.ini-busca-lugar { position:relative; flex:none; margin:12px 10px 8px; }
+   muda a janela não o tira do lugar. A linha tem a altura da linha de cima da moldura e a mesma borda
+   embaixo: na sala, o alto da lateral é o da sala, e a linha atravessa as três colunas. */
+.ini-busca-lugar { position:relative; flex:none; height:var(--chassi-topo); margin:0 0 8px; padding:10px; border-bottom:1px solid var(--line); }
 .ini-busca { display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:var(--r-md); background:var(--bg-0); box-shadow:inset 0 0 0 1px var(--line); color:var(--faint); transition:box-shadow var(--dur) var(--curva); }
 .ini-busca:focus-within { box-shadow:inset 0 0 0 1px var(--accent),0 0 0 3px var(--accent-suave-hi); }
 .ini-busca input { flex:1; min-width:0; min-height:var(--ctl-m); padding:0; border:0; background:transparent; color:var(--text); font-size:var(--fs-sm); outline:none; }
 .ini-busca input::placeholder { color:var(--faint); text-overflow:ellipsis; }
-.ini-busca-lista { position:absolute; top:calc(100% + 6px); left:0; right:0; width:auto; max-height:min(360px,60vh); }
+.ini-busca-lista { position:absolute; top:calc(100% - 2px); left:10px; right:10px; width:auto; max-height:min(360px,60vh); }
 /* A sugestão que o Enter escolhe, andando pelas setas: o mesmo fundo do passar o mouse. */
 .ini-busca-lista .nx-menu-item[aria-selected="true"] { --nx-fundo:var(--nx-fundo-hover); --nx-cor:var(--nx-cor-hover); }
 .ini-secoes { display:grid; gap:2px; padding:4px 8px 6px; }
@@ -72,7 +54,7 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-conversa-textos small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--faint); font-size:var(--fs-meta); font-weight:500; }
 .ini-conversa.nao-lida .ini-conversa-textos strong { color:var(--text); font-weight:750; }
 .ini-conversas-vazio { padding:10px 12px; color:var(--faint); font-size:var(--fs-sm); line-height:1.5; }
-.ini-eu { flex:none; display:flex; align-items:center; gap:4px; min-height:64px; padding:8px; background:var(--bg-0); }
+.ini-eu { flex:none; display:flex; align-items:center; gap:4px; min-height:var(--chassi-eu); padding:8px; background:var(--bg-0); }
 .ini-eu-botao { --nx-fundo-hover:rgb(var(--tinta) / 5%); --nx-cor:var(--text); flex:1; min-width:0; justify-content:flex-start; gap:10px; padding:5px 7px; border-radius:var(--r-md); }
 .ini-eu-botao .nx-av { transition:transform var(--dur) var(--curva-mola); }
 .ini-eu-botao:hover .nx-av { transform:scale(1.06); }
@@ -86,7 +68,8 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 
 /* ---------- O centro ---------- */
 .ini-centro { grid-area:centro; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg); }
-.ini-topo { flex:none; display:flex; align-items:center; gap:12px; min-height:56px; padding:8px 20px; border-bottom:1px solid var(--line); min-width:0; }
+/* A faixa de cima é `--bg-1`, como na sala: o `--bg-1` em volta e o `--bg` no miolo são a moldura das duas. */
+.ini-topo { flex:none; display:flex; align-items:center; gap:12px; min-height:var(--chassi-topo); padding:8px 20px; border-bottom:1px solid var(--line); background:var(--bg-1); min-width:0; }
 .ini-menu { display:none; }
 .ini-titulo { flex:none; font-size:var(--fs-lg); font-weight:650; white-space:nowrap; }
 .ini-abas { display:flex; gap:4px; min-width:0; padding:3px; border-radius:11px; background:var(--bg-1); box-shadow:inset 0 0 0 1px rgb(var(--tinta) / 3.9%); overflow-x:auto; scrollbar-width:none; }
@@ -155,8 +138,10 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 /* `overflow-y:auto` faz o `overflow-x` valer `auto` também: com a barra de rolagem de verdade do Linux
    (que ocupa largura, ao contrário da fina do Windows) qualquer sobra de um pixel virava uma barra
    horizontal. A coluna nunca rola de lado: o que não cabe é culpa do conteúdo, e o conteúdo encolhe. */
-.ini-agora { grid-area:agora; display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; padding:16px; border-left:1px solid var(--line); background:var(--bg-1); overflow-y:auto; overflow-x:hidden; }
-.ini-agora-titulo { font-size:var(--fs-xl); font-weight:750; letter-spacing:-.02em; }
+.ini-agora { grid-area:agora; display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; padding:0 16px 16px; border-left:1px solid var(--line); background:var(--bg-1); overflow-y:auto; overflow-x:hidden; }
+/* O título é o cabeçalho da coluna, na altura e com a borda da linha de cima da moldura (o chat da sala
+   tem o dele): a linha atravessa as três colunas. */
+.ini-agora-titulo { flex:none; display:flex; align-items:center; height:var(--chassi-topo); margin:0 -16px; padding:0 16px; border-bottom:1px solid var(--line); font-size:var(--fs-lg); font-weight:650; letter-spacing:-.02em; }
 .ini-agora-lista { display:grid; gap:10px; }
 .ini-agora-centro { display:none; }
 .ini-sala-viva { position:relative; display:grid; gap:10px; padding:14px; border-radius:var(--r-lg); background:var(--bg-cartao); box-shadow:inset 0 0 0 1px var(--line-2); transition:transform var(--dur) var(--curva),box-shadow var(--dur) var(--curva); animation:nexo-surgir var(--dur-lenta) var(--curva); }
@@ -224,7 +209,7 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 .ini-veu { position:fixed; inset:0; z-index:60; background:#0809109c; animation:nexo-aparecer var(--dur) var(--curva); }
 
 /* ---------- Larguras ---------- */
-@media (max-width:1250px) { .ini { --col-lateral:240px; --col-agora:300px; } }
+/* As larguras de cada degrau (1250, 1600) vêm dos tokens da moldura, em tema.css. */
 /* Sem a coluna da direita, o "Agora no Nexo" desce para o topo da lista de amigos. */
 @media (max-width:1100px) {
   .ini { grid-template-columns:var(--col-trilho) var(--col-lateral) minmax(0,1fr); grid-template-areas:"trilho lateral centro"; }
@@ -237,10 +222,10 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 /* Celular: a trilha e a lateral viram gaveta, e o centro fica com a tela inteira. */
 @media (max-width:760px) {
   .ini { grid-template-columns:minmax(0,1fr); grid-template-areas:"centro"; padding-top:env(safe-area-inset-top); }
-  .ini-trilho,.ini-lateral { position:fixed; top:0; bottom:0; z-index:70; transform:translateX(-110%); visibility:hidden; transition:transform var(--dur-lenta) var(--curva),visibility 0s linear var(--dur-lenta); }
-  .ini-trilho { left:0; width:var(--col-trilho); padding-top:calc(12px + env(safe-area-inset-top)); }
+  .ini > .trilho,.ini-lateral { position:fixed; top:0; bottom:0; z-index:70; transform:translateX(-110%); visibility:hidden; transition:transform var(--dur-lenta) var(--curva),visibility 0s linear var(--dur-lenta); }
+  .ini > .trilho { left:0; width:var(--col-trilho); padding-top:calc(10px + env(safe-area-inset-top)); }
   .ini-lateral { left:var(--col-trilho); width:min(280px,calc(100vw - var(--col-trilho) - 24px)); padding-bottom:env(safe-area-inset-bottom); }
-  .ini.menu-aberto .ini-trilho,.ini.menu-aberto .ini-lateral { transform:none; visibility:visible; transition:transform var(--dur-lenta) var(--curva),visibility 0s; }
+  .ini.menu-aberto > .trilho,.ini.menu-aberto .ini-lateral { transform:none; visibility:visible; transition:transform var(--dur-lenta) var(--curva),visibility 0s; }
   .ini-menu { display:inline-grid; }
   .ini-topo { flex-wrap:wrap; gap:8px; padding:8px 12px; }
   .ini-abas { order:3; flex-basis:100%; }
@@ -254,6 +239,5 @@ kbd { display:inline-grid; place-items:center; min-width:20px; height:20px; padd
 /* ---------- Dentro de uma chamada (camada.js) ---------- */
 /* O início aberto por cima da sala (inicio-na-sala.js) é esta mesma página num quadro. A sala já tem o
    botão de atualizar o aplicativo, e a página de cima cuida da barra de segurança do celular. A sala da
-   chamada é a primeira da trilha, com o anel verde de "você está aqui". */
+   chamada é a primeira da trilha, com o anel verde de "você está aqui" (trilho.css, `.aqui`). */
 .na-camada #atualizarAppBtn { display:none!important; }
-.na-camada .ini-sala.aqui { border-radius:var(--r-md); box-shadow:0 0 0 2px var(--bg-fundo),0 0 0 4px var(--online); }

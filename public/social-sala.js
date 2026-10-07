@@ -255,6 +255,8 @@
   // segundos, com a imagem congelada.
   function entrarNaSala(sala) {
     const destino = `/${encodeURIComponent(sala)}/sala`;
+    // Quem aceitou o convite não precisa confirmar o nome de novo na sala (chassi.js).
+    window.NexoChassi?.marcarEntrada(sala);
     if (typeof sairDaSala === 'function') sairDaSala(destino); else window.location.href = destino;
   }
   S.on('mensagem', ({ com, mensagem }) => {
