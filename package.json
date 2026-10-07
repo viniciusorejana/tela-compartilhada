@@ -48,6 +48,8 @@
     "build:sfu": "node scripts/baixar-livekit.cjs",
     "android:empacotar": "node --env-file-if-exists=.env.prod scripts/empacotar-android.cjs",
     "servidor:padrao": "node --env-file-if-exists=.env.prod scripts/servidor-padrao.cjs",
+    "lancar": "node deploy/lancamento/lancar.cjs",
+    "lancar:plano": "node deploy/lancamento/lancar.cjs --plano",
     "musica:instalar": "node scripts/baixar-musica.cjs",
     "musica:atualizar": "node scripts/baixar-musica.cjs --atualizar",
     "sons:compor": "node scripts/sons/compor.cjs",

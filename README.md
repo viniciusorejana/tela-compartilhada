@@ -1745,7 +1745,7 @@ pelo Git.
 
 ### Versão do aplicativo e aviso de atualização
 
-A versão é a do `app/package.json` (hoje **1.2.0**; a do Android é a do
+A versão é a do `app/package.json` (a do Android é a do
 `android/app/build.gradle`). Os scripts `empacotar` rodam, depois do
 `electron-builder`, o `app/escrever-versao.js`, que anota a versão do build em
 `app/dist/versao.json` — uma linha por sistema, porque cada um sai de uma máquina diferente. É
@@ -1754,8 +1754,12 @@ a do código antes de empacotar mandaria todo mundo baixar o mesmo arquivo velho
 o arquivo, a versão fica desconhecida e ninguém é avisado de nada. Quem copia um build feito
 em outra máquina copia junto a linha dele no `versao.json`.
 
-Para lançar uma versão: suba o `version` do `app/package.json`, rode o `empacotar` de cada
-sistema e ponha os arquivos (e o `versao.json`) no `app/dist` do servidor.
+Para lançar uma versão: `npm run lancar` (`docs/lancar-aplicativos.md`). Ele decide se o
+aplicativo de mesa e o Android precisam de número novo (cada build anota no `versao.json` o
+commit de onde saiu), sobe a versão, gera o Windows e o Android no PC e o Linux na máquina do
+servidor, manda tudo e confere pelo endereço público. À mão: suba o `version` do
+`app/package.json`, rode o `empacotar` de cada sistema e ponha os arquivos no `app/dist` do
+servidor, cuidando para não apagar do `versao.json` de lá as linhas feitas em outra máquina.
 
 No aplicativo portátil (e no Android), a sala compara a própria versão (que o `preload.js` expõe
 como `appNativo.versao`; no Android, o user agent) com a do build servido para aquele sistema. Se

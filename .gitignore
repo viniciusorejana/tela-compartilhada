@@ -19,6 +19,8 @@ native/dev/
 .env
 .env.*
 !.env.example
+# A máquina para onde o lançamento manda os builds (endereço, usuário, chave). O modelo é config.exemplo.json.
+deploy/lancamento/config.json
 
 # O aplicativo Android: o que o Gradle gera, o caminho do SDK desta máquina e, acima de tudo, a
 # chave que assina o APK -- quem a tem publica atualizações (docs/android.md).

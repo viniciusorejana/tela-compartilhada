@@ -1,0 +1,22 @@
+{
+  "_comentario": "Copie para config.json (fora do Git) e preencha. Cada campo está explicado em docs/lancar-aplicativos.md, \"A configuração\".",
+  "ramo": "nexo-webcodecs",
+  "remoto": "origin",
+  "urlPublica": "https://seu-dominio.exemplo",
+  "servidorPadrao": null,
+  "vps": {
+    "host": "203.0.113.10",
+    "porta": 22,
+    "usuario": "ubuntu",
+    "chave": "~/.ssh/sua-chave.key",
+    "pasta": "/opt/nexo",
+    "usuarioDoServico": "nexo",
+    "servico": "nexo"
+  },
+  "construir": {
+    "windows": true,
+    "android": true,
+    "linux": true
+  },
+  "javaHome": null
+}

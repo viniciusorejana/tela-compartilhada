@@ -112,6 +112,7 @@ correta. Os comentários explicam *por que* a decisão existe, não o que a linh
 | Mesa de sons: um som por pessoa, parar o próprio som | `soundboard.js` (servidor) + `public/soundboard.js`; o parar é o evento `soundboard-parar` (`server.js`) |
 | Instalador do aplicativo de mesa (NSIS, .deb) e a atualização sozinha | `build` em `app/package.json`; `app/atualizacao-automatica.js` (electron-updater pelo servidor escolhido), `app/iniciar-com-o-sistema.js`; a pasta `/downloads/atualizacoes` em `desktop-download.js`; na sala, `public/atualizacao-app.js` (o aviso e a seção "Aplicativo de mesa") |
 | Downloads da página inicial (todos os sistemas e o APK) | `desktop-download.js` (`SISTEMAS`) + `public/download.js`; a versão de cada build em `app/dist/versao.json` |
+| Lançar versões novas dos aplicativos (decidir, subir o número, gerar Windows/Android aqui e Linux na VPS, mandar, conferir; GitHub e VPS em dia) | `npm run lancar` (`lancar:plano` só mostra): `deploy/lancamento/lancar.cjs`, as decisões em `versoes.cjs` (`tests/lancamento.test.js`), o que roda na máquina em `deploy/lancamento/remoto/`; a máquina e o ramo em `deploy/lancamento/config.json` (fora do Git; modelo `config.exemplo.json`); cada build anota versão, commit e servidor por `app/escrever-versao.js` (`anotar`, `caminhosDoBuild`). Tudo em `docs/lancar-aplicativos.md` (o `docs/lancamento.md` é outro assunto: custo e preço) |
 | Aplicativo Android (WebView, chamada em segundo plano) | `android/` (`MainActivity`, `ChamadaService`); na sala, `public/app-android.js` e os ganchos em `sala.js`; o APK por `scripts/empacotar-android.cjs`; tudo em `docs/android.md` |
 | Atualização do Android (baixar, conferir a assinatura, instalar) e "Nexo X disponível" | `Atualizador.java` + `AtualizacaoRecebedor.java`; a notificação na rodada do `AvisosJob` (`conferirVersao`); na página, o mesmo `public/atualizacao-app.js` do aplicativo de mesa (o "motor" do Android vem de `app-android.js`, só do APK 1.1.0 em diante) |
 | O aviso de versão nova fora da sala (PC e Android) | `public/atualizacao-app.js` também no início (o botão `#atualizarAppBtn` no topo) e na apresentação (sem o botão, o aviso vem no canto) |
@@ -163,4 +164,5 @@ tela por WebCodecs — e o que a implementação mediu —, no fim de `docs/plan
 Estúdio, a foto de perfil e o que eles não resolvem, em `docs/estudio.md`; o aplicativo Android
 — construir, a chave de assinatura, distribuir e o que ele não resolve —, em `docs/android.md`;
 amigos, mensagens diretas, o cartão de perfil, as conquistas e o início de quem tem conta — e o
-que fica guardado e o que não fica —, em `docs/amigos-e-perfil.md`.
+que fica guardado e o que não fica —, em `docs/amigos-e-perfil.md`; lançar versões novas dos
+aplicativos (como decide, o que garante, trocar de máquina), em `docs/lancar-aplicativos.md`.

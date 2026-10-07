@@ -218,9 +218,11 @@ servidor o entrega em `/downloads/Nexo.apk` (`desktop-download.js`, com o tipo q
 oferecer instalar), a página inicial o mostra — como botão principal para quem a abre num
 Android — e o aplicativo aberto compara a versão para avisar que há uma mais nova.
 
-Para lançar uma versão: suba `versionCode` (sempre) e `versionName` em
-`android/app/build.gradle`, rode o `android:empacotar` e ponha o `Nexo.apk` e o `versao.json` no
-`app/dist` do servidor. Daí em diante, quem tem o Nexo fica sabendo e atualiza sem sair dele
+Para lançar uma versão: `npm run lancar` (`docs/lancar-aplicativos.md`) percebe que a pasta
+`android/` mudou desde o APK que está no ar, sobe `versionCode` e `versionName`, gera, manda e
+confere. À mão: suba `versionCode` (sempre) e `versionName` em `android/app/build.gradle`, rode o
+`android:empacotar` e ponha o `Nexo.apk` no `app/dist` do servidor, com a linha `android` do
+`versao.json` de lá atualizada. Daí em diante, quem tem o Nexo fica sabendo e atualiza sem sair dele
 (a seção abaixo).
 
 ### A atualização

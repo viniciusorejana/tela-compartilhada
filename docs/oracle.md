@@ -102,6 +102,10 @@ ter HTTPS sem comprar domínio (microfone, câmera e tela só funcionam em HTTPS
 | atualizar (depois de um `git push`) | `sudo bash /opt/nexo/deploy/oracle/atualizar.sh` |
 | a chave do painel | `sudo -u nexo -H bash -c 'cd /opt/nexo && node --env-file=.env.prod scripts/painel-chave.cjs'` |
 
+Do PC, `npm run lancar` faz a atualização acima e ainda lança as versões novas dos aplicativos
+(Windows e Android gerados no PC, Linux gerado aqui): `docs/lancar-aplicativos.md`. Ele também
+explica como trocar de máquina sem perder as contas e o painel.
+
 **O painel** não abre de fora, de propósito. Do seu PC:
 
 ```powershell

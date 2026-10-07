@@ -12,12 +12,12 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { escrever: escreverServidorPadrao } = require('./servidor-padrao.cjs');
+const { anotar } = require('../app/escrever-versao.js');
 
 const raiz = path.join(__dirname, '..');
 const pastaDoAndroid = path.join(raiz, 'android');
 const saidas = path.join(pastaDoAndroid, 'app', 'build', 'outputs', 'apk', 'release');
 const destino = path.join(raiz, 'app', 'dist', 'Nexo.apk');
-const fichaDeVersoes = path.join(raiz, 'app', 'dist', 'versao.json');
 
 // A versão é a do build.gradle, e não a do package.json: o aplicativo Android tem a dele.
 const gradle = fs.readFileSync(path.join(pastaDoAndroid, 'app', 'build.gradle'), 'utf8');
@@ -29,8 +29,9 @@ if (!versao) {
 
 // O servidor que a tela de endereço traz preenchido vem do .env.prod (NEXO_SERVIDOR_PADRAO) e entra no APK pelo
 // Gradle, que lê o arquivo que isto escreve.
+let servidor = '';
 try {
-  const servidor = escreverServidorPadrao();
+  servidor = escreverServidorPadrao();
   console.log(servidor ? `Servidor padrão no APK: ${servidor}` : 'Sem NEXO_SERVIDOR_PADRAO no .env.prod: a tela de endereço abre vazia.');
 } catch (erro) {
   console.error(erro.message);
@@ -67,10 +68,8 @@ if (!fs.existsSync(assinado)) {
 fs.mkdirSync(path.dirname(destino), { recursive: true });
 fs.copyFileSync(assinado, destino);
 
-let atual = {};
-try { atual = JSON.parse(fs.readFileSync(fichaDeVersoes, 'utf8')); } catch (_) { /* primeiro build */ }
-const sistemas = { ...(atual.sistemas || {}), android: { versao, em: new Date().toISOString() } };
-fs.writeFileSync(fichaDeVersoes, JSON.stringify({ sistemas }, null, 2) + '\n');
+// A mesma anotação dos aplicativos de mesa: a versão, o commit de onde o APK saiu e o servidor que ele traz.
+anotar(['android'], { servidor });
 
 const megabytes = (fs.statSync(destino).size / 1024 / 1024).toFixed(1);
 console.log(`\napp/dist/Nexo.apk: versão ${versao}, ${megabytes} MB. O servidor já oferece o download.`);
