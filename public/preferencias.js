@@ -175,6 +175,7 @@
     prioridade: ['nexoPrioridade', 'texto'],
     quadros: ['nexoFps', 'numero'],
     ladoCamera: ['nexoLadoCamera', 'texto'],
+    espelharCamera: [PREFIXO + 'espelharCamera', 'um-ou-zero'],
     pushToTalk: ['sala.pushToTalk', 'um-ou-zero'],
     reducaoDeRuido: [PREFIXO + 'reducaoDeRuido', 'json'],
     sons: [PREFIXO + 'sons', 'json'],

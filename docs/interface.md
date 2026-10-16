@@ -1027,6 +1027,32 @@ mudar de cor nem deixar um vazio no meio (a página nasce com a tela dela já ac
   servidor lento, fora do ar e mudo; primeira abertura; sem splash quando o sistema abre) e por `npm run test:carregando`
   (a tela de carregamento que nasce acesa nos aplicativos).
 
+### 4.22 Texto que fica na tela: curto, e o aviso importante recolhido
+
+Os painéis de configuração e, sobretudo, o de compartilhar a tela e as medições juntaram parágrafos de cinco a
+sete linhas (o custo medido de uma janela, o teto por espectador, o porquê do codec). Úteis, mas ocupavam a tela e
+escondiam o controle. O padrão, desde 15/10/2026:
+
+1. **Explicação embaixo de um controle é uma frase**, a consequência (seção 11) — "60 dobra o trabalho do
+   processador, não a banda." O número que decide fica; a história de como ele foi medido vai para o `docs/` e para
+   o comentário do código.
+2. **Aviso que pede leitura vira nota recolhida** (`.nx-nota`, `public/tema.css`): um `<details>` com um título de
+   uma linha que já diz o essencial ("Uma janela entrega metade dos quadros"), e o porquê e a ação só ao abrir. A
+   caixa (fundo, borda, cor) é de quem usa — `.echo-warning` no painel de compartilhar, `.medicao-nota` e
+   `.medicao-veredito` nas medições —; a nota só traz o comportamento.
+3. **A nota importante chama a atenção sem gritar** (`.nx-nota.importante`): um ponto âmbar à esquerda que pulsa três
+   vezes e para (menos movimento: não pulsa), e à direita a pílula **"Importante · ler"**, que vira "Fechar" aberta.
+   Para o leitor de tela, o título começa com "Importante:" (`.so-leitor`), e o `<details>` anuncia "recolhido" e
+   "expandido" sozinho; Enter e Espaço abrem.
+4. **Painel que se redesenha** (as medições, a cada 2 s) lembra o que a pessoa abriu: `notaRecolhida(chave, …)`
+   (`sala.js`) guarda a chave, e a nota volta aberta — senão fecharia no meio da leitura. Sem porquê, o ajudante
+   devolve só o título, sem "Ler".
+5. **Uma informação, um lugar**: o que a frase de cima já diz não se repete numa caixa embaixo (a caixa do agente
+   conectado ficou só com o título).
+
+Onde está: os dois avisos do painel de compartilhar (`#capturaAviso`, `#echoWarning`) e as notas e vereditos das
+medições. Candidatos para o mesmo padrão quando crescerem: as dicas do Estúdio e o diagnóstico.
+
 ---
 
 ## 5. Leiaute da sala
@@ -1246,8 +1272,11 @@ Regras que valem para toda peça nova:
 7. **Alvos de toque**: no mínimo 32 px (pílula de volume, silenciar, chips), 44 px para a ação
    principal de um painel no celular. Campos com 16 px de letra.
 8. **Sem passar o mouse não há `:hover`**: o que só aparecia ao passar o mouse fica à vista no
-   toque, mas apagado (`@media (hover: none)` — ações da mensagem a 50%, o X de tirar imagem,
-   as ações da fila).
+   toque, mas apagado (`@media (hover: none)` — o X de tirar imagem, as ações da fila). **As ações de
+   uma mensagem** (chat da sala e conversa direta) são a exceção: à vista em toda linha, poluíam a
+   conversa inteira; aparecem ao **tocar na mensagem** (`.tocada`, em `sala.js` e `conversa.js`) e somem
+   ao tocar de novo, noutra ou fora. O `:hover` delas fica dentro de `@media (hover: hover)`, porque no
+   toque ele gruda na última mensagem tocada.
 9. **Janela baixa** também é caso: painéis altos tiram a frase de explicação abaixo de 560 px
    de altura; o celular deitado tem de caber.
 
@@ -1272,6 +1301,15 @@ de fora. Painel ou estado novo entra na lista dele (`ESTADOS` em `tests/layout-b
 - **Regiões vivas**: o chat é `role="log"`, avisos de estado são `role="status"`.
 - **Contraste medido** (2.3, 2.4), também nos temas que a pessoa monta.
 - **Menos movimento** respeitado nos dois níveis (2.8).
+- **As opções da pessoa** (Configurações → Aparência → Acessibilidade; seguem a conta, e `tema.js` aplica em toda
+  página desde a primeira pintura): **Menos animação**, **Alto contraste** (`html.alto-contraste`: os textos fracos
+  chegam perto de `--text` e as bordas sutis ficam visíveis, por mistura de cor, então vale em todo tema),
+  **Sublinhar os links** (no meio do texto: a cor sozinha não basta) e **Contorno de foco reforçado** (3 px, também
+  no clique). Para aumentar tudo, o zoom — e o aplicativo de mesa ganhou o menu Ver com Ctrl +, Ctrl − e Ctrl 0.
+- **Notificações** (Configurações → Sons → Avisos e notificações; `public/notificacoes.js`): o interruptor do
+  computador, o do celular (só no aplicativo Android) e "O que notifica" (menções, mensagens/convites/amizades, tela,
+  pedidos para entrar). Ficam no aparelho, e não na conta.
+- **A própria câmera espelhada** (Voz e vídeo; padrão ligado), como num espelho, só para quem se vê.
 
 ---
 
@@ -1345,7 +1383,8 @@ avançado).
   só nos rótulos de grupo pequenos (2.6).
 
 **Explicações.** Abaixo do controle, em `--muted`/`--faint`, dizendo a **consequência**: "Só
-você ouve a diferença, e o Nexo lembra na próxima vez." — e não o que o controle é.
+você ouve a diferença, e o Nexo lembra na próxima vez." — e não o que o controle é. **Uma frase**; o
+que passa disso e a pessoa precisa saber vira nota recolhida (4.22).
 
 **Erros e recusas.** O que aconteceu e o que fazer, em uma frase: "Sem conexão com o servidor.
 Tente de novo.", "Mudanças demais em pouco tempo. Aguarde um minuto.", "Esta pessoa não deixa
@@ -1373,7 +1412,7 @@ Quando a frase pede concordância, ela vai com "a pessoa".
 - [ ] Uma ação principal violeta no máximo; "Fechar" cinza.
 - [ ] Botão só de ícone com `aria-label` e `title`; liga-desliga com `aria-pressed`.
 - [ ] Foco visível, Enter/Espaço em tudo que é clicável, Esc fecha o que abriu.
-- [ ] O texto segue a seção 11.
+- [ ] O texto segue a seção 11: explicação de uma frase, e aviso longo como nota recolhida (4.22).
 - [ ] Funciona de 320 a 2560 px sem rolar de lado nem sobrepor; o estado novo entrou em
       `tests/layout-browser.cjs`.
 - [ ] No toque: alvos de 32 px, nada que só exista no `:hover`.

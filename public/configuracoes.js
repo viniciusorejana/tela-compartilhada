@@ -16,7 +16,9 @@
   const Tema = window.NexoTema;
   // `modo` vazio quer dizer "o do tema": escolher o Areia traz o claro junto, e o Floresta o
   // escuro. Só quem mexe no seletor de modo fixa um -- e "do sistema" sobrevive à troca de tema.
-  const PADRAO = Object.freeze({ densidade: 'confortavel', texto: 'normal', tempos: false, reacoes: true, menosMovimento: false, tema: Tema.TEMA_PADRAO, modo: '', destaque: '', cores: null });
+  const PADRAO = Object.freeze({ densidade: 'confortavel', texto: 'normal', tempos: false, reacoes: true, menosMovimento: false, contraste: false, sublinhar: false, focoReforcado: false, tema: Tema.TEMA_PADRAO, modo: '', destaque: '', cores: null });
+  // As chaves liga-desliga da Aparência e o interruptor de cada uma (sala.html).
+  const CHAVES = { tempos: 'aparenciaTempos', reacoes: 'aparenciaReacoes', menosMovimento: 'aparenciaMovimento', contraste: 'aparenciaContraste', sublinhar: 'aparenciaSublinhar', focoReforcado: 'aparenciaFoco' };
   let aparencia = { ...PADRAO };
   // Se as cores exatas valem agora. O plano chega depois da página; até lá vale o último que
   // esta página soube (tema.js guarda), para o tema com cores exatas não piscar.
@@ -27,7 +29,7 @@
     if (!bruto || typeof bruto !== 'object') return limpo;
     if (['confortavel', 'compacta'].includes(bruto.densidade)) limpo.densidade = bruto.densidade;
     if (['normal', 'grande', 'maior'].includes(bruto.texto)) limpo.texto = bruto.texto;
-    for (const chave of ['tempos', 'reacoes', 'menosMovimento']) if (typeof bruto[chave] === 'boolean') limpo[chave] = bruto[chave];
+    for (const chave of Object.keys(CHAVES)) if (typeof bruto[chave] === 'boolean') limpo[chave] = bruto[chave];
     if (Tema.TEMAS.some(t => t.id === bruto.tema)) limpo.tema = bruto.tema;
     if (Tema.MODOS.includes(bruto.modo)) limpo.modo = bruto.modo;
     if (Object.prototype.hasOwnProperty.call(Tema.DESTAQUES, bruto.destaque)) limpo.destaque = bruto.destaque;
@@ -89,9 +91,7 @@
     const marcar = (nome, valor) => { const opcao = painel.querySelector(`input[name="${nome}"][value="${valor}"]`); if (opcao) opcao.checked = true; };
     marcar('densidade', aparencia.densidade);
     marcar('textoChat', aparencia.texto);
-    $('aparenciaTempos').checked = aparencia.tempos;
-    $('aparenciaReacoes').checked = aparencia.reacoes;
-    $('aparenciaMovimento').checked = aparencia.menosMovimento;
+    for (const [chave, id] of Object.entries(CHAVES)) $(id).checked = aparencia[chave];
     const efetivo = Tema.resolver(aparencia, { coresLivres });
     marcar('modoTema', efetivo.modoEscolhido);
     marcar('temaPronto', aparencia.tema);
@@ -175,9 +175,7 @@
 
   painel.querySelectorAll('input[name="densidade"]').forEach(opcao => opcao.addEventListener('change', () => definir({ densidade: opcao.value })));
   painel.querySelectorAll('input[name="textoChat"]').forEach(opcao => opcao.addEventListener('change', () => definir({ texto: opcao.value })));
-  $('aparenciaTempos').addEventListener('change', evento => definir({ tempos: evento.target.checked }));
-  $('aparenciaReacoes').addEventListener('change', evento => definir({ reacoes: evento.target.checked }));
-  $('aparenciaMovimento').addEventListener('change', evento => definir({ menosMovimento: evento.target.checked }));
+  for (const [chave, id] of Object.entries(CHAVES)) $(id).addEventListener('change', evento => definir({ [chave]: evento.target.checked }));
 
   // ---------- Perfil ----------
   // Um resumo de como a sala vê a pessoa, com o caminho para mudar. O editor em si é o do perfil

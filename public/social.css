@@ -87,10 +87,11 @@
 .nx-dm-msg-texto { grid-column:2; margin:1px 0 0; color:var(--text-2); font-size:14px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
 .nx-dm-msg-texto a { color:var(--accent-texto); }
 /* As ações da mensagem (reagir, apagar) numa barrinha por cima do canto de cima, como no chat da sala:
-   aparece com o mouse ou o foco na mensagem, e não ocupa lugar do texto. No toque ficam à vista, apagadas. */
+   aparece com o mouse ou o foco na mensagem, e não ocupa lugar do texto. No toque, ao tocar na mensagem (`.tocada`,
+   conversa.js); o `:hover` do toque gruda na última tocada, então ele só vale onde há ponteiro. */
 .nx-dm-msg-acoes { position:absolute; top:-13px; right:6px; z-index:3; display:flex; gap:1px; padding:2px; border-radius:var(--r-md); background:var(--bg-3); box-shadow:0 0 0 1px var(--line-2),0 6px 18px rgb(0 0 0 / 28%); opacity:0; pointer-events:none; transition:opacity var(--dur-rapida) var(--curva); }
-.nx-dm-msg:hover .nx-dm-msg-acoes,.nx-dm-msg:focus-within .nx-dm-msg-acoes { opacity:1; pointer-events:auto; }
-@media (hover:none) { .nx-dm-msg-acoes { opacity:.6; pointer-events:auto; } }
+@media (hover:hover) { .nx-dm-msg:hover .nx-dm-msg-acoes { opacity:1; pointer-events:auto; } }
+.nx-dm-msg.tocada .nx-dm-msg-acoes,.nx-dm-msg:focus-within .nx-dm-msg-acoes { opacity:1; pointer-events:auto; }
 .nx-dm-msg-acao { --nx-cor:var(--muted); --nx-cor-hover:var(--text); --nx-fundo-hover:rgb(var(--tinta) / 7.8%); width:var(--ctl-p); height:var(--ctl-p); border-radius:var(--r-sm); }
 .nx-dm-msg-acao.perigo { --nx-cor-hover:var(--danger-texto); --nx-fundo-hover:var(--danger-suave); }
 .nx-dm-msg-acao .ico { transition:transform var(--dur) var(--curva-mola); }

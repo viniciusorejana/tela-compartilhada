@@ -113,7 +113,11 @@
     });
   }
 
+  // A sala de quem tem conta é sempre a mesma (conta-cliente.js, `salaDaConta`); o sorteio só fica para
+  // o caso de a conta ainda não ter respondido.
   function novoCodigo() {
+    const minha = window.NexoConta?.salaDaConta(conta);
+    if (minha) return minha;
     const bytes = crypto.getRandomValues(new Uint8Array(4));
     return `sala-${[...bytes].map(b => b.toString(16).padStart(2, '0')).join('')}`;
   }
@@ -910,13 +914,18 @@
     if (mensagem.de === S.estado.eu) return;
     const vendo = secao === 'conversa' && conversa?.codigo === com && document.visibilityState === 'visible';
     if (vendo || naoIncomodar() || mensagem.tipo === 'convite') return;
-    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: (mensagem.texto || 'Mandou uma imagem').slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirConversa(com) }] });
+    const detalhe = (mensagem.texto || 'Mandou uma imagem').slice(0, 120);
+    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe, acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirConversa(com) }] });
+    // Com a janela escondida, também uma notificação do computador (notificacoes.js). Dentro da camada, quem
+    // notifica é a sala por baixo -- e ela fica calada enquanto a camada está aberta, então é aqui.
+    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', S.nomeDe(com), { corpo: detalhe, tag: `nexo-dm-${com}`, aoClicar: () => abrirConversa(com) });
   });
   S.on('convite', ({ de, apelido, sala }) => {
     pintarConversas();
     // Chamado para a sala em que já está: a conversa mostra o convite, e o aviso não tem o que pedir.
     if (ehMinhaSala(sala)) return;
     aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: camada ? `Para a sala #${sala}. Entrar sai desta chamada.` : `Para a sala #${sala}`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar na sala', principal: true, fazer: () => irParaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirConversa(de) }] });
+    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', `${S.nomeDe(de) || apelido} chamou você`, { corpo: `Para a sala #${sala}`, tag: `nexo-convite-${sala}`, aoClicar: () => abrirConversa(de) });
   });
   S.on('conquista', c => {
     aviso({ tom: 'ok', icone: 'conquista', titulo: `Conquista: ${c.nome}`, detalhe: c.descricao, fecharEm: 8000, acoes: [{ rotulo: 'Ver conquistas', fazer: () => irPara('conquistas') }] });

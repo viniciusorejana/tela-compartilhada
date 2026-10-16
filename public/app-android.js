@@ -151,9 +151,15 @@
     const lido = chave => mandar({ tipo: 'aviso-lido', chave });
     let recebidos = null;
     let enviados = null;
+    // A escolha da pessoa (Configurações → Sons → "Notificações do celular" e "O que notifica", notificacoes.js).
+    // Desligado, nada sai daqui, e o aplicativo para de perguntar sozinho (`avisos` desligado para o AvisosJob).
+    const pode = () => window.NexoNotificacoes ? window.NexoNotificacoes.celular('mensagem') : true;
+    let comConta = false;
+    const contarAoAplicativo = () => mandar({ tipo: 'avisos', ligado: comConta && pode() });
+    window.NexoNotificacoes?.aoMudar(contarAoAplicativo);
 
     function avisarMensagem(com, mensagem) {
-      if (!mensagem || mensagem.de === S.estado.eu) return;
+      if (!mensagem || mensagem.de === S.estado.eu || !pode()) return;
       const nome = curto(S.nomeDe(com), 60);
       if (mensagem.tipo === 'convite') {
         if (!CODIGO_DE_SALA.test(mensagem.sala || '') || mensagem.sala === salaAberta) return;
@@ -165,8 +171,9 @@
     }
 
     S.on('pronto', () => {
-      // A conta está aqui: o aplicativo passa a perguntar sozinho quando a página parar.
-      mandar({ tipo: 'avisos', ligado: true });
+      // A conta está aqui: o aplicativo passa a perguntar sozinho quando a página parar (se a pessoa quer).
+      comConta = true;
+      contarAoAplicativo();
       for (const c of S.conversas()) {
         // Lida em outro lugar (no computador, noutra aba) enquanto esta página estava parada.
         if (!c.naoLidas) lido(`conversa:${c.com}`);
@@ -175,7 +182,7 @@
         else if (escondida()) avisarMensagem(c.com, c.ultima);
       }
     });
-    S.on('sem-conta', () => mandar({ tipo: 'avisos', ligado: false }));
+    S.on('sem-conta', () => { comConta = false; contarAoAplicativo(); });
     S.on('mensagem', ({ com, mensagem }) => {
       // Respondi (aqui ou noutro aparelho): a conversa está em dia.
       if (mensagem.de === S.estado.eu) { lido(`conversa:${com}`); return; }
@@ -189,10 +196,10 @@
       // com a página parada).
       if (recebidos) {
         for (const [codigo, p] of agoraRecebidos) {
-          if (!recebidos.has(codigo) && escondida()) mandar({ tipo: 'aviso', categoria: 'pedido', codigo, nome: curto(p.apelido, 60) });
+          if (!recebidos.has(codigo) && escondida() && pode()) mandar({ tipo: 'aviso', categoria: 'pedido', codigo, nome: curto(p.apelido, 60) });
         }
         for (const codigo of enviados.keys()) {
-          if (amigos.has(codigo) && escondida()) mandar({ tipo: 'aviso', categoria: 'aceito', codigo, nome: curto(enviados.get(codigo).apelido, 60) });
+          if (amigos.has(codigo) && escondida() && pode()) mandar({ tipo: 'aviso', categoria: 'aceito', codigo, nome: curto(enviados.get(codigo).apelido, 60) });
         }
       }
       // Os pedidos que ainda esperam, sempre, e não só a diferença: um pedido aceito no computador

@@ -140,6 +140,8 @@ let fuiRemovido = false;
 let micStream = null;
 let micTrack = null;
 let cameraStream = null;
+// Ver a própria câmera espelhada (espelharSeForAMinhaCamera); Configurações → Voz e vídeo.
+let espelharCamera = Preferencias.lerAjuste('espelharCamera', true) !== false;
 let screenStream = null;
 // Entra-se na sala em silencio: o microfone e aberto (a permissao vale de uma vez so),
 // mas a faixa vai desligada ate a pessoa apertar o botao.
@@ -1254,20 +1256,16 @@ const perfilAtual = () => RoomQuality.profiles[perfilDeQualidade];
 const PREFERENCIAS_DE_WEBCODECS = {
   automatico: {
     aviso: 'Codificação da tela automática: pela placa de vídeo quando der.',
-    explica: 'Com placa de vídeo que faz H.264 nesta máquina, a tela é codificada por ela, pelo WebCodecs, e viaja pelo'
-      + ' WebRTC como sempre: todo mundo na sala recebe, em qualquer navegador, e o servidor de mídia gasta o mesmo que'
-      + ' gastaria sem a placa. Sem placa, o navegador codifica, sem você mexer em nada.'
+    explica: 'Com placa de vídeo que faz H.264, ela codifica a tela; sem placa, o navegador. Todo mundo recebe, em qualquer navegador.'
   },
   sempre: {
     aviso: 'Codificação da tela: WebCodecs forçado, pela faixa de dados.',
-    explica: 'Para testes. A tela vai pela faixa de dados, o caminho anterior do WebCodecs, mesmo sem placa de vídeo'
-      + ' (codificando no processador) e mesmo com servidor de mídia anterior ao 1.13.7. Precisa de todos na sala'
-      + ' conseguindo receber, e custa ao servidor umas cinco vezes o processador do outro caminho.'
+    explica: 'Para testes. A tela vai pela faixa de dados, mesmo sem placa (no processador). Todos na sala precisam'
+      + ' conseguir receber, e o servidor gasta umas cinco vezes mais.'
   },
   desligada: {
     aviso: 'Codificação da tela: só WebRTC.',
-    explica: 'A tela vai sempre pelo WebRTC, e o navegador decide onde codificar. Vale também para o que você recebe:'
-      + ' enquanto você estiver na sala, ninguém transmite por WebCodecs.'
+    explica: 'A tela vai sempre pelo WebRTC. Vale também para o que você recebe: com você na sala, ninguém usa WebCodecs.'
   }
 };
 let preferenciaDeWebCodecs = Preferencias.lerAjuste('webcodecs', 'automatico');
@@ -2615,6 +2613,9 @@ pushToTalk.addEventListener('change', () => {
   Preferencias.gravarAjuste('pushToTalk', pushToTalkAtivo);
   if (pushToTalkAtivo && micTrack && !micMuted) alternarMic();
 });
+const espelharCameraChave = document.getElementById('espelharCamera');
+espelharCameraChave.checked = espelharCamera;
+espelharCameraChave.addEventListener('change', () => definirEspelhoDaCamera(espelharCameraChave.checked));
 function alvoEditavel(alvo) { return Boolean(alvo?.closest?.('input,textarea,select,[contenteditable="true"]')); }
 // Fechar o microfone não pode depender de o `keyup` chegar. Alt+Tab com o Espaço apertado, um
 // clique que leva o foco para o campo do chat no meio da fala, a aba que vai para segundo
@@ -3087,12 +3088,12 @@ function atualizarRotulosDeQualidade() {
   // "mais" acreditando que é melhor.
   const noTeto = RoomQuality.tetoDeEnvio(largura, altura, 60) >= RoomQuality.TETO_ABSOLUTO
     && RoomQuality.tetoDeEnvio(largura, altura, 30) >= RoomQuality.TETO_ABSOLUTO;
-  const texto = `Nesta resolução: 30 quadros até ${em(30)}, 60 quadros até ${em(60)}.`
+  // Uma linha: os dois tetos e a consequência que importa. O porquê do teto (uma cópia por espectador) está no
+  // docs/banda-e-escala.md, e não precisa morar embaixo do seletor.
+  const texto = `30 quadros: até ${em(30)} · 60 quadros: até ${em(60)}.`
     + (noTeto
-      ? ` Os dois batem no teto de ${emMegabits(RoomQuality.TETO_ABSOLUTO)}, que existe porque o servidor manda uma cópia por espectador.`
-        + ' Aqui 60 quadros não ganham banda, dividem a mesma: mais movimento, menos definição em cada quadro.'
-        + ' Para 60 quadros com imagem cheia, uma resolução abaixo entrega mais.'
-      : ' Dobrar os quadros não dobra a banda, mas dobra o trabalho do seu processador.');
+      ? ` Os dois batem no teto de ${emMegabits(RoomQuality.TETO_ABSOLUTO)}: a 60, cada quadro sai menos nítido.`
+      : ' 60 dobra o trabalho do processador, não a banda.');
   if (dica) dica.textContent = texto;
   if (dicaDoEnvio) dicaDoEnvio.textContent = texto;
   atualizarAvisoDeCodificacao();
@@ -3123,10 +3124,9 @@ async function atualizarAvisoDeCodificacao() {
   const aperta = COMBINACOES_QUE_NAO_CABEM(perfilAtual());
   const frase = !semHardware ? ''
     : aperta
-      ? `Esta máquina comprime vídeo no processador, e ${perfilAtual().label.split(' · ')[0]} a ${quadrosDaTela} quadros`
-        + ' não cabe nele. A resolução vai cair sozinha durante a transmissão para os quadros não travarem —'
-        + ' o painel de medições mostra quando isso acontece. 720p a 60 e 1080p a 30 cabem com folga.'
-      : 'Esta máquina comprime vídeo no processador, e esta combinação cabe nele.';
+      ? `${perfilAtual().label.split(' · ')[0]} a ${quadrosDaTela} quadros não cabe no processador desta máquina: a`
+        + ' resolução cai sozinha na transmissão. 720p a 60 e 1080p a 30 cabem.'
+      : 'Sem placa de vídeo para comprimir, mas esta combinação cabe no processador.';
   for (const alvo of alvos) {
     alvo.textContent = frase;
     alvo.classList.toggle('aviso-aperta', Boolean(semHardware && aperta));
@@ -3160,6 +3160,27 @@ const elemento = (tag, classe, texto) => {
   if (texto != null) el.textContent = texto;
   return el;
 };
+
+// Uma explicação longa do painel de medições vira uma nota recolhida (tema.css, `.nx-nota`; docs/interface.md
+// 4.22): o título à vista, o porquê a pedido. O painel se redesenha a cada medição (dois segundos), então o que a
+// pessoa abriu fica lembrado pela chave e volta aberto -- senão a nota fecharia no meio da leitura.
+const notasAbertas = new Set();
+function notaRecolhida(chave, classe, titulo, texto, { importante = false } = {}) {
+  // Sem porquê, não há o que abrir: só o título.
+  if (!texto) { const simples = elemento('div', classe); simples.append(elemento('strong', null, titulo)); return simples; }
+  const nota = elemento('details', `${classe} nx-nota${importante ? ' importante' : ''}`);
+  nota.open = notasAbertas.has(chave);
+  nota.addEventListener('toggle', () => { if (nota.open) notasAbertas.add(chave); else notasAbertas.delete(chave); });
+  const resumo = elemento('summary');
+  const rotulo = elemento('span', 'nx-nota-titulo');
+  if (importante) rotulo.append(elemento('span', 'so-leitor', 'Importante: '));
+  rotulo.append(titulo);
+  const ler = elemento('span', 'nx-nota-ler');
+  ler.setAttribute('aria-hidden', 'true');
+  resumo.append(rotulo, ler);
+  nota.append(resumo, elemento('div', 'nx-nota-corpo', texto));
+  return nota;
+}
 
 // ---------- Ícones desenhados ----------
 //
@@ -3241,16 +3262,13 @@ function anotarFluxoDaCaptura(ao_vivo, capturaFps, codificado, presa = null) {
   // resolução e codec atrás de quadros que nunca existiram. A captura presa tem remédio, e ele
   // vem primeiro.
   if (presa) {
-    ao_vivo.append(elemento('div', 'medicao-nota', `A captura não passa de ${presa.fps} quadros por segundo, e`
-      + ' nunca entrega dois quadros mais perto que isso. É o jeito da captura lenta do Windows, que entra'
-      + ' depois de uma troca de resolução ou de monitor e fica até a tela ser capturada de novo: use Trocar,'
-      + ' na barra de baixo, e escolha a mesma tela. Se o que está na tela roda a 30 (um vídeo, um jogo'
-      + ' travado em 30), é só isso mesmo.'));
+    ao_vivo.append(notaRecolhida('captura-presa', 'medicao-nota', `Captura presa em ${presa.fps} quadros: use Trocar e escolha a mesma tela`,
+      'É a captura lenta do Windows, que entra depois de uma troca de resolução ou de monitor e só sai capturando'
+      + ' de novo. Se o que está na tela roda a 30 (um vídeo, um jogo travado em 30), é só isso mesmo.', { importante: true }));
   } else if (fonteEntrega === false && codificadorAcompanha) {
-    ao_vivo.append(elemento('div', 'medicao-nota', 'A fonte não tem mais quadros para dar:'
-      + ' a captura de tela só produz quadro quando a imagem muda, e não passa da taxa em que o'
-      + ' programa capturado está desenhando. Se o jogo está a ' + captura + ' quadros, é isso que'
-      + ' sobe — e a placa de vídeo ocupada também afeta a captura, mesmo com o processador folgado.'));
+    ao_vivo.append(notaRecolhida('fonte-lenta', 'medicao-nota', `A fonte entrega ${captura} quadros, e é isso que sobe`,
+      'A captura só produz quadro quando a imagem muda, e não passa da taxa em que o programa desenha. A placa de'
+      + ' vídeo ocupada também segura a captura, mesmo com o processador folgado.'));
   }
 }
 
@@ -3264,12 +3282,9 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
   // aviso laranja transformava a economia em susto, e acusava o codificador de não dar conta
   // exatamente quando ele estava de folga.
   if (q.emEspera) {
-    const espera = elemento('div', 'medicao-veredito ok');
-    espera.append(elemento('strong', null, 'Em espera: ninguém abriu a sua tela ainda.'));
-    espera.append(elemento('span', null, 'A tela está publicada, mas o servidor desligou as camadas'
-      + ' porque não há quem as receba — então nada está sendo codificado nem subindo. As medições'
-      + ' aparecem quando alguém clicar em Assistir.'));
-    ao_vivo.append(espera);
+    ao_vivo.append(notaRecolhida('espera', 'medicao-veredito ok', 'Em espera: ninguém abriu a sua tela ainda.',
+      'Sem quem receba, o servidor desliga as camadas e nada é codificado nem sobe. As medições aparecem quando'
+      + ' alguém clicar em Assistir.'));
     return;
   }
   const codec = nomeDoCodec(q.codec);
@@ -3321,10 +3336,9 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
     // quem pediu 1080p e vê 810p no painel conclui defeito, e a conclusão é razoável se nada
     // na tela explicar. Sem a frase, o ajuste que protege os quadros pareceria o problema.
     if (q.escalaDaTela > 1) {
-      ao_vivo.append(elemento('div', 'medicao-nota', `A imagem foi encolhida ${escalaEmTexto(q.escalaDaTela)}x`
-        + ` para os ${quadrosDaTela} quadros caberem na codificação — menos pixels custam menos por quadro.`
-        + ' É a troca deliberada desta sala: resolução menor quase ninguém repara, quadro perdido trava a'
-        + ' imagem e todo mundo repara. Ela volta ao tamanho cheio sozinha quando sobrar folga.'));
+      ao_vivo.append(notaRecolhida('encolhida', 'medicao-nota', `Imagem encolhida ${escalaEmTexto(q.escalaDaTela)}x para os ${quadrosDaTela} quadros caberem`,
+        'Menos pixels custam menos por quadro: resolução menor quase ninguém repara, quadro perdido todo mundo repara.'
+        + ' Ela volta ao tamanho cheio sozinha quando sobrar folga.'));
     }
     // Uma camada sozinha desligada continua sendo economia, e continua merecendo explicação:
     // é o degrau que ninguém está usando, não um degrau que falhou.
@@ -3339,9 +3353,9 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
   // O de reserva é uma codificação inteira a mais, paga por quem transmite, e nada na tela
   // contava isso.
   if (q.reserva) {
-    ao_vivo.append(elemento('div', 'medicao-nota',
-      `Codec de reserva ${nomeDoCodec(q.reserva.codec)} também subindo: ${emMegabits(q.reserva.kbps * 1000)}. `
-      + 'Alguém na sala não decodifica sua escolha, então a imagem sobe duas vezes.'));
+    ao_vivo.append(notaRecolhida('reserva', 'medicao-nota',
+      `Codec de reserva ${nomeDoCodec(q.reserva.codec)} também subindo: ${emMegabits(q.reserva.kbps * 1000)}`,
+      'Alguém na sala não decodifica a sua escolha, então a imagem sobe duas vezes.'));
   }
 
   // O veredito fecha o painel porque é a conclusão, não a introdução: quem chega aqui já viu
@@ -3352,10 +3366,7 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
     // economia. Alarmar nesse caso ensina a pessoa a ignorar o aviso quando ele importar.
     const nivel = queda.nivel === 'ok' ? 'ok'
       : queda.nivel === 'indefinido' || queda.nivel === 'fonte' ? 'neutro' : 'alerta';
-    const caixa = elemento('div', `medicao-veredito ${nivel}`);
-    caixa.append(elemento('strong', null, queda.titulo));
-    if (queda.texto) caixa.append(elemento('span', null, queda.texto));
-    ao_vivo.append(caixa);
+    ao_vivo.append(notaRecolhida(`queda:${queda.titulo}`, `medicao-veredito ${nivel}`, queda.titulo, queda.texto, { importante: nivel === 'alerta' }));
   } else if (MOTIVOS_DE_LIMITE[q.reason]) {
     ao_vivo.append(elemento('div', 'medicao-veredito alerta', MOTIVOS_DE_LIMITE[q.reason]));
   }
@@ -3373,10 +3384,10 @@ function renderizarMedicaoDoEnvio(ao_vivo, q) {
 function anotarFonteMenorQueOPedido(ao_vivo, largura, altura) {
   const perfil = perfilAtual();
   if (!largura || !altura || (altura >= perfil.height && largura >= perfil.width)) return;
-  ao_vivo.append(elemento('div', 'medicao-nota', `Sua tela tem ${largura}×${altura}, então a imagem sobe em ${altura}p mesmo`
-    + ` com ${perfil.label.split(' · ')[0]} escolhido. Esticar só gastaria banda sem ganhar detalhe — quem assiste num monitor`
-    + ' maior amplia do mesmo jeito. Para mais resolução de verdade, a fonte precisa ter os pixels: um monitor maior, ou a'
-    + ' resolução virtual do driver (DSR na NVIDIA, VSR na AMD) com a área de trabalho na resolução maior.'));
+  ao_vivo.append(notaRecolhida('fonte-menor', 'medicao-nota', `Sua tela tem ${largura}×${altura}: a imagem sobe em ${altura}p`,
+    `Mesmo com ${perfil.label.split(' · ')[0]} escolhido: esticar só gastaria banda sem ganhar detalhe. Para mais`
+    + ' resolução, a fonte precisa ter os pixels: um monitor maior, ou a resolução virtual do driver (DSR na NVIDIA,'
+    + ' VSR na AMD).'));
 }
 
 function atualizarBotaoDeQualidade() {
@@ -3588,11 +3599,9 @@ function anotarLimiteDaPlaca(ao_vivo, wc) {
 function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   ao_vivo.textContent = '';
   if (!wc.camadas.length) {
-    const espera = elemento('div', 'medicao-veredito ok');
-    espera.append(elemento('strong', null, 'Em espera: ninguém abriu a sua tela ainda.'));
-    espera.append(elemento('span', null, 'A tela vai por WebCodecs. Nada é codificado nem sobe enquanto ninguém assiste;'
-      + ' as medições aparecem quando alguém clicar em Assistir.'));
-    ao_vivo.append(espera);
+    ao_vivo.append(notaRecolhida('espera', 'medicao-veredito ok', 'Em espera: ninguém abriu a sua tela ainda.',
+      'A tela vai por WebCodecs. Nada é codificado nem sobe enquanto ninguém assiste; as medições aparecem quando'
+      + ' alguém clicar em Assistir.'));
     anotarLimiteDaPlaca(ao_vivo, wc);
     return;
   }
@@ -3635,11 +3644,12 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   // A imagem encolhida é dita, pela mesma razão que no RTP: sem a frase, o ajuste que protege
   // os quadros pareceria o problema.
   if (alta.camada === 'alta' && (alta.escala > 1 || alta.quadrosAlvo < quadrosDaTela)) {
-    ao_vivo.append(elemento('div', 'medicao-nota', alta.escala > 1
-      ? `A imagem foi encolhida ${escalaEmTexto(alta.escala)}x para os quadros continuarem chegando`
-        + (alta.ultimaMudanca === 'codificador' ? ' — o codificador não dava conta do tamanho cheio.' : ' — a banda não comportava o tamanho cheio.')
-        + ' Ela volta sozinha quando sobrar folga.'
-      : `Os quadros foram reduzidos a ${alta.quadrosAlvo} por segundo para a imagem continuar nítida — é a prioridade de nitidez. Eles voltam quando sobrar folga.`));
+    ao_vivo.append(alta.escala > 1
+      ? notaRecolhida('encolhida', 'medicao-nota', `Imagem encolhida ${escalaEmTexto(alta.escala)}x para os quadros continuarem chegando`,
+        (alta.ultimaMudanca === 'codificador' ? 'O codificador não dava conta do tamanho cheio.' : 'A banda não comportava o tamanho cheio.')
+        + ' Ela volta sozinha quando sobrar folga.')
+      : notaRecolhida('menos-quadros', 'medicao-nota', `Quadros reduzidos a ${alta.quadrosAlvo} por segundo`,
+        'Para a imagem continuar nítida: é a prioridade de nitidez. Eles voltam quando sobrar folga.'));
   }
   anotarLimiteDaPlaca(ao_vivo, wc);
   const pulados = wc.camadas.reduce((soma, c) => soma + c.descartes.rede + c.descartes.fila, 0);
@@ -3654,14 +3664,12 @@ function renderizarEnvioPorWebCodecs(ao_vivo, wc) {
   // A captura presa não é "Estável": a transmissão acompanha tudo que chega, mas chega metade
   // do que foi pedido. Neutro, e não laranja, porque o conteúdo pode rodar a 30 de verdade.
   const presa = !avisos.length && wc.capturaPresa;
-  const caixa = elemento('div', `medicao-veredito ${avisos.length ? 'alerta' : presa ? 'neutro' : 'ok'}`);
-  caixa.append(elemento('strong', null, avisos.length ? 'A transmissão está se ajustando.'
-    : presa ? `A captura não passa de ${wc.capturaPresa.fps} quadros por segundo.` : 'Estável.'));
-  caixa.append(elemento('span', null, [
-    ...avisos,
-    atraso !== null ? `Atraso mediano até quem assiste: ${atraso} ms.` : ''
-  ].filter(Boolean).join(' ')));
-  ao_vivo.append(caixa);
+  // O atraso cabe no título (é um número); os avisos são o porquê, e abrem a pedido.
+  const titulo = (avisos.length ? 'A transmissão está se ajustando.'
+    : presa ? `A captura não passa de ${wc.capturaPresa.fps} quadros por segundo.` : 'Estável.')
+    + (atraso !== null ? ` Atraso até quem assiste: ${atraso} ms.` : '');
+  ao_vivo.append(notaRecolhida('ajustando', `medicao-veredito ${avisos.length ? 'alerta' : presa ? 'neutro' : 'ok'}`,
+    titulo, avisos.join(' '), { importante: avisos.length > 0 }));
   anotarFonteMenorQueOPedido(ao_vivo, wc.fonte.largura, wc.fonte.altura);
 }
 
@@ -4140,57 +4148,38 @@ function planoDeAudio() {
 // O texto muda conforme o modo, porque a consequencia muda: excluir o navegador (ou o
 // aplicativo) e o caso sem eco; excluir outro programa deixa o navegador entrar na captura,
 // e ai tudo que ele toca volta para a sala.
-function textoDaCaptura(quem) {
-  const origem = quem === 'agente'
-    ? 'O agente instalado neste computador vai transmitir'
-    : 'Este computador vai transmitir';
-
-  if (modoDeAudio === 'excluir-pid') {
-    return `${origem} todo o áudio do sistema, exceto o deste aplicativo. `
-         + 'Como quem toca a sala é o próprio aplicativo, nada volta como eco — e o navegador '
-         + 'continua na captura, então um vídeo aberto nele vai junto normalmente.';
-  }
+// Uma frase só, abaixo do seletor (docs/interface.md 4.22): a consequência, e não a explicação inteira.
+function textoDaCaptura() {
+  if (modoDeAudio === 'excluir-pid') return 'Vai todo o som do computador, menos o do Nexo: sem eco.';
   if (modoDeAudio === 'incluir') {
-    if (!appEscolhido) {
-      return 'Escolha abaixo o programa cujo som deve ir para a sala. Enquanto nenhum for '
-           + 'escolhido, a tela é compartilhada sem áudio.';
-    }
-    const nome = nomeDoApp(appEscolhido);
-    return `${origem} SOMENTE o áudio de ${nome}. Nada mais do computador vai para a sala: `
-         + 'nem a voz de outro aplicativo, nem esta página. É o modo para quem conversa por fora '
-         + '(Discord, por exemplo) e compartilha tela ao mesmo tempo, porque é a única forma de '
-         + 'deixar os dois de fora.';
+    if (!appEscolhido) return 'Escolha abaixo o programa que vai junto. Sem escolha, a tela vai sem som.';
+    // O modo de quem conversa por fora (Discord) e transmite: a única forma de deixar os dois de fora.
+    return `Vai só o som de ${nomeDoApp(appEscolhido)}, e nada mais do computador.`;
   }
   const app = aplicativosDoAgente.find(a => a.executavel === appEscolhido);
-  if (!app || app.padrao) {
-    return `${origem} todo o áudio do SEU sistema, exceto o do navegador — sem eco, e sem precisar `
-         + 'marcar nada na janela do Chrome.';
-  }
-  return `${origem} todo o áudio do SEU sistema, exceto o de ${app.nome}. `
-       + 'Como o navegador entra na captura, use assim só enquanto a conversa por voz for por fora: '
-       + 'falando por aqui, sua própria sala volta como eco.';
+  if (!app || app.padrao) return 'Vai todo o som do computador, menos o do navegador: sem eco.';
+  return `Vai todo o som, menos o de ${app.nome}. O navegador entra: falando por aqui, a sala volta como eco.`;
 }
 
 function atualizarExplicacaoDeAudio() {
   const plano = planoDeAudio();
   const textos = {
     nenhum: 'A tela será compartilhada sem áudio.',
-    aba: 'Marque “Compartilhar áudio da guia” na janela do navegador. Como vai só o som daquela aba, não há risco de eco.',
-    'janela-navegador': 'Vai só o som da janela escolhida, quando o navegador oferece essa opção — nunca o som do resto do sistema. Se não oferecer, a tela vai sem áudio.',
-    agente: textoDaCaptura('agente'),
-    helper: textoDaCaptura('helper'),
+    aba: 'Marque “Compartilhar áudio da guia” na janela do navegador. Sem risco de eco.',
+    'janela-navegador': 'Vai só o som da janela, se o navegador oferecer. Se não, a tela vai sem som.',
+    agente: textoDaCaptura(),
+    helper: textoDaCaptura(),
     // Este sistema ainda não tem o agente nativo, então o som vem inteiro -- e o Nexo vai
     // dentro dele. Dizer isso ANTES é o que permite a pessoa pôr o fone: o eco aparece no
     // ouvido dos outros, não no dela, e ela seria a última a descobrir.
-    loopback: 'O som deste computador vai junto, inteiro. Use fones: sem eles, a voz dos outros'
-      + ' volta para a sala como eco. Neste sistema o Nexo ainda não consegue tirar a si mesmo da captura.',
-    'navegador-sistema': 'Marque “Compartilhar áudio do sistema” na janela que abrir. Sem isso o navegador não envia som nenhum.'
+    loopback: 'Vai todo o som deste computador, inclusive a sala. Use fones.',
+    'navegador-sistema': 'Marque “Compartilhar áudio do sistema” na janela que abrir, ou a tela vai sem som.'
   };
   echoHint.textContent = textos[plano];
   if (captureMode.value === 'window' && aplicativoNativo && audioPolicy.value !== 'none') {
-    echoHint.textContent = 'O som do programa vai junto com a janela, automaticamente. Outras janelas do mesmo programa podem ser ouvidas também.';
+    echoHint.textContent = 'O som do programa vai junto com a janela (e o das outras janelas dele).';
   }
-  if (aplicativoNativo && plano === 'nenhum' && audioPolicy.value !== 'none') echoHint.textContent = 'Sem o agente de áudio a tela vai sem som. Reinicie o aplicativo para tentar de novo.';
+  if (aplicativoNativo && plano === 'nenhum' && audioPolicy.value !== 'none') echoHint.textContent = 'Sem o agente de áudio, a tela vai sem som. Reinicie o aplicativo para tentar de novo.';
   atualizarCaixaDoAgente(plano);
 
   // A escolha do programa vale nos dois caminhos de captura nativa: pelo agente (no PC de
@@ -4204,14 +4193,13 @@ function atualizarExplicacaoDeAudio() {
   const riscoDeEco = plano === 'navegador-sistema' || plano === 'loopback';
   echoWarning.hidden = !riscoDeEco;
   if (plano === 'loopback') {
-    echoWarningText.textContent = 'Neste sistema o aplicativo ainda não tem o agente de áudio, que é o'
-      + ' programa capaz de excluir o Nexo da captura. Sem ele o som vai inteiro: de fone, ninguém nota;'
-      + ' em caixas de som, a voz dos outros volta como eco. Compartilhar uma aba do navegador não tem esse risco.';
+    echoWarningText.textContent = 'Neste sistema o aplicativo ainda não tem o agente de áudio, o programa que tira o Nexo'
+      + ' da captura. De fone, ninguém nota; em caixas de som, a voz dos outros volta. Uma aba do navegador não tem esse risco.';
   } else if (riscoDeEco) {
     const explicacoes = {
-      'helper-ausente': 'Sem o helper nativo não dá para tirar esta chamada da captura, e a voz dos outros pode voltar como eco. Rode “npm start” para compilá-lo, ou compartilhe uma aba.',
-      'atras-de-proxy': 'Por um endereço público a captura nativa fica desativada: ela rodaria na máquina do servidor e enviaria o áudio de lá. O navegador captura o som daqui, mas a voz dos outros pode voltar como eco. Se você hospeda a sala, abra-a por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador.',
-      remoto: 'A captura nativa só vale no computador que executa o servidor. O navegador captura o som daqui normalmente, mas a voz dos outros pode voltar como eco.'
+      'helper-ausente': 'Sem o helper nativo, esta chamada entra na captura. Rode “npm start” para compilá-lo, ou compartilhe uma aba.',
+      'atras-de-proxy': 'Por um endereço público a captura nativa fica desligada, e o navegador captura o som inteiro. Se você hospeda a sala, abra-a por ' + (audioCapabilities.urlLocal || 'http://localhost:3000') + ' neste computador.',
+      remoto: 'A captura nativa só vale no computador do servidor. Daqui, o navegador captura o som inteiro, com a sala junto.'
     };
     echoWarningText.textContent = explicacoes[audioCapabilities.motivo] || explicacoes.remoto;
   }
@@ -4231,11 +4219,10 @@ function atualizarAvisoDeCaptura() {
   // O custo era descrito e não medido. Agora é medido, e o número é grande o bastante para
   // mudar a decisão de quem lê: mesmo jogo, mesma resolução, mesma prioridade, trocando só
   // janela por tela inteira, os quadros que chegaram ao outro lado foram de 30 para 57.
-  capturaAvisoTexto.textContent = 'Compartilhar UMA janela custa quase metade dos quadros: medido '
-    + 'aqui, o mesmo jogo em 720p entregou 30 quadros por segundo por janela e 57 pela tela inteira. '
-    + 'O Windows precisa desenhar a janela de novo só para a captura, e é daí que vem também a tarja '
-    + 'amarela em volta. A tela inteira lê o quadro que a placa de vídeo já fez: mesma imagem, sem '
-    + 'tarja, com o dobro da fluidez — e o som do jogo continua saindo sem eco pelo agente.';
+  // O título da nota já diz o essencial; aqui vai o porquê, para quem abrir.
+  capturaAvisoTexto.textContent = 'O Windows redesenha a janela só para a captura (é daí a tarja amarela): o mesmo jogo em'
+    + ' 720p deu 30 quadros por janela e 57 pela tela inteira. A tela inteira mostra a mesma imagem, sem tarja, e o'
+    + ' som continua sem eco.';
 }
 
 // Mostra o estado do agente e, quando ele nao esta rodando, oferece o download ja
@@ -4250,20 +4237,15 @@ function atualizarCaixaDoAgente(plano) {
   const conectado = Boolean(audioCapabilities.agenteConectado);
   agenteBolinha.classList.toggle('ligado', conectado);
   agenteTitulo.textContent = conectado ? 'Agente de áudio conectado' : 'Agente de áudio não encontrado';
-  const excluindoOutro = modoDeAudio !== 'excluir'
-    || aplicativosDoAgente.some(a => a.executavel === appEscolhido && !a.padrao);
-  agenteTexto.textContent = conectado
-    ? (excluindoOutro
-      ? 'O som do seu computador vai junto com a tela, sem o programa escolhido abaixo.'
-      : 'O som do seu computador vai junto com a tela, sem eco e sem depender da caixa de áudio do navegador.')
-    : 'Um arquivo só, sem instalar: baixe, dê um duplo clique e deixe a janelinha aberta. Se o antivírus reclamar, é alarme falso — escolha “Manter” nos downloads do navegador.';
+  // Conectado, o título basta: o que vai junto já está na frase de cima (echoHint), e repetir era ruído.
+  agenteTexto.textContent = conectado ? ''
+    : 'Um arquivo, sem instalar: baixe, abra e deixe a janelinha aberta. Se o antivírus reclamar, escolha “Manter”.';
   // Dentro do aplicativo o agente vem junto: oferecer o download seria mandar a pessoa
   // resolver a mao um problema que o proprio aplicativo ja resolve.
   agenteDownload.hidden = conectado || Boolean(aplicativoNativo);
   agenteDownload.href = `/api/agente?token=${encodeURIComponent(tokenDoAgente)}`;
   if (!conectado && aplicativoNativo) {
-    agenteTexto.textContent = 'Subindo o agente de áudio. Se esta mensagem não sair em alguns '
-      + 'segundos, o AgenteAudio.exe não está ao lado do aplicativo.';
+    agenteTexto.textContent = 'Subindo o agente de áudio… Se demorar, o AgenteAudio.exe não está ao lado do aplicativo.';
   }
 }
 
@@ -4371,8 +4353,7 @@ function desenharAplicativos() {
     ? 'Programa que entra'
     : 'Programa que fica de fora';
   if (!precisaEscolher) {
-    excluirAppDica.textContent = 'O som deste aplicativo fica fora, então a sala não volta como eco. '
-      + 'Todo o resto do computador vai junto.';
+    excluirAppDica.textContent = 'O som deste aplicativo fica de fora; todo o resto vai junto.';
     return;
   }
 
@@ -4389,14 +4370,13 @@ function desenharAplicativos() {
     excluirApp.appendChild(opcao);
     excluirApp.disabled = true;
     excluirAppDica.textContent = audioCapabilities.agenteConectado
-      ? 'O agente não respondeu com a lista. Se você o baixou antes desta versão, baixe e execute de novo.'
+      ? 'O agente não mandou a lista. Se ele é de antes desta versão, baixe e abra de novo.'
       : 'Nenhum programa com áudio foi encontrado neste computador.';
     return;
   }
 
   if (agenteSemModo) {
-    excluirAppDica.textContent = 'O agente que está rodando é anterior a este recurso e não obedece '
-      + 'a esta escolha. Baixe e execute o agente de novo para que ela valha.';
+    excluirAppDica.textContent = 'Este agente é antigo e ignora esta escolha. Baixe e abra o agente de novo.';
   }
 
   excluirApp.disabled = false;
@@ -4435,12 +4415,12 @@ excluirApp.onchange = () => {
   const nome = nomeDoApp(appEscolhido);
   const app = aplicativosDoAgente.find(a => a.executavel === appEscolhido);
   if (modoDeAudio === 'incluir') {
-    excluirAppDica.textContent = `Só o som de ${nome} vai para a sala. Nada mais do computador é transmitido — nem a voz de outro aplicativo, nem esta página.`;
+    excluirAppDica.textContent = `Só o som de ${nome} vai para a sala.`;
     status.textContent = `Somente o som de ${nome} será transmitido.`;
   } else {
     excluirAppDica.textContent = app && !app.padrao
-      ? `O som de ${nome} fica fora da transmissão. Vale na hora — mas o navegador passa a entrar, então evite conversar por voz aqui enquanto isso.`
-      : `O som de ${nome} fica fora da transmissão. Vale na hora.`;
+      ? `O som de ${nome} fica de fora. O navegador entra: evite conversar por voz aqui.`
+      : `O som de ${nome} fica de fora.`;
     status.textContent = `O som de ${nome} não será transmitido.`;
   }
   atualizarExplicacaoDeAudio();
@@ -4465,9 +4445,8 @@ function avaliarRiscoDeEco() {
   const emRisco = navegadorNaCaptura && euMando && outrosQueMandam.length > 0;
   avisoDeEco.classList.toggle('hidden', !emRisco);
   if (!emRisco) return;
-  avisoDeEco.textContent = `Eco à vista: o som da sua tela inclui este navegador, que está tocando a tela de `
-    + `${outrosQueMandam.join(', ')}. O som deles volta para a sala pela sua transmissão. `
-    + `Para resolver, troque o modo para “Somente um programa” e escolha o que você quer transmitir.`;
+  avisoDeEco.textContent = `Eco à vista: a sua tela leva o som da tela de ${outrosQueMandam.join(', ')} de volta à sala.`
+    + ' Troque para “Somente um programa”.';
 }
 
 // Enquanto o painel esta aberto a lista se mantem viva: um programa que comeca a tocar
@@ -4679,7 +4658,13 @@ function fecharAgenteLocal() {
 // captura é pedida de novo, com espera crescente, enquanto a tela estiver no ar. O segundo é o encontro tardio:
 // o som entra na transmissão que já está no ar quando o agente finalmente conecta.
 const ESPERAS_PARA_REPEDIR = [5, 10, 30]; // segundos sem receber nada até pedir a captura de novo
-const supervisor = { desde: 0, recebidos: 0, tentativas: 0, jaOuviu: false };
+// O terceiro remédio é para a captura que nasce MUDA: o agente diz "capturando" e manda zeros no ritmo certo, então
+// `recebidos` sobe e a insistência acima nunca disparava. Era o "não funciona de primeira, e trocar o modo do som
+// resolve" -- trocar o modo refaz a captura. Recebendo só silêncio, a página refaz sozinha, com espera crescente.
+// Refazer durante silêncio não se ouve (não havia som para perder), então repetir quando nada está tocando de
+// verdade é inofensivo.
+const ESPERAS_EM_SILENCIO = [6, 20, 60];
+const supervisor = { desde: 0, recebidos: 0, tentativas: 0, jaOuviu: false, audiveis: 0, mudoDesde: 0, tentativasMudo: 0 };
 // A tela subiu antes de o agente conectar: { tipo, selecionada }, o que falta para o som entrar depois.
 let somPendenteDoAgente = null;
 let avisoDoSom = null;
@@ -4694,6 +4679,9 @@ function reiniciarSupervisor() {
   supervisor.recebidos = estatisticasDoAudioDoAgente?.recebidos || 0;
   supervisor.tentativas = 0;
   supervisor.jaOuviu = false;
+  supervisor.audiveis = estatisticasDoAudioDoAgente?.audiveis || 0;
+  supervisor.mudoDesde = Date.now();
+  supervisor.tentativasMudo = 0;
 }
 
 // Um aviso só, que se atualiza e some quando o som volta: dois avisos empilhados dizendo a mesma coisa seriam
@@ -4710,13 +4698,22 @@ function limparAvisoDoSom() {
 }
 
 // Pede a captura ao agente do zero. É seguro repetir: o agente refaz a captura que já tinha.
+//
+// Para primeiro, e só depois manda a escolha e o "iniciar". Com a captura viva, a escolha sozinha já a refaz, e o
+// "iniciar" logo atrás chegava ao agente com a captura nova ainda "começando": a captura do Windows só aceita
+// parar quem já está capturando (StopCaptureAsync, LoopbackCapture.cpp), a recusa era engolida, e a captura velha
+// seguia viva ao lado da nova -- duas capturas do mesmo som, e a segunda sai muda (medido com o helper). O agente
+// novo começa a captura de uma vez e não tem mais essa janela; a ordem aqui protege os agentes que já estão
+// instalados.
 function pedirCapturaAoAgente(motivo) {
   if (!somDoAgenteAtivo() || !socket?.connected) return;
   registrarDiagnostico('audioAgente.repedir', motivo);
   if (appAudioContext?.state !== 'running') appAudioContext?.resume().catch(() => {});
+  socket.emit('audio-stop');
   enviarEscolhaDeAudio();
   socket.emit('audio-start', { origem: 'agente', familia: familiaDoNavegador(), version: audioCaptureVersion });
   supervisor.desde = Date.now();
+  supervisor.mudoDesde = Date.now();
 }
 
 // Chamado a cada contagem do reprodutor (dois segundos).
@@ -4732,6 +4729,7 @@ function vigiarOSomDoAgente(estatisticas) {
       supervisor.tentativas = 0;
     }
     limparAvisoDoSom();
+    vigiarOSilencio(estatisticas, agora);
     return;
   }
   // Sem agente não há a quem pedir: quando ele voltar, o `agente-status` pede a captura.
@@ -4740,6 +4738,26 @@ function vigiarOSomDoAgente(estatisticas) {
   if (agora - supervisor.desde < espera * 1000) return;
   supervisor.tentativas++;
   pedirCapturaAoAgente(`nada chegou em ${espera} s`);
+}
+
+// O som chega, mas só zeros: a captura nasceu muda (ESPERAS_EM_SILENCIO, acima). A contagem de audíveis é do
+// reprodutor desta página (pcm-worklet.js), então vale para qualquer agente, novo ou já instalado.
+function vigiarOSilencio(estatisticas, agora) {
+  if (typeof estatisticas.audiveis !== 'number') return;
+  if (estatisticas.audiveis > supervisor.audiveis) {
+    supervisor.audiveis = estatisticas.audiveis;
+    supervisor.mudoDesde = agora;
+    if (supervisor.tentativasMudo) {
+      registrarDiagnostico('audioAgente.somVoltou', `depois de ${supervisor.tentativasMudo} recomeço(s) em silêncio`);
+      supervisor.tentativasMudo = 0;
+    }
+    return;
+  }
+  if (!audioCapabilities.agenteConectado) return;
+  const espera = ESPERAS_EM_SILENCIO[Math.min(supervisor.tentativasMudo, ESPERAS_EM_SILENCIO.length - 1)];
+  if (agora - supervisor.mudoDesde < espera * 1000) return;
+  supervisor.tentativasMudo++;
+  pedirCapturaAoAgente(`só silêncio há ${espera} s`);
 }
 
 // Uma recusa do agente com a tela no ar não pode ser só uma frase que o próximo aviso apaga: o pedido é
@@ -5013,6 +5031,7 @@ confirmScreenBtn.onclick = async () => {
       status.textContent = (plano === 'agente' || plano === 'helper')
         ? 'Compartilhando a tela, mas sem som: a captura de áudio não iniciou.'
         : 'Compartilhando a tela sem som. Para levar o áudio junto, compartilhe uma aba e marque a caixa de áudio do navegador.';
+      avisarTelaSemSomDoNavegador(plano);
     }
     else if (plano === 'loopback') status.textContent = 'Compartilhando tela + som deste computador. Use fones para não gerar eco.';
     else if (audioDaJanela) status.textContent = `Compartilhando janela + áudio do programa ${audioDaJanela.nome}.`;
@@ -5029,6 +5048,27 @@ confirmScreenBtn.onclick = async () => {
   }
 };
 cancelScreenBtn.onclick = fecharPainelDeTela;
+
+// O som pedido pelo navegador (sem o agente) depende de uma caixa NA JANELA DO NAVEGADOR, que o Nexo não marca nem
+// lê: desmarcada, a tela sobe muda, e a única pista era uma frase na barra de status que o próximo aviso apagava.
+// Era a outra metade do "o som não vem de primeira". O aviso fica até a pessoa agir, e "Compartilhar de novo" abre o
+// seletor de novo com a mesma escolha (o clique no aviso é o gesto que o navegador exige).
+function avisarTelaSemSomDoNavegador(plano) {
+  const como = {
+    aba: 'Na janela do navegador, deixe ligado “Compartilhar áudio da guia”.',
+    'navegador-sistema': 'Na janela do navegador, ligue “Compartilhar áudio do sistema”: sem isso, ele não manda som.',
+    'janela-navegador': 'Este navegador não deu o som desta janela. A tela inteira ou uma aba levam o som.'
+  }[plano];
+  if (!como || !window.NexoToast) return;
+  limparAvisoDoSom();
+  avisoDoSom = window.NexoToast.mostrar({
+    icone: 'erro', tom: 'erro', titulo: 'A tela subiu sem som', detalhe: como,
+    acoes: [
+      { rotulo: 'Compartilhar de novo', principal: true, fazer: () => { if (screenStream) confirmScreenBtn.onclick(); } },
+      { rotulo: 'Seguir sem som' }
+    ]
+  });
+}
 
 function pararTela() {
   if (!screenStream) return;
@@ -5621,9 +5661,7 @@ function adicionarPedidoDeEntrada(pedido) {
   renderizarPedidosDeEntrada();
   atualizarAvisoDeEntrada(pedido.nome);
   tocarAvisoDeEntrada();
-  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    new Notification(`${pedido.nome || 'Alguém'} quer entrar no Nexo`, { body: `Sala ${roomCode}`, tag: `entrada-${roomCode}` });
-  }
+  if (document.hidden) window.NexoNotificacoes?.mostrar('entrada', `${pedido.nome || 'Alguém'} quer entrar no Nexo`, { corpo: `Sala ${roomCode}`, tag: `entrada-${roomCode}` });
   status.textContent = `${pedido.nome || 'Alguém'} quer entrar na sala.`;
 }
 function removerPedidoDeEntrada(identidade) { pedidosPendentes.delete(identidade); renderizarPedidosDeEntrada(); atualizarAvisoDeEntrada(); }
@@ -6918,7 +6956,26 @@ function atualizarPalco() {
 
 // One video-only stream per element. Never clone/stop the receiver track itself.
 function ligarFluxo(el, stream) {
-  return el ? RoomMedia.bindVideo(el, stream) : false;
+  if (!el) return false;
+  const mudou = RoomMedia.bindVideo(el, stream);
+  espelharSeForAMinhaCamera(el);
+  return mudou;
+}
+
+// A própria câmera aparece como num espelho, como em todo app de chamada: levantar a mão direita e ver a
+// imagem levantar a esquerda é o que causava estranheza. Só aqui, para quem se vê: a sala recebe a imagem
+// como a câmera entrega (o texto de uma camiseta continua legível para os outros). A câmera traseira do
+// celular não espelha, porque ela não mostra a pessoa.
+function espelharSeForAMinhaCamera(el) {
+  // bindVideo embrulha as faixas num MediaStream novo: o que identifica a câmera é a faixa.
+  const faixa = cameraStream?.getVideoTracks()[0];
+  const minha = Boolean(faixa) && el.srcObject?.getVideoTracks?.()[0] === faixa;
+  el.classList.toggle('espelhado', espelharCamera && minha && ladoAtualDaCamera() !== 'environment');
+}
+function definirEspelhoDaCamera(ligado) {
+  espelharCamera = ligado;
+  Preferencias.gravarAjuste('espelharCamera', ligado);
+  document.querySelectorAll('video').forEach(espelharSeForAMinhaCamera);
 }
 
 // ---------- Autoplay (som bloqueado pelo navegador) ----------
@@ -7543,8 +7600,9 @@ function mostrarMensagem(msg) {
   }
   // "Não incomodar" também segura o aviso do sistema da menção (o som já fica calado em sons.js): a
   // menção continua marcada no chat, para quem olhar.
-  if (!carregandoHistorico && !msg._atualizandoLocal && mencionou && msg.autorId !== myId && document.hidden && !naoIncomodar() && 'Notification' in window && Notification.permission === 'granted') {
-    new Notification(`${msg.autor || 'Alguém'} mencionou você no Nexo`, { body: String(msg.texto || '').slice(0, 160), tag: `nexo-${roomCode}` });
+  // O resto (o interruptor do computador, a categoria, o "Não incomodar") é de notificacoes.js.
+  if (!carregandoHistorico && !msg._atualizandoLocal && mencionou && msg.autorId !== myId && document.hidden) {
+    window.NexoNotificacoes?.mostrar('mencao', `${msg.autor || 'Alguém'} mencionou você no Nexo`, { corpo: String(msg.texto || '').slice(0, 160), tag: `nexo-${roomCode}` });
   }
   atualizarFixadas();
 }
@@ -7931,7 +7989,18 @@ chatMsgs.addEventListener('keydown', evento => {
   evento.preventDefault();
   evento.target.click();
 });
+// Tocar numa mensagem mostra as ações dela (sala.css, `.msg.tocada`); tocar de novo, noutra ou fora do chat
+// esconde. No toque não há `:hover`, e as ações sempre acesas poluíam a conversa inteira.
+function marcarMensagemTocada(alvo) {
+  chatMsgs.querySelectorAll('.msg.tocada').forEach(m => { if (m !== alvo) m.classList.remove('tocada'); });
+  alvo?.classList.add('tocada');
+}
+document.addEventListener('click', evento => { if (!evento.target.closest?.('#chatMsgs,#chatMsgMenu,.nx-pop')) marcarMensagemTocada(null); });
 chatMsgs.addEventListener('click', (e) => {
+  if (!e.target.closest('.msg-actions')) {
+    const tocada = e.target.closest('.msg[data-message-id]');
+    marcarMensagemTocada(tocada && !tocada.classList.contains('tocada') ? tocada : null);
+  }
   const doAutor = e.target.closest('.msg-avatar, .msg-autor');
   const daMensagem = doAutor && mensagensDoChat.get(doAutor.closest('[data-message-id]')?.dataset.messageId);
   if (daMensagem) { abrirPerfilDoAutor(daMensagem); return; }

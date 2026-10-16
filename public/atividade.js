@@ -104,8 +104,9 @@
     try { aberto.notificacao?.close(); } catch (_) { /* já fechada */ }
   }
 
-  const naoIncomodar = () => Boolean(root.NexoSocial?.naoIncomodar?.());
-  const sistemaPermitido = () => lerPreferencias().sistema && 'Notification' in root && root.Notification.permission === 'granted' && !naoIncomodar();
+  // A notificação do sistema é decidida por notificacoes.js (o interruptor do computador, a categoria "tela", o "Não
+  // incomodar"), como todas as outras.
+  const sistemaPermitido = () => Boolean(root.NexoNotificacoes?.pode('tela'));
 
   // `chave`: identifica a atividade ("tela:<id>"), para avisar uma vez e encerrar com ela.
   // `assistir`: o que "Assistir" faz depois de trazer o palco; `sala`: o código, para a notificação do sistema.
@@ -146,42 +147,13 @@
   // A atividade acabou (a tela saiu do ar): o aviso que ainda esperava um clique não tem mais o que oferecer.
   const encerrar = chave => esquecer(chave);
 
-  // ---------- Configurações → Sons → Avisos na tela ----------
+  // ---------- Configurações → Sons → Avisos e notificações ----------
+  // Só o aviso no canto é daqui; o interruptor das notificações do computador é de notificacoes.js.
   function ligarConfiguracoes() {
     const atividade = $('avisosAtividade');
-    const sistema = $('avisosSistema');
-    if (!atividade || !sistema) return;
-    const dica = $('avisosSistemaDica');
-    const textoPadrao = dica.textContent;
-    const preferencias = lerPreferencias();
-    atividade.checked = preferencias.atividade;
-    // Sem a API (o WebView do Android, o Safari do iPhone) não há notificação do sistema para ligar.
-    if (!('Notification' in root)) {
-      sistema.disabled = true;
-      dica.textContent = 'Este navegador não mostra notificações do sistema. O aviso no canto da sala continua.';
-    } else {
-      sistema.checked = preferencias.sistema && root.Notification.permission === 'granted';
-      if (root.Notification.permission === 'denied') dica.textContent = 'O navegador bloqueou as notificações deste site. Libere nas configurações do site para ligar.';
-    }
+    if (!atividade) return;
+    atividade.checked = lerPreferencias().atividade;
     atividade.addEventListener('change', () => { gravarPreferencias({ atividade: atividade.checked }); });
-    sistema.addEventListener('change', async () => {
-      if (!sistema.checked) { gravarPreferencias({ sistema: false }); dica.textContent = textoPadrao; return; }
-      // O pedido só vale com um gesto: o clique no interruptor é ele.
-      let permissao = root.Notification.permission;
-      if (permissao === 'default') {
-        try { permissao = await root.Notification.requestPermission(); } catch (_) { permissao = 'denied'; }
-      }
-      if (permissao !== 'granted') {
-        sistema.checked = false;
-        gravarPreferencias({ sistema: false });
-        dica.textContent = permissao === 'denied'
-          ? 'O navegador não deu a permissão. Libere as notificações nas configurações do site e tente de novo.'
-          : textoPadrao;
-        return;
-      }
-      gravarPreferencias({ sistema: true });
-      dica.textContent = textoPadrao;
-    });
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', ligarConfiguracoes); else ligarConfiguracoes();
 

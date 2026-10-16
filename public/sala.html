@@ -340,6 +340,7 @@
           <video id="camPreview" class="cam-preview contexto-escuro" autoplay muted playsinline hidden></video>
           <small id="camDica">Ligue a câmera para se ver aqui.</small>
         </div>
+        <div class="field"><label class="toggle-line" for="espelharCamera"><span><strong>Ver minha câmera espelhada</strong><small>Como num espelho, só para você. A sala vê a imagem do jeito certo.</small></span><input id="espelharCamera" type="checkbox" role="switch" checked></label></div>
         <div class="device-tools"><button id="testAudioBtn" class="secondary" type="button">Tocar som de teste</button><button id="noiseBtn" class="secondary" type="button" aria-pressed="true" title="Reduzir o ruído de fundo do meu microfone" hidden>Ruído reduzido</button></div>
         <small class="modal-sub">A redução de ruído limpa só a sua voz. O som de jogos e telas vai inteiro.</small>
         <small id="devicesDica" class="modal-sub"></small>
@@ -355,11 +356,11 @@
         <p class="plano-dica" data-plano-dica hidden></p>
         <div class="field"><label for="videoQuality">Resolução da transmissão</label><select id="videoQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="qualidadeBtn"></small></div>
         <div class="field"><label for="videoFps">Quadros por segundo</label><select id="videoFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="fpsDica"></small><small id="codecEstado" class="codec-estado"></small></div>
-        <div class="field"><label for="videoPriority">O que proteger quando apertar</label><select id="videoPriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>O padrão protege o movimento, porque travar estraga mais uma transmissão do que perder um pouco de definição. Escolha Nitidez só para ler código ou texto parado: ela mantém a imagem afiada e deixa os quadros caírem.</small></div>
+        <div class="field"><label for="videoPriority">O que proteger quando apertar</label><select id="videoPriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Movimento (o padrão) segura os quadros. Nitidez segura os detalhes, para código e texto.</small></div>
         <div class="field" id="dataSaverField"><label class="toggle-line" for="dataSaver"><span><strong>Economia de dados e bateria</strong><small>Reduz o consumo no celular sem bloquear suas escolhas de qualidade.</small></span><input id="dataSaver" type="checkbox" role="switch"></label></div>
         <details class="avancado">
           <summary>Codec e codificação da tela</summary>
-          <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">Vale para a tela; a câmera vai sempre em H.264. H.264 é o mais compatível e o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. Quem não aceitar sua escolha recebe pelo melhor codec em comum.</small></div>
+          <div class="field"><label for="videoCodec">Codec usado para enviar</label><select id="videoCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small id="codecDica">Vale para a tela; a câmera vai sempre em H.264, o mais compatível e o único com o degrau de 360p para internet ruim.</small></div>
           <div class="field"><label for="telaWebCodecs">Codificação da tela</label><select id="telaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · pela placa de vídeo quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · pela faixa de dados</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
         </details>
         <small class="modal-sub">Cada pessoa recebe a qualidade que a conexão dela aguenta. Quem está na rede lenta não derruba a imagem dos outros.</small>
@@ -437,13 +438,21 @@
           </div>
         </div>
         <!-- O par visual dos sons de "tela ao vivo" e companhia (atividade.js): para quem não está olhando para o palco. -->
-        <span class="config-rotulo config-rotulo-grupo">Avisos na tela</span>
+        <!-- As notificações fora da página moram em notificacoes.js; o aviso no canto, em atividade.js. -->
+        <span class="config-rotulo config-rotulo-grupo">Avisos e notificações</span>
         <div class="config-bloco">
-          <label class="toggle-line" for="avisosAtividade"><span><strong>Avisar quando alguém começar algo</strong><small>Um aviso no canto quando alguém compartilha a tela ou põe uma música e o palco não está na sua frente: com o chat em foco, com o início por cima da sala, ou com a janela em segundo plano.</small></span><input id="avisosAtividade" type="checkbox" role="switch" checked></label>
-          <label class="toggle-line" for="avisosSistema"><span><strong>Avisos do sistema, com a janela em segundo plano</strong><small id="avisosSistemaDica">Uma notificação do computador, sem som, quando a sala está em outra janela ou aba. O navegador pede a sua permissão uma vez.</small></span><input id="avisosSistema" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="avisosAtividade"><span><strong>Avisar quando alguém começar algo</strong><small>Um aviso no canto quando alguém compartilha a tela ou põe música e o palco está fora da sua vista.</small></span><input id="avisosAtividade" type="checkbox" role="switch" checked></label>
+          <label class="toggle-line" for="avisosSistema"><span><strong>Notificações do computador</strong><small id="avisosSistemaDica">Com o Nexo em outra janela ou aba. O navegador pede a permissão uma vez.</small></span><input id="avisosSistema" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="notifCelular" hidden><span><strong>Notificações do celular</strong><small>Mensagens, convites e pedidos de amizade, mesmo com o Nexo fechado.</small></span><input id="notifCelular" type="checkbox" role="switch" checked></label>
+          <fieldset class="notif-tipos">
+            <legend>O que notifica</legend>
+            <label><input type="checkbox" id="notif-mencao" checked> Menções a você</label>
+            <label><input type="checkbox" id="notif-mensagem" checked> Mensagens, convites e amizades</label>
+            <label><input type="checkbox" id="notif-tela" checked> Alguém compartilhando a tela</label>
+            <label><input type="checkbox" id="notif-entrada" checked> Pedidos para entrar na sala</label>
+          </fieldset>
         </div>
-        <p class="config-dica">Em “Não incomodar”, os avisos do sistema ficam em silêncio; o aviso no canto da sala continua, como os sons da chamada.</p>
-        <p class="config-dica">Ensurdecido (<kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd>), a sala fica em silêncio: os avisos de quem entra, sai e escreve também. Os que são sobre você continuam. Em “Não incomodar” (o status da sua conta), só as mensagens e as menções ficam em silêncio. A mesa de sons tem o volume dela, na própria mesa.</p>
+        <p class="config-dica">Ensurdecido (<kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>D</kbd>), só tocam os avisos sobre você. Em “Não incomodar”, calam as mensagens, as menções e os avisos do sistema; o aviso no canto continua.</p>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAparencia" aria-labelledby="abaAparencia" hidden>
@@ -500,8 +509,16 @@
         <div class="config-bloco config-chaves">
           <label class="toggle-line" for="aparenciaTempos"><span><strong>Tempo de cada pessoa sempre à vista</strong><small>Na lista da barra lateral. Desligado, ele aparece ao passar o mouse.</small></span><input id="aparenciaTempos" type="checkbox" role="switch"></label>
           <label class="toggle-line" for="aparenciaReacoes"><span><strong>Reações flutuando pela tela</strong><small>As de todo mundo. Desligadas, não aparecem para você.</small></span><input id="aparenciaReacoes" type="checkbox" role="switch" checked></label>
-          <label class="toggle-line" for="aparenciaMovimento"><span><strong>Menos animação</strong><small>Painéis, menus e avisos aparecem sem deslizar.</small></span><input id="aparenciaMovimento" type="checkbox" role="switch"></label>
         </div>
+        <!-- Valem em todo o Nexo, e não só na sala: tema.js põe as classes na raiz de toda página (tema.css). -->
+        <span class="config-rotulo config-rotulo-grupo">Acessibilidade</span>
+        <div class="config-bloco config-chaves">
+          <label class="toggle-line" for="aparenciaMovimento"><span><strong>Menos animação</strong><small>Painéis, menus e avisos aparecem sem deslizar.</small></span><input id="aparenciaMovimento" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="aparenciaContraste"><span><strong>Alto contraste</strong><small>Textos fracos e bordas mais fortes, em qualquer tema.</small></span><input id="aparenciaContraste" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="aparenciaSublinhar"><span><strong>Sublinhar os links</strong><small>Para achar um link sem depender da cor.</small></span><input id="aparenciaSublinhar" type="checkbox" role="switch"></label>
+          <label class="toggle-line" for="aparenciaFoco"><span><strong>Contorno de foco reforçado</strong><small>Um anel mais grosso em volta do que está selecionado, também no clique.</small></span><input id="aparenciaFoco" type="checkbox" role="switch"></label>
+        </div>
+        <p class="config-dica">Para aumentar tudo, use o zoom: <kbd>Ctrl</kbd> <kbd>+</kbd> e <kbd>Ctrl</kbd> <kbd>−</kbd>. O texto do chat tem tamanho próprio, acima.</p>
       </div>
 
       <div class="aba-painel" role="tabpanel" id="painelAtalhos" aria-labelledby="abaAtalhos" hidden>
@@ -571,11 +588,15 @@
         <option value="window">Janela ou aplicativo</option>
         <option value="monitor">Tela inteira</option>
       </select>
-      <small id="captureCompatibility" hidden>Compartilhar uma única aba com áudio só funciona no Chrome ou no Edge. No aplicativo, dá para compartilhar a janela do navegador com o som do programa.</small>
-      <div id="capturaAviso" class="echo-warning" hidden>
-        <small id="capturaAvisoTexto"></small>
-        <button id="usarTelaInteiraBtn" type="button" class="secondary">Compartilhar a tela inteira</button>
-      </div>
+      <small id="captureCompatibility" hidden>Aba com áudio só no Chrome e no Edge. No aplicativo, a janela leva o som do programa.</small>
+      <!-- Nota recolhida (tema.css, `.nx-nota`): o título diz o essencial, o porquê abre a pedido. -->
+      <details id="capturaAviso" class="echo-warning nx-nota importante" hidden>
+        <summary><span class="nx-nota-titulo"><span class="so-leitor">Importante: </span>Uma janela entrega metade dos quadros</span><span class="nx-nota-ler" aria-hidden="true"></span></summary>
+        <div class="nx-nota-corpo">
+          <small id="capturaAvisoTexto"></small>
+          <button id="usarTelaInteiraBtn" type="button" class="secondary">Compartilhar a tela inteira</button>
+        </div>
+      </details>
     </div>
     <div class="field">
       <label for="audioPolicy">Áudio</label>
@@ -585,10 +606,13 @@
       </select>
     </div>
     <small id="echoHint"></small>
-    <div id="echoWarning" class="echo-warning" hidden>
-      <small id="echoWarningText"></small>
-      <button id="fixEchoBtn" type="button" class="secondary">Compartilhar uma aba (sem eco)</button>
-    </div>
+    <details id="echoWarning" class="echo-warning nx-nota importante" hidden>
+      <summary><span class="nx-nota-titulo"><span class="so-leitor">Importante: </span>A voz dos outros pode voltar como eco</span><span class="nx-nota-ler" aria-hidden="true"></span></summary>
+      <div class="nx-nota-corpo">
+        <small id="echoWarningText"></small>
+        <button id="fixEchoBtn" type="button" class="secondary">Compartilhar uma aba (sem eco)</button>
+      </div>
+    </details>
     <div id="agenteBox" class="agente-box" hidden>
       <div class="agente-status">
         <span class="agente-bolinha" id="agenteBolinha"></span>
@@ -612,12 +636,12 @@
 
       <div class="aba-painel" role="tabpanel" id="painelEnvio" aria-labelledby="abaEnvio" hidden>
     <p class="plano-dica" data-plano-dica hidden></p>
-    <div class="field"><label for="shareQuality">Resolução</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="shareQualidadeDica">Dá para mudar depois, durante a transmissão, em Dispositivos.</small></div>
+    <div class="field"><label for="shareQuality">Resolução</label><select id="shareQuality" data-quality-profile><option value="economical">720p · Econômica</option><option value="high">1080p · Alta</option><option value="ultra">1440p · Máxima</option></select><small id="shareQualidadeDica">Dá para mudar durante a transmissão, em Configurações.</small></div>
     <div class="field"><label for="shareFps">Quadros por segundo</label><select id="shareFps" data-screen-fps><option value="30">30 quadros</option><option value="60">60 quadros</option></select><small id="shareFpsDica"></small><small id="shareCodecEstado" class="codec-estado"></small></div>
-    <div class="field"><label for="sharePriority">O que proteger quando apertar</label><select id="sharePriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Nitidez segura os detalhes e derruba os quadros; movimento faz o contrário, e é o padrão. Quantos quadros você pede é a escolha de cima.</small></div>
+    <div class="field"><label for="sharePriority">O que proteger quando apertar</label><select id="sharePriority" data-screen-priority><option value="fluidez">Movimento · jogos e vídeo</option><option value="nitidez">Nitidez · código e texto</option></select><small>Movimento (o padrão) segura os quadros. Nitidez segura os detalhes, para código e texto.</small></div>
     <details class="avancado">
       <summary>Codec e codificação da tela</summary>
-      <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>Vale para a tela; a câmera vai sempre em H.264. Ele costuma usar a placa de vídeo e é o único com o degrau leve de 360p garantido, que segura na sala quem tem internet ruim. O codificador em uso aparece no Diagnóstico.</small></div>
+      <div class="field"><label for="shareCodec">Codec usado para enviar</label><select id="shareCodec" data-video-codec><option value="auto">Automático · H.264 primeiro</option><option value="h264">H.264</option><option value="vp8">VP8</option><option value="vp9">VP9</option><option value="av1">AV1</option></select><small>Vale para a tela; a câmera vai sempre em H.264, o mais compatível e o único com o degrau de 360p para internet ruim.</small></div>
       <div class="field"><label for="shareTelaWebCodecs">Codificação da tela</label><select id="shareTelaWebCodecs" data-tela-webcodecs><option value="automatico">Automática · pela placa de vídeo quando der (recomendado)</option><option value="sempre">Forçar WebCodecs · pela faixa de dados</option><option value="desligada">Só WebRTC · sem WebCodecs</option></select><small data-tela-webcodecs-explica></small></div>
     </details>
       </div>
@@ -896,6 +920,7 @@
 <script src="/estudio-sala.js"></script>
 <script src="/versao-app.js"></script>
 <script src="/toast.js"></script>
+<script src="/notificacoes.js"></script>
 <script src="/atividade.js"></script>
 <script src="/atualizacao-app.js"></script>
 <script src="/servidor-app.js"></script>

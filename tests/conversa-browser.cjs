@@ -68,6 +68,9 @@ const observar = (pagina, nome) => {
 
   // A barrinha de ações aparece com o mouse em cima da mensagem, e tem o "Reagir".
   const mensagemNaBia = inicioDaBia.locator('.nx-dm-msg', { hasText: 'olha esse clipe' });
+  // O ponteiro pode ter ficado parado onde a mensagem nova nasceu (ela chegaria já com o hover).
+  await inicioDaBia.mouse.move(2, 2);
+  await inicioDaBia.waitForTimeout(220);
   assert.equal(await mensagemNaBia.locator('.nx-dm-msg-acoes').evaluate(el => getComputedStyle(el).opacity), '0', 'em repouso a barrinha não aparece');
   await mensagemNaBia.hover();
   await inicioDaBia.waitForTimeout(220);

@@ -152,6 +152,15 @@
     aviso.append(icone(DESENHOS.relogio, 'ico ico-p'), doc.createTextNode('As mensagens diretas ficam só na memória do servidor e somem três dias depois da última. Nada disso vai para um arquivo.'));
     const mensagensEl = elemento('div', 'nx-dm-mensagens');
     lista.append(aviso, mensagensEl);
+    // No toque não há `:hover`: tocar na mensagem mostra as ações dela (`.tocada`, social.css), e tocar de novo ou
+    // noutra esconde -- como no chat da sala.
+    mensagensEl.addEventListener('click', evento => {
+      if (evento.target.closest('.nx-dm-msg-acoes')) return;
+      const tocada = evento.target.closest('.nx-dm-msg');
+      const ligar = tocada && !tocada.classList.contains('tocada');
+      mensagensEl.querySelectorAll('.nx-dm-msg.tocada').forEach(m => m.classList.remove('tocada'));
+      if (ligar) tocada.classList.add('tocada');
+    });
     const digitandoEl = elemento('p', 'nx-dm-digitando');
     digitandoEl.setAttribute('aria-live', 'polite');
 

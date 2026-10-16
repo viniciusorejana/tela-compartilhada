@@ -51,5 +51,10 @@
 
   // `atualizar` recebe o que o servidor devolveu ao salvar o perfil de dentro da sala: a
   // próxima abertura do editor já parte do perfil novo.
-  window.NexoConta = { pronto, atual: () => estado, atualizar: novo => { estado = { ...estado, ...novo }; } };
+  // A sala de cada conta tem nome fixo: "Criar sala" leva sempre ao mesmo lugar, e o link que a pessoa
+  // mandou ontem continua valendo. O usuário (3 a 20 de a-z, 0-9, "." e "_") cabe no código de sala
+  // (4 a 32 de a-z, 0-9, "-" e "_") trocando o ponto por hífen.
+  const salaDaConta = conta => (conta?.usuario ? `sala-${conta.usuario.replace(/\./g, '-')}` : null);
+
+  window.NexoConta = { pronto, atual: () => estado, atualizar: novo => { estado = { ...estado, ...novo }; }, salaDaConta };
 })();

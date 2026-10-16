@@ -254,6 +254,10 @@
     // "Menos animação" é da aparência e vale em toda página, não só na sala: o início e a conta
     // também animam, e quem pediu menos movimento pediu para o Nexo inteiro (tema.css).
     doc.classList.toggle('menos-movimento', escolha.menosMovimento === true);
+    // As opções de acessibilidade da Aparência, pelo mesmo caminho e pelo mesmo motivo (tema.css, "Acessibilidade").
+    doc.classList.toggle('alto-contraste', escolha.contraste === true);
+    doc.classList.toggle('sublinhar-links', escolha.sublinhar === true);
+    doc.classList.toggle('foco-reforcado', escolha.focoReforcado === true);
     doc.style.colorScheme = efetivo.modo === 'claro' ? 'light' : 'dark';
     aplicadas.forEach(nome => doc.style.removeProperty(nome));
     aplicadas.clear();

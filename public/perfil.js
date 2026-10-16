@@ -45,6 +45,9 @@
     prioridade: um(['fluidez', 'nitidez']),
     quadros: um([30, 60]),
     ladoCamera: um(['user', 'environment']),
+    // Ver a própria câmera como num espelho (o padrão). Só muda o que a pessoa vê de si: a sala recebe a
+    // imagem como a câmera entrega.
+    espelharCamera: booleano,
     pushToTalk: booleano,
     reducaoDeRuido: booleano,
     // Os avisos sonoros e o jeito de ler a sala são da pessoa, como a qualidade: quem baixou
@@ -55,6 +58,7 @@
     // guardá-las é o que as faz voltar quando ele volta.
     aparencia: grupo({
       densidade: um(['confortavel', 'compacta']), texto: um(['normal', 'grande', 'maior']), tempos: booleano, reacoes: booleano, menosMovimento: booleano,
+      contraste: booleano, sublinhar: booleano, focoReforcado: booleano,
       tema: um((NexoTema?.TEMAS || []).map(t => t.id)), modo: um(['escuro', 'claro', 'sistema']),
       destaque: um(Object.keys(NexoTema?.DESTAQUES || {})), cores: grupo({ destaque: corHex, fundo: corHex })
     }),

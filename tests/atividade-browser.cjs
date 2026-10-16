@@ -145,7 +145,7 @@ async function configurar(pagina, id, ligado) {
 
   // Ligar a opção pelo interruptor das configurações (que pede a permissão ao navegador).
   await configurar(bia, 'avisosSistema', true);
-  await bia.waitForFunction(() => Preferencias.ler('avisosVisuais', {}).sistema === true);
+  await bia.waitForFunction(() => NexoNotificacoes.ler().computador === true);
   await dormir(8500);
   await compartilhar(ana);
   await bia.waitForFunction(() => notificacoes.length === 1, null, { timeout: 15000 });
@@ -163,6 +163,16 @@ async function configurar(pagina, id, ligado) {
   assert.equal(await bia.evaluate(() => notificacoes.length), 1, 'em "não incomodar", nenhuma notificação a mais');
   await parar(caio);
   await bia.evaluate(() => { NexoSocial.estado.minha = null; });
+
+  // "O que notifica": com a tela desmarcada, o computador continua ligado e a tela não notifica.
+  await configurar(bia, 'notif-tela', false);
+  assert.equal(await bia.evaluate(() => NexoNotificacoes.ler().tela), false);
+  await dormir(8500);
+  await compartilhar(ana);
+  await bia.waitForFunction(() => document.title.startsWith('● Ana'), null, { timeout: 15000 });
+  assert.equal(await bia.evaluate(() => notificacoes.length), 1, 'com a categoria desligada, nenhuma notificação a mais');
+  await parar(ana);
+  await configurar(bia, 'notif-tela', true);
 
   // Voltar à janela tira o ponto do título.
   await bia.evaluate(() => {

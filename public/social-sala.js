@@ -264,11 +264,15 @@
     if (!$('mensagensPanel').classList.contains('hidden')) pintarConversas();
     if (mensagem.de === S.estado.eu || mensagem.tipo === 'convite' || naoIncomodar() || camadaAberta()) return;
     if (conversa?.codigo === com && !$('mensagensPanel').classList.contains('hidden')) return;
-    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe: (mensagem.texto || 'Mandou uma imagem').slice(0, 120), acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
+    const detalhe = (mensagem.texto || 'Mandou uma imagem').slice(0, 120);
+    aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe, acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
+    // Com a janela escondida, o aviso no canto ninguém vê: vai também uma notificação do computador (notificacoes.js).
+    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', S.nomeDe(com), { corpo: detalhe, tag: `nexo-dm-${com}`, aoClicar: () => abrirMensagens(com) });
   });
   S.on('convite', ({ de, apelido, sala }) => {
     if (sala === roomCode || camadaAberta()) return;
     aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: `Para a sala #${sala}. Entrar sai desta chamada.`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar', principal: true, fazer: () => entrarNaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirMensagens(de) }] });
+    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', `${S.nomeDe(de) || apelido} chamou você`, { corpo: `Para a sala #${sala}`, tag: `nexo-convite-${sala}`, aoClicar: () => abrirMensagens(de) });
   });
   S.on('conquista', c => {
     if (camadaAberta()) { editor?.carregar(); return; }

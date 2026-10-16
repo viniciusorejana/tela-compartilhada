@@ -30,17 +30,20 @@
   });
   // Criar uma sala é abrir uma, e só uma conta abre sala: quem clica sem conta vai para o
   // cadastro e volta direto para a sala nova. Entrar numa sala aberta continua sem cadastro.
+  // Sem código digitado, a sala é a da conta (`salaDaConta`): sempre a mesma, e não um nome novo a cada
+  // clique. Quem ainda não tem conta faz a conta e volta para cá, onde o clique já sabe o nome.
   document.getElementById('createBtn').onclick = async () => {
-    const bytes = crypto.getRandomValues(new Uint8Array(5));
-    const random = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-    const codigo = normalize(input.value) || `sala-${random}`;
     const dados = await conta;
-    if (!dados?.conta && !dados?.abrirSemConta && /^[a-z0-9_-]{4,32}$/.test(codigo)) {
+    const digitado = normalize(input.value);
+    if (!dados?.conta && !dados?.abrirSemConta) {
       window.NexoCarregando?.navegando('Abrindo a sua conta');
-      window.location.href = `/conta?motivo=criar-sala&voltar=${encodeURIComponent(`/${codigo}/sala`)}`;
+      const destino = /^[a-z0-9_-]{4,32}$/.test(digitado) ? `/${digitado}/sala` : '/';
+      window.location.href = `/conta?motivo=criar-sala&voltar=${encodeURIComponent(destino)}`;
       return;
     }
-    openRoom(codigo);
+    const bytes = crypto.getRandomValues(new Uint8Array(5));
+    const sorteada = `sala-${[...bytes].map(b => b.toString(16).padStart(2, '0')).join('')}`;
+    openRoom(digitado || window.NexoConta.salaDaConta(dados.conta) || sorteada);
   };
   input.addEventListener('input', () => { error.hidden = true; input.removeAttribute('aria-invalid'); });
   try {
