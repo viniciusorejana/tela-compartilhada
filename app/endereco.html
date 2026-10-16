@@ -101,12 +101,18 @@
   campo.addEventListener('input', pintarPadrao);
   voltarAoPadrao.onclick = () => { campo.value = padrao; pintarPadrao(); campo.focus(); };
   pintarPadrao();
+  // `rede=1`: o problema foi a rede deste computador (main.js, ERROS_DA_REDE_LOCAL), e não o servidor. Já houve 20 s
+  // de novas tentativas; daqui, a tela tenta de novo sozinha assim que o sistema disser que a rede voltou.
+  const daRede = parametros.get('rede') === '1';
   if (falhou) {
     const faixa = document.getElementById('falha');
     faixa.hidden = false;
-    faixa.textContent = 'Não foi possível abrir o endereço anterior: ' + falhou
-      + '. Confira se o servidor está rodando ("npm start" na máquina que hospeda) e tente de novo.';
+    faixa.textContent = daRede
+      ? 'A rede deste computador ainda não estava pronta (' + falhou + '). Confira o Wi-Fi ou o cabo: o Nexo conecta sozinho quando a rede voltar.'
+      : 'Não foi possível abrir o endereço anterior: ' + falhou
+        + '. Confira se o servidor está rodando ("npm start" na máquina que hospeda) e tente de novo.';
   }
+  if (daRede && anterior) window.addEventListener('online', () => abrir(), { once: true });
 
   async function abrir() {
     let valor = campo.value.trim();

@@ -77,13 +77,46 @@ function origemHttp(endereco) {
 
 const PAGINA_DE_ENDERECO = pathToFileURL(path.join(__dirname, 'endereco.html')).pathname;
 
-function mostrarTelaDeEndereco(erro, anterior) {
+function mostrarTelaDeEndereco(erro, anterior, { daRede = false } = {}) {
   if (!janela) return;
   enderecoPendente = null;
+  clearTimeout(repeticao.relogio);
+  repeticao = { url: null };
   const consulta = {};
   if (erro) consulta.erro = erro;
   if (anterior) consulta.anterior = anterior;
+  // A tela de endereço explica diferente (e tenta sozinha quando a rede volta) se o problema é a rede deste computador.
+  if (daRede) consulta.rede = '1';
   janela.loadFile(path.join(__dirname, 'endereco.html'), { query: consulta });
+}
+
+// ---------------------------------------------------------------- a rede que ainda está subindo
+// Ao ligar o computador (sobretudo no Linux, com o NetworkManager), o Nexo abre antes de a rede assentar: o Wi-Fi
+// conecta, o DHCP troca o endereço, a VPN sobe, o DNS ainda não responde. O Chromium vê a interface mudar no meio do
+// pedido e desiste com ERR_NETWORK_CHANGED (-21), ou com ERR_INTERNET_DISCONNECTED / ERR_NAME_NOT_RESOLVED. Nada
+// disso é o servidor fora do ar, e o mesmo endereço funciona segundos depois -- mandar a pessoa para a tela de
+// endereço com "confira se o servidor está rodando" era culpar o lugar errado. Esses erros ganham novas tentativas
+// sozinhas, com espera crescente, por até 20 s (dentro da splash, que espera 25). Servidor recusando (-102) ou mudo
+// continua indo direto para a tela de endereço: é o servidor, e esperar não resolve.
+const ERROS_DA_REDE_LOCAL = new Set([
+  -21,  // ERR_NETWORK_CHANGED
+  -105, // ERR_NAME_NOT_RESOLVED
+  -106, // ERR_INTERNET_DISCONNECTED
+  -109, // ERR_ADDRESS_UNREACHABLE
+  -137  // ERR_NAME_RESOLUTION_FAILED
+]);
+const MS_TENTANDO_A_REDE = 20000;
+let repeticao = { url: null };
+
+// Agenda outra tentativa do mesmo endereço. Falso quando o prazo acabou: aí é a tela de endereço.
+function tentarDeNovo(url, abrir) {
+  const agora = Date.now();
+  if (repeticao.url !== url) repeticao = { url, desde: agora, vezes: 0 };
+  if (agora - repeticao.desde > MS_TENTANDO_A_REDE) return false;
+  const espera = Math.min(500 * 2 ** repeticao.vezes++, 4000);
+  clearTimeout(repeticao.relogio);
+  repeticao.relogio = setTimeout(() => { if (janela && !janela.isDestroyed()) abrir(); }, espera);
+  return true;
 }
 
 function irParaEndereco(url) {
@@ -271,6 +304,8 @@ function criarJanela({ comSplash = splashLigada() } = {}) {
     // Qualquer página que termine de carregar -- a sala, ou a tela de endereço quando o servidor falhou -- é o que a
     // janela tinha a mostrar: a splash pode sair.
     revelarJanela();
+    // Carregou: a próxima falha de rede tem os 20 s inteiros de novo.
+    if (origemHttp(janela.webContents.getURL())) { clearTimeout(repeticao.relogio); repeticao = { url: null }; }
     // A sala abriu: é dela que vêm as atualizações do aplicativo instalado.
     if (origemDaSala && origemHttp(janela.webContents.getURL()) === origemDaSala) atualizador.definirOrigem(origemDaSala);
     if (!enderecoPendente) return;
@@ -283,9 +318,17 @@ function criarJanela({ comSplash = splashLigada() } = {}) {
     // -3 é navegação abortada (a própria troca de página), não é falha.
     if (!ehJanelaPrincipal || codigo === -3) return;
     const tentado = enderecoPendente || urlQueFalhou;
+    const daRede = ERROS_DA_REDE_LOCAL.has(codigo);
+    if (daRede && origemHttp(tentado)) {
+      // Abrindo o servidor escolhido, tenta-se de novo o mesmo endereço (e ele só é guardado quando carregar);
+      // já dentro da sala (um F5 no meio da troca de rede), recarrega-se a página que falhou.
+      const pendente = enderecoPendente;
+      const abrir = pendente ? () => irParaEndereco(pendente) : () => janela.loadURL(urlQueFalhou).catch(() => {});
+      if (tentarDeNovo(tentado, abrir)) return;
+    }
     // O endereço anterior que funcionava continua guardado: o servidor pode só estar fora do
     // ar por um momento, e apagar a configuração obrigaria a redigitar por nada.
-    mostrarTelaDeEndereco(`${descricao || 'falha ao carregar'} (${codigo})`, tentado);
+    mostrarTelaDeEndereco(`${descricao || 'falha ao carregar'} (${codigo})`, tentado, { daRede });
   });
 
   // O próprio endereço escolhido pode redirecionar ao abrir -- http para https, o domínio sem
@@ -834,6 +877,16 @@ function instalarMenu() {
         { role: 'copy', label: 'Copiar' },
         { role: 'paste', label: 'Colar' },
         { role: 'selectAll', label: 'Selecionar tudo' }
+      ]
+    },
+    // O zoom é o jeito de aumentar o Nexo inteiro (Configurações → Aparência → Acessibilidade aponta para cá). Sem estes
+    // papéis no menu, Ctrl + e Ctrl − não fazem nada no aplicativo, ao contrário do navegador.
+    {
+      label: 'Ver',
+      submenu: [
+        { role: 'zoomIn', label: 'Aumentar', accelerator: 'CmdOrCtrl+=' },
+        { role: 'zoomOut', label: 'Diminuir', accelerator: 'CmdOrCtrl+-' },
+        { role: 'resetZoom', label: 'Tamanho normal', accelerator: 'CmdOrCtrl+0' }
       ]
     }
   ]));
