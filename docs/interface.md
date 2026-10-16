@@ -1129,10 +1129,14 @@ muda de tamanho a cada segundo, quando o relógio da sala repinta.
 | ≥ 1600 | lateral 248, "Agora" 320 |
 | ≤ 1100 | "Agora no Nexo" sai da direita e as salas ao vivo descem para o topo dos amigos |
 
-**A engrenagem do "eu" são as configurações**, as mesmas da sala: fora de uma chamada ela abre `/configuracoes`, que
-é a página da sala mostrando só o painel (sem entrar em sala nenhuma; fechar o painel volta ao início), e dentro da
-chamada, com o início por cima (5.2), ela fecha a camada e abre o painel da sala. A conta (senha, recuperação, dados)
-é o botão "Senha e conta" na seção Perfil das configurações, nos dois lugares.
+**A engrenagem do "eu" são as configurações**, as mesmas da sala, e abrem **na hora, sem trocar de rota**: o início
+carrega de antemão (1,5 s depois de abrir, ou ao chegar perto da engrenagem) a página `/configuracoes` num quadro
+escondido e transparente por cima dele (`.ini-configuracoes`, `inicio.js`) -- a página da sala mostrando só o painel,
+sem entrar em sala nenhuma. A engrenagem só mostra o quadro e pede o painel; fechar o painel esconde o quadro e devolve
+o foco à engrenagem; o tema escolhido lá dentro vale aqui na hora (o evento `storage`); o "voltar" do Android fecha o
+painel. Lá dentro os avisos de mensagem ficam calados (o início já avisa). Dentro da chamada, com o início por cima
+(5.2), a engrenagem fecha a camada e abre o painel da sala. Só a conta (senha, recuperação, dados) troca a página
+inteira: o botão "Senha e conta" na seção Perfil, nos dois lugares. `/configuracoes` aberta direto também funciona.
 
 O editor do cartão não segue esta tabela: ele decide pela própria largura (4.13), então tem duas
 colunas a 1440 e entre 1012 e 1100 px, e uma só (a prévia em cima) a 1250 e no celular.

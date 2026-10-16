@@ -902,6 +902,60 @@
     document.querySelector('.ini-eu-conta').addEventListener('click', evento => { evento.preventDefault(); camada.avisar('configuracoes'); });
   }
 
+  // ---------- As configurações, por cima do início ----------
+  // O painel é o mesmo da sala (a página /configuracoes, sala.js). Ele vive num quadro carregado de antemão, escondido:
+  // a engrenagem só mostra o quadro e pede o painel -- sem rota nova e sem carregar nada na hora, como dentro da sala.
+  // Fechar o painel esconde o quadro; "Senha e conta" leva a janela inteira à conta (perfil-sala.js).
+  if (!camada) {
+    const engrenagem = document.querySelector('.ini-eu-conta');
+    let quadro = null;
+    let pronta = false;
+    let abrirAoFicarPronta = false;
+    const mandar = tipo => quadro.contentWindow.postMessage({ nexo: 'configuracoes', tipo }, location.origin);
+    const prepararConfiguracoes = () => {
+      if (quadro) return;
+      quadro = document.createElement('iframe');
+      quadro.className = 'ini-configuracoes';
+      quadro.title = 'Configurações';
+      quadro.hidden = true;
+      quadro.src = '/configuracoes';
+      document.body.append(quadro);
+    };
+    const mostrar = () => { quadro.hidden = false; quadro.focus(); mandar('abrir'); };
+    function abrirConfiguracoes() {
+      prepararConfiguracoes();
+      window.NexoAndroid?.camada(true);
+      if (pronta) mostrar(); else abrirAoFicarPronta = true;
+    }
+    function fecharConfiguracoes() {
+      if (!quadro || quadro.hidden) return;
+      quadro.hidden = true;
+      window.NexoAndroid?.camada(false);
+      // O que mudou lá dentro (o tema, a letra) vale aqui também: as escolhas moram no mesmo armazenamento.
+      window.NexoTema?.aplicar();
+      engrenagem.focus();
+    }
+    window.addEventListener('message', evento => {
+      const dados = evento.data;
+      if (!quadro || evento.source !== quadro.contentWindow || evento.origin !== location.origin || dados?.nexo !== 'configuracoes') return;
+      if (dados.tipo === 'pronta') { pronta = true; if (abrirAoFicarPronta) { abrirAoFicarPronta = false; mostrar(); } }
+      else if (dados.tipo === 'fechar') fecharConfiguracoes();
+    });
+    // O tema escolhido lá dentro aparece aqui na hora, por trás do véu do painel.
+    window.addEventListener('storage', evento => { if (evento.key === 'nexo.pref.aparencia') window.NexoTema?.aplicar(); });
+    engrenagem.addEventListener('click', evento => {
+      if (evento.button || evento.ctrlKey || evento.metaKey || evento.shiftKey) return;
+      evento.preventDefault();
+      abrirConfiguracoes();
+    });
+    // O "voltar" do Android fecha o painel, como fecha a camada da sala.
+    window.NexoAndroid?.ao('voltar-camada', () => { if (quadro && !quadro.hidden) mandar('fechar'); });
+    // De antemão: depois que o início assentou, ou já ao chegar perto da engrenagem.
+    engrenagem.addEventListener('pointerenter', prepararConfiguracoes, { once: true });
+    engrenagem.addEventListener('focus', prepararConfiguracoes, { once: true });
+    setTimeout(prepararConfiguracoes, 1500);
+  }
+
   // ---------- Avisos ----------
   // "Não incomodar" segura os avisos de mensagem no canto; a contagem continua.
   const naoIncomodar = () => minhaPresencaEscolhida() === 'ocupado';

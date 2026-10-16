@@ -234,12 +234,30 @@ async function novaPagina(contexto) {
   assert.deepEqual(erros, []);
   console.log('PASS: o cartão "Abrir uma sala" cabe na coluna mesmo com uma fonte do sistema mais larga');
 
-  // A engrenagem do início abre as configurações -- o mesmo painel da sala --, sem entrar em sala nenhuma; um ajuste
-  // feito ali vale; fechar volta ao início; e "Senha e conta" leva à conta, que volta às configurações.
+  // A engrenagem do início abre as configurações -- o mesmo painel da sala -- sem rota nova e sem carregar nada: o
+  // painel já está num quadro carregado de antemão, e abre como dentro da sala. Nada de sala por trás; um ajuste feito
+  // ali vale no início na hora; fechar esconde o quadro; e só "Senha e conta" troca de página.
+  const navegacoes = [];
+  larga.on('framenavigated', f => { if (f === larga.mainFrame()) navegacoes.push(f.url()); });
+  await larga.waitForFunction(() => document.querySelector('.ini-configuracoes'));
+  const quadroDasConfiguracoes = () => larga.frames().find(f => /^https?:\/\/[^/]+\/configuracoes$/.test(f.url()));
+  const esperarAte = async (condicao, mensagem, ms = 15000) => {
+    const fim = Date.now() + ms;
+    while (Date.now() < fim) { if (await condicao()) return; await larga.waitForTimeout(100); }
+    assert.fail(mensagem);
+  };
+  await esperarAte(async () => Boolean(await quadroDasConfiguracoes()?.evaluate(() => typeof NexoConfig === 'object' && document.title.startsWith('Configurações')).catch(() => false)), 'o quadro das configurações devia ficar pronto de antemão');
+  const quadroCfg = quadroDasConfiguracoes();
+  const antes = Date.now();
   await larga.locator('.ini-eu-conta').click();
-  await larga.waitForURL(/\/configuracoes/);
-  await larga.locator('#devicesPanel:not(.hidden)').waitFor();
-  const fora = await larga.evaluate(() => ({
+  await quadroCfg.locator('#devicesPanel:not(.hidden)').waitFor();
+  const demorou = Date.now() - antes;
+  assert.ok(demorou < 800, `o painel devia abrir na hora, sem carregar (levou ${demorou} ms)`);
+  assert.deepEqual(navegacoes, [], 'abrir as configurações não muda de rota');
+  assert.equal(await larga.locator('.ini-configuracoes').isVisible(), true);
+  await larga.waitForTimeout(300);
+  await larga.screenshot({ path: path.join(saida, 'configuracoes-no-inicio.png') });
+  const fora = await quadroCfg.evaluate(() => ({
     portao: getComputedStyle(document.getElementById('nameGate')).display,
     sala: getComputedStyle(document.querySelector('.app')).display,
     naChamada: Boolean(socket || transporte),
@@ -247,27 +265,22 @@ async function novaPagina(contexto) {
   }));
   assert.deepEqual({ portao: fora.portao, sala: fora.sala, naChamada: fora.naChamada }, { portao: 'none', sala: 'none', naChamada: false }, `as configurações fora da sala não mostram nem entram na sala: ${JSON.stringify(fora)}`);
   assert.ok(!fora.recentes.includes('principal'), 'abrir as configurações não vira sala recente');
-  await larga.evaluate(() => NexoConfig.abrir('aparencia'));
-  // Chegou pela troca de página animada (@view-transition): enquanto ela anda, o clique cai na transição.
-  await larga.waitForFunction(() => {
-    const c = document.getElementById('aparenciaContraste');
-    c.scrollIntoView({ block: 'center' });
-    const r = c.getBoundingClientRect();
-    return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === c;
-  });
-  await larga.locator('#aparenciaContraste').setChecked(true);
-  assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste vale na hora');
-  await larga.evaluate(() => NexoConfig.abrir('perfil'));
-  await larga.locator('#configConta').click();
-  await larga.waitForURL(/\/conta\?voltar=%2Fconfiguracoes/);
-  await larga.locator('#voltarParaSala', { hasText: 'Voltar às configurações' }).click();
-  await larga.waitForURL(/\/configuracoes/);
-  await larga.locator('#devicesPanel:not(.hidden)').waitFor();
-  await larga.locator('#devicesClose').click();
-  await larga.locator('#inicioApp').waitFor();
-  assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste segue no início');
+  await quadroCfg.evaluate(() => NexoConfig.abrir('aparencia'));
+  await quadroCfg.locator('#aparenciaContraste').setChecked(true);
+  await larga.waitForFunction(() => document.documentElement.classList.contains('alto-contraste'));
+  // Fechar esconde o quadro e devolve o foco à engrenagem; abrir de novo é instantâneo.
+  await quadroCfg.locator('#devicesClose').click();
+  await larga.locator('.ini-configuracoes').waitFor({ state: 'hidden' });
+  assert.equal(await larga.evaluate(() => document.activeElement?.classList.contains('ini-eu-conta')), true, 'o foco volta à engrenagem');
+  await larga.locator('.ini-eu-conta').click();
+  await quadroCfg.locator('#devicesPanel:not(.hidden)').waitFor({ timeout: 800 });
+  // Só "Senha e conta" troca a página inteira.
+  await quadroCfg.evaluate(() => NexoConfig.abrir('perfil'));
+  await quadroCfg.locator('#configConta').click();
+  await larga.waitForURL(/\/conta$/);
+  assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste segue na conta');
   assert.deepEqual(erros, []);
-  console.log('PASS: a engrenagem do início abre as configurações da sala sem entrar em sala; o ajuste vale; a conta e a volta');
+  console.log('PASS: a engrenagem do início abre as configurações da sala na hora, sem rota nova nem sala por trás; o ajuste vale no início; só "Senha e conta" troca de página');
 
   // Pela rede (e no celular) os scripts de depois do sala.js chegam um a um, e a conta respondia antes de o
   // configuracoes.js existir: o painel nunca abria e a tela ficava vazia. Aqui eles chegam 400 ms atrasados cada.

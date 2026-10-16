@@ -49,7 +49,9 @@
   function confirmarIrParaConta() {
     // Nas configurações fora da sala não há chamada para perder: a conta abre direto, e volta para as configurações.
     if (document.documentElement.classList.contains('so-configuracoes')) {
-      window.location.assign(`/conta?voltar=${encodeURIComponent(location.pathname)}`);
+      // No quadro por cima do início, a conta toma a janela inteira (e o início é o caminho de volta dela).
+      if (document.documentElement.classList.contains('configuracoes-no-quadro')) window.top.location.assign('/conta');
+      else window.location.assign(`/conta?voltar=${encodeURIComponent(location.pathname)}`);
       return;
     }
     // Quem tem conta vê a página dela por cima da sala (inicio-na-sala.js), sem sair da chamada:

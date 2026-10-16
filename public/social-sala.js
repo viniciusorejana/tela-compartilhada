@@ -32,7 +32,10 @@
     b.addEventListener('click', fazer);
     return b;
   }
-  const aviso = opcoes => window.NexoToast?.mostrar({ fecharEm: 6000, ...opcoes });
+  // As configurações fora da sala (/configuracoes) moram num quadro por cima do início, que já avisa de mensagens e
+  // convites: aqui dentro tudo fica calado, senão cada aviso viria duas vezes (e a notificação do sistema também).
+  const calada = document.documentElement.classList.contains('so-configuracoes');
+  const aviso = opcoes => (calada ? null : window.NexoToast?.mostrar({ fecharEm: 6000, ...opcoes }));
 
   // ---------- No cartão de perfil ----------
   // Entre duas contas, o cartão diz a relação e oferece o próximo passo. Sem conta de um dos dois
@@ -267,12 +270,12 @@
     const detalhe = (mensagem.texto || 'Mandou uma imagem').slice(0, 120);
     aviso({ icone: 'mensagem', titulo: S.nomeDe(com), detalhe, acoes: [{ rotulo: 'Responder', principal: true, fazer: () => abrirMensagens(com) }] });
     // Com a janela escondida, o aviso no canto ninguém vê: vai também uma notificação do computador (notificacoes.js).
-    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', S.nomeDe(com), { corpo: detalhe, tag: `nexo-dm-${com}`, aoClicar: () => abrirMensagens(com) });
+    if (document.hidden && !calada) window.NexoNotificacoes?.mostrar('mensagem', S.nomeDe(com), { corpo: detalhe, tag: `nexo-dm-${com}`, aoClicar: () => abrirMensagens(com) });
   });
   S.on('convite', ({ de, apelido, sala }) => {
     if (sala === roomCode || camadaAberta()) return;
     aviso({ icone: 'convite', titulo: `${S.nomeDe(de) || apelido} chamou você`, detalhe: `Para a sala #${sala}. Entrar sai desta chamada.`, fecharEm: 15000, acoes: [{ rotulo: 'Entrar', principal: true, fazer: () => entrarNaSala(sala) }, { rotulo: 'Responder', fazer: () => abrirMensagens(de) }] });
-    if (document.hidden) window.NexoNotificacoes?.mostrar('mensagem', `${S.nomeDe(de) || apelido} chamou você`, { corpo: `Para a sala #${sala}`, tag: `nexo-convite-${sala}`, aoClicar: () => abrirMensagens(de) });
+    if (document.hidden && !calada) window.NexoNotificacoes?.mostrar('mensagem', `${S.nomeDe(de) || apelido} chamou você`, { corpo: `Para a sala #${sala}`, tag: `nexo-convite-${sala}`, aoClicar: () => abrirMensagens(de) });
   });
   S.on('conquista', c => {
     if (camadaAberta()) { editor?.carregar(); return; }

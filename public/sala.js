@@ -403,12 +403,26 @@ const SO_CONFIGURACOES = document.documentElement.classList.contains('so-configu
 const paginaPronta = document.readyState === 'loading'
   ? new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }))
   : Promise.resolve();
+// No quadro por cima do início (inicio.js), a página é carregada de antemão e fica esperando: o painel abre quando o
+// início pede, e fechar o painel avisa o início, que esconde o quadro -- abrir as configurações vira só mostrar um
+// painel, sem rota nova e sem carregar nada, como dentro da sala. Aberta direto (/configuracoes), abre na hora.
+const NO_QUADRO = document.documentElement.classList.contains('configuracoes-no-quadro');
+const avisarOInicio = tipo => window.parent.postMessage({ nexo: 'configuracoes', tipo }, location.origin);
 async function abrirSoAsConfiguracoes() {
   await paginaPronta;
   // O portão sai de vez (e não só da tela): room-ui.js trata o diálogo visível de cima como o modal da vez.
   nameGate.classList.add('hidden');
   document.title = 'Configurações · Nexo';
-  window.NexoConfig.abrir();
+  if (NO_QUADRO) {
+    window.addEventListener('message', evento => {
+      const dados = evento.data;
+      if (evento.source !== window.parent || evento.origin !== location.origin || dados?.nexo !== 'configuracoes') return;
+      if (dados.tipo === 'abrir') window.NexoConfig.abrir(dados.secao);
+      // O "voltar" do Android, pelo início: fechar como o X fecha (o início fica sabendo pelo vigia abaixo).
+      else if (dados.tipo === 'fechar') devicesPanel.classList.add('hidden');
+    });
+    avisarOInicio('pronta');
+  } else window.NexoConfig.abrir();
   window.NexoCarregando?.concluir();
   // Fechar o painel é sair das configurações. Mas outro painel aberto a partir dele (o editor do cartão, o aviso
   // de ir para a conta) também o esconde: aí se espera esse outro fechar e o painel volta. Antes, "Personalizar
@@ -418,8 +432,9 @@ async function abrirSoAsConfiguracoes() {
   const observador = new MutationObserver(registros => {
     for (const r of registros) if (r.target.classList.contains('hidden')) fechouPorUltimo = r.target;
     if (dialogos.some(d => !d.classList.contains('hidden'))) return;
-    if (fechouPorUltimo === devicesPanel) { observador.disconnect(); sairDasConfiguracoes(); }
-    else window.NexoConfig.abrir();
+    if (fechouPorUltimo !== devicesPanel) window.NexoConfig.abrir();
+    else if (NO_QUADRO) avisarOInicio('fechar');
+    else { observador.disconnect(); sairDasConfiguracoes(); }
   });
   for (const d of dialogos) observador.observe(d, { attributes: true, attributeFilter: ['class'] });
 }

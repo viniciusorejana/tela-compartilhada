@@ -61,7 +61,12 @@
   if (daSala && espiarEntrada(daSala[1])) raiz.classList.add('entrando-direto');
   // `/configuracoes` é a página da sala mostrando só o painel de configurações (server.js): a classe entra antes da
   // primeira pintura, para o portão e a sala nunca aparecerem por trás.
-  if (/^\/configuracoes\/?$/.test(location.pathname)) raiz.classList.add('so-configuracoes');
+  if (/^\/configuracoes\/?$/.test(location.pathname)) {
+    raiz.classList.add('so-configuracoes');
+    // No início ela vive num quadro por cima da página (inicio.js), carregado de antemão: aí o fundo é transparente,
+    // e quem abre e fecha o painel é o início (sala.js, `NO_QUADRO`).
+    try { if (window.parent !== window) raiz.classList.add('configuracoes-no-quadro'); } catch (_) { /* quadro de outra origem: não é o nosso */ }
+  }
 
   window.NexoChassi = Object.freeze({ definirConta, marcarEntrada, espiarEntrada, consumirEntrada, irParaSala });
 })();
