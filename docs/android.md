@@ -299,6 +299,12 @@ fundo escuro da tela de carregamento da página (`@color/fundo_splash`, `#12131C
 - **Mudar o desenho**: os números de `splash_icone.xml` (o centro é 144, 144); o que passar de 96 de raio é cortado no
   Android 12. As cores são as da marca e do tema escuro e não mudam com o tema do sistema. Mexeu na marca ou nas cores?
   Os outros três lugares que seguem o mesmo desenho estão em `docs/interface.md` 4.21.
+- **O risco no lugar do arco (15/10/2026)**: num aparelho de verdade a splash mostrava a roda inteira, a faísca e, à
+  esquerda, um risco reto saindo dela, sem o arco. O arco era o círculo inteiro (`a80,80 0 1,1 -0.01,0`, início e fim a
+  0,01 um do outro) cortado em 30% por `trimPathEnd`; o PathParser do Android perde a precisão nesse arco quase fechado
+  e desenhou uma reta a partir do começo dele (é onde o risco nascia, na posição exata do começo do arco). Agora o
+  arco tem o ponto final de verdade (108°, `A80,80 0 0,1 119.28,220.08`) e não há corte. **Arco quase fechado em
+  vetor do Android: nunca.** Só se confirma num aparelho.
 
 ## O que ele não resolve
 

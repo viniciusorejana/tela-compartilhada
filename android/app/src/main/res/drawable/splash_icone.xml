@@ -36,18 +36,20 @@
         android:strokeColor="#26FFFFFF"
         android:strokeWidth="4" />
 
-    <!-- O arco: começa às 3 horas e vai até 30% da volta; o gradiente em varredura acompanha o caminho, da cauda
-         transparente até a ponta, e o grupo gira para pôr a ponta onde a roda da página a mostra. -->
+    <!-- O arco: começa às 3 horas e vai até 30% da volta (108 graus); o gradiente em varredura acompanha o caminho, da
+         cauda transparente até a ponta, e o grupo gira para pôr a ponta onde a roda da página a mostra.
+         O arco é desenhado com o ponto final de verdade. Antes era o círculo inteiro ("a80,80 0 1,1 -0.01,0", início e
+         fim a 0,01 um do outro) cortado em 30% por trimPathEnd: o PathParser do Android perde a precisão nesse arco
+         quase fechado e, em aparelhos de verdade, desenhava um risco reto saindo da roda no lugar do arco. -->
     <group
         android:name="arco"
         android:pivotX="144"
         android:pivotY="144"
         android:rotation="200">
         <path
-            android:pathData="M224,144a80,80 0 1,1 -0.01,0"
+            android:pathData="M224,144A80,80 0 0,1 119.28,220.08"
             android:strokeLineCap="round"
-            android:strokeWidth="6"
-            android:trimPathEnd="0.3">
+            android:strokeWidth="6">
             <aapt:attr name="android:strokeColor">
                 <gradient
                     android:type="sweep"
