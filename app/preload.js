@@ -65,6 +65,8 @@ function limparAtualizacao(dados) {
     recebidos: numero(dados.recebidos),
     total: numero(dados.total),
     arquivo: String(dados.arquivo || '').slice(0, 120),
+    // Por que a instalação não terminou (atualizacao-automatica.js): uma frase montada lá, e não uma mensagem crua.
+    motivo: String(dados.motivo || '').slice(0, 240),
     // Descendo sozinha, sem ninguém ter pedido: a sala não mostra o progresso.
     silenciosa: dados.silenciosa === true
   };

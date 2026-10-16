@@ -767,7 +767,10 @@ ipcMain.handle('atualizacao:abrir', async evento => {
     const { response } = await dialog.showMessageBox(janela, {
       type: 'question', buttons: ['Reiniciar agora', 'Depois'], defaultId: 0, cancelId: 1, noLink: true,
       title: 'Atualizar o Nexo', message: `Instalar o Nexo ${pronta.versao} agora?`,
-      detail: 'O Nexo fecha, instala a versão nova e abre de novo. Uma chamada em andamento cai por alguns segundos. "Depois" instala quando você sair do Nexo de verdade (botão direito no ícone da bandeja, "Sair do Nexo").'
+      detail: 'O Nexo fecha, instala a versão nova e abre de novo. Uma chamada em andamento cai por alguns segundos. '
+        // O .deb troca um pacote do sistema: o pkexec pede a senha, e sem ela nada é instalado.
+        + (atualizador.tipo === 'deb' ? 'O Linux vai pedir a sua senha para trocar o pacote. ' : '')
+        + '"Depois" instala quando você sair do Nexo de verdade (botão direito no ícone da bandeja, "Sair do Nexo").'
     });
     return response === 0 ? atualizador.instalar() : false;
   }

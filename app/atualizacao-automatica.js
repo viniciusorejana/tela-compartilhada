@@ -58,11 +58,15 @@ function criarAtualizador({ lerConfig, salvarConfig, avisar, tipo = tipoDeInstal
   let cancelamento = null;
   let ultimoAviso = 0;
   let relogio = null;
+  let instalando = false;
+  // Um download que descia sozinho e falhou tenta de novo bem antes das quatro horas.
+  const MS_ATE_TENTAR_DE_NOVO = 10 * 60 * 1000;
 
   const sozinho = () => lerConfig().atualizarSozinho !== false;
 
+  // O motivo vale só para o estado que o trouxe: a mudança seguinte o apaga.
   function mudar(parcial) {
-    estado = { recebidos: 0, total: 0, silenciosa: false, ...estado, ...parcial };
+    estado = { recebidos: 0, total: 0, silenciosa: false, ...estado, motivo: '', ...parcial };
     avisar({ ...estado });
   }
 
@@ -98,11 +102,24 @@ function criarAtualizador({ lerConfig, salvarConfig, avisar, tipo = tipoDeInstal
       mudar({ estado: 'pronto', versao: info.version, recebidos: estado?.total || 0 });
     });
     atualizador.on('error', erro => {
-      // Falhar ao PROCURAR (o servidor sem a pasta de atualizações, a rede fora) não é notícia:
-      // tenta de novo na próxima volta. Falhar no meio de um download é, se a pessoa pediu.
-      if (estado && ['pedido', 'baixando'].includes(estado.estado)) {
+      // A instalação que não terminou (no .deb, a senha do sistema cancelada ou recusada): antes o erro era só uma
+      // linha no console, e a pessoa ficava olhando o Nexo aberto sem saber que nada tinha acontecido.
+      if (instalando) {
+        instalando = false;
+        if (tipo === 'appimage') app.requestSingleInstanceLock();
+        mudar({
+          estado: 'falhou',
+          motivo: tipo === 'deb'
+            ? 'A instalação não terminou: a senha do sistema foi cancelada ou recusada. Tente de novo.'
+            : 'A instalação não terminou. Tente de novo, ou baixe pelo navegador.'
+        });
+      } else if (estado && ['pedido', 'baixando'].includes(estado.estado)) {
+        // Falhar ao PROCURAR (o servidor sem a pasta de atualizações, a rede fora) não é notícia:
+        // tenta de novo na próxima volta. Falhar no meio de um download é, se a pessoa pediu.
+        const silenciosa = estado.silenciosa;
         cancelamento = null;
         mudar({ estado: 'falhou' });
+        if (silenciosa) setTimeout(procurar, MS_ATE_TENTAR_DE_NOVO).unref?.();
       }
       console.warn('[atualização]', erro?.message || erro);
     });
@@ -202,6 +219,11 @@ function criarAtualizador({ lerConfig, salvarConfig, avisar, tipo = tipoDeInstal
   // o AppImage é trocado no lugar, e o .deb pede a senha (pkexec) para trocar o pacote.
   function instalar() {
     if (!atualizador || estado?.estado !== 'pronto') return false;
+    instalando = true;
+    // O AppImage novo é aberto pelo electron-updater ANTES de este fechar (AppImageUpdater.doInstall, `spawnLog`).
+    // Ele esbarrava na trava de instância única (main.js, `requestSingleInstanceLock`) e fechava sozinho, e este
+    // fechava logo depois: o Nexo sumia em vez de voltar na versão nova. Soltar a trava deixa o novo assumir.
+    if (tipo === 'appimage') app.releaseSingleInstanceLock();
     atualizador.quitAndInstall(true, true);
     return true;
   }
