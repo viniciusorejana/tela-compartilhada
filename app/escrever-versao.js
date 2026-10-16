@@ -37,7 +37,8 @@ function caminhosDoBuild(produto) {
   const empacotados = (pacote.build?.files || []).filter(arquivo => !/[*!]/.test(arquivo));
   return [...new Set(['package.json', 'package-lock.json', ...empacotados])]
     .map(arquivo => `app/${arquivo}`)
-    .concat('native/audio-agent');
+    // O agente compila a captura do audio-helper (LoopbackCapture.cpp): mudar ela muda o agente.
+    .concat('native/audio-agent', 'native/audio-helper');
 }
 
 function versaoDe(chave) {

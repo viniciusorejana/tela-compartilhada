@@ -97,6 +97,7 @@ test('o que entra no build do aplicativo de mesa é o que o electron-builder emp
   assert.ok(caminhos.includes('app/package.json'));
   assert.ok(caminhos.includes('app/package-lock.json'));
   assert.ok(caminhos.includes('native/audio-agent'));
+  assert.ok(caminhos.includes('native/audio-helper'), 'a captura do helper é compilada dentro do agente');
   assert.ok(!caminhos.includes('app/escrever-versao.js'), 'mexer no anotador não muda o aplicativo de ninguém');
   assert.deepEqual(anotador.caminhosDoBuild('android'), ['android']);
 });

@@ -378,16 +378,17 @@ function garantirDependenciasDoApp() {
 // quando alguém confirma que ele está em dia. Sem marca, sobra a comparação de datas, como aviso.
 function conferirAgenteDeAudio() {
   if (!fs.existsSync(AGENTE)) throw new Error(`Falta ${path.relative(RAIZ, AGENTE)}: compile o agente de áudio (native/audio-agent) antes.`);
-  const arvore = git(['rev-parse', 'HEAD:native/audio-agent'], { permitirFalha: true });
+  // O agente compila também a captura do native/audio-helper (LoopbackCapture.cpp): as duas árvores formam a marca.
+  const arvore = git(['rev-parse', 'HEAD:native/audio-agent', 'HEAD:native/audio-helper'], { permitirFalha: true })?.replace(/\s+/g, ' ');
   const marca = `${AGENTE}.fonte`;
-  const comando = `git rev-parse HEAD:native/audio-agent > ${path.relative(RAIZ, marca)}`;
+  const comando = `git rev-parse HEAD:native/audio-agent HEAD:native/audio-helper > ${path.relative(RAIZ, marca)}`;
   let marcada = null;
-  try { marcada = fs.readFileSync(marca, 'utf8').trim(); } catch (_) { /* nunca marcado */ }
+  try { marcada = fs.readFileSync(marca, 'utf8').replace(/\s+/g, ' ').trim(); } catch (_) { /* nunca marcado */ }
   if (marcada) {
     if (arvore && marcada !== arvore) aviso(`O código do agente de áudio mudou desde que o AgenteAudio.exe foi compilado. Compile de novo e marque: ${comando}`);
     return;
   }
-  const ultimoCommit = Number(git(['log', '-1', '--format=%ct', '--', 'native/audio-agent'], { permitirFalha: true })) * 1000;
+  const ultimoCommit = Number(git(['log', '-1', '--format=%ct', '--', 'native/audio-agent', 'native/audio-helper'], { permitirFalha: true })) * 1000;
   if (ultimoCommit && fs.statSync(AGENTE).mtimeMs < ultimoCommit) {
     aviso(`O código do agente de áudio tem commit mais novo que o AgenteAudio.exe. Se o executável já tem esse código, marque: ${comando}`);
   }
