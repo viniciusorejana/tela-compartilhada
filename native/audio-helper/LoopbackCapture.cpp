@@ -233,7 +233,12 @@ HRESULT CLoopbackCapture::StartCaptureAsync(DWORD processId, bool includeProcess
     if (m_DeviceState == DeviceState::Initialized)
     {
         m_DeviceState = DeviceState::Starting;
-        return MFPutWorkItem2(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, 0, &m_xStartCapture, nullptr);
+        // Comeca aqui mesmo, e nao num work item como no exemplo da Microsoft. Com o work item, a captura ficava
+        // "Starting" depois de esta funcao voltar, e StopCaptureAsync recusa parar quem nao esta Capturing: um
+        // "parar" que chegasse nessa janela (o agente recebe "escolha" e "iniciar" colados) era engolido, a captura
+        // seguia viva sem dono ao lado da nova, e duas capturas do mesmo som deixam uma delas muda. Comecando aqui,
+        // quem chama recebe o estado final (Capturing, ou o erro do Start, que antes se perdia no work item).
+        return OnStartCapture(nullptr);
     }
 
     return S_OK;

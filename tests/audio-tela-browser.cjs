@@ -56,9 +56,10 @@ async function entrar(contexto, sala, nome) {
   return pagina;
 }
 
-// O agente falso. `recusarOsPrimeiros`: quantos `iniciar` respondem com erro antes de aceitar.
-function criarAgente(token, { recusarOsPrimeiros = 0 } = {}) {
-  const agente = { ws: null, comandos: [], recusar: recusarOsPrimeiros, parar: () => {} };
+// O agente falso. `recusarOsPrimeiros`: quantos `iniciar` respondem com erro antes de aceitar. `mudoNosPrimeiros`:
+// quantos `iniciar` "capturam" só zeros, no ritmo certo -- a captura do Windows que nasce muda.
+function criarAgente(token, { recusarOsPrimeiros = 0, mudoNosPrimeiros = 0 } = {}) {
+  const agente = { ws: null, comandos: [], recusar: recusarOsPrimeiros, mudo: mudoNosPrimeiros, parar: () => {} };
   agente.conectar = async () => {
     const ws = new WebSocket(`${origem.replace('http:', 'ws:')}/agente?token=${token}`);
     await new Promise((resolve, rejeitar) => { ws.once('open', resolve); ws.once('error', rejeitar); });
@@ -71,8 +72,9 @@ function criarAgente(token, { recusarOsPrimeiros = 0 } = {}) {
         agente.parar();
         if (agente.recusar > 0) { agente.recusar--; ws.send(JSON.stringify({ evento: 'erro', mensagem: 'falha ao iniciar a captura' })); return; }
         ws.send(JSON.stringify({ evento: 'capturando', modo: 'excluir-pid', alvo: 'pid 1' }));
+        const frequencia = agente.mudo > 0 ? (agente.mudo--, 0) : 1000;
         const inicio = performance.now(); let enviados = 0;
-        const t = setInterval(() => { while (enviados < (performance.now() - inicio) / 10) ws.send(bloco(1000, 441 * enviados++)); }, 5);
+        const t = setInterval(() => { while (enviados < (performance.now() - inicio) / 10) ws.send(bloco(frequencia, 441 * enviados++)); }, 5);
         agente.parar = () => clearInterval(t);
       }
     });
@@ -180,6 +182,19 @@ async function compartilhar(mostra, assiste, { esperarOQuadro = true } = {}) {
       const pedidos = agente.comandos.filter(c => c === 'iniciar').length;
       assert.ok(pedidos >= 2, `a página repetiu o pedido (${pedidos} pedidos)`);
     }, { agente: { recusarOsPrimeiros: 1 } });
+
+    // O relato de "não funciona de primeira, e trocar o modo do som resolve": a captura diz que começou e manda
+    // zeros. Sem o vigia do silêncio, `recebidos` subia e ninguém pedia de novo.
+    await cenario('a captura nasce muda: a página refaz sozinha e o som chega', 'audio-mudo-de-primeira', async ({ mostra, assiste, agente }) => {
+      await compartilhar(mostra, assiste);
+      await esperarSom(assiste, 20, 'depois da captura muda', agente);
+      const comandos = agente.comandos.join(',');
+      assert.ok(agente.comandos.filter(c => c === 'iniciar').length >= 2, `a página refez a captura (${comandos})`);
+      // E refez parando antes: escolha e iniciar colados sobre uma captura viva deixavam uma captura zumbi no agente.
+      const ultimoIniciar = agente.comandos.lastIndexOf('iniciar');
+      assert.equal(agente.comandos.slice(0, ultimoIniciar).lastIndexOf('parar') > agente.comandos.slice(0, ultimoIniciar).lastIndexOf('iniciar'), true,
+        `o pedido de novo para a captura antes de recomeçar (${comandos})`);
+    }, { agente: { mudoNosPrimeiros: 1 } });
 
     await cenario('a tela sobe antes do agente: o som entra na transmissão que já está no ar', 'audio-agente-tardio', async ({ mostra, assiste, agente }) => {
       await compartilhar(mostra, assiste);

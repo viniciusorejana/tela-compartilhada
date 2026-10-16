@@ -45,12 +45,38 @@ consertava. É o que as pessoas descreviam.
 * **No servidor** (`server.js`, `disconnect`): o agente só é mandado parar se aquele socket ainda é o dono do
   token. O socket novo, já registrado, manda no agente.
 
+## A captura que nasce muda (15/10/2026)
+
+O relato seguinte: "o som não vem de primeira, e trocar o modo do som resolve". Trocar o modo refaz a captura no
+agente — então a captura existia e não entregava som. Dois achados:
+
+* **A captura zumbi no agente.** `pedirCapturaAoAgente` mandava `escolha` e `iniciar` colados. Com a captura viva, a
+  escolha já a refazia, e o `iniciar` chegava com a nova ainda "começando" (o `StartCaptureAsync` do exemplo da
+  Microsoft só começava num work item). `StopCaptureAsync` recusa parar quem não está `Capturing`, a recusa era
+  engolida, e a captura velha seguia viva ao lado da nova. Medido aqui com o helper: com **duas capturas por
+  processo abertas ao mesmo tempo, a segunda sai muda** (12 de 12). Correções: o `StartCaptureAsync`
+  (`native/audio-helper/LoopbackCapture.cpp`, compartilhado com o agente) começa na hora e devolve o estado final
+  (e o erro do `Start`, que antes se perdia); e a página manda `audio-stop` antes da escolha e do `iniciar`, o que
+  protege os agentes já instalados.
+* **O vigia não via o silêncio.** O agente manda silêncio no ritmo certo (`AUDCLNT_BUFFERFLAGS_SILENT` vira zeros),
+  então `recebidos` subia e a insistência nunca disparava. O reprodutor conta agora os quadros **audíveis**
+  (`audiveis`, acima de ~−72 dBFS) e `vigiarOSilencio` (`sala.js`) refaz a captura depois de 6, 20 e 60 s só de
+  silêncio. Refazer durante silêncio não se ouve, então repetir quando nada está tocando é inofensivo.
+
+**No navegador, sem o agente**, o som depende de uma caixa na janela do navegador ("Compartilhar áudio da guia" ou "do
+sistema") que o Nexo não marca nem lê. Desmarcada, a tela subia muda e só uma frase na barra avisava; agora fica um
+aviso com **Compartilhar de novo** (`avisarTelaSemSomDoNavegador`), que reabre o seletor com a mesma escolha.
+
+O agente corrigido chega com a próxima versão do aplicativo de mesa (ele leva o `AgenteAudio.exe` de
+`native/audio-agent/x64/Release`, recompilado por `build-helper.ps1`) e, no navegador, com o download do agente.
+
 ## Como se prova
 
 `npm run test:audio-tela`. Um agente falso (WebSocket em Node, que só captura depois de `iniciar` e para ao
 cair) manda um seno de 1 kHz, e quem assiste mede o som que chega na faixa. Os cenários são os dois sintomas:
-agente que cai, socket que cai, agente que recusa, tela que sobe antes do agente, e agente que chega durante a
-espera. Sem as funções novas, quatro deles falham exatamente como o relato (`tem: true, rms: 0` e
+agente que cai, socket que cai, agente que recusa, tela que sobe antes do agente, agente que chega durante a
+espera, e captura que nasce muda (o agente falso manda zeros no primeiro `iniciar`; a página precisa refazer, e
+parando antes). Sem as funções novas, quatro deles falham exatamente como o relato (`tem: true, rms: 0` e
 `tem: false`).
 
 ## O que isto não resolve

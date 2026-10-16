@@ -117,6 +117,9 @@ class ReprodutorPcm {
 
     this.saidaTotal = 0;
     this.recebidoTotal = 0;
+    // Quadros com som de verdade (acima de ~-72 dBFS). "Recebidos" sobe também com a captura que nasceu muda, que
+    // manda zeros no ritmo certo: é esta contagem que a separa (sala.js, `vigiarOSomDoAgente`).
+    this.audivelTotal = 0;
     this.ultimaChegada = 0;
     this.ultimaPausa = 0;
     this.inicioDoBuraco = 0;
@@ -178,6 +181,7 @@ class ReprodutorPcm {
   }
 
   escrever(e, d) {
+    if (e > 8 || e < -8 || d > 8 || d < -8) this.audivelTotal++;
     const k = this.escrito & MASCARA;
     this.esquerda[k] = e / 32768;
     this.direita[k] = d / 32768;
@@ -398,6 +402,7 @@ class ReprodutorPcm {
       // Quadros que já chegaram desde o começo: é com ele que a página sabe se o som do agente ainda
       // anda (sala.js, `vigiarOSomDoAgente`) -- um número que não sobe é uma captura que parou.
       recebidos: this.recebidoTotal,
+      audiveis: this.audivelTotal,
       buracos: this.contagem.buracos,
       saltos: this.contagem.saltos,
       silencioMs: Math.round(this.contagem.silencioS * 1000),
