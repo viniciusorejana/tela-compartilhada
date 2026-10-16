@@ -35,6 +35,9 @@
   const cartao = botao ? $('atualizarAppMenu') : null;
   const baixar = botao ? $('atualizarAppBaixar') : null;
   const NA_SALA = Boolean($('abaAplicativo'));
+  // As configurações no quadro por cima do início (inicio.js) carregam este arquivo também, pela seção "Aplicativo de
+  // mesa"; quem avisa e mostra o progresso é o início, por fora -- aqui dentro os avisos repetiriam os dele.
+  const NO_QUADRO = document.documentElement.classList.contains('configuracoes-no-quadro');
   const ADIAMENTO = 3 * 24 * 60 * 60 * 1000;
   const CHAVE = 'nexo.atualizacao.adiada';
 
@@ -59,6 +62,8 @@
   const instalado = Boolean(baixaSozinho && ['instalador', 'appimage', 'deb'].includes(nativo?.instalacao));
   // O arquivo de cada forma instalada, para "Baixar pelo navegador" quando a atualização falha.
   const ARQUIVO_DO_INSTALADO = { instalador: '/downloads/Nexo-Setup.exe', appimage: '/downloads/Nexo.AppImage', deb: '/downloads/Nexo.deb' };
+  // A linha de /api/desktop-app que diz a versão desta forma do aplicativo (desktop-download.js, `SISTEMAS`).
+  const CHAVE_DO_INSTALADO = { instalador: 'windows-instalador', appimage: 'linux', deb: 'linux-deb' };
   let situacao = null;
   // Se já se comparou com o servidor: antes disso, "a versão mais recente" seria um chute.
   let verificado = false;
@@ -133,19 +138,22 @@
   async function conferir() {
     if (!local) return;
     situacao = { texto: `Nexo ${local}${instalado ? ' · instalado' : ''}`, desatualizado: false };
-    // Instalado: o processo principal é quem sabe. Uma versão já achada (ou já baixada) aparece
-    // mesmo depois de a página recarregar.
+    // Instalado: o processo principal é quem baixa e instala. Uma versão já achada (ou já baixada) aparece mesmo
+    // depois de a página recarregar.
     if (instalado) {
       const emCurso = await motor.estado().catch(() => null);
       if (emCurso) mostrarProgresso(emCurso);
       pintarSecao();
-      return;
+      if (emCurso && !['cancelado', 'falhou'].includes(emCurso.estado)) return;
+      // Nada em curso: o processo principal só procura 15 s depois de a sala abrir, e de quatro em quatro horas -- e
+      // uma procura que falhou ficava calada até a próxima. A página compara com o servidor ela mesma, e havendo
+      // versão nova oferece o botão: antes, quem abria o Nexo depois de um lançamento não via botão nenhum.
     }
     try {
       const resposta = await fetch('/api/desktop-app', { cache: 'no-store' });
       if (!resposta.ok) return;
       const dados = await resposta.json();
-      const sistema = android ? 'android' : NexoVersao.SISTEMA_DA_PLATAFORMA[nativo.plataforma] || 'windows';
+      const sistema = android ? 'android' : CHAVE_DO_INSTALADO[instalado ? nativo.instalacao : ''] || NexoVersao.SISTEMA_DA_PLATAFORMA[nativo.plataforma] || 'windows';
       build = (dados.sistemas || []).find(s => s.chave === sistema) || null;
     } catch (_) { return; }
     verificado = Boolean(build?.versao);
@@ -178,7 +186,10 @@
   function pintarBotao(texto) {
     if (rotuloDoBotao) rotuloDoBotao.textContent = texto;
   }
-  const mostrarToast = conteudo => { if (!toast || toast.fechado) toast = NexoToast.mostrar(conteudo); else toast.atualizar(conteudo); };
+  const mostrarToast = conteudo => {
+    if (NO_QUADRO) return;
+    if (!toast || toast.fechado) toast = NexoToast.mostrar(conteudo); else toast.atualizar(conteudo);
+  };
 
   function mostrarProgresso(dados) {
     const anterior = ultimoEstado;
@@ -197,8 +208,14 @@
       return;
     }
     if (dados.estado === 'pedido' || dados.estado === 'baixando') {
-      // Descendo sozinha, ninguém pediu: nada aparece no meio da chamada.
-      if (dados.silenciosa) return;
+      // Descendo sozinha, ninguém pediu: nenhum aviso no meio da chamada, só o botão no topo dizendo que tem versão
+      // nova a caminho (antes, nada: "não apareceu o botão para atualizar"). Clicar nele mostra o progresso.
+      if (dados.silenciosa) {
+        mostrarBotao(true);
+        pintarBotao('Atualizando…');
+        if (botao) botao.title = `Nexo ${versao} descendo em segundo plano. Clique para ver o progresso.`;
+        return;
+      }
       mostrarBotao(true);
       const fracao = dados.total ? dados.recebidos / dados.total : null;
       const porcento = fracao === null ? '' : ` · ${Math.floor(fracao * 100)}%`;
@@ -258,8 +275,15 @@
       mostrarToast(conteudo);
       return;
     }
-    // Cancelado ou falhou. O que descia sozinho tenta de novo na próxima volta, calado.
-    if (dados.silenciosa) return;
+    // Cancelado ou falhou. O que descia sozinho tenta de novo em alguns minutos, calado -- e o botão fica, para quem
+    // não quiser esperar.
+    if (dados.silenciosa) {
+      if (versao) {
+        pintarBotao('Atualizar');
+        oferecer(versao, { texto: `Você está com a ${local}. O aplicativo baixa a versão nova sem fechar o Nexo e avisa quando ela estiver pronta: a conta, o servidor escolhido e os ajustes continuam.` });
+      }
+      return;
+    }
     // Cancelado sem versão: a procura pedida não achou nada mais novo.
     if (dados.estado === 'cancelado' && !dados.versao) return;
     pintarBotao('Atualizar');
@@ -298,7 +322,7 @@
 
   // A notificação "Nexo X disponível" do Android, tocada com a página aberta: direto ao download.
   window.NexoAndroid?.ao('aviso-tocado', async ({ acao }) => {
-    if (acao !== 'atualizar' || !baixaSozinho) return;
+    if (acao !== 'atualizar' || !baixaSozinho || NO_QUADRO) return;
     if (!build) await conferir();
     if (build?.versao && NexoVersao.comparar(build.versao, local) > 0) atualizar();
   });

@@ -65,7 +65,17 @@
     raiz.classList.add('so-configuracoes');
     // No início ela vive num quadro por cima da página (inicio.js), carregado de antemão: aí o fundo é transparente,
     // e quem abre e fecha o painel é o início (sala.js, `NO_QUADRO`).
-    try { if (window.parent !== window) raiz.classList.add('configuracoes-no-quadro'); } catch (_) { /* quadro de outra origem: não é o nosso */ }
+    try {
+      if (window.parent !== window) {
+        raiz.classList.add('configuracoes-no-quadro');
+        // A ponte do aplicativo (o `appNativo` do Electron, o `NexoAndroid` do Android) só existe na página de cima:
+        // o Electron expõe o preload no quadro principal, e app-android.js não liga a ponte num quadro. Sem ela, a
+        // seção "Aplicativo de mesa" (versão, atualizar sozinho, abrir com o computador, trocar de servidor) sumia
+        // das configurações fora da sala. O quadro é da mesma origem, então usa a ponte da página de cima.
+        if (!window.appNativo && window.parent.appNativo) window.appNativo = window.parent.appNativo;
+        if (!window.NexoAndroid && window.parent.NexoAndroid) window.NexoAndroid = window.parent.NexoAndroid;
+      }
+    } catch (_) { /* quadro de outra origem: não é o nosso */ }
   }
 
   window.NexoChassi = Object.freeze({ definirConta, marcarEntrada, espiarEntrada, consumirEntrada, irParaSala });

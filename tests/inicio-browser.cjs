@@ -188,6 +188,60 @@ async function novaPagina(contexto) {
   await app.close();
   console.log('PASS: no início, o aplicativo de mesa mostra o mesmo "Atualizar" da sala, baixa com progresso e oferece reiniciar');
 
+  // ---------- O aplicativo INSTALADO (o AppImage do Linux) ----------
+  // A ponte só existe na página de cima, como no Electron (o preload é do quadro principal). Antes: o botão de atualizar
+  // só aparecia com a versão já baixada (nada enquanto ela descia em silêncio, nada se a descida falhava), e a seção
+  // "Aplicativo de mesa" sumia das configurações fora da sala, que moram num quadro.
+  const ponteInstalada = () => {
+    if (window !== window.top) return;
+    const ouvintes = [];
+    window.avisarDaPonte = dados => ouvintes.forEach(ouvir => ouvir(dados));
+    window.chamadasDaPonte = [];
+    const opcoes = { tipo: 'appimage', atualizaSozinho: true, atualizarSozinho: true, podeAbrirAoEntrar: true, abrirAoEntrar: false };
+    window.appNativo = { pid: 0, versao: '1.0.0', plataforma: 'linux', instalacao: 'appimage', estadoDoAgente: async () => ({}), iniciarAgente: async () => ({ rodando: false }),
+      prepararCaptura: async () => false, capturaSelecionada: async () => null, encerreiCaptura: async () => ({}), aoEncerrarCaptura: () => {}, definirEndereco: async () => ({}), trocarServidor: async () => ({}),
+      opcoesDoAplicativo: async () => ({ ...opcoes }), definirOpcaoDoAplicativo: async (nome, valor) => { opcoes[nome] = valor; return { ...opcoes }; },
+      procurarAtualizacao: async () => ({ ok: true, nova: true, versao: '1.1.0' }),
+      aoProgressoDaAtualizacao: ouvir => ouvintes.push(ouvir), estadoDaAtualizacao: async () => null,
+      cancelarAtualizacao: async () => true, mostrarAtualizacao: async () => true, abrirAtualizacao: async () => true,
+      baixarAtualizacao: async versao => { chamadasDaPonte.push(`baixar ${versao}`); return { ok: true }; } };
+  };
+  const contextoInstalado = await comConta({ viewport: { width: 1280, height: 820 } });
+  await contextoInstalado.addInitScript(ponteInstalada);
+  await contextoInstalado.route('**/api/desktop-app', rota => rota.fulfill({ json: { available: true, sistemas: [
+    { chave: 'linux', nome: 'Linux', tipo: 'AppImage', url: '/downloads/Nexo.AppImage', size: 1, builtAt: new Date().toISOString(), versao: '1.1.0' }
+  ] } }));
+  const instalado = await novaPagina(contextoInstalado);
+  // Com nada em curso no processo principal, a página compara com o servidor e oferece o botão.
+  await instalado.locator('#atualizarAppBtn').waitFor({ timeout: 5000 });
+  // Descendo em silêncio: o botão diz que está a caminho, e nenhum aviso aparece no canto.
+  await instalado.evaluate(() => avisarDaPonte({ estado: 'baixando', versao: '1.1.0', recebidos: 10, total: 100, silenciosa: true }));
+  assert.equal(await instalado.locator('#atualizarAppBtn span').textContent(), 'Atualizando…');
+  assert.equal(await instalado.locator('.nexo-toast').count(), 0, 'a descida silenciosa não abre aviso');
+  // A descida silenciosa falhou: o botão volta a "Atualizar", e clicar pede o download com o progresso à vista.
+  await instalado.evaluate(() => avisarDaPonte({ estado: 'falhou', versao: '1.1.0', silenciosa: true }));
+  assert.equal(await instalado.locator('#atualizarAppBtn span').textContent(), 'Atualizar');
+  assert.equal(await instalado.locator('#atualizarAppBtn').isVisible(), true);
+  // A instalação que não terminou (no .deb, a senha recusada) chega com o motivo.
+  await instalado.evaluate(() => avisarDaPonte({ estado: 'falhou', versao: '1.1.0', motivo: 'A instalação não terminou: a senha do sistema foi cancelada ou recusada. Tente de novo.' }));
+  await instalado.locator('.nexo-toast', { hasText: 'a senha do sistema foi cancelada' }).waitFor({ timeout: 5000 });
+  await instalado.locator('.nexo-toast .nexo-toast-fechar, .nexo-toast [aria-label="Fechar"]').first().click().catch(() => {});
+  // A seção "Aplicativo de mesa" nas configurações fora da sala (o quadro), com a versão e as opções.
+  await instalado.locator('.ini-eu-conta').click();
+  const quadroDoApp = () => instalado.frames().find(f => /^https?:\/\/[^/]+\/configuracoes$/.test(f.url()));
+  await instalado.waitForFunction(() => document.querySelector('.ini-configuracoes') && !document.querySelector('.ini-configuracoes').hidden);
+  const cfgApp = quadroDoApp();
+  await cfgApp.locator('#devicesPanel:not(.hidden)').waitFor();
+  assert.equal(await cfgApp.locator('#abaAplicativo').isVisible(), true, 'a aba "Aplicativo de mesa" aparece fora da sala');
+  await cfgApp.locator('#abaAplicativo').click();
+  await cfgApp.locator('#appLinhaAtualizar:not([hidden])').waitFor();
+  assert.equal(await cfgApp.locator('#appVersao').textContent(), 'Nexo 1.0.0');
+  assert.equal(await cfgApp.locator('#appAtualizarSozinho').isChecked(), true);
+  assert.equal(await cfgApp.locator('.nexo-toast').count(), 0, 'o quadro não repete os avisos do início');
+  assert.deepEqual(erros, []);
+  await instalado.close();
+  console.log('PASS: o aplicativo instalado mostra "Atualizar" sempre que há versão nova (descendo, falhada ou com o motivo), e a seção "Aplicativo de mesa" aparece fora da sala');
+
   // Sem conta, o aplicativo abre a apresentação: o aviso vem no canto, e "Depois" vale.
   const contextoSemConta = await navegador.newContext({ viewport: { width: 1280, height: 820 } });
   await contextoSemConta.addInitScript(pontePortatil);
