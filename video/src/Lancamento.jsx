@@ -5,12 +5,16 @@
 // problema na introdução (o squad espalhado), a marca exatamente no drop, sete recursos, um por
 // compasso, e o convite. As frases de efeito são as da página inicial -- o vídeo e o site falam
 // com a mesma voz.
+//
+// Os recursos e o convite mostram o Nexo de verdade: gravações do aplicativo (base/gravacao.jsx). A introdução
+// (o squad espalhado) e a marca continuam desenhadas, porque são a ideia, e não a interface.
 import React from 'react';
 import { AbsoluteFill, Html5Audio, Sequence, interpolate, random, staticFile, useCurrentFrame } from 'remotion';
-import { COR, FONTE, PESSOAS, compasso, entre, mola } from './base/tema';
-import { Avatar, Chip, Cursor, Fundo, Icone, Marca, Palavras, Som, useFormato } from './base/componentes';
+import { COR, FONTE, FPS, PESSOAS, compasso, entre, mola } from './base/tema';
+import { Avatar, Fundo, Marca, Palavras, Som, useFormato } from './base/componentes';
 import { Apoio, Cena, useLarguraDaDemo } from './base/cena';
-import { BarraDeControles, CapaAssistir, Grupo, Jogo, LinhaDeVolume, Mesa, MiniSala, Palco, SalaEnchendo } from './base/interface';
+import { Jogo } from './base/interface';
+import { Celular, GRAVACOES, Janela as Gravacao, ajustar, emSequencia } from './base/gravacao';
 
 export const DURACAO_DO_LANCAMENTO = 1020;
 const DROP = compasso(4);
@@ -128,56 +132,29 @@ function Marcante({ duracao }) {
 }
 
 // ---------- 12–26 s: um recurso por compasso ----------
-function Dispositivos({ largura }) {
-  const q = useCurrentFrame();
-  const e = largura / 900;
-  const itens = [['navegador', 'No navegador', 6], ['celular', 'No celular', 14], ['tela', 'No aplicativo', 22]];
-  return (
-    <div style={{ display: 'flex', gap: 30 * e, alignItems: 'flex-end' }}>
-      {itens.map(([icone, nome, em], i) => {
-        const p = mola(q, em, { amortecimento: 11 });
-        const celular = icone === 'celular';
-        return (
-          <div key={nome} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 * e, opacity: Math.min(1, p * 1.4), transform: `translateY(${(1 - p) * 60}px)` }}>
-            <div style={{ display: 'grid', placeItems: 'center', width: (celular ? 170 : 300) * e, height: (celular ? 320 : 220) * e, borderRadius: (celular ? 34 : 22) * e, background: COR.bg1, boxShadow: `0 30px 70px rgba(0,0,0,.45), 0 0 0 ${3 * e}px ${COR.bg4}` }}>
-              <Marca tamanho={76 * e} />
-            </div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 * e, fontFamily: FONTE, fontSize: 28 * e, fontWeight: 600, color: COR.texto2 }}><Icone nome={icone} tamanho={28 * e} cor={COR.accentTexto} />{nome}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
+// Cada cartão tem 2 s: a gravação inteira do recurso, acelerada para caber (o ritmo de montagem é o do drop).
 function Rapida({ titulo, destaque, duracao, children }) {
   return <Cena titulo={titulo} destaque={destaque} duracao={duracao} inicioDaDemo={0} grande>{children}</Cena>;
 }
 
 function Montagem() {
   const largura = useLarguraDaDemo();
-  const q = useCurrentFrame();
   const D = 60;
+  const naJanela = gravacao => <Gravacao gravacao={ajustar(gravacao, D / FPS)} largura={largura} />;
   const cartoes = [
-    { titulo: 'Voz, câmera\ne tela.', destaque: ['tela.'], demo: () => <BarraDeControles tamanho={largura / 680} ligados={{ mic: 10, camera: 20, tela: 30 }} />, sons: [['audio/sala/mic-ligado.mp3', 10, 1], ['pop', 20, 0.35], ['audio/sala/tela.mp3', 30, 0.9]] },
-    { titulo: 'Tela com som,\naté 1440p.', destaque: ['1440p.'], demo: () => (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
-        <Palco largura={largura * 0.95} legenda="1440p · 60 quadros" espectadores={[{ pessoa: PESSOAS.ana, em: 8 }, { pessoa: PESSOAS.leo, em: 14 }]} />
-        <Chip inicio={16}>Até 1440p a 60 quadros, para todo mundo</Chip>
-      </div>) },
-    { titulo: 'Assista só\no que quiser.', destaque: ['quiser.'], demo: ({ l }) => (
-      <Palco largura={largura * 0.95} visto={entre(l, [20, 36])} aoVivo={l >= 36} espectadores={[{ pessoa: PESSOAS.ana, em: 0 }, { pessoa: PESSOAS.voce, em: 30 }]} capa={<CapaAssistir e={largura * 0.95 / 900} apertado={18} some={entre(l, [18, 26])} />} />), sons: [['audio/sala/assistir.mp3', 18, 1]] },
-    { titulo: 'Cada um no\nseu volume.', destaque: ['volume.'], demo: ({ l }) => <LinhaDeVolume largura={largura * 0.92} valor={interpolate(entre(l, [8, 38]), [0, 1], [100, 200])} /> },
-    { titulo: 'Música, @ e\nmesa de sons.', destaque: ['mesa', 'sons.'], demo: () => <Mesa largura={largura * 0.92} tocados={{ 0: 10, 3: 32 }} />, sons: [['piada', 10, 0.5], ['boing', 32, 0.45]] },
-    { titulo: 'Do seu\njeito.', destaque: ['jeito.'], demo: () => <MiniSala largura={largura * 0.95} trocas={[10, 24, 38]} />, sons: [['pop', 10, 0.3], ['pop', 24, 0.3], ['pop', 38, 0.3]] },
-    { titulo: 'No navegador,\nno celular e no app.', destaque: ['navegador,', 'celular', 'app.'], demo: () => <Dispositivos largura={largura} />, sons: [['pop', 6, 0.3], ['pop', 14, 0.3], ['pop', 22, 0.3]] }
+    { titulo: 'Voz, câmera\ne tela.', destaque: ['tela.'], demo: naJanela(GRAVACOES.cameras) },
+    { titulo: 'Tela com som,\naté 1440p.', destaque: ['1440p.'], demo: naJanela(GRAVACOES.transmitir) },
+    { titulo: 'Assista só\no que quiser.', destaque: ['quiser.'], demo: naJanela(GRAVACOES.assistir) },
+    { titulo: 'Cada um no\nseu volume.', destaque: ['volume.'], demo: naJanela(GRAVACOES.volume) },
+    { titulo: 'Música, @ e\nmesa de sons.', destaque: ['mesa', 'sons.'], demo: naJanela(GRAVACOES.mesa) },
+    { titulo: 'Do seu\njeito.', destaque: ['jeito.'], demo: naJanela(GRAVACOES.temas) },
+    { titulo: 'No navegador,\nno celular e no app.', destaque: ['navegador,', 'celular', 'app.'], demo: <Celular gravacao={ajustar(GRAVACOES.celular, D / FPS)} altura={600} /> }
   ];
   return (
     <>
       {cartoes.map((c, i) => (
         <Sequence key={i} from={i * D} durationInFrames={D} layout="none">
-          <Rapida titulo={c.titulo} destaque={c.destaque} duracao={D}>{c.demo({ l: q - i * D })}</Rapida>
-          {(c.sons || []).map(([src, em, volume]) => <Som key={`${src}${em}`} src={src} em={em} volume={volume} />)}
+          <Rapida titulo={c.titulo} destaque={c.destaque} duracao={D}>{c.demo}</Rapida>
           <Som src="whoosh" em={D - 8} volume={0.18} duracao={30} />
         </Sequence>
       ))}
@@ -190,13 +167,8 @@ function Convite({ duracao }) {
   const largura = useLarguraDaDemo();
   return (
     <Cena titulo={'Um link é tudo\nque separa vocês.'} destaque={['link']} duracao={duracao} inicioDaDemo={0}>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 34 }}>
-        <Grupo largura={largura * 0.9} mensagens={[{ pessoa: PESSOAS.ana, texto: 'bora hoje?', em: 4 }]} link={{ em: 16, clique: 52 }} />
-        <SalaEnchendo entradas={[{ pessoa: PESSOAS.voce, em: 60 }, { pessoa: PESSOAS.ana, em: 72 }, { pessoa: PESSOAS.leo, em: 84 }, { pessoa: PESSOAS.bia, em: 96 }]} />
-        <Cursor caminho={[[26, largura * 0.85, 520], [46, largura * 0.6, 300]]} cliques={[52]} />
-      </div>
-      <Som src="pop" em={4} volume={0.3} /><Som src="pop" em={16} volume={0.35} />
-      <Som src="audio/sala/entrada.mp3" em={60} volume={1} /><Som src="audio/sala/entrada.mp3" em={84} volume={0.9} />
+      <Gravacao gravacao={ajustar(emSequencia(GRAVACOES.abrir, GRAVACOES.convite), duracao / FPS)} largura={largura} />
+      <Som src="audio/sala/entrada.mp3" em={Math.round(duracao * 0.4)} volume={0.9} />
       <Som src="whoosh" em={duracao - 8} volume={0.3} duracao={30} />
     </Cena>
   );

@@ -100,9 +100,9 @@ Para mudar a **apresentação** em si (textos e demonstrações), o conteúdo es
 
 | arquivo | onde aparece | duração | tamanho |
 |---|---|---:|---:|
-| `public/midia/apresentacao.mp4` | dentro do modal, na abertura de "Conheça o Nexo" | 60 s | 6,2 MB |
-| `public/midia/lancamento.mp4` | página inicial, seção "O Nexo em meio minuto" | 34 s | 4,5 MB |
-| `public/midia/lancamento-vertical.mp4` | para Reels, Shorts e TikTok (não aparece no site) | 34 s | 4,5 MB |
+| `public/midia/apresentacao.mp4` | dentro do modal, na abertura de "Conheça o Nexo" | 60 s | 7,8 MB |
+| `public/midia/lancamento.mp4` | página inicial, seção "O Nexo em meio minuto" | 34 s | 5,3 MB |
+| `public/midia/lancamento-vertical.mp4` | para Reels, Shorts e TikTok (não aparece no site) | 34 s | 5,2 MB |
 
 Cada um tem a capa `.jpg` ao lado. Os dois do site usam `preload="none"`: o modal abre para todo
 mundo, e baixar um minuto de vídeo para quem só queria fechar seria banda da casa de quem hospeda.
@@ -120,10 +120,16 @@ npm run video:renderizar    # renderiza os três e entrega em public/midia (~3 m
 `npm run video:renderizar -- Apresentacao` refaz um só. O script nivela o som em −16 LUFS (o padrão
 da web), grava a capa e exporta os sons da mesa de demonstração do modal (`public/midia/mesa`).
 
-O código fica em `video/src`: `Apresentacao.jsx` e `Lancamento.jsx` são os roteiros, e `base/` tem a
-sala redesenhada para vídeo (barra de controles, palco, chat, mesa, fila, temas). As cores são as de
-`public/tema.css`, e a cena de temas usa as paletas que `public/tema.js` calcula de verdade. Os
-avisos que tocam nos vídeos são os da sala (`public/sons`), copiados por `scripts/preparar.cjs`.
+O código fica em `video/src`: `Apresentacao.jsx` e `Lancamento.jsx` são os roteiros. **Desde 15/10/2026 o que
+aparece ao lado de cada título é o Nexo de verdade**: as gravações do `video-discord/` (Playwright dirigindo o
+aplicativo, com servidor, contas e câmeras de mentira — ver `video-discord/README.md`), trazidas para
+`video/public/clipes` por `scripts/preparar.cjs` (elo, fora do Git). `base/gravacao.jsx` tem a janela com a câmera
+virtual que aproxima o que importa, o celular e o catálogo `GRAVACOES` (os trechos e zooms de cada clipe, os mesmos
+que o video-discord calibrou pelo diário de cada clique). A interface mudou? Grave de novo no video-discord
+(`node captura\gravar.cjs --isolado 05`, por exemplo, e o `preparar` de lá), confira os segundos no diário do clipe e
+renderize aqui. A introdução do lançamento (o squad espalhado) e as aberturas com a marca continuam desenhadas, e
+`base/interface.jsx` (a sala redesenhada) segue só para o Reels. Os avisos que tocam nos vídeos são os da sala
+(`public/sons`), copiados por `scripts/preparar.cjs`.
 
 As duas trilhas estão em **120 BPM** (medido: 120,25). Todo corte cai num compasso (a cada 60
 quadros) e todo gesto importante numa batida — as constantes estão em `video/src/base/tema.js`. A

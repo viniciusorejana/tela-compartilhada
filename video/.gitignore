@@ -3,3 +3,5 @@ node_modules/
 public/audio/sala/
 # Renderizações intermediárias; as finais vão para public/midia do Nexo.
 saida/
+# As gravações do Nexo, trazidas de video-discord/public/clipes por scripts/preparar.cjs.
+public/clipes/
