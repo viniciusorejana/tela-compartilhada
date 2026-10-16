@@ -253,12 +253,20 @@ const quadroPronto = async pagina => {
   await quadroDaConta.locator('.home-nav .nav-link').click();
   await quadro3.locator('#inicioApp').waitFor();
   await esperarAte(async () => (await naSala.locator('#camadaTitulo').textContent()) === 'Início do Nexo', 'a camada devia acompanhar a troca de página');
+  // A engrenagem do início, dentro da chamada, são as configurações DA SALA: a camada fecha e o painel abre.
   await quadro3.locator('.ini-eu-conta').click();
-  await quadroDaConta.locator('#comConta').waitFor();
-  await quadroDaConta.locator('#voltarParaSala').click();
+  await esperarCamada(naSala, false);
+  await naSala.locator('#devicesPanel:not(.hidden)').waitFor();
+  assert.equal(await emPe(naSala), true);
+  // Delas, "Senha e conta" abre a conta por cima da chamada, e voltar devolve às configurações.
+  await naSala.evaluate(() => NexoConfig.abrir('perfil'));
+  await naSala.locator('#configConta').click();
+  await esperarCamada(naSala, true);
+  const quadroDaContaDeNovo = await quadroPronto(naSala);
+  await quadroDaContaDeNovo.locator('#comConta').waitFor();
+  await quadroDaContaDeNovo.locator('#voltarParaSala').click();
   await esperarCamada(naSala, false);
   assert.equal(await naSala.locator('#devicesPanel').evaluate(el => el.classList.contains('hidden')), false, 'quem abriu a conta pelas configurações volta a elas');
-  assert.equal(await emPe(naSala), true);
   await naSala.locator('#devicesClose').click();
   await naSala.locator('#devicesPanel').waitFor({ state: 'hidden' });
   console.log('PASS: a página da conta abre na camada (sem pergunta, sem sair), troca com o início por dentro, e volta para a sala');

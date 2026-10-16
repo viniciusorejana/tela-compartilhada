@@ -272,6 +272,8 @@
     vestirIdentidade();
     $('voltarParaSala').hidden = !voltar && !camada;
     if (voltar) $('voltarParaSala').href = voltar;
+    // Quem veio do botão "Senha e conta" das configurações fora da sala volta para elas.
+    if (voltar === '/configuracoes') $('voltarParaSala').textContent = 'Voltar às configurações';
   }
   if (camada) {
     $('voltarParaSala').href = '#';

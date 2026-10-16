@@ -897,8 +897,9 @@
     });
     // A marca da trilha é "Início" aqui dentro: leva aos amigos, e não recarrega o quadro.
     document.querySelector('.trilho-marca').addEventListener('click', evento => { evento.preventDefault(); irPara('amigos'); });
-    // A engrenagem abre a conta no mesmo quadro (a camada mostra a conta, e não a navegação).
-    document.querySelector('.ini-eu-conta').addEventListener('click', evento => { evento.preventDefault(); camada.irPara('/conta'); });
+    // A engrenagem são as configurações, e dentro da chamada elas são as da sala: a camada fecha e o painel abre ali
+    // (o mesmo painel de /configuracoes; dele, "Senha e conta" abre a conta por cima da chamada).
+    document.querySelector('.ini-eu-conta').addEventListener('click', evento => { evento.preventDefault(); camada.avisar('configuracoes'); });
   }
 
   // ---------- Avisos ----------

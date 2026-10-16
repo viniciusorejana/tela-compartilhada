@@ -390,10 +390,42 @@ document.getElementById('gateContaLink').href = `/conta?voltar=${encodeURICompon
 // Com conta, o nome da sala é o apelido da conta -- o servidor usa ele de qualquer jeito, e o
 // campo livre só faria a pessoa achar que entrou com outro nome.
 let contaNaSala = null;
+
+// ---------- As configurações fora de uma sala (/configuracoes) ----------
+// A engrenagem do início abre esta mesma página em `/configuracoes` (server.js): o painel de configurações é um só,
+// com o mesmo código, dentro e fora da sala. Aqui a página nunca entra em chamada (`entrar` não é chamado): mostra só
+// o painel (`html.so-configuracoes`, sala.css), e fechar o painel -- o X, "Fechar" ou Esc -- volta para onde a pessoa
+// estava (`?voltar=`, só caminho deste site).
+const SO_CONFIGURACOES = document.documentElement.classList.contains('so-configuracoes');
+function abrirSoAsConfiguracoes() {
+  // O portão sai de vez (e não só da tela): room-ui.js trata o diálogo visível de cima como o modal da vez.
+  nameGate.classList.add('hidden');
+  document.title = 'Configurações · Nexo';
+  window.NexoConfig?.abrir();
+  window.NexoCarregando?.concluir();
+  new MutationObserver(() => { if (devicesPanel.classList.contains('hidden')) sairDasConfiguracoes(); })
+    .observe(devicesPanel, { attributes: true, attributeFilter: ['class'] });
+}
+function sairDasConfiguracoes() {
+  const voltar = new URLSearchParams(location.search).get('voltar') || '';
+  const destino = voltar.startsWith('/') && !voltar.startsWith('//') ? voltar : '/';
+  window.NexoCarregando?.navegando('Voltando');
+  location.assign(destino);
+}
+
 window.NexoConta?.pronto.then(({ conta, perfil, planosLigados }) => {
   // O cadeado aparece antes de entrar, pelo plano da conta; a entrada na sala confirma.
   const livre = planosLigados === false;
   aplicarPlano({ nivel: livre ? 'completo' : conta?.nivel || 'anonimo', livre });
+  if (SO_CONFIGURACOES) {
+    if (conta) {
+      contaNaSala = conta;
+      meuPerfil = { conta: true, codigo: conta.codigo, cor: perfil?.cor || null, marca: perfil?.marca || null };
+      recarregarAjustes();
+    }
+    abrirSoAsConfiguracoes();
+    return;
+  }
   if (!conta) {
     // Sem conta o recado de "entrar direto" não vale: o portão, escondido no primeiro quadro, volta.
     window.NexoChassi?.consumirEntrada(roomCode);

@@ -47,6 +47,11 @@
     }
   };
   function confirmarIrParaConta() {
+    // Nas configurações fora da sala não há chamada para perder: a conta abre direto, e volta para as configurações.
+    if (document.documentElement.classList.contains('so-configuracoes')) {
+      window.location.assign(`/conta?voltar=${encodeURIComponent(location.pathname)}`);
+      return;
+    }
     // Quem tem conta vê a página dela por cima da sala (inicio-na-sala.js), sem sair da chamada:
     // senha, código de recuperação e dados não pedem mais que a pessoa saia. O aviso abaixo fica para
     // quem vai criar uma conta (que muda quem entrou na sala) e para quando a camada não puder abrir.

@@ -233,6 +233,41 @@ async function novaPagina(contexto) {
   assert.ok(medidas.botaoSaiDoCartao <= 0, `o botão de "Abrir uma sala" sai do cartão com fonte larga: ${JSON.stringify(medidas)}`);
   assert.deepEqual(erros, []);
   console.log('PASS: o cartão "Abrir uma sala" cabe na coluna mesmo com uma fonte do sistema mais larga');
+
+  // A engrenagem do início abre as configurações -- o mesmo painel da sala --, sem entrar em sala nenhuma; um ajuste
+  // feito ali vale; fechar volta ao início; e "Senha e conta" leva à conta, que volta às configurações.
+  await larga.locator('.ini-eu-conta').click();
+  await larga.waitForURL(/\/configuracoes/);
+  await larga.locator('#devicesPanel:not(.hidden)').waitFor();
+  const fora = await larga.evaluate(() => ({
+    portao: getComputedStyle(document.getElementById('nameGate')).display,
+    sala: getComputedStyle(document.querySelector('.app')).display,
+    naChamada: Boolean(socket || transporte),
+    recentes: localStorage.getItem('nexoRecentRooms') || ''
+  }));
+  assert.deepEqual({ portao: fora.portao, sala: fora.sala, naChamada: fora.naChamada }, { portao: 'none', sala: 'none', naChamada: false }, `as configurações fora da sala não mostram nem entram na sala: ${JSON.stringify(fora)}`);
+  assert.ok(!fora.recentes.includes('principal'), 'abrir as configurações não vira sala recente');
+  await larga.evaluate(() => NexoConfig.abrir('aparencia'));
+  // Chegou pela troca de página animada (@view-transition): enquanto ela anda, o clique cai na transição.
+  await larga.waitForFunction(() => {
+    const c = document.getElementById('aparenciaContraste');
+    c.scrollIntoView({ block: 'center' });
+    const r = c.getBoundingClientRect();
+    return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === c;
+  });
+  await larga.locator('#aparenciaContraste').setChecked(true);
+  assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste vale na hora');
+  await larga.evaluate(() => NexoConfig.abrir('perfil'));
+  await larga.locator('#configConta').click();
+  await larga.waitForURL(/\/conta\?voltar=%2Fconfiguracoes/);
+  await larga.locator('#voltarParaSala', { hasText: 'Voltar às configurações' }).click();
+  await larga.waitForURL(/\/configuracoes/);
+  await larga.locator('#devicesPanel:not(.hidden)').waitFor();
+  await larga.locator('#devicesClose').click();
+  await larga.locator('#inicioApp').waitFor();
+  assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste segue no início');
+  assert.deepEqual(erros, []);
+  console.log('PASS: a engrenagem do início abre as configurações da sala sem entrar em sala; o ajuste vale; a conta e a volta');
 })().catch(erro => {
   console.error(erro);
   console.error(instancia?.erros());

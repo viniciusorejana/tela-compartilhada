@@ -281,6 +281,8 @@
         ficouPronta();
         break;
       case 'fechar': fechar(); break;
+      // A engrenagem da página de dentro: as configurações são as da sala.
+      case 'configuracoes': fechar(); window.NexoConfig?.abrir(); break;
       case 'entrar': pedirEntrada(String(dados.sala || '').toLowerCase()); break;
       case 'sem-conta':
         fechar();

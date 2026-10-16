@@ -1129,6 +1129,11 @@ muda de tamanho a cada segundo, quando o relógio da sala repinta.
 | ≥ 1600 | lateral 248, "Agora" 320 |
 | ≤ 1100 | "Agora no Nexo" sai da direita e as salas ao vivo descem para o topo dos amigos |
 
+**A engrenagem do "eu" são as configurações**, as mesmas da sala: fora de uma chamada ela abre `/configuracoes`, que
+é a página da sala mostrando só o painel (sem entrar em sala nenhuma; fechar o painel volta ao início), e dentro da
+chamada, com o início por cima (5.2), ela fecha a camada e abre o painel da sala. A conta (senha, recuperação, dados)
+é o botão "Senha e conta" na seção Perfil das configurações, nos dois lugares.
+
 O editor do cartão não segue esta tabela: ele decide pela própria largura (4.13), então tem duas
 colunas a 1440 e entre 1012 e 1100 px, e uma só (a prévia em cima) a 1250 e no celular.
 | ≤ 760 | uma coluna: trilha e lateral viram gaveta (botão no topo), as abas descem para uma linha própria |

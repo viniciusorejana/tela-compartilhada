@@ -59,6 +59,9 @@
 
   const daSala = location.pathname.match(/^\/([a-z0-9_-]{4,32})\/sala\/?$/i);
   if (daSala && espiarEntrada(daSala[1])) raiz.classList.add('entrando-direto');
+  // `/configuracoes` é a página da sala mostrando só o painel de configurações (server.js): a classe entra antes da
+  // primeira pintura, para o portão e a sala nunca aparecerem por trás.
+  if (/^\/configuracoes\/?$/.test(location.pathname)) raiz.classList.add('so-configuracoes');
 
   window.NexoChassi = Object.freeze({ definirConta, marcarEntrada, espiarEntrada, consumirEntrada, irParaSala });
 })();

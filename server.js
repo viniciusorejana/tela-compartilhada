@@ -286,6 +286,13 @@ app.get('/conta', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'conta.html'));
 });
 
+// As configurações fora de uma sala (a engrenagem do início): a MESMA página da sala, que neste endereço não entra
+// em chamada nenhuma e mostra só o painel (chassi.js põe `html.so-configuracoes`; sala.js não chama `entrar`). Um
+// painel só, nos dois lugares, em vez de uma cópia que ficaria para trás.
+app.get('/configuracoes', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'sala.html'));
+});
+
 // A página que vai para dentro do OBS (o Estúdio em si é um painel da sala, estudio.js). O link
 // não é conferido aqui: a página apresenta-o ao socket `/estudio`, que responde com o estado -- e
 // um link inválido recebe a mesma página, que diz o que aconteceu em vez de um 404 seco.

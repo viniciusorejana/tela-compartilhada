@@ -126,7 +126,8 @@
   const Pref = root.Preferencias;
   const lidaNoNavegador = inteiro(Pref?.lerAjuste('novidades', 0));
   let lida = lidaNoNavegador;
-  let automatico = true;
+  // Nas configurações fora da sala (/configuracoes) a pessoa veio mexer num ajuste: a apresentação não abre sozinha.
+  let automatico = !root.document?.documentElement.classList.contains('so-configuracoes');
 
   function gravarLida(valor) {
     lida = juntarLidas(lida, valor);
