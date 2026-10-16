@@ -268,6 +268,26 @@ async function novaPagina(contexto) {
   assert.equal(await larga.evaluate(() => document.documentElement.classList.contains('alto-contraste')), true, 'o ajuste segue no início');
   assert.deepEqual(erros, []);
   console.log('PASS: a engrenagem do início abre as configurações da sala sem entrar em sala; o ajuste vale; a conta e a volta');
+
+  // Pela rede (e no celular) os scripts de depois do sala.js chegam um a um, e a conta respondia antes de o
+  // configuracoes.js existir: o painel nunca abria e a tela ficava vazia. Aqui eles chegam 400 ms atrasados cada.
+  // E "Personalizar perfil" abre o editor por cima: fechar o editor devolve o painel, e não manda ao início.
+  const lenta = await comConta({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await lenta.route(/\/(configuracoes|room-ui|social-sala|editor-cartao|perfil-sala|novidades|atividade|notificacoes)\.js$/, async rota => { await new Promise(r => setTimeout(r, 400)); await rota.continue(); });
+  const devagar = await lenta.newPage();
+  devagar.on('pageerror', e => { erros.push(e.message); console.error('erro nas configurações lentas:', e.message); });
+  await devagar.goto(`${origem}/configuracoes?voltar=/`);
+  await devagar.locator('#devicesPanel:not(.hidden)').waitFor({ timeout: 20000 });
+  assert.equal(await devagar.evaluate(() => { NexoConfig.abrir('estudio'); return getComputedStyle(document.getElementById('estudioAbrir')).display; }), 'none', 'fora da sala não há "Abrir o Estúdio"');
+  await devagar.evaluate(() => NexoConfig.abrir('perfil'));
+  await devagar.locator('#configCartao').click();
+  await devagar.locator('#editorCartaoPanel:not(.hidden)').waitFor();
+  assert.match(devagar.url(), /\/configuracoes/, 'abrir o editor não sai das configurações');
+  await devagar.keyboard.press('Escape');
+  await devagar.locator('#devicesPanel:not(.hidden)').waitFor();
+  assert.match(devagar.url(), /\/configuracoes/, 'fechar o editor devolve o painel');
+  assert.deepEqual(erros, []);
+  console.log('PASS: as configurações fora da sala abrem mesmo com os scripts chegando devagar (celular), sem "Abrir o Estúdio", e o editor do cartão volta ao painel');
 })().catch(erro => {
   console.error(erro);
   console.error(instancia?.erros());

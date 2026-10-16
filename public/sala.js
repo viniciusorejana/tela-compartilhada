@@ -397,14 +397,31 @@ let contaNaSala = null;
 // o painel (`html.so-configuracoes`, sala.css), e fechar o painel -- o X, "Fechar" ou Esc -- volta para onde a pessoa
 // estava (`?voltar=`, só caminho deste site).
 const SO_CONFIGURACOES = document.documentElement.classList.contains('so-configuracoes');
-function abrirSoAsConfiguracoes() {
+// Os scripts que vêm depois deste (configuracoes.js, room-ui.js...) precisam ter rodado antes de o painel abrir. A
+// conta podia responder antes deles: no servidor de verdade (e no celular) os arquivos chegam um a um, e com
+// `NexoConfig` ainda inexistente o painel nunca abria -- a tela ficava vazia.
+const paginaPronta = document.readyState === 'loading'
+  ? new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }))
+  : Promise.resolve();
+async function abrirSoAsConfiguracoes() {
+  await paginaPronta;
   // O portão sai de vez (e não só da tela): room-ui.js trata o diálogo visível de cima como o modal da vez.
   nameGate.classList.add('hidden');
   document.title = 'Configurações · Nexo';
-  window.NexoConfig?.abrir();
+  window.NexoConfig.abrir();
   window.NexoCarregando?.concluir();
-  new MutationObserver(() => { if (devicesPanel.classList.contains('hidden')) sairDasConfiguracoes(); })
-    .observe(devicesPanel, { attributes: true, attributeFilter: ['class'] });
+  // Fechar o painel é sair das configurações. Mas outro painel aberto a partir dele (o editor do cartão, o aviso
+  // de ir para a conta) também o esconde: aí se espera esse outro fechar e o painel volta. Antes, "Personalizar
+  // perfil" mandava a pessoa de volta ao início.
+  const dialogos = [...document.querySelectorAll('[role="dialog"]')].filter(d => d !== nameGate);
+  let fechouPorUltimo = null;
+  const observador = new MutationObserver(registros => {
+    for (const r of registros) if (r.target.classList.contains('hidden')) fechouPorUltimo = r.target;
+    if (dialogos.some(d => !d.classList.contains('hidden'))) return;
+    if (fechouPorUltimo === devicesPanel) { observador.disconnect(); sairDasConfiguracoes(); }
+    else window.NexoConfig.abrir();
+  });
+  for (const d of dialogos) observador.observe(d, { attributes: true, attributeFilter: ['class'] });
 }
 function sairDasConfiguracoes() {
   const voltar = new URLSearchParams(location.search).get('voltar') || '';

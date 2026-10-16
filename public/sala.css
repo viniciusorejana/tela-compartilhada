@@ -681,6 +681,8 @@ html.menos-movimento .som-btn.meu-tocando::after { display:none; }
 html.entrando-direto #nameGate { display:none!important; }
 /* /configuracoes: a página da sala mostrando só o painel de configurações (sala.js, `SO_CONFIGURACOES`). */
 html.so-configuracoes #nameGate,html.so-configuracoes .app { display:none!important; }
+/* Fora da sala não há Estúdio para abrir (ele é um painel da chamada); a aba e as escolhas dela continuam. */
+html.so-configuracoes #estudioAbrir { display:none!important; }
 .gate-card { width:min(100%,430px); padding:37px; border:1px solid color-mix(in srgb, var(--accent) 11%, transparent); background:var(--bg-2); border-radius:var(--r-xl); box-shadow:var(--sombra-modal); animation:nexo-surgir var(--dur-lenta) var(--curva); }
 .gate-mark { margin-bottom:21px; }
 .gate-card .eyebrow { font-size:var(--fs-rotulo); }
